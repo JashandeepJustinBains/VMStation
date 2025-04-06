@@ -5,6 +5,7 @@ Optimized for low-resource systems
 
 1. Install microk8s
 ```
+apt install sudo -y
 apt install snapd -y
 systemctl enable --now snapd
 snap version
