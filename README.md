@@ -3,6 +3,15 @@ My personal virtual machine cloud computing rig on a minipc
 MicroK8s with Ansible Deployment Guide
 Optimized for low-resource systems
 
+1. Install microk8s
+```
+apt install snapd -y
+systemctl enable --now snapd
+snap version
+snap install core
+snap install microk8s --classic
+```
+
 
 1. Set Up Your Environment
 Install MicroK8s
