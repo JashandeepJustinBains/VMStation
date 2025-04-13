@@ -85,4 +85,16 @@ apiVersion: apps/v1
             image: myapp-image:latest
 ```
 
+check status of nodes
+```
+microk8s stop
+microk8s start
+microk8s status --wait-ready
+```
 
+create alias for 'microk8s kubectl' :
+```
+alias kubectl='microk8s kubectl'
+echo "alias kubectl='microk8s kubectl'" >> ~/.bashrc
+source ~/.bashrc
+```
