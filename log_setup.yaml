@@ -1,0 +1,36 @@
+#This playbook sets up system logging, monitoring tools, and diagnostic utilities.
+
+- hosts: log
+  become: yes
+  tasks:
+    - name: Update & Upgrade System
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install Logging & Monitoring Tools
+      apt:
+        name:
+          - sysstat
+          - dstat
+          - journalctl
+          - rsyslog
+          - logrotate
+        state: present
+
+    - name: Install Prometheus Node Exporter for Logs
+      apt:
+        name: prometheus-node-exporter
+        state: present
+
+    - name: Enable System Logs
+      systemd:
+        name: rsyslog
+        enabled: yes
+        state: started
+
+    - name: Configure Firewall
+      shell: |
+        ufw default deny incoming
+        ufw allow ssh
+        ufw enable
