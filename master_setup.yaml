@@ -1,0 +1,64 @@
+#This playbook sets up the control node, installs orchestration tools, and enables monitoring.
+- hosts: master
+  become: yes
+  tasks:
+    - name: Update & Upgrade System
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install Essential Packages
+      apt:
+        name:
+          - ssh
+          - net-tools
+          - htop
+          - tmux
+          - git
+          - curl
+          - wget
+          - ufw
+          - fail2ban
+        state: present
+
+    - name: Install Ansible
+      apt:
+        name: ansible
+        state: present
+
+    - name: Install Jenkins
+      apt:
+        name: openjdk-11-jdk
+        state: present
+
+    - name: Add Jenkins Repo & Install
+      shell: |
+        wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -
+        echo "deb http://pkg.jenkins.io/debian-stable binary/" | tee /etc/apt/sources.list.d/jenkins.list
+        apt update && apt install -y jenkins
+
+    - name: Enable Jenkins Service
+      systemd:
+        name: jenkins
+        enabled: yes
+        state: started
+
+    - name: Install Prometheus & Grafana
+      apt:
+        name:
+          - prometheus
+          - prometheus-node-exporter
+          - grafana
+        state: present
+
+    - name: Enable Grafana Service
+      systemd:
+        name: grafana-server
+        enabled: yes
+        state: started
+
+    - name: Configure Firewall
+      shell: |
+        ufw default deny incoming
+        ufw allow ssh
+        ufw enable
