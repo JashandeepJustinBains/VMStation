@@ -1,0 +1,40 @@
+#This playbook sets up MPI, security rules, and Prometheus Node Exporter for monitoring.
+- hosts: workers
+  become: yes
+  tasks:
+    - name: Update & Upgrade System
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install Essential Packages
+      apt:
+        name:
+          - ssh
+          - net-tools
+          - htop
+          - tmux
+          - curl
+          - wget
+          - ufw
+          - fail2ban
+        state: present
+
+    - name: Install OpenMPI
+      apt:
+        name:
+          - openmpi-bin
+          - openmpi-common
+          - libopenmpi-dev
+        state: present
+
+    - name: Install Prometheus Node Exporter
+      apt:
+        name: prometheus-node-exporter
+        state: present
+
+    - name: Configure Firewall
+      shell: |
+        ufw default deny incoming
+        ufw allow ssh
+        ufw enable
