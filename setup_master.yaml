@@ -1,0 +1,17 @@
+- name: Deploy Kubernetes Master Node
+  hosts: master
+  become: yes
+  tasks:
+    - name: Install K3s (Master)
+      shell: |
+        curl -sfL https://get.k3s.io | sh -
+    - name: Retrieve Node Token
+      shell: cat /var/lib/rancher/k3s/server/node-token
+      register: node_token
+    - name: Save Node Token
+      set_fact:
+        k3s_token: "{{ node_token.stdout }}"
+    - name: Copy TLS Certificate to Workers
+      copy:
+        src: /etc/rancher/k3s/ssl/cert.pem
+        dest: /etc/rancher/k3s/ssl/cert.pem
