@@ -1,3 +1,6 @@
+# ansible-playbook -i inventory setup_master_k3s.yaml
+# ansible-playbook -i inventory setup_worker_k3s.yaml
+# wait until nodes are up
 # kubectl apply -f /root/k8s-deployments/microservice-auto-schedule.yaml
 apiVersion: apps/v1
 kind: Deployment
