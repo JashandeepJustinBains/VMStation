@@ -1,0 +1,18 @@
+# kubectl apply -f /root/k8s-deployments/microservice-auto-schedule.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-auto-schedule
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myservice
+  template:
+    metadata:
+      labels:
+        app: myservice
+    spec:
+      containers:
+      - name: myservice
+        image: my-container-image:latest
