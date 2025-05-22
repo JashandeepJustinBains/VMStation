@@ -1,3 +1,8 @@
+# had to run these to manually generate the TLS certificate
+# mkdir -p /etc/rancher/k3s/server/tls
+# cd /etc/rancher/k3s/server/tls
+# openssl req -newkey rsa:4096 -nodes -keyout server-key.pem -x509 -days 365 -out server-ca.crt
+
 - name: Deploy Kubernetes Master Node
   hosts: master
   become: yes
