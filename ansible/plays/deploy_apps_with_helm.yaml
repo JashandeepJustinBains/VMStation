@@ -1,0 +1,37 @@
+- name: Deploy Grafana, Prometheus, and Drone with Helm
+  hosts: master
+  become: yes
+  tasks:
+    - name: Add Bitnami repo (for Grafana and Prometheus)
+      shell: helm repo add bitnami https://charts.bitnami.com/bitnami
+      args:
+        creates: /root/.cache/helm/repository/bitnami-index.yaml
+
+    - name: Add Drone repo
+      shell: helm repo add drone https://charts.drone.io
+      args:
+        creates: /root/.cache/helm/repository/drone-index.yaml
+
+    - name: Update Helm repos
+      shell: helm repo update
+
+    - name: Install Prometheus
+      community.kubernetes.helm:
+        name: prometheus
+        chart_ref: bitnami/prometheus
+        release_namespace: monitoring
+        create_namespace: true
+
+    - name: Install Grafana
+      community.kubernetes.helm:
+        name: grafana
+        chart_ref: bitnami/grafana
+        release_namespace: monitoring
+        create_namespace: true
+
+    - name: Install Drone
+      community.kubernetes.helm:
+        name: drone
+        chart_ref: drone/drone
+        release_namespace: drone
+        create_namespace: true

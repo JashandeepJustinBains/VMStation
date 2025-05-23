@@ -1,0 +1,5 @@
+- import_playbook: master.yaml
+- import_playbook: grafana_worker.yaml
+- import_playbook: prometheus_worker.yaml
+- import_playbook: helm_install.yaml
+- import_playbook: deploy_apps_with_helm.yaml

@@ -1,0 +1,80 @@
+- name: Deploy Kubernetes Master Node (with TLS)
+  hosts: master
+  become: yes
+  vars:
+    node_name: master   # Change this per playbook or via --extra-vars
+  tasks:
+    - name: Set hostname to "{{ node_name }}"
+      hostname:
+        name: "{{ node_name }}"
+
+    # Reset Any Old K3s Installations
+    - name: Stop K3s server if running
+      systemd:
+        name: k3s
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove old K3s installation
+      shell: |
+        sudo /usr/local/bin/k3s-uninstall.sh || true
+        sudo rm -rf /etc/rancher/k3s
+        sudo rm -rf /var/lib/rancher/k3s
+        sudo rm -rf /usr/local/bin/k3s
+        sudo rm -rf /etc/systemd/system/k3s.service
+        sudo systemctl daemon-reload
+
+    # Install Fresh K3s Master Node
+    - name: Install K3s (Master)
+      shell: |
+        curl -sfL https://get.k3s.io | sh -
+
+    # Generate TLS Certificates (Auto)
+    - name: Create TLS directory
+      file:
+        path: /etc/rancher/k3s/server/tls
+        state: directory
+        mode: "0700"
+
+    - name: Generate TLS certificates for K3s (Non-Interactive)
+      shell: |
+        openssl req -newkey rsa:4096 -nodes -keyout /etc/rancher/k3s/server/tls/server-key.pem \
+        -x509 -days 365 -out /etc/rancher/k3s/server/tls/server-ca.crt \
+        -subj "/C=CA/ST=ONTARIO/L=OAKVILLE/O=NA/OU=NA/CN={{ master_ip }}"
+      args:
+        creates: /etc/rancher/k3s/server/tls/server-ca.crt
+
+
+    # Retrieve & Save Node Token for Workers
+    - name: Retrieve Node Token
+      shell: cat /var/lib/rancher/k3s/server/node-token
+      register: node_token
+
+    - name: Save Node Token
+      set_fact:
+        k3s_token: "{{ node_token.stdout }}"
+
+    # Restart K3s for Final Initialization
+    - name: Restart K3s after installation
+      shell: systemctl restart k3s
+
+    # Verify Master Node is Up
+    - name: Check Node Status
+      shell: kubectl get nodes -o wide
+      register: node_status
+
+    - name: Show Master Node Status
+      debug:
+        msg: "{{ node_status.stdout_lines }}"
+    
+    - name: Fetch server-key.pem from master to control node
+      fetch:
+        src: /etc/rancher/k3s/server/tls/server-key.pem
+        dest: ./tls_certs/{{ inventory_hostname }}/etc/rancher/k3s/server/tls/
+        flat: no
+
+    - name: Fetch server-ca.crt from master to control node
+      fetch:
+        src: /etc/rancher/k3s/server/tls/server-ca.crt
+        dest: ./tls_certs/{{ inventory_hostname }}/etc/rancher/k3s/server/tls/
+        flat: no
