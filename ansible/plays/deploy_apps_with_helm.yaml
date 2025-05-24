@@ -1,11 +1,11 @@
-- name: Deploy Grafana, Prometheus, and Drone with Helm
+- name: Deploy Monitoring Stack and Drone with Helm
   hosts: master
   become: yes
   tasks:
-    - name: Add Bitnami repo (for Grafana and Prometheus)
-      shell: helm repo add bitnami https://charts.bitnami.com/bitnami
+    - name: Add Prometheus Community repo
+      shell: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
       args:
-        creates: /root/.cache/helm/repository/bitnami-index.yaml
+        creates: /root/.cache/helm/repository/prometheus-community-index.yaml
 
     - name: Add Drone repo
       shell: helm repo add drone https://charts.drone.io
@@ -15,66 +15,50 @@
     - name: Update Helm repos
       shell: helm repo update
 
-
-    - name: Install Prometheus
+    - name: Install kube-prometheus-stack
       community.kubernetes.helm:
-        name: prometheus
-        chart_ref: bitnami/prometheus
+        name: kube-prometheus-stack
+        chart_ref: prometheus-community/kube-prometheus-stack
         release_namespace: monitoring
         create_namespace: true
         values:
-          server:
+          grafana:
+            adminPassword: "{{ grafana_admin_pass }}"
             service:
               type: NodePort
-          kubeStateMetrics:
-            enabled: true
-          nodeExporter:
-            enabled: true
+            additionalDataSources:
+              - name: Prometheus
+                type: prometheus
+                url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+                access: proxy
+                isDefault: true
+            dashboards:
+              default:
+                k8s-cluster:
+                  gnetId: 315
+                  revision: 4
+                  datasource: Prometheus
+          prometheus:
+            service:
+              type: NodePort
+            prometheusSpec:
+              maximumStartupDurationSeconds: 300
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
     - name: Print Prometheus NodePort
       shell: |
-        kubectl -n monitoring get svc prometheus-server -o jsonpath="{.spec.ports[0].nodePort}"
+        kubectl -n monitoring get svc kube-prometheus-stack-prometheus -o jsonpath="{.spec.ports[0].nodePort}"
       register: prometheus_nodeport
       changed_when: false
 
     - name: Show Prometheus NodePort
       debug:
-        msg: "PRometheus is available at http://{{ ansible_host }}:{{ prometheus_nodeport.stdout }}"
+        msg: "Prometheus is available at http://{{ ansible_host }}:{{ prometheus_nodeport.stdout }}"
 
-
-
-    - name: Install Grafana
-      community.kubernetes.helm:
-        name: grafana
-        chart_ref: bitnami/grafana
-        release_namespace: monitoring
-        create_namespace: true
-        values:
-          service:
-            type: NodePort
-          admin:
-            password: "{{ grafana_admin_pass }}"
-          datasources:
-            datasources.yaml:
-              apiVersion: 1
-              datasources:
-                - name: Prometheus
-                  type: prometheus
-                  url: http://prometheus-server.monitoring.svc.cluster.local
-                  access: proxy
-                  isDefault: true
-          dashboards:
-            default:
-              k8s-cluster:
-                gnetId: 315
-                revision: 4
-                datasource: Prometheus
-      environment:
-        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
     - name: Print Grafana NodePort
       shell: |
-        kubectl -n monitoring get svc grafana -o jsonpath="{.spec.ports[0].nodePort}"
+        kubectl -n monitoring get svc kube-prometheus-stack-grafana -o jsonpath="{.spec.ports[0].nodePort}"
       register: grafana_nodeport
       changed_when: false
 
