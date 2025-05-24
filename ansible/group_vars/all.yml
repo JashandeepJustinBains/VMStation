@@ -1,3 +1,0 @@
-master_ip: 192.168.68.145 # {master ip} 
-master_socket: https://192.168.68.145:6443
-k3s_token: # {"k3s_token"}
