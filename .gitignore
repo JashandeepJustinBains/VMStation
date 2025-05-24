@@ -35,3 +35,6 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+ansible/group_vars/master.yml
+ansible/group_vars/all.yml

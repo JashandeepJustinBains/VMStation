@@ -1,0 +1,40 @@
+- name: Deploy K3s Worker Node with Custom Hostname
+  hosts: master
+  become: yes
+  vars:
+    node_name: drone   # Change this per playbook or via --extra-vars
+  tasks:
+    - name: Set hostname to "{{ node_name }}"
+      hostname:
+        name: "{{ node_name }}"
+
+    # Copy TLS Certificates to Worker
+    - name: Create TLS directory
+      file:
+        path: /etc/rancher/k3s/server/tls
+        state: directory
+        mode: "0700"
+
+    - name: Copy TLS certificates from master to worker
+      copy:
+        src: /etc/rancher/k3s/server/tls/
+        dest: /etc/rancher/k3s/server/tls/
+        owner: root
+        group: root
+        mode: "0600"
+        remote_src: yes
+
+    # Install K3s Worker with Correct Credentials
+    - name: Install K3s Worker
+      shell: |
+        curl -sfL https://get.k3s.io | \
+        K3S_URL="{{ master_socket }}" \
+        K3S_TOKEN="{{ k3s_token }}" \
+        K3S_CERTIFICATE_AUTHORITY="/etc/rancher/k3s/server/tls/server-ca.crt" \
+        sh -
+
+    # Restart K3s Agent & Confirm Registration
+    - name: Restart K3s agent
+      systemd:
+        name: k3s-agent
+        state: restarted

@@ -28,8 +28,10 @@
       shell: helm repo update
 
     # Example: Deploy a chart (optional)
-    # - name: Install nginx-ingress via Helm
-    #   community.kubernetes.helm:
-    #     name: nginx-ingress
-    #     chart_ref: stable/nginx-ingress
-    #     release_namespace: kube-system
+    - name: Install nginx-ingress via Helm
+      community.kubernetes.helm:
+        name: nginx-ingress
+        chart_ref: stable/nginx-ingress
+        release_namespace: kube-system
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml

@@ -15,12 +15,34 @@
     - name: Update Helm repos
       shell: helm repo update
 
+
     - name: Install Prometheus
       community.kubernetes.helm:
         name: prometheus
         chart_ref: bitnami/prometheus
         release_namespace: monitoring
         create_namespace: true
+        values:
+          server:
+            service:
+              type: NodePort
+          kubeStateMetrics:
+            enabled: true
+          nodeExporter:
+            enabled: true
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    - name: Print Prometheus NodePort
+      shell: |
+        kubectl -n monitoring get svc prometheus-server -o jsonpath="{.spec.ports[0].nodePort}"
+      register: prometheus_nodeport
+      changed_when: false
+
+    - name: Show Prometheus NodePort
+      debug:
+        msg: "PRometheus is available at http://{{ ansible_host }}:{{ prometheus_nodeport.stdout }}"
+
+
 
     - name: Install Grafana
       community.kubernetes.helm:
@@ -28,6 +50,37 @@
         chart_ref: bitnami/grafana
         release_namespace: monitoring
         create_namespace: true
+        values:
+          service:
+            type: NodePort
+          admin:
+            password: "{{ grafana_admin_pass }}"
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+                - name: Prometheus
+                  type: prometheus
+                  url: http://prometheus-server.monitoring.svc.cluster.local
+                  access: proxy
+                  isDefault: true
+          dashboards:
+            default:
+              k8s-cluster:
+                gnetId: 315
+                revision: 4
+                datasource: Prometheus
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    - name: Print Grafana NodePort
+      shell: |
+        kubectl -n monitoring get svc grafana -o jsonpath="{.spec.ports[0].nodePort}"
+      register: grafana_nodeport
+      changed_when: false
+
+    - name: Show Grafana NodePort
+      debug:
+        msg: "Grafana is available at http://{{ ansible_host }}:{{ grafana_nodeport.stdout }}"
 
     - name: Install Drone
       community.kubernetes.helm:
@@ -35,3 +88,13 @@
         chart_ref: drone/drone
         release_namespace: drone
         create_namespace: true
+        values:
+          env:
+            DRONE_SERVER_HOST: "{{ drone_server_host }}"
+            DRONE_SERVER_PROTO: "{{ drone_server_proto }}"
+            DRONE_RPC_SECRET: "{{ drone_rpc_secret }}"
+            DRONE_GITHUB_CLIENT_ID: "{{ drone_github_client_id }}"
+            DRONE_GITHUB_CLIENT_SECRET: "{{ drone_github_client_secret }}"
+            DRONE_GITHUB_SERVER: "{{ drone_github_server }}"
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
