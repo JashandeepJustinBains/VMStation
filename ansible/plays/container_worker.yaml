@@ -1,8 +1,8 @@
 - name: Deploy K3s Worker Node with Custom Hostname
-  hosts: master
+  hosts: worker
   become: yes
   vars:
-    node_name: drone   # Change this per playbook or via --extra-vars
+    node_name: worker
   tasks:
     - name: Set hostname to "{{ node_name }}"
       hostname:
@@ -33,8 +33,19 @@
         K3S_CERTIFICATE_AUTHORITY="/etc/rancher/k3s/server/tls/server-ca.crt" \
         sh -
 
-    # Restart K3s Agent & Confirm Registration
     - name: Restart K3s agent
       systemd:
         name: k3s-agent
         state: restarted
+
+    # Deploy your app as a pod (example manifest)
+    - name: Copy app deployment manifest to worker
+      copy:
+        src: ../k8s/deployment.yaml
+        dest: /tmp/deployment.yaml
+
+    - name: Apply app deployment manifest
+      shell: |
+        KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f /tmp/deployment.yaml
+      args:
+        executable: /bin/bash

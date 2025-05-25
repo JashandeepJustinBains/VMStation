@@ -99,55 +99,25 @@ echo "alias kubectl='microk8s kubectl'" >> ~/.bashrc
 source ~/.bashrc
 ```
 ###TODO
-set up **distributed cluster with MPI, Grafana, Prometheus, Ansible, Jenkins, and more**
+set up **cluster Grafana, Prometheus, Ansible, Drone, Loki, and more**
 
 ---
 
 ## **1. Base System Setup**
 Before installing services, ensure you have:
-✅ **Debian Linux (Headless) installed on each node**  
-✅ **Static IP addresses configured for each machine**  
-✅ **SSH access enabled across all nodes**  
+**Debian Linux (Headless) installed on each node**  
+**Static IP addresses configured for each machine**  
+**SSH access enabled across all nodes**  
 
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install ssh net-tools htop tmux git curl wget
-```
-✔️ These packages provide basic system utilities for management.
 
----
-
-## **2. MPI (Message Passing Interface)**
-MPI enables **distributed computing across nodes**.
-
-### **Install OpenMPI (Recommended)**
-```bash
-sudo apt install openmpi-bin openmpi-common libopenmpi-dev
-```
-- **Test with a simple MPI script:**  
-```bash
-mpiexec -n 4 hostname
-```
-✔️ This runs a test across four MPI processes.
-
----
+## **2. useful kubectl commands **
+kubectl get ns
+kubectl get pods -n [name space] {--watch -o wide}
+kubectl get nodes -o wide
 
 ## **3. Monitoring: Grafana + Prometheus**
-Grafana + Prometheus tracks **system performance metrics**.
-
-### **Install Prometheus**
-```bash
-sudo apt install prometheus prometheus-node-exporter
-```
-### **Install Grafana**
-```bash
-sudo apt install grafana
-sudo systemctl enable grafana-server
-sudo systemctl start grafana-server
-```
-✔️ You’ll configure dashboards in Grafana to visualize **CPU/RAM usage**.
-
----
+Loki + Grafana + Prometheus tracks **system performance metrics**.
+look at ```site.yaml``` and ```deploy.sh```
 
 ## **4. Orchestration: Ansible**
 Ansible automates **configuration & deployment** across your cluster.
@@ -159,8 +129,9 @@ sudo apt install ansible
 ✔️ **Define inventory:**  
 Edit `/etc/ansible/hosts` to add your cluster nodes:
 ```ini
-[cluster]
+[master]
 node1 ansible_host=192.168.1.100
+[worker]
 node2 ansible_host=192.168.1.101
 node3 ansible_host=192.168.1.102
 ```
@@ -171,29 +142,8 @@ ansible all -m ping
 
 ---
 
-## **5. CI/CD Pipeline: Jenkins**
-Jenkins automates code compilation and deployment.
-
-### **Install Jenkins**
-```bash
-sudo apt install openjdk-11-jdk
-wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -
-sudo sh -c 'echo deb http://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
-sudo apt update
-sudo apt install jenkins
-```
-✔️ **Start Jenkins**
-```bash
-sudo systemctl start jenkins
-```
-✔️ **Set Up Jenkins Pipeline**
-- Configure a **GitHub Webhook** for automated build triggers.
-- Define tasks in `Jenkinsfile` to compile and distribute workloads.
-
----
-
 ## **6. Firewall & Security Hardening**
-Since your cluster is **partially exposed via DuckDNS**, harden security:
+**partially exposed via DuckDNS**, harden security:
 ```bash
 sudo apt install ufw fail2ban
 sudo ufw default deny incoming
@@ -204,14 +154,4 @@ sudo systemctl enable fail2ban
 ✔️ Set Fail2Ban rules to **prevent brute-force attacks**.
 
 ---
-
-## **7. System Metrics & Benchmarking**
-Ensure efficient resource usage:
-✅ **Install `htop` and `dstat` to monitor system performance**  
-✅ **Use `mpstat` to analyze MPI workload distribution**  
-✅ **Enable logging for debugging task execution**  
-
-```bash
-sudo apt install htop dstat sysstat
-```
 

@@ -2,6 +2,25 @@
   hosts: master
   become: yes
   tasks:
+
+    - name: Uninstall Prometheus stack if present
+      shell: helm uninstall kube-prometheus-stack -n monitoring || true
+      ignore_errors: yes
+
+    - name: Uninstall Loki if present
+      shell: helm uninstall loki -n monitoring || true
+      ignore_errors: yes
+
+    - name: Uninstall Promtail if present
+      shell: helm uninstall promtail -n monitoring || true
+      ignore_errors: yes
+
+    - name: Uninstall Drone if present
+      shell: helm uninstall drone -n drone || true
+      ignore_errors: yes
+
+    # ...rest of your install tasks...
+
     - name: Add Prometheus Community repo
       shell: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
       args:
@@ -31,22 +50,22 @@
             adminPassword: "{{ grafana_admin_pass }}"
             service:
               type: NodePort
-            additionalDataSources:
-              - name: Prometheus
-                type: prometheus
-                url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-                access: proxy
-                isDefault: true
-              - name: Loki
-                type: loki
-                url: http://loki.monitoring.svc.cluster.local:3100
-                access: proxy
-            dashboards:
-              default:
-                k8s-cluster:
-                  gnetId: 315
-                  revision: 4
-                  datasource: Prometheus
+            # additionalDataSources:
+            #   - name: Prometheus
+            #     type: prometheus
+            #     url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+            #     access: proxy
+            #     isDefault: true
+            #   - name: Loki
+            #     type: loki
+            #     url: http://loki.monitoring.svc.cluster.local:3100
+            #     access: proxy
+            # dashboards:
+            #   default:
+            #     k8s-cluster:
+            #       gnetId: 315
+            #       revision: 4
+            #       datasource: Prometheus
           prometheus:
             service:
               type: NodePort
@@ -89,6 +108,8 @@
             DRONE_GITHUB_CLIENT_ID: "{{ drone_github_client_id }}"
             DRONE_GITHUB_CLIENT_SECRET: "{{ drone_github_client_secret }}"
             DRONE_GITHUB_SERVER: "{{ drone_github_server }}"
+          service:
+            type: NodePort
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
@@ -100,11 +121,18 @@
         release_namespace: monitoring
         create_namespace: true
         values:
-          deploymentMode: "SingleBinary"
+          deploymentMode: SingleBinary
           loki:
-            storage:
-              type: 'filesystem'
             auth_enabled: false
+            commonConfig:
+              replication_factor: 1
+            storage:
+              type: filesystem
+          singleBinary:
+            replicas: 1
+            persistence:
+              enabled: true
+              storageClass: local-path
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
