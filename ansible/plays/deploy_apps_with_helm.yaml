@@ -12,6 +12,11 @@
       args:
         creates: /root/.cache/helm/repository/drone-index.yaml
 
+    - name: Add Grafana Loki repo
+      shell: helm repo add grafana https://grafana.github.io/helm-charts
+      args:
+        creates: /root/.cache/helm/repository/grafana-index.yaml
+
     - name: Update Helm repos
       shell: helm repo update
 
@@ -29,9 +34,13 @@
             additionalDataSources:
               - name: Prometheus
                 type: prometheus
-                url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+                url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
                 access: proxy
                 isDefault: true
+              - name: Loki
+                type: loki
+                url: http://loki.monitoring.svc.cluster.local:3100
+                access: proxy
             dashboards:
               default:
                 k8s-cluster:
@@ -80,5 +89,33 @@
             DRONE_GITHUB_CLIENT_ID: "{{ drone_github_client_id }}"
             DRONE_GITHUB_CLIENT_SECRET: "{{ drone_github_client_secret }}"
             DRONE_GITHUB_SERVER: "{{ drone_github_server }}"
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Install Loki
+      community.kubernetes.helm:
+        name: loki
+        chart_ref: grafana/loki
+        chart_version: "5.41.4"
+        release_namespace: monitoring
+        create_namespace: true
+        values:
+          deploymentMode: "SingleBinary"
+          loki:
+            storage:
+              type: 'filesystem'
+            auth_enabled: false
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Install Promtail
+      community.kubernetes.helm:
+        name: promtail
+        chart_ref: grafana/promtail
+        release_namespace: monitoring
+        create_namespace: true
+        values:
+          loki:
+            serviceName: loki
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
