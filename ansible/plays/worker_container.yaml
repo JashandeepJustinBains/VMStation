@@ -3,6 +3,9 @@
   become: yes
   vars:
     node_name: worker
+    repo_url: "https://github.com/FGOCanItFarm/FGO-can-it-farm.git"
+    repo_dest: "/opt/FGO-can-it-farm"
+    image_name: "my-app:latest"
   tasks:
     - name: Set hostname to "{{ node_name }}"
       hostname:
@@ -38,14 +41,10 @@
         name: k3s-agent
         state: restarted
 
-    # Deploy your app as a pod (example manifest)
-    - name: Copy app deployment manifest to worker
-      copy:
-        src: ../k8s/deployment.yaml
-        dest: /tmp/deployment.yaml
+    # Ensure git is installed
+    - name: Install git
+      apt:
+        name: git
+        state: present
+      become: yes
 
-    - name: Apply app deployment manifest
-      shell: |
-        KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f /tmp/deployment.yaml
-      args:
-        executable: /bin/bash

@@ -1,3 +1,4 @@
 - import_playbook: master.yaml
 - import_playbook: helm_install.yaml
 - import_playbook: deploy_apps_with_helm.yaml
+- import_playbook: worker_container.yaml

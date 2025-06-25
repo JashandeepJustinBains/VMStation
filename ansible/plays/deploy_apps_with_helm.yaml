@@ -19,8 +19,6 @@
       shell: helm uninstall drone -n drone || true
       ignore_errors: yes
 
-    # ...rest of your install tasks...
-
     - name: Add Prometheus Community repo
       shell: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
       args:
@@ -50,25 +48,11 @@
             adminPassword: "{{ grafana_admin_pass }}"
             service:
               type: NodePort
-            # additionalDataSources:
-            #   - name: Prometheus
-            #     type: prometheus
-            #     url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-            #     access: proxy
-            #     isDefault: true
-            #   - name: Loki
-            #     type: loki
-            #     url: http://loki.monitoring.svc.cluster.local:3100
-            #     access: proxy
-            # dashboards:
-            #   default:
-            #     k8s-cluster:
-            #       gnetId: 315
-            #       revision: 4
-            #       datasource: Prometheus
+              nodePort: 32000        # <-- Static NodePort for Grafana
           prometheus:
             service:
               type: NodePort
+              nodePort: 32001        # <-- Static NodePort for Prometheus
             prometheusSpec:
               maximumStartupDurationSeconds: 300
       environment:
@@ -110,6 +94,23 @@
             DRONE_GITHUB_SERVER: "{{ drone_github_server }}"
           service:
             type: NodePort
+            nodePort: 32002          # <-- Static NodePort for Drone
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    - name: Install Drone Kubernetes Runner
+      community.kubernetes.helm:
+        name: drone-runner-kube
+        chart_ref: drone/drone-runner-kube
+        release_namespace: drone
+        create_namespace: true
+        values:
+          env:
+            DRONE_RPC_HOST: "{{ drone_server_host}}"
+            DRONE_RPC_PROTO: "{{ drone_server_proto }}"
+            DRONE_RPC_SECRET: "{{ drone_rpc_secret }}"
+            DRONE_RUNNER_CAPACITY: 2
+            DRONE_RUNNER_NAME: "kube-runner"
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 

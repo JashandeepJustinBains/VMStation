@@ -35,3 +35,26 @@
         release_namespace: kube-system
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+
+    # Install ngrok-operator using Helm
+    - name: Add ngrok Helm repo
+      shell: helm repo add ngrok https://charts.ngrok.com
+      args:
+        creates: /root/.cache/helm/repository/ngrok-index.yaml
+
+    - name: Update Helm repos
+      shell: helm repo update
+
+    - name: Install ngrok-operator
+      community.kubernetes.helm:
+        name: ngrok-operator
+        chart_ref: ngrok/ngrok-operator
+        release_namespace: ngrok-operator
+        create_namespace: true
+        values:
+          credentials:
+            apiKey: "{{ ngrok_api_key }}"
+            authtoken: "{{ ngrok_auth_token }}"
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml

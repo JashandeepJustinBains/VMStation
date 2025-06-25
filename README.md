@@ -112,8 +112,10 @@ Before installing services, ensure you have:
 
 ## **2. useful kubectl commands **
 kubectl get ns
-kubectl get pods -n [name space] {--watch -o wide}
+kubectl get pods -n [name space] {-A, --watch, -o wide}
 kubectl get nodes -o wide
+kubectl get svc --all-namespaces | grep NodePort
+kubectl get svc --all-namespaces -o wide
 
 ## **3. Monitoring: Grafana + Prometheus**
 Loki + Grafana + Prometheus tracks **system performance metrics**.
@@ -155,3 +157,13 @@ sudo systemctl enable fail2ban
 
 ---
 
+## **7. setup ngrok public tunnel**
+on worker node
+```
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+  | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+  && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+  | sudo tee /etc/apt/sources.list.d/ngrok.list \
+  && sudo apt update \
+  && sudo apt install ngrok
+```

@@ -63,10 +63,6 @@
       shell: kubectl get nodes -o wide
       register: node_status
 
-    - name: Show Master Node Status
-      debug:
-        msg: "{{ node_status.stdout_lines }}"
-    
     - name: Fetch server-key.pem from master to control node
       fetch:
         src: /etc/rancher/k3s/server/tls/server-key.pem

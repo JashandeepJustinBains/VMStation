@@ -38,3 +38,7 @@ terraform.rc
 
 ansible/group_vars/master.yml
 ansible/group_vars/all.yml
+ansible/group_vars/worker.yml
+ansible/group_vars/cloudflared_key.yml
+ansible/group_vars
+
