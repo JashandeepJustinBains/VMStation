@@ -3,6 +3,17 @@ kind: ServiceAccount
 metadata:
   name: drone
   namespace: kube-system
+secrets:
+  - name: drone-token
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: drone-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: drone
+type: kubernetes.io/service-account-token
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
