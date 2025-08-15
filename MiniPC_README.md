@@ -2,6 +2,47 @@ Absolutely! Here's a clean, professional-style documentation section you can inc
 
 ---
 
+# Mini PC - Monitoring Node
+
+The Mini PC serves as the monitoring node for the network. It runs Prometheus, Grafana, Loki, and other monitoring tools to visualize the network and system metrics on a web dashboard.
+
+## Features
+- **Prometheus**: Collects metrics from all devices.
+- **Grafana**: Visualizes metrics and logs.
+- **Loki**: Centralized logging for the network.
+- **Headless Debian**: Lightweight OS for efficient resource usage.
+
+## Setup Instructions
+1. **Install Base System Utilities**:
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install -y openssh-server net-tools htop tmux git curl wget ufw fail2ban
+   ```
+
+2. **Install Monitoring Tools**:
+   - Install Prometheus, Grafana, and Loki using Ansible playbooks:
+     ```bash
+     ansible-playbook -i inventory.txt ansible/plays/deploy_apps_with_helm.yaml
+     ```
+
+3. **Access the Dashboard**:
+   - Grafana: `http://<MiniPC_IP>:32000`
+   - Prometheus: `http://<MiniPC_IP>:32001`
+
+4. **Firewall Configuration**:
+   ```bash
+   sudo ufw allow ssh
+   sudo ufw allow 32000/tcp  # Grafana
+   sudo ufw allow 32001/tcp  # Prometheus
+   sudo ufw enable
+   ```
+
+## Notes
+- Ensure the Mini PC has a static IP address.
+- Use the `TODO.md` file for pending tasks.
+
+---
+
 ## 🖧 Serial Console Access via Mini PC
 
 This section documents how to use the mini PC to access the serial console of network devices (e.g., switches, routers) via the management interface using `minicom`.

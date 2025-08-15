@@ -36,9 +36,17 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+
+# Ansible and secrets
 ansible/group_vars/master.yml
 ansible/group_vars/all.yml
 ansible/group_vars/worker.yml
 ansible/group_vars/cloudflared_key.yml
-ansible/group_vars
+ansible/group_vars/
+secrets/
+*.vault
+*.key
+*.pem
+*.env
+inventory.yml
 
