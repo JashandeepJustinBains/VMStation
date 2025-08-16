@@ -50,17 +50,6 @@
           - podman
         state: absent
       ignore_errors: true
-    - name: Install Podman (optional)
-      apt:
-        name: podman
-        state: present
-      ignore_errors: true
-    - name: Run Prometheus Node Exporter (Podman)
-      command: "podman run -d --name node_exporter -p 9100:9100 prom/node-exporter"
-      ignore_errors: true
-    - name: Run Grafana Loki Agent (Podman)
-      command: "podman run -d --name loki_agent -p 3100:3100 grafana/loki"
-      ignore_errors: true
     - name: Reboot node (optional)
       reboot:
         msg: "Rebooting to apply clean state."
