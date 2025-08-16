@@ -88,6 +88,16 @@ This keeps your IPs and credentials secret from git users, but available locally
       args:
         removes: /usr/local/bin/k3s-agent-uninstall.sh
       ignore_errors: true
+    - name: Remove k3s certificates
+      file:
+        path: /etc/rancher/k3s
+        state: absent
+      ignore_errors: true
+    - name: Remove k3s install settings
+      file:
+        path: /var/lib/rancher/k3s
+        state: absent
+      ignore_errors: true
     - name: Remove other non-essential packages
       apt:
         name:
