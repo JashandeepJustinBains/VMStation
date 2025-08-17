@@ -19,7 +19,6 @@
       become_method: sudo
       become_pass: "{{ vault_r430_sudo_password }}"
       when: ansible_os_family == 'RedHat'
-        state: present
 
 - name: Deploy Jellyfin container on media nodes
   hosts: media
