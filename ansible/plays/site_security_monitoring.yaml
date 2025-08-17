@@ -86,6 +86,8 @@
         enabled: yes
         state: started
 
+  # The following block was duplicated and incorrectly indented. It is now removed for clarity and correctness.
+
 - name: Collect IPMI stats from R430
   hosts: monitoring
   become: true
@@ -147,120 +149,8 @@
           - "{{ splunk_data }}:/opt/splunk"
         ports:
           - "8000:8000"
-
-- handlers:
-  - name: Restart SSH
-    service:
-      name: ssh
-      state: restarted
-          - "8000:8000"
-
-- handlers:
-  - name: Restart SSH
-    service:
-      name: ssh
-      state: restarted
-
-  hosts: monitoring
-  become: true
-  vars:
-  node_exporter_version: "1.7.0"
-  node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
-  hosts: monitoring
-  become: true
-  vars:
-    node_exporter_version: "1.7.0"
-    node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
-
-  get_url:
-  url: "{{ node_exporter_url }}"
-  dest: /tmp/node_exporter.tar.gz
-  unarchive:
-  src: /tmp/node_exporter.tar.gz
-  dest: /opt/
-  remote_src: yes
-  file:
-  src: /opt/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter
-  dest: /usr/local/bin/node_exporter
-  state: link
-  copy:
-  dest: /etc/systemd/system/node_exporter.service
-  content: |
-    [Unit]
-    Description=Prometheus Node Exporter
-    After=network.target
-    [Service]
-    User=root
-    ExecStart=/usr/local/bin/node_exporter
-    [Install]
-    WantedBy=default.target
-  systemd:
-  name: node_exporter
-  enabled: yes
-  state: started
-
-  hosts: monitoring
-  become: true
-  vars:
-  r430_ip: "{{ hostvars['r430']['ansible_host'] | default('192.168.1.20') }}"
-  tasks:
-  package:
-  name: ipmitool
-  state: present
-  shell: |
-    ipmitool -I lanplus -H {{ r430_ip }} -U admin -P '{{ vault_ipmi_password | default("changeme") }}' sensor
-    register: ipmi_stats
-    changed_when: false
-  copy:
-  dest: /var/log/ipmi_r430_stats.txt
-  hosts: monitoring
-  become: true
-  vars:
-  r430_ip: "{{ hostvars['r430']['ansible_host'] | default('192.168.1.20') }}"
-  tasks:
-  package:
-  name: ipmitool
-  state: present
-  shell: |
-    ipmitool -I lanplus -H {{ r430_ip }} -U admin -P '{{ vault_ipmi_password | default("changeme") }}' sensor
-    register: ipmi_stats
-    changed_when: false
-  copy:
-  dest: /var/log/ipmi_r430_stats.txt
-  content: "{{ ipmi_stats.stdout }}"
-
-  hosts: "{{ vault_become_true_host | default('r430') }}"
-  become: true
-  tasks:
-  package:
-  name: ipmitool
-  state: present
-  command: ipmitool sensor
-  register: ipmi_local_stats
-  changed_when: false
-  copy:
-  dest: /var/log/ipmi_local_stats.txt
-  content: "{{ ipmi_local_stats.stdout }}"
-  content: "{{ ipmi_stats.stdout }}"
-
-  hosts: monitoring
-  become: true
-  vars:
-  splunk_image: "splunk/splunk:latest"
-  splunk_data: "/mnt/splunk"
-  tasks:
-  file:
-  path: "{{ splunk_data }}"
-  state: directory
-  owner: root
-  group: root
-  mode: '0755'
-  containers.podman.podman_container:
-  name: splunk
-  image: "{{ splunk_image }}"
-  state: started
-  restart_policy: always
-  volumes:
-  - "{{ splunk_data }}:/opt/splunk"
-  ports:
-  - "8000:8000"
+      handlers:
+        - name: Restart SSH
+          service:
+            name: ssh
+            state: restarted
