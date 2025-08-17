@@ -1,5 +1,6 @@
 
 
+
 - name: Basic security and functionality setup
   hosts: all
   become: true
@@ -45,12 +46,6 @@
       apt:
         name: fail2ban
         state: present
-
-handlers:
-  - name: Restart SSH
-    service:
-      name: ssh
-      state: restarted
 
 - name: Install and configure node_exporter
   hosts: monitoring
@@ -152,6 +147,19 @@ handlers:
           - "{{ splunk_data }}:/opt/splunk"
         ports:
           - "8000:8000"
+
+handlers:
+  - name: Restart SSH
+    service:
+      name: ssh
+      state: restarted
+          - "8000:8000"
+
+handlers:
+  - name: Restart SSH
+    service:
+      name: ssh
+      state: restarted
 
   hosts: monitoring
   become: true
