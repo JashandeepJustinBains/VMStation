@@ -1,20 +1,16 @@
-
 ---
 - hosts: all
   become: true
+  become_method: sudo
+  become_pass: "{{ vault_r430_sudo_password }}"
   tasks:
     - name: Ensure Podman is installed (Debian)
-      become: true
-      become_method: sudo
-      become_pass: "{{ vault_r430_sudo_password }}"
       when: ansible_os_family == 'Debian'
       apt:
         name: podman
         state: present
+
     - name: Ensure Podman is installed (RHEL)
-      become: true
-      become_method: sudo
-      become_pass: "{{ vault_r430_sudo_password }}"
       when: ansible_os_family == 'RedHat'
       yum:
         name: podman
@@ -35,6 +31,7 @@
         owner: root
         group: root
         mode: '0755'
+
     - name: Run Jellyfin container
       containers.podman.podman_container:
         name: jellyfin
@@ -56,15 +53,17 @@
     mount_point: "/mnt/media"
   tasks:
     - name: Ensure NFS client is installed (Debian)
+      when: ansible_os_family == 'Debian'
       apt:
         name: nfs-common
         state: present
-      when: ansible_os_family == 'Debian'
+
     - name: Ensure NFS client is installed (RHEL)
+      when: ansible_os_family == 'RedHat'
       yum:
         name: nfs-utils
         state: present
-      when: ansible_os_family == 'RedHat'
+
     - name: Create mount point
       file:
         path: "{{ mount_point }}"
@@ -72,6 +71,7 @@
         owner: root
         group: root
         mode: '0755'
+
     - name: Mount NFS share
       mount:
         src: "{{ nfs_server }}:{{ nfs_export }}"
