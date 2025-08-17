@@ -1,77 +1,81 @@
-- name: Ensure Podman is installed (Debian)
-  apt:
-    name: podman
-    state: present
+---
+- hosts: all
   become: true
-  become_method: sudo
-  become_pass: "{{ vault_r430_sudo_password }}"
-  when: ansible_os_family == 'Debian'
-
-- name: Ensure Podman is installed (RHEL)
-  yum:
-    name: podman
-    state: present
-  become: true
-  become_method: sudo
-  become_pass: "{{ vault_r430_sudo_password }}"
-  when: ansible_os_family == 'RedHat'
-
-- name: Deploy Jellyfin container on media nodes
-  hosts: media
-  become: true
-  vars:
-    jellyfin_image: "jellyfin/jellyfin:latest"
-    media_dir: "/mnt/media"
-    config_dir: "/mnt/media/jellyfin-config"
   tasks:
-    - name: Create Jellyfin config directory
-      file:
-        path: "{{ config_dir }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Run Jellyfin container
-      containers.podman.podman_container:
-        name: jellyfin
-        image: "{{ jellyfin_image }}"
-        state: started
-        restart_policy: always
-        volumes:
-          - "{{ media_dir }}:/media"
-          - "{{ config_dir }}:/config"
-        ports:
-          - "8096:8096"
+  - name: Ensure Podman is installed (Debian)
+    apt:
+      name: podman
+      state: present
+    become: true
+    become_method: sudo
+    become_pass: "{{ vault_r430_sudo_password }}"
+    when: ansible_os_family == 'Debian'
 
-- name: Mount NFS shares for media
-  hosts: media
-  become: true
-  vars:
-    nfs_server: "{{ hostvars['masternode']['ansible_host'] | default('192.168.1.10') }}"
-    nfs_export: "/srv/nfs/media"
-    mount_point: "/mnt/media"
-  tasks:
-    - name: Ensure NFS client is installed
-      apt:
-        name: nfs-common
-        state: present
-      when: ansible_os_family == 'Debian'
-    - name: Ensure NFS client is installed (RHEL)
-      yum:
-        name: nfs-utils
-        state: present
-      when: ansible_os_family == 'RedHat'
-    - name: Create mount point
-      file:
-        path: "{{ mount_point }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Mount NFS share
-      mount:
-        src: "{{ nfs_server }}:{{ nfs_export }}"
-        path: "{{ mount_point }}"
-        fstype: nfs
-        state: mounted
-        opts: rw
+  - name: Ensure Podman is installed (RHEL)
+    yum:
+      name: podman
+      state: present
+    become: true
+    become_method: sudo
+    become_pass: "{{ vault_r430_sudo_password }}"
+    when: ansible_os_family == 'RedHat'
+
+  - name: Deploy Jellyfin container on media nodes
+    hosts: media
+    become: true
+    vars:
+      jellyfin_image: "jellyfin/jellyfin:latest"
+      media_dir: "/mnt/media"
+      config_dir: "/mnt/media/jellyfin-config"
+    tasks:
+      - name: Create Jellyfin config directory
+        file:
+          path: "{{ config_dir }}"
+          state: directory
+          owner: root
+          group: root
+          mode: '0755'
+      - name: Run Jellyfin container
+        containers.podman.podman_container:
+          name: jellyfin
+          image: "{{ jellyfin_image }}"
+          state: started
+          restart_policy: always
+          volumes:
+            - "{{ media_dir }}:/media"
+            - "{{ config_dir }}:/config"
+          ports:
+            - "8096:8096"
+
+  - name: Mount NFS shares for media
+    hosts: media
+    become: true
+    vars:
+      nfs_server: "{{ hostvars['masternode']['ansible_host'] | default('192.168.1.10') }}"
+      nfs_export: "/srv/nfs/media"
+      mount_point: "/mnt/media"
+    tasks:
+      - name: Ensure NFS client is installed
+        apt:
+          name: nfs-common
+          state: present
+        when: ansible_os_family == 'Debian'
+      - name: Ensure NFS client is installed (RHEL)
+        yum:
+          name: nfs-utils
+          state: present
+        when: ansible_os_family == 'RedHat'
+      - name: Create mount point
+        file:
+          path: "{{ mount_point }}"
+          state: directory
+          owner: root
+          group: root
+          mode: '0755'
+      - name: Mount NFS share
+        mount:
+          src: "{{ nfs_server }}:{{ nfs_export }}"
+          path: "{{ mount_point }}"
+          fstype: nfs
+          state: mounted
+          opts: rw
