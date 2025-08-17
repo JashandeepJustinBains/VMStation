@@ -1,4 +1,5 @@
-  hosts: storage_node
+---
+- hosts: storage_node
   become: true
   vars:
     jellyfin_image: "jellyfin/jellyfin:latest"
