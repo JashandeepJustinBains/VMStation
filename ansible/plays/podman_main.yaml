@@ -19,7 +19,7 @@
   hosts: storage_node
   become: true
   vars:
-    jellyfin_image: "jellyfin/jellyfin:latest"
+    jellyfin_image: "docker.io/jellyfin/jellyfin:latest"
     media_dir: "/mnt/media"
     config_dir: "/mnt/media/jellyfin-config"
   tasks:
