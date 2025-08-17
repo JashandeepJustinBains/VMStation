@@ -1,5 +1,6 @@
-- import_playbook: master.yaml
-- import_playbook: helm_install.yaml
-- import_playbook: deploy_apps_with_helm.yaml
-- import_playbook: worker_container.yaml
-- import_playbook: bind_service_account.yaml
+---
+# Main playbook for Podman-based automation
+# Add new Podman play imports below
+import_playbook: podman_main.yaml
+import_playbook: jellyfin_setup.yaml
+import_playbook: site_security_monitoring.yaml

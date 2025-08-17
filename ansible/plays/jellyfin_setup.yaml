@@ -1,0 +1,64 @@
+---
+---
+- name: Jellyfin media server setup on storage_node
+  hosts: storage_node
+  become: true
+  vars:
+    jellyfin_image: "jellyfin/jellyfin:latest"
+    media_dir: "/mnt/media"
+    config_dir: "/mnt/jellyfin-config"
+    nfs_export: "/srv/media"
+    nfs_clients: "192.168.4.0/24(rw,sync,no_subtree_check)"
+  tasks:
+    - name: Ensure media directory exists
+      file:
+        path: "{{ media_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0775'
+    - name: Ensure Jellyfin config directory exists
+      file:
+        path: "{{ config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0775'
+    - name: Install NFS server packages
+      apt:
+        name: nfs-kernel-server
+        state: present
+      when: ansible_os_family == 'Debian'
+    - name: Install NFS server packages (RHEL)
+      yum:
+        name: nfs-utils
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Export media directory via NFS
+      lineinfile:
+        path: /etc/exports
+        line: "{{ nfs_export }} {{ nfs_clients }}"
+        state: present
+    - name: Reload NFS exports
+      command: exportfs -ra
+    - name: Install Podman
+      apt:
+        name: podman
+        state: present
+      when: ansible_os_family == 'Debian'
+    - name: Install Podman (RHEL)
+      yum:
+        name: podman
+        state: present
+      when: ansible_os_family == 'RedHat'
+    - name: Run Jellyfin container
+      containers.podman.podman_container:
+        name: jellyfin
+        image: "{{ jellyfin_image }}"
+        state: started
+        restart_policy: always
+        volumes:
+          - "{{ media_dir }}:/media"
+          - "{{ config_dir }}:/config"
+        ports:
+          - "8096:8096"
