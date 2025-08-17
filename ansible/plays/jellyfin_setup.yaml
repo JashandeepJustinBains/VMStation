@@ -1,6 +1,4 @@
----
----
-- name: Jellyfin media server setup on storage_node
+----
   hosts: storage_node
   become: true
   vars:
