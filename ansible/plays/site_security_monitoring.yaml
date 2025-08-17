@@ -42,93 +42,13 @@
       notify: Restart SSH
     - name: Install fail2ban
       apt:
-        name: fail2ban
-        state: present
-      when: ansible_os_family == 'Debian'
-    - name: Install fail2ban (RHEL)
-      yum:
-        name: fail2ban
-        state: present
-      when: ansible_os_family == 'RedHat'
-    - name: Install basic tools
-      package:
-        name:
-          - curl
-          - git
-          - htop
-          - sysstat
-        state: present
 
-  become: true
-  tasks:
-    - name: Ensure persistent directory for Drone
-      file:
-        path: /srv/drone
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Ensure persistent directory for Grafana
-      file:
-        path: /srv/grafana
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Ensure persistent directory for Prometheus
-      file:
-        path: /srv/prometheus
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Ensure persistent directory for Loki
-      file:
-        path: /srv/loki
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Install Podman (Debian)
-      apt:
-        name: podman
-        state: present
-      when: ansible_os_family == 'Debian'
-    - name: Install Podman (RHEL)
-      yum:
-        name: podman
-        state: present
-      when: ansible_os_family == 'RedHat'
-    - name: Set up automatic security updates (Debian)
-      apt:
-        name: unattended-upgrades
-        state: present
-      when: ansible_os_family == 'Debian'
-    - name: Set up automatic security updates (RHEL)
-      yum:
-        name: yum-cron
-        state: present
-      when: ansible_os_family == 'RedHat'
   handlers:
     - name: Restart SSH
       service:
         name: ssh
         state: restarted
 
-    - name: NFS server setup for media share
-      hosts: storage_node
-      become: true
-      tasks:
-        - name: Install NFS server packages (Debian)
-          apt:
-            name: nfs-kernel-server
-            state: present
-          when: ansible_os_family == 'Debian'
-        - name: Install NFS server packages (RHEL)
-          yum:
-            name: nfs-utils
-            state: present
-          when: ansible_os_family == 'RedHat'
         - name: Ensure /srv/media exists
           file:
             path: /srv/media
@@ -170,8 +90,6 @@
           when: ansible_os_family == 'Debian'
         - name: Install NFS client packages (RHEL)
           yum:
-            name: nfs-utils
-            state: present
           when: ansible_os_family == 'RedHat'
         - name: Ensure mount point exists
           file:
