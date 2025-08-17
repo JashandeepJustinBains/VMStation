@@ -1,3 +1,45 @@
+
+- name: Install and configure NFS server on storage_node
+  hosts: storage_node[0]
+  become: true
+  tasks:
+    - name: Install NFS server (Debian)
+      apt:
+        name: nfs-kernel-server
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install NFS server (RHEL)
+      yum:
+        name: nfs-utils
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure export directory exists
+      file:
+        path: /srv/media
+        state: directory
+        owner: root
+        group: root
+        mode: '0777'
+
+    - name: Export /srv/media to all storage_nodes
+      lineinfile:
+        path: /etc/exports
+        line: '/srv/media *(rw,sync,no_subtree_check,no_root_squash)'
+        create: yes
+
+    - name: Restart NFS server
+      service:
+        name: nfs-kernel-server
+        state: restarted
+      when: ansible_os_family == 'Debian'
+
+    - name: Restart NFS server (RHEL)
+      service:
+        name: nfs-server
+        state: restarted
+      when: ansible_os_family == 'RedHat'
 ---
 - hosts: all
   become: true
