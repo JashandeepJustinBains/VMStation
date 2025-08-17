@@ -1,4 +1,3 @@
----
 - hosts: storage_node
   become: true
   vars:

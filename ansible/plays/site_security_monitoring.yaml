@@ -59,9 +59,6 @@
           - sysstat
         state: present
 
----
-- name: Monitoring app directories setup (minipc only)
-  hosts: monitoring_node
   become: true
   tasks:
     - name: Ensure persistent directory for Drone
