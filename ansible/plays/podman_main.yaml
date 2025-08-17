@@ -1,7 +1,6 @@
 
 ---
-- name: Install Podman on Debian nodes
-  hosts: all
+- hosts: all
   become: true
   tasks:
     - name: Ensure Podman is installed (Debian)
@@ -12,11 +11,6 @@
       become_method: sudo
       become_pass: "{{ vault_r430_sudo_password }}"
       when: ansible_os_family == 'Debian'
-
-- name: Install Podman on RHEL nodes
-  hosts: all
-  become: true
-  tasks:
     - name: Ensure Podman is installed (RHEL)
       yum:
         name: podman
