@@ -59,4 +59,3 @@
           - "{{ config_dir }}:/config"
         ports:
           - "8096:8096"
----
