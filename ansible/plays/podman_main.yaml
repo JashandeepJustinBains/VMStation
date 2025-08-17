@@ -15,8 +15,8 @@
         name: podman
         state: present
 
-- name: Deploy Jellyfin container on media nodes
-  hosts: media
+-- name: Deploy Jellyfin container on storage_node nodes
+  hosts: storage_node
   become: true
   vars:
     jellyfin_image: "jellyfin/jellyfin:latest"
@@ -43,8 +43,8 @@
         ports:
           - "8096:8096"
 
-- name: Mount NFS shares for media
-  hosts: media
+- name: Mount NFS shares for storage_node
+  hosts: storage_node
   become: true
   vars:
     nfs_server: "{{ hostvars['masternode']['ansible_host'] | default('192.168.1.10') }}"
