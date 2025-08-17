@@ -6,18 +6,18 @@
       become: true
       become_method: sudo
       become_pass: "{{ vault_r430_sudo_password }}"
+      when: ansible_os_family == 'Debian'
       apt:
         name: podman
         state: present
-      when: ansible_os_family == 'Debian'
     - name: Ensure Podman is installed (RHEL)
       become: true
       become_method: sudo
       become_pass: "{{ vault_r430_sudo_password }}"
+      when: ansible_os_family == 'RedHat'
       yum:
         name: podman
         state: present
-      when: ansible_os_family == 'RedHat'
 
 - name: Deploy Jellyfin container on media nodes
   hosts: media
