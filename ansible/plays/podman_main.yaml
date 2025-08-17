@@ -40,7 +40,6 @@
         name: nfs-server
         state: restarted
       when: ansible_os_family == 'RedHat'
----
 - hosts: all
   become: true
   become_method: sudo
