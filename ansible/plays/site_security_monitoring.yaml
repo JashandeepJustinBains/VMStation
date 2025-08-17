@@ -148,14 +148,14 @@
         ports:
           - "8000:8000"
 
-handlers:
+- handlers:
   - name: Restart SSH
     service:
       name: ssh
       state: restarted
           - "8000:8000"
 
-handlers:
+- handlers:
   - name: Restart SSH
     service:
       name: ssh
