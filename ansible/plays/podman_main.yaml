@@ -1,14 +1,8 @@
----
 
-- hosts: all
+---
+- name: Install Podman on Debian nodes
+  hosts: all
   become: true
-  vars:
-    jellyfin_image: "jellyfin/jellyfin:latest"
-    media_dir: "/mnt/media"
-    config_dir: "/mnt/media/jellyfin-config"
-    nfs_server: "{{ hostvars['masternode']['ansible_host'] | default('192.168.1.10') }}"
-    nfs_export: "/srv/nfs/media"
-    mount_point: "/mnt/media"
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
@@ -19,6 +13,10 @@
       become_pass: "{{ vault_r430_sudo_password }}"
       when: ansible_os_family == 'Debian'
 
+- name: Install Podman on RHEL nodes
+  hosts: all
+  become: true
+  tasks:
     - name: Ensure Podman is installed (RHEL)
       yum:
         name: podman
@@ -28,6 +26,14 @@
       become_pass: "{{ vault_r430_sudo_password }}"
       when: ansible_os_family == 'RedHat'
 
+- name: Deploy Jellyfin container on media nodes
+  hosts: media
+  become: true
+  vars:
+    jellyfin_image: "jellyfin/jellyfin:latest"
+    media_dir: "/mnt/media"
+    config_dir: "/mnt/media/jellyfin-config"
+  tasks:
     - name: Create Jellyfin config directory
       file:
         path: "{{ config_dir }}"
@@ -35,8 +41,6 @@
         owner: root
         group: root
         mode: '0755'
-      when: inventory_hostname in groups['media']
-
     - name: Run Jellyfin container
       containers.podman.podman_container:
         name: jellyfin
@@ -48,20 +52,25 @@
           - "{{ config_dir }}:/config"
         ports:
           - "8096:8096"
-      when: inventory_hostname in groups['media']
 
-    - name: Ensure NFS client is installed
+- name: Mount NFS shares for media
+  hosts: media
+  become: true
+  vars:
+    nfs_server: "{{ hostvars['masternode']['ansible_host'] | default('192.168.1.10') }}"
+    nfs_export: "/srv/nfs/media"
+    mount_point: "/mnt/media"
+  tasks:
+    - name: Ensure NFS client is installed (Debian)
       apt:
         name: nfs-common
         state: present
-      when: ansible_os_family == 'Debian' and inventory_hostname in groups['media']
-
+      when: ansible_os_family == 'Debian'
     - name: Ensure NFS client is installed (RHEL)
       yum:
         name: nfs-utils
         state: present
-      when: ansible_os_family == 'RedHat' and inventory_hostname in groups['media']
-
+      when: ansible_os_family == 'RedHat'
     - name: Create mount point
       file:
         path: "{{ mount_point }}"
@@ -69,8 +78,6 @@
         owner: root
         group: root
         mode: '0755'
-      when: inventory_hostname in groups['media']
-
     - name: Mount NFS share
       mount:
         src: "{{ nfs_server }}:{{ nfs_export }}"
@@ -78,4 +85,3 @@
         fstype: nfs
         state: mounted
         opts: rw
-      when: inventory_hostname in groups['media']
