@@ -1,4 +1,3 @@
-
 - name: Install and configure NFS server on storage_node
   hosts: storage_node[0]
   become: true
@@ -119,3 +118,23 @@
         fstype: nfs
         state: mounted
         opts: rw
+
+- name: Configure security (UFW, fail2ban)
+  hosts: all
+  become: true
+  tasks:
+    - name: Allow SSH from local network (Debian)
+      command: ufw allow from 192.168.0.0/16 to any port ssh
+      when: ansible_os_family == 'Debian'
+
+    - name: Install fail2ban (Debian)
+      apt:
+        name: fail2ban
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install fail2ban (RHEL)
+      yum:
+        name: fail2ban
+        state: present
+      when: ansible_os_family == 'RedHat'
