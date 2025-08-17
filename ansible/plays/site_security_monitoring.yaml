@@ -1,4 +1,6 @@
 
+---
+- name: Basic security and functionality setup
   hosts: all
   become: true
   tasks:
