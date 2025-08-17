@@ -89,7 +89,7 @@
   become: true
   vars:
     nfs_server: "192.168.4.61"  # Set to the storage_node IP that is running the NFS server
-    nfs_export: "/srv/nfs/media"
+    nfs_export: "/srv/media"
     mount_point: "/mnt/media"
   tasks:
     - name: Ensure NFS client is installed (Debian)
