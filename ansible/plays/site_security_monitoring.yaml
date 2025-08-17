@@ -1,5 +1,5 @@
 
----
+
 - name: Basic security and functionality setup
   hosts: all
   become: true
@@ -18,6 +18,7 @@
     - name: Allow all local network connections
       command: ufw allow from 192.168.0.0/16
       when: ansible_os_family == 'Debian'
+    - name: Allow SSH from local network
       command: ufw allow ssh from 192.168.0.0/16
       when: ansible_os_family == 'Debian'
     # If using VPN on compute_node, allow VPN port (example: 1194 for OpenVPN)
@@ -42,12 +43,115 @@
       notify: Restart SSH
     - name: Install fail2ban
       apt:
+        name: fail2ban
+        state: present
 
-  handlers:
-    - name: Restart SSH
-      service:
-        name: ssh
-        state: restarted
+handlers:
+  - name: Restart SSH
+    service:
+      name: ssh
+      state: restarted
+
+- name: Install and configure node_exporter
+  hosts: monitoring
+  become: true
+  vars:
+    node_exporter_version: "1.7.0"
+    node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+  tasks:
+    - name: Download node_exporter
+      get_url:
+        url: "{{ node_exporter_url }}"
+        dest: /tmp/node_exporter.tar.gz
+    - name: Extract node_exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /opt/
+        remote_src: yes
+    - name: Link node_exporter binary
+      file:
+        src: /opt/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter
+        dest: /usr/local/bin/node_exporter
+        state: link
+    - name: Create systemd service for node_exporter
+      copy:
+        dest: /etc/systemd/system/node_exporter.service
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          After=network.target
+          [Service]
+          User=root
+          ExecStart=/usr/local/bin/node_exporter
+          [Install]
+          WantedBy=default.target
+    - name: Enable and start node_exporter
+      systemd:
+        name: node_exporter
+        enabled: yes
+        state: started
+
+- name: Collect IPMI stats from R430
+  hosts: monitoring
+  become: true
+  vars:
+    r430_ip: "{{ hostvars['r430']['ansible_host'] | default('192.168.1.20') }}"
+  tasks:
+    - name: Install ipmitool
+      package:
+        name: ipmitool
+        state: present
+    - name: Collect IPMI stats from R430
+      shell: |
+        ipmitool -I lanplus -H {{ r430_ip }} -U admin -P '{{ vault_ipmi_password | default("changeme") }}' sensor
+      register: ipmi_stats
+      changed_when: false
+    - name: Save IPMI stats to file
+      copy:
+        dest: /var/log/ipmi_r430_stats.txt
+        content: "{{ ipmi_stats.stdout }}"
+
+- name: Collect local IPMI stats
+  hosts: "{{ vault_become_true_host | default('r430') }}"
+  become: true
+  tasks:
+    - name: Install ipmitool
+      package:
+        name: ipmitool
+        state: present
+    - name: Collect local IPMI stats
+      command: ipmitool sensor
+      register: ipmi_local_stats
+      changed_when: false
+    - name: Save local IPMI stats to file
+      copy:
+        dest: /var/log/ipmi_local_stats.txt
+        content: "{{ ipmi_local_stats.stdout }}"
+
+- name: Deploy Splunk container
+  hosts: monitoring
+  become: true
+  vars:
+    splunk_image: "splunk/splunk:latest"
+    splunk_data: "/mnt/splunk"
+  tasks:
+    - name: Ensure Splunk data directory exists
+      file:
+        path: "{{ splunk_data }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: Run Splunk container
+      containers.podman.podman_container:
+        name: splunk
+        image: "{{ splunk_image }}"
+        state: started
+        restart_policy: always
+        volumes:
+          - "{{ splunk_data }}:/opt/splunk"
+        ports:
+          - "8000:8000"
 
   hosts: monitoring
   become: true
