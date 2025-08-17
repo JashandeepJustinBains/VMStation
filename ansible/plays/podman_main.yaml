@@ -88,7 +88,7 @@
   hosts: storage_node
   become: true
   vars:
-    nfs_server: "{{ hostvars['masternode']['ansible_host'] | default('192.168.1.10') }}"
+    nfs_server: "192.168.4.61"  # Set to the storage_node IP that is running the NFS server
     nfs_export: "/srv/nfs/media"
     mount_point: "/mnt/media"
   tasks:
