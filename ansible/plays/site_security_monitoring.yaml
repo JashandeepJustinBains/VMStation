@@ -149,8 +149,11 @@
           - "{{ splunk_data }}:/opt/splunk"
         ports:
           - "8000:8000"
-      handlers:
-        - name: Restart SSH
-          service:
-            name: ssh
-            state: restarted
+
+# Handlers must be defined at the playbook level, not inside a task.
+
+- handlers:
+  - name: Restart SSH
+    service:
+      name: ssh
+      state: restarted
