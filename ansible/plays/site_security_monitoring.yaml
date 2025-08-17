@@ -8,6 +8,26 @@
         name: ufw
         state: present
       when: ansible_os_family == 'Debian'
+    - name: Set UFW default deny incoming
+      command: ufw default deny incoming
+      when: ansible_os_family == 'Debian'
+    - name: Set UFW default allow outgoing
+      command: ufw default allow outgoing
+      when: ansible_os_family == 'Debian'
+    - name: Allow all local network connections
+      command: ufw allow from 192.168.0.0/16
+      when: ansible_os_family == 'Debian'
+    - name: Allow SSH from local network
+      command: ufw allow ssh from 192.168.0.0/16
+      when: ansible_os_family == 'Debian'
+    # If using VPN on compute_node, allow VPN port (example: 1194 for OpenVPN)
+    # - name: Allow VPN port
+    #   command: ufw allow 1194/udp
+    #   when: ansible_os_family == 'Debian'
+    # For media server file share, allow NFS (if used)
+    # - name: Allow NFS
+    #   command: ufw allow from 192.168.0.0/16 to any port nfs
+    #   when: ansible_os_family == 'Debian'
     - name: Install and configure firewalld (RHEL)
       yum:
         name: firewalld
@@ -97,6 +117,86 @@
       service:
         name: ssh
         state: restarted
+
+    - name: NFS server setup for media share
+      hosts: storage_node
+      become: true
+      tasks:
+        - name: Install NFS server packages (Debian)
+          apt:
+            name: nfs-kernel-server
+            state: present
+          when: ansible_os_family == 'Debian'
+        - name: Install NFS server packages (RHEL)
+          yum:
+            name: nfs-utils
+            state: present
+          when: ansible_os_family == 'RedHat'
+        - name: Ensure /srv/media exists
+          file:
+            path: /srv/media
+            state: directory
+            owner: root
+            group: root
+            mode: '0775'
+        - name: Export /srv/media via NFS
+          lineinfile:
+            path: /etc/exports
+            line: '/srv/media 192.168.0.0/16(rw,sync,no_subtree_check)'
+            create: yes
+            state: present
+        - name: Reload NFS exports
+          command: exportfs -ra
+        - name: Ensure NFS service is running (Debian)
+          service:
+            name: nfs-kernel-server
+            state: started
+            enabled: yes
+          when: ansible_os_family == 'Debian'
+        - name: Ensure NFS service is running (RHEL)
+          service:
+            name: nfs-server
+            state: started
+            enabled: yes
+          when: ansible_os_family == 'RedHat'
+
+    - name: NFS client mount for media share
+      hosts: compute_node
+      become: true
+      vars:
+        media_server_ip: "{{ hostvars[groups['storage_node'][0]]['ansible_host'] | default('192.168.1.10') }}"
+      tasks:
+        - name: Install NFS client packages (Debian)
+          apt:
+            name: nfs-common
+            state: present
+          when: ansible_os_family == 'Debian'
+        - name: Install NFS client packages (RHEL)
+          yum:
+            name: nfs-utils
+            state: present
+          when: ansible_os_family == 'RedHat'
+        - name: Ensure mount point exists
+          file:
+            path: /mnt/media
+            state: directory
+            owner: root
+            group: root
+            mode: '0775'
+        - name: Mount NFS share
+          mount:
+            path: /mnt/media
+            src: "{{ media_server_ip }}:/srv/media"
+            fstype: nfs
+            opts: rw
+            state: mounted
+        - name: Ensure NFS mount persists on reboot
+          mount:
+            path: /mnt/media
+            src: "{{ media_server_ip }}:/srv/media"
+            fstype: nfs
+            opts: rw
+            state: present
 
 - name: Monitoring setup
   hosts: monitoring
