@@ -43,6 +43,9 @@
       apt:
         name: fail2ban
         state: present
+  handlers:
+    - name: Restart SSH
+      command: systemctl restart sshd
 
 - name: Install and configure node_exporter
   hosts: monitoring_nodes
@@ -107,7 +110,3 @@
           - "{{ splunk_data }}:/opt/splunk"
         ports:
           - "8000:8000"
-
-- handlers:
-  - name: Restart SSH
-    command: systemctl restart sshd
