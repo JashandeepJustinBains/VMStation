@@ -1,3 +1,35 @@
+- name: Mount NFS share on non-storage_nodes
+  hosts: all:!storage_nodes
+  become: true
+  vars:
+    nfs_server: "192.168.4.61"
+    nfs_export: "/srv/media"
+    mount_point: "/mnt/media"
+  tasks:
+    - name: Install NFS client utilities (Debian)
+      apt:
+        name: nfs-common
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install NFS client utilities (RHEL)
+      yum:
+        name: nfs-utils
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure mount point exists
+      file:
+        path: "{{ mount_point }}"
+        state: directory
+
+    - name: Mount NFS share if not already mounted
+      mount:
+        src: "{{ nfs_server }}:{{ nfs_export }}"
+        path: "{{ mount_point }}"
+        fstype: nfs
+        state: mounted
+        opts: rw
 - hosts: storage_nodes
   become: true
   vars:
