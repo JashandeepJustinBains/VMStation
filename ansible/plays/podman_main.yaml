@@ -96,7 +96,6 @@
         state: mounted
         opts: rw
 
----
 
 - name: Deploy Jellyfin container on storage_node nodes
   hosts: storage_node
