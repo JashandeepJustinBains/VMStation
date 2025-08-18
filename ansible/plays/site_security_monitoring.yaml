@@ -1,6 +1,3 @@
-
-
-
 - name: Basic security and functionality setup
   hosts: all
   become: true
@@ -129,7 +126,7 @@
   hosts: monitoring_nodes
   become: true
   vars:
-    splunk_image: "splunk/splunk:latest"
+    splunk_image: "docker.io/splunk/splunk:latest"
     splunk_data: "/mnt/splunk"
   tasks:
     - name: Ensure Splunk data directory exists
