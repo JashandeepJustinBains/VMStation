@@ -140,19 +140,25 @@
 
     - name: Install fail2ban (RHEL)
       block:
+        - name: Check if fail2ban is already installed
+          shell: rpm -q fail2ban
+          register: fail2ban_installed
+          ignore_errors: true
         - name: Install EPEL repository (RHEL 7/8)
           yum:
             name: epel-release
             state: present
           when:
             - ansible_distribution_major_version is version('9', '<')
+            - fail2ban_installed.rc != 0
         - name: Install EPEL repository (RHEL 9+)
-          ansible.builtin.command:
-            cmd: dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+          command: dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
           when:
             - ansible_distribution_major_version is version('9', '>=')
+            - fail2ban_installed.rc != 0
         - name: Install fail2ban
           yum:
             name: fail2ban
             state: present
+          when: fail2ban_installed.rc != 0
       when: ansible_os_family == 'RedHat'
