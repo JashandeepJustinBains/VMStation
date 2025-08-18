@@ -83,45 +83,6 @@
         enabled: yes
         state: started
 
-  # The following block was duplicated and incorrectly indented. It is now removed for clarity and correctness.
-
-# - name: Collect IPMI stats from R430
-#   hosts: monitoring_nodes
-#   become: true
-#   vars:
-#     r430_ip: "{{ hostvars['r430']['ansible_host'] | default('192.168.1.20') }}"
-#   tasks:
-#     - name: Install ipmitool
-#       package:
-#         name: ipmitool
-#         state: present
-#     - name: Collect IPMI stats from R430
-#       shell: |
-#         ipmitool -I lanplus -H {{ r430_ip }} -U admin -P '{{ vault_ipmi_password | default("changeme") }}' sensor
-#       register: ipmi_stats
-#       changed_when: false
-#     - name: Save IPMI stats to file
-#       copy:
-#         dest: /var/log/ipmi_r430_stats.txt
-#         content: "{{ ipmi_stats.stdout }}"
-
-# - name: Collect local IPMI stats
-#   hosts: "{{ vault_become_true_host | default('compute_nodes') }}"
-#   become: true
-#   tasks:
-#     - name: Install ipmitool
-#       package:
-#         name: ipmitool
-#         state: present
-#     - name: Collect local IPMI stats
-#       command: ipmitool sensor
-#       register: ipmi_local_stats
-#       changed_when: false
-#     - name: Save local IPMI stats to file
-#       copy:
-#         dest: /var/log/ipmi_local_stats.txt
-#         content: "{{ ipmi_local_stats.stdout }}"
-
 - name: Deploy Splunk container
   hosts: monitoring_nodes
   become: true
@@ -147,10 +108,6 @@
         ports:
           - "8000:8000"
 
-# Handlers must be defined at the playbook level, not inside a task.
-
 - handlers:
   - name: Restart SSH
-    service:
-      name: ssh
-      state: restarted
+    command: systemctl restart sshd
