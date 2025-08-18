@@ -56,10 +56,12 @@
         shell: /bin/bash
         create_home: yes
     - name: Set Samba password for nfsuser
-      ansible.builtin.shell: |
-        echo -e "{{ samba_password }}\n{{ samba_password }}" | smbpasswd -s -a nfsuser
-      args:
-        creates: "/var/lib/samba/private/nfsuser_smb_set"
+      ansible.builtin.expect:
+        command: smbpasswd -a nfsuser
+        responses:
+          "New SMB password:": "{{ samba_password }}"
+          "Retype new SMB password:": "{{ samba_password }}"
+      become: true
       register: smbpasswd_result
       changed_when: smbpasswd_result.rc == 0
     - name: Mark Samba password set
