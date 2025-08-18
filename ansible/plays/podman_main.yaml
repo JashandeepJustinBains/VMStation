@@ -71,10 +71,6 @@
     media_dir: "/mnt/media"
     config_dir: "/mnt/media/jellyfin-config"
   tasks:
-    - name: Create Jellyfin config directory
-      file:
-        path: "{{ config_dir }}"
-        state: directory
 
     - name: Run Jellyfin container
       containers.podman.podman_container:
