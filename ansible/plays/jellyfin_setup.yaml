@@ -11,15 +11,11 @@
       file:
         path: "{{ media_dir }}"
         state: directory
-        owner: root
-        group: root
         mode: '0775'
     - name: Ensure Jellyfin config directory exists
       file:
         path: "{{ config_dir }}"
         state: directory
-        owner: root
-        group: root
         mode: '0775'
     - name: Install NFS server packages
       apt:
