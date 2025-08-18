@@ -18,16 +18,16 @@
       file:
         path: /srv/media
         state: directory
-        owner: root
-        group: root
+        owner: nfsuser
+        group: nfsuser
         mode: '0777'
 
     - name: Create Jellyfin config directory on NFS server
       file:
         path: /srv/media/jellyfin-config
         state: directory
-        owner: root
-        group: root
+        owner: nfsuser
+        group: nfsuser
         mode: '0755'
 
     - name: Export /srv/media to all storage_nodes
