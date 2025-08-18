@@ -63,32 +63,11 @@
         name: podman
         state: present
 
-- name: Deploy Jellyfin container on storage_node nodes
-  hosts: storage_node
-  become: true
-  vars:
-    jellyfin_image: "docker.io/jellyfin/jellyfin:latest"
-    media_dir: "/mnt/media"
-    config_dir: "/mnt/media/jellyfin-config"
-  tasks:
-
-    - name: Run Jellyfin container
-      containers.podman.podman_container:
-        name: jellyfin
-        image: "{{ jellyfin_image }}"
-        state: started
-        restart_policy: always
-        volumes:
-          - "{{ media_dir }}:/media"
-          - "{{ config_dir }}:/config"
-        ports:
-          - "8096:8096"
-
 - name: Mount NFS shares for storage_node
   hosts: storage_node
   become: true
   vars:
-    nfs_server: "192.168.4.61"  # Set to the storage_node IP that is running the NFS server
+    nfs_server: "192.168.4.61"
     nfs_export: "/srv/media"
     mount_point: "/mnt/media"
   tasks:
@@ -104,11 +83,10 @@
         name: nfs-utils
         state: present
 
-    - name: Ensure mount point exists before mounting NFS share
+    - name: Ensure mount point exists
       file:
         path: "{{ mount_point }}"
         state: directory
-      when: not (mount_point is mount)
 
     - name: Mount NFS share
       mount:
@@ -117,6 +95,34 @@
         fstype: nfs
         state: mounted
         opts: rw
+
+---
+
+- name: Deploy Jellyfin container on storage_node nodes
+  hosts: storage_node
+  become: true
+  vars:
+    jellyfin_image: "docker.io/jellyfin/jellyfin:latest"
+    media_dir: "/mnt/media"
+    config_dir: "/mnt/media/jellyfin-config"
+  tasks:
+    - name: Ensure config directory exists inside NFS mount
+      file:
+        path: "{{ config_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Run Jellyfin container
+      containers.podman.podman_container:
+        name: jellyfin
+        image: "{{ jellyfin_image }}"
+        state: started
+        restart_policy: always
+        volumes:
+          - "{{ media_dir }}:/media"
+          - "{{ config_dir }}:/config"
+        ports:
+          - "8096:8096"
 
 - name: Configure security (UFW, fail2ban)
   hosts: all
