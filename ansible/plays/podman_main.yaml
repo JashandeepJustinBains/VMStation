@@ -166,3 +166,40 @@
   handlers:
     - name: Restart SSH
       command: systemctl restart sshd
+
+# - name: Collect IPMI stats from R430
+#   hosts: compute_nodes
+#   become: true
+#   vars:
+#     r430_ip: "{{ hostvars['compute_nodes']['ansible_host'] | default('192.168.1.20') }}"
+#   tasks:
+#     - name: Install ipmitool
+#       package:
+#         name: ipmitool
+#         state: present
+#     - name: Collect IPMI stats from R430
+#       shell: |
+#         ipmitool -I lanplus -H {{ r430_ip }} -U admin -P '{{ vault_ipmi_password | default("changeme") }}' sensor
+#       register: ipmi_stats
+#       changed_when: false
+#     - name: Save IPMI stats to file
+#       copy:
+#         dest: /var/log/ipmi_r430_stats.txt
+#         content: "{{ ipmi_stats.stdout }}"
+
+# - name: Collect local IPMI stats
+#   hosts: compute_nodes
+#   become: true
+#   tasks:
+#     - name: Install ipmitool
+#       package:
+#         name: ipmitool
+#         state: present
+#     - name: Collect local IPMI stats
+#       command: ipmitool sensor
+#       register: ipmi_local_stats
+#       changed_when: false
+#     - name: Save local IPMI stats to file
+#       copy:
+#         dest: /var/log/ipmi_local_stats.txt
+#         content: "{{ ipmi_local_stats.stdout }}"
