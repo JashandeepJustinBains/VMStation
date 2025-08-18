@@ -34,7 +34,7 @@
       lineinfile:
         path: /etc/exports
         regexp: '^/srv/media'
-        line: '/srv/media 192.168.4.0/24(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000)'
+        line: '/srv/media 192.168.4.0/24(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1001,anongid=1001)'
         create: yes
 
     - name: Restart NFS server

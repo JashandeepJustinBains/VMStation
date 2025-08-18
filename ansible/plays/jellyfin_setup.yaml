@@ -5,7 +5,7 @@
     media_dir: "/mnt/media"
     config_dir: "/mnt/jellyfin-config"
     nfs_export: "/srv/media"
-    nfs_clients: "192.168.4.0/24(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1000,anongid=1000)"
+    nfs_clients: "192.168.4.0/24(rw,sync,no_subtree_check,no_root_squash,all_squash,anonuid=1001,anongid=1001)"
   tasks:
     - name: Ensure media directory exists
       file:
