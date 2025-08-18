@@ -57,7 +57,7 @@
         create_home: yes
     - name: Set Samba password for nfsuser
       ansible.builtin.shell: |
-        echo '{{ samba_password }}' | smbpasswd -s -a nfsuser
+        echo -e '{{ samba_password }}\n{{ samba_password }}' | smbpasswd -s -a nfsuser
       args:
         creates: "/var/lib/samba/private/nfsuser_smb_set"
       register: smbpasswd_result
