@@ -163,3 +163,6 @@
             state: present
           when: fail2ban_installed.rc != 0
       when: ansible_os_family == 'RedHat'
+  handlers:
+    - name: Restart SSH
+      command: systemctl restart sshd
