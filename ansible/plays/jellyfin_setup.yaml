@@ -49,6 +49,41 @@
         path: "{{ config_dir }}"
         state: directory
         mode: '0775'
+    - name: Install Samba (Debian)
+      apt:
+        name: samba
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Samba (RHEL)
+      yum:
+        name: samba
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Configure Samba share for media directory
+      blockinfile:
+        path: /etc/samba/smb.conf
+        marker: "# {ansible managed media share}"
+        block: |
+          [media]
+          path = /srv/media
+          browseable = yes
+          writable = yes
+          guest ok = yes
+          force user = nfsuser
+
+    - name: Restart Samba service (Debian)
+      service:
+        name: smbd
+        state: restarted
+      when: ansible_os_family == 'Debian'
+
+    - name: Restart Samba service (RHEL)
+      service:
+        name: smb
+        state: restarted
+      when: ansible_os_family == 'RedHat'
     - name: Install NFS server packages
       apt:
         name: nfs-kernel-server
