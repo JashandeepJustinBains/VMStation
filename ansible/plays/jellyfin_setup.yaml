@@ -55,6 +55,16 @@
         state: present
         shell: /bin/bash
         create_home: yes
+    - name: Ensure python3-pexpect is installed (Debian)
+      apt:
+        name: python3-pexpect
+        state: present
+      when: ansible_os_family == 'Debian'
+    - name: Ensure python3-pexpect is installed (RHEL)
+      yum:
+        name: python3-pexpect
+        state: present
+      when: ansible_os_family == 'RedHat'
     - name: Set Samba password for nfsuser
       ansible.builtin.expect:
         command: smbpasswd -a nfsuser
