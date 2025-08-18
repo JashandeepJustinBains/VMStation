@@ -83,10 +83,11 @@
         name: nfs-utils
         state: present
 
-    - name: Ensure mount point exists
+    - name: Ensure mount point exists before mounting NFS share
       file:
         path: "{{ mount_point }}"
         state: directory
+      when: not (mount_point is mount)
 
     - name: Mount NFS share
       mount:
@@ -138,7 +139,13 @@
       when: ansible_os_family == 'Debian'
 
     - name: Install fail2ban (RHEL)
-      yum:
-        name: fail2ban
-        state: present
+      block:
+        - name: Ensure EPEL repository is enabled
+          yum:
+            name: epel-release
+            state: present
+        - name: Install fail2ban
+          yum:
+            name: fail2ban
+            state: present
       when: ansible_os_family == 'RedHat'
