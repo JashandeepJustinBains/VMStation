@@ -75,9 +75,6 @@
       file:
         path: "{{ config_dir }}"
         state: directory
-        owner: root
-        group: root
-        mode: '0755'
 
     - name: Run Jellyfin container
       containers.podman.podman_container:
