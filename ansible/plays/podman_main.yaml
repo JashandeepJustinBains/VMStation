@@ -111,13 +111,11 @@
         name: nfs-utils
         state: present
 
-    - name: Create mount point
+    - name: Ensure mount point exists before mounting NFS share
       file:
         path: "{{ mount_point }}"
         state: directory
-        owner: root
-        group: root
-        mode: '0755'
+      when: not (mount_point is mount)
 
     - name: Mount NFS share
       mount:
