@@ -1,5 +1,5 @@
-- name: Install and configure NFS server on storage_node
-  hosts: storage_node[0]
+name: Install and configure NFS server on storage_nodes
+hosts: storage_nodes[0]
   become: true
   tasks:
     - name: Install NFS server (Debian)
@@ -64,8 +64,8 @@
         name: podman
         state: present
 
-- name: Mount NFS shares for storage_node
-  hosts: storage_node
+name: Mount NFS shares for storage_nodes
+hosts: storage_nodes
   become: true
   vars:
     nfs_server: "192.168.4.61"
@@ -99,8 +99,8 @@
         opts: rw
 
 
-- name: Deploy Jellyfin container on storage_node nodes
-  hosts: storage_node
+name: Deploy Jellyfin container on storage_nodes
+hosts: storage_nodes
   become: true
   vars:
     jellyfin_image: "docker.io/jellyfin/jellyfin:latest"

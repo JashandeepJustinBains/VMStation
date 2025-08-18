@@ -20,7 +20,7 @@
       command: ufw allow from 192.168.0.0/16
       when: ansible_os_family == 'Debian'
     - name: Allow SSH from local network
-      command: ufw allow ssh from 192.168.0.0/16
+      command: ufw allow from 192.168.0.0/16 to any port ssh
       when: ansible_os_family == 'Debian'
     # If using VPN on compute_node, allow VPN port (example: 1194 for OpenVPN)
     # - name: Allow VPN port
@@ -48,7 +48,7 @@
         state: present
 
 - name: Install and configure node_exporter
-  hosts: monitoring
+  hosts: monitoring_nodes
   become: true
   vars:
     node_exporter_version: "1.7.0"
@@ -89,7 +89,7 @@
   # The following block was duplicated and incorrectly indented. It is now removed for clarity and correctness.
 
 - name: Collect IPMI stats from R430
-  hosts: monitoring
+  hosts: monitoring_nodes
   become: true
   vars:
     r430_ip: "{{ hostvars['r430']['ansible_host'] | default('192.168.1.20') }}"
@@ -109,7 +109,7 @@
         content: "{{ ipmi_stats.stdout }}"
 
 - name: Collect local IPMI stats
-  hosts: "{{ vault_become_true_host | default('r430') }}"
+  hosts: "{{ vault_become_true_host | default('compute_nodes') }}"
   become: true
   tasks:
     - name: Install ipmitool
@@ -126,7 +126,7 @@
         content: "{{ ipmi_local_stats.stdout }}"
 
 - name: Deploy Splunk container
-  hosts: monitoring
+  hosts: monitoring_nodes
   become: true
   vars:
     splunk_image: "splunk/splunk:latest"
