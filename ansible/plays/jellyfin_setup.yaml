@@ -49,6 +49,24 @@
         path: "{{ config_dir }}"
         state: directory
         mode: '0775'
+    - name: Ensure nfsuser exists
+      ansible.builtin.user:
+        name: nfsuser
+        state: present
+        shell: /bin/bash
+        create_home: yes
+    - name: Set Samba password for nfsuser
+      ansible.builtin.command:
+        cmd: "(echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a nfsuser"
+      args:
+        creates: "/var/lib/samba/private/nfsuser_smb_set"
+      register: smbpasswd_result
+      changed_when: smbpasswd_result.rc == 0
+    - name: Mark Samba password set
+      ansible.builtin.file:
+        path: "/var/lib/samba/private/nfsuser_smb_set"
+        state: touch
+      when: smbpasswd_result.rc == 0
     - name: Install Samba (Debian)
       apt:
         name: samba
@@ -70,7 +88,8 @@
           path = /srv/media
           browseable = yes
           writable = yes
-          guest ok = yes
+          valid users = nfsuser
+          guest ok = no
           force user = nfsuser
 
     - name: Restart Samba service (Debian)
