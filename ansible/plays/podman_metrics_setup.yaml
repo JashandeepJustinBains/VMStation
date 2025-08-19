@@ -1,3 +1,22 @@
+    - name: Add Podman upstream repository (Debian/Ubuntu)
+      apt_repository:
+        repo: 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/ /'
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Add Podman repo key (Debian/Ubuntu)
+      apt_key:
+        url: 'https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/Release.key'
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Upgrade Podman to latest upstream version (Debian/Ubuntu)
+      apt:
+        name: podman
+        state: latest
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
 - name: Podman Metrics Exporter Setup
   hosts: all
   become: true
