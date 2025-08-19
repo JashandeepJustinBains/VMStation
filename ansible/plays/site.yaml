@@ -2,6 +2,6 @@
 # Main playbook for Podman-based automation
 # Add new Podman play imports below
 - import_playbook: podman_main.yaml
-- import_playbook: jellyfin_setup.yaml
+#- import_playbook: jellyfin_setup.yaml
 - import_playbook: site_security_monitoring.yaml
 - import_playbook: podman_metrics_setup.yaml

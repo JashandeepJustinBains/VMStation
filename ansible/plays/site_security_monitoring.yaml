@@ -86,27 +86,33 @@
         enabled: yes
         state: started
 
-- name: Deploy Splunk container
+
+- name: Install and configure Grafana
   hosts: monitoring_nodes
   become: true
   vars:
-    splunk_image: "docker.io/splunk/splunk:latest"
-    splunk_data: "/mnt/splunk"
+    grafana_version: "10.2.3"
+    grafana_deb_url: "https://dl.grafana.com/oss/release/grafana_{{ grafana_version }}_amd64.deb"
   tasks:
-    - name: Ensure Splunk data directory exists
-      file:
-        path: "{{ splunk_data }}"
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-    - name: Run Splunk container
-      containers.podman.podman_container:
-        name: splunk
-        image: "{{ splunk_image }}"
+    - name: Download Grafana deb package
+      get_url:
+        url: "{{ grafana_deb_url }}"
+        dest: /tmp/grafana.deb
+    - name: Install Grafana
+      apt:
+        deb: /tmp/grafana.deb
+        state: present
+    - name: Ensure Grafana service is enabled and started
+      systemd:
+        name: grafana-server
+        enabled: yes
         state: started
-        restart_policy: always
-        volumes:
-          - "{{ splunk_data }}:/opt/splunk"
-        ports:
-          - "8000:8000"
+    - name: Allow Grafana port 3000 through UFW (Debian)
+      command: ufw allow 3000/tcp
+      when: ansible_os_family == 'Debian'
+    - name: Allow Grafana port 3000 through firewalld (RHEL)
+      firewalld:
+        port: 3000/tcp
+        permanent: yes
+        state: enabled
+      when: ansible_os_family == 'RedHat'
