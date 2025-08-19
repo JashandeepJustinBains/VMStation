@@ -2,11 +2,12 @@
   hosts: all
   become: true
   tasks:
-    - name: Install Podman plugins for metrics (Debian)
-      apt:
+
+    - name: Install Podman plugins for metrics (RHEL)
+      yum:
         name: podman-plugins
         state: present
-      when: ansible_os_family == 'Debian'
+      when: ansible_os_family == 'RedHat'
 
     - name: Install Podman plugins for metrics (RHEL)
       yum:
