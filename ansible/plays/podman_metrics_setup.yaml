@@ -7,55 +7,14 @@
 
     - name: Add Podman repo key (Debian/Ubuntu)
       apt_key:
-        keyserver: keyserver.ubuntu.com
-        id: 4D64390375060AA4
-        state: present
-      when: ansible_os_family == 'Debian'
-
-    - name: Add Podman upstream repository (Debian/Ubuntu)
-      apt_repository:
-        repo: 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/ /'
-        state: present
-      when: ansible_os_family == 'Debian'
-
-    - name: Upgrade Podman to latest upstream version (Debian/Ubuntu)
-  hosts: all
-  become: true
-  tasks:
-    - name: Add Podman upstream repository (Debian/Ubuntu)
-      apt_repository:
-        repo: 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/ /'
-        state: present
-      when: ansible_os_family == 'Debian'
-    - name: Add Podman repo key (Debian/Ubuntu)
-      apt_key:
         url: 'https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/Release.key'
         state: present
       when: ansible_os_family == 'Debian'
-    - name: Upgrade Podman to latest upstream version (Debian/Ubuntu)
-      apt:
-        name: podman
-        state: latest
-        update_cache: yes
-      when: ansible_os_family == 'Debian'
-    - name: Install Podman plugins for metrics (RHEL)
-      yum:
-        name: podman-plugins
+
+    - name: Add Podman upstream repository (Debian/Ubuntu)
+      apt_repository:
+        repo: 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/ /'
         state: present
-      when: ansible_os_family == 'RedHat'
-    - name: Enable Podman REST API for Prometheus metrics
-      copy:
-        dest: /etc/systemd/system/podman-metrics.service
-        content: |
-          [Unit]
-          Description=Podman REST API for Prometheus metrics
-          After=network.target
+      when: ansible_os_family == 'Debian'
 
-          [Service]
-          ExecStart=/usr/bin/podman system service --time=0 tcp:0.0.0.0:8080
-          Restart=always
-          User=root
-
-          [Install]
-          WantedBy=multi-user.target
-      notify:
+    - name: Upgrade Podman to latest upstream version (Debian/Ubuntu)
