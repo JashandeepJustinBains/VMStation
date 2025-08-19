@@ -18,9 +18,6 @@
       when: ansible_os_family == 'Debian'
 
     - name: Upgrade Podman to latest upstream version (Debian/Ubuntu)
-
----
-- name: Podman Metrics Exporter Setup
   hosts: all
   become: true
   tasks:
@@ -56,11 +53,6 @@
           [Service]
           ExecStart=/usr/bin/podman system service --time=0 tcp:0.0.0.0:8080
           Restart=always
-          User=root
-
-          [Install]
-          WantedBy=multi-user.target
-
           User=root
 
           [Install]
