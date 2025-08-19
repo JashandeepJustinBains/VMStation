@@ -60,29 +60,7 @@
 
           [Install]
           WantedBy=multi-user.target
-      notify:
-        - Reload systemd
-        - Start podman-metrics
-  handlers:
-    - name: Reload systemd
-      become: true
-      systemd:
-        daemon_reload: yes
 
-    - name: Start podman-metrics
-      become: true
-      systemd:
-        name: podman-metrics.service
-        enabled: yes
-        state: started
-        content: |
-          [Unit]
-          Description=Podman REST API for Prometheus metrics
-          After=network.target
-
-          [Service]
-          ExecStart=/usr/bin/podman system service --time=0 tcp:0.0.0.0:8080
-          Restart=always
           User=root
 
           [Install]
