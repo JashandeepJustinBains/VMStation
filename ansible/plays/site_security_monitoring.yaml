@@ -126,9 +126,10 @@
         - /etc/grafana/provisioning/datasources
         - /etc/grafana/provisioning/dashboards
 
-    - name: Provision Prometheus data source for Grafana
+
+    - name: Provision Prometheus and Loki data sources for Grafana
       copy:
-        dest: /etc/grafana/provisioning/datasources/prometheus.yaml
+        dest: /etc/grafana/provisioning/datasources/datasources.yaml
         content: |
           apiVersion: 1
           datasources:
@@ -137,10 +138,16 @@
               access: proxy
               url: http://localhost:9090
               isDefault: true
+            - name: Loki
+              type: loki
+              access: proxy
+              url: http://localhost:3100
+              isDefault: false
         owner: grafana
         group: grafana
         mode: '0644'
       notify: Restart grafana-server
+
 
 
     - name: Copy Podman dashboard JSON for provisioning
@@ -152,15 +159,58 @@
         mode: '0644'
       notify: Restart grafana-server
 
-    - name: Provision Podman dashboard in Grafana
+    - name: Copy Loki dashboard JSON for provisioning
       copy:
-        dest: /etc/grafana/provisioning/dashboards/podman_dashboard.yaml
+        content: |
+          {
+            "dashboard": {
+              "id": null,
+              "title": "Loki Logs Overview",
+              "tags": ["loki", "logs"],
+              "timezone": "browser",
+              "schemaVersion": 36,
+              "version": 1,
+              "refresh": "30s",
+              "panels": [
+                {
+                  "type": "logs",
+                  "title": "Recent Loki Logs",
+                  "datasource": "Loki",
+                  "targets": [
+                    {
+                      "expr": "{job=\"varlogs\"}",
+                      "format": "logs"
+                    }
+                  ],
+                  "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12}
+                }
+              ]
+            }
+          }
+        dest: /etc/grafana/provisioning/dashboards/loki_dashboard.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart grafana-server
+
+
+    - name: Provision Podman and Loki dashboards in Grafana
+      copy:
+        dest: /etc/grafana/provisioning/dashboards/dashboards.yaml
         content: |
           apiVersion: 1
           providers:
             - name: 'Podman Dashboards'
               orgId: 1
               folder: 'Podman'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /etc/grafana/provisioning/dashboards
+            - name: 'Loki Dashboards'
+              orgId: 1
+              folder: 'Loki'
               type: file
               disableDeletion: false
               editable: true
