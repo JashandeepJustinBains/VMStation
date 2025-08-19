@@ -1,56 +1,54 @@
 {
-  "dashboard": {
-    "id": null,
-    "title": "Podman Containers Overview",
-    "tags": ["podman", "containers"],
-    "timezone": "browser",
-    "schemaVersion": 36,
-    "version": 1,
-    "refresh": "30s",
-    "panels": [
-      {
-        "type": "table",
-        "title": "Running Containers by Node",
-        "datasource": "Prometheus",
-        "targets": [
-          {
-            "expr": "podman_container_running{instance=~'.*'}",
-            "format": "table"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {},
-          "overrides": []
-        },
-        "options": {
-          "showHeader": true
-        },
-        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8}
+  "id": null,
+  "title": "Podman Containers Overview",
+  "tags": ["podman", "containers"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "table",
+      "title": "Running Containers by Node",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "podman_container_running{instance=~'.*'}",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
       },
-      {
-        "type": "graph",
-        "title": "Container CPU Usage (per node)",
-        "datasource": "Prometheus",
-        "targets": [
-          {
-            "expr": "sum(rate(podman_container_cpu_usage_seconds_total[5m])) by (instance, name)",
-            "legendFormat": "{{instance}} {{name}}"
-          }
-        ],
-        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+      "options": {
+        "showHeader": true
       },
-      {
-        "type": "graph",
-        "title": "Container Memory Usage (per node)",
-        "datasource": "Prometheus",
-        "targets": [
-          {
-            "expr": "sum(podman_container_memory_usage_bytes) by (instance, name)",
-            "legendFormat": "{{instance}} {{name}}"
-          }
-        ],
-        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
-      }
-    ]
-  }
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8}
+    },
+    {
+      "type": "graph",
+      "title": "Container CPU Usage (per node)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(podman_container_cpu_usage_seconds_total[5m])) by (instance, name)",
+          "legendFormat": "{{instance}} {{name}}"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+    },
+    {
+      "type": "graph",
+      "title": "Container Memory Usage (per node)",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(podman_container_memory_usage_bytes) by (instance, name)",
+          "legendFormat": "{{instance}} {{name}}"
+        }
+      ],
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+    }
+  ]
 }
