@@ -112,20 +112,15 @@
       command: ufw allow 3000/tcp
       when: ansible_os_family == 'Debian'
 
-    - name: Enable anonymous access in Grafana
-      lineinfile:
-        path: /etc/grafana/grafana.ini
-        regexp: '^enabled ='
-        line: 'enabled = true'
-        insertafter: '\[auth.anonymous\]'
-      notify: Restart grafana-server
 
-    - name: Set anonymous org_role to Admin
-      lineinfile:
+    - name: Ensure [auth.anonymous] section exists in grafana.ini
+      blockinfile:
         path: /etc/grafana/grafana.ini
-        regexp: '^org_role ='
-        line: 'org_role = Admin'
-        insertafter: '\[auth.anonymous\]'
+        marker: "# {ansible managed block for anonymous access}"
+        block: |
+          [auth.anonymous]
+          enabled = true
+          org_role = Admin
       notify: Restart grafana-server
 
   handlers:
