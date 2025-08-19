@@ -1,0 +1,34 @@
+- name: Podman Metrics Exporter Setup
+  hosts: all
+  become: true
+  tasks:
+    - name: Enable Podman REST API for Prometheus metrics
+      copy:
+        dest: /etc/systemd/system/podman-metrics.service
+        content: |
+          [Unit]
+          Description=Podman REST API for Prometheus metrics
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/bin/podman system service --time=0 tcp:0.0.0.0:8080
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+      notify:
+        - Reload systemd
+        - Start podman-metrics
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+      listen: Reload systemd
+
+    - name: Start podman-metrics
+      systemd:
+        name: podman-metrics.service
+        enabled: yes
+        state: started
+      listen: Start podman-metrics
