@@ -1,11 +1,166 @@
 - name: Mount NFS share on non-storage_nodes
-  hosts: all:!storage_nodes
+  hosts: all
   become: true
   vars:
     nfs_server: "192.168.4.61"
     nfs_export: "/srv/media"
     mount_point: "/mnt/media"
   tasks:
+    - name: Install node_exporter (system metrics)
+      become: true
+      ansible.builtin.shell: |
+        wget https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz -O /tmp/node_exporter.tar.gz
+        tar -xzf /tmp/node_exporter.tar.gz -C /tmp
+        cp /tmp/node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/
+        useradd -rs /bin/false node_exporter || true
+        echo -e '[Unit]\nDescription=Node Exporter\n[Service]\nUser=node_exporter\nExecStart=/usr/local/bin/node_exporter\n[Install]\nWantedBy=default.target' > /etc/systemd/system/node_exporter.service
+        systemctl daemon-reload
+        systemctl enable --now node_exporter
+      args:
+        creates: /usr/local/bin/node_exporter
+    - name: Install promtail (Loki log shipper)
+      become: true
+      ansible.builtin.shell: |
+        wget https://github.com/grafana/loki/releases/download/v2.9.4/promtail-linux-amd64.zip -O /tmp/promtail.zip
+        unzip -o /tmp/promtail.zip -d /usr/local/bin/
+        useradd -rs /bin/false promtail || true
+        echo -e '[Unit]\nDescription=Promtail\n[Service]\nUser=promtail\nExecStart=/usr/local/bin/promtail-linux-amd64 -config.file=/etc/promtail-config.yaml\n[Install]\nWantedBy=default.target' > /etc/systemd/system/promtail.service
+        systemctl daemon-reload
+        systemctl enable --now promtail
+      args:
+        creates: /usr/local/bin/promtail-linux-amd64
+    - name: Create promtail config
+      become: true
+      copy:
+        dest: /etc/promtail-config.yaml
+        content: |
+          server:
+            http_listen_port: 9080
+          positions:
+            filename: /tmp/positions.yaml
+          clients:
+            - url: http://192.168.4.63:3100/loki/api/v1/push
+          scrape_configs:
+            - job_name: system
+              static_configs:
+                - targets:
+                    - localhost
+                  labels:
+                    job: varlogs
+                    __path__: /var/log/*log
+  tasks:
+    - name: Install Prometheus
+      become: true
+      ansible.builtin.shell: |
+        wget https://github.com/prometheus/prometheus/releases/download/v2.52.0/prometheus-2.52.0.linux-amd64.tar.gz -O /tmp/prometheus.tar.gz
+        tar -xzf /tmp/prometheus.tar.gz -C /tmp
+        cp /tmp/prometheus-2.52.0.linux-amd64/prometheus /usr/local/bin/
+        cp /tmp/prometheus-2.52.0.linux-amd64/promtool /usr/local/bin/
+        mkdir -p /etc/prometheus /var/lib/prometheus
+        useradd -rs /bin/false prometheus || true
+        echo -e '[Unit]\nDescription=Prometheus\n[Service]\nUser=prometheus\nExecStart=/usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/var/lib/prometheus\n[Install]\nWantedBy=default.target' > /etc/systemd/system/prometheus.service
+        systemctl daemon-reload
+        systemctl enable --now prometheus
+      args:
+        creates: /usr/local/bin/prometheus
+    - name: Create Prometheus config
+      become: true
+      copy:
+        dest: /etc/prometheus/prometheus.yml
+        content: |
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'node_exporters'
+              static_configs:
+                - targets:
+                    - '192.168.4.61:9100'
+                    - '192.168.4.62:9100'
+                    - '192.168.4.63:9100'
+            - job_name: 'podman_apps'
+              static_configs:
+                - targets:
+                    # Add podman app metrics endpoints here
+            # Add more scrape configs as needed
+    - name: Install Loki
+      become: true
+      ansible.builtin.shell: |
+        wget https://github.com/grafana/loki/releases/download/v2.9.4/loki-linux-amd64.zip -O /tmp/loki.zip
+        unzip -o /tmp/loki.zip -d /usr/local/bin/
+        useradd -rs /bin/false loki || true
+        echo -e '[Unit]\nDescription=Loki\n[Service]\nUser=loki\nExecStart=/usr/local/bin/loki-linux-amd64 -config.file=/etc/loki-config.yaml\n[Install]\nWantedBy=default.target' > /etc/systemd/system/loki.service
+        systemctl daemon-reload
+        systemctl enable --now loki
+      args:
+        creates: /usr/local/bin/loki-linux-amd64
+    - name: Create Loki config
+      become: true
+      copy:
+        dest: /etc/loki-config.yaml
+        content: |
+          auth_enabled: false
+          server:
+            http_listen_port: 3100
+          ingester:
+            lifecycler:
+              address: 127.0.0.1
+              ring:
+                kvstore:
+                  store: inmemory
+              final_sleep: 0s
+            chunk_idle_period: 5m
+            max_chunk_age: 1h
+            chunk_target_size: 1048576
+          schema_config:
+            configs:
+              - from: 2020-10-24
+                store: boltdb-shipper
+                object_store: filesystem
+                schema: v11
+                index:
+                  prefix: index_
+                  period: 168h
+          storage_config:
+            boltdb_shipper:
+              active_index_directory: /tmp/loki/index
+              cache_location: /tmp/loki/cache
+              shared_store: filesystem
+            filesystem:
+              directory: /tmp/loki/chunks
+          limits_config:
+            enforce_metric_name: false
+            reject_old_samples: true
+            reject_old_samples_max_age: 168h
+          chunk_store_config:
+            max_look_back_period: 0s
+          table_manager:
+            retention_deletes_enabled: true
+            retention_period: 336h
+    - name: Install Grafana
+      become: true
+      ansible.builtin.shell: |
+        wget https://dl.grafana.com/oss/release/grafana-10.2.2.linux-amd64.tar.gz -O /tmp/grafana.tar.gz
+        tar -xzf /tmp/grafana.tar.gz -C /tmp
+        cp -r /tmp/grafana-10.2.2 /usr/share/grafana
+        ln -sf /usr/share/grafana/bin/grafana-server /usr/local/bin/grafana-server
+        useradd -rs /bin/false grafana || true
+        echo -e '[Unit]\nDescription=Grafana\n[Service]\nUser=grafana\nExecStart=/usr/local/bin/grafana-server --homepath=/usr/share/grafana\n[Install]\nWantedBy=default.target' > /etc/systemd/system/grafana.service
+        systemctl daemon-reload
+        systemctl enable --now grafana
+      args:
+        creates: /usr/local/bin/grafana-server
+  tasks:
+    - name: Install Splunk Forwarder (example)
+      become: true
+      ansible.builtin.shell: |
+        wget -O /tmp/splunkforwarder.tgz 'https://download.splunk.com/products/universalforwarder/releases/9.2.1/linux/splunkforwarder-9.2.1-123456-linux-2.6-x86_64.tgz'
+        tar -xzf /tmp/splunkforwarder.tgz -C /opt
+        /opt/splunkforwarder/bin/splunk start --accept-license --answer-yes --no-prompt
+        /opt/splunkforwarder/bin/splunk enable boot-start
+        /opt/splunkforwarder/bin/splunk add forward-server <splunk-server-ip>:9997
+        /opt/splunkforwarder/bin/splunk add monitor /var/log
+      args:
+        creates: /opt/splunkforwarder
     - name: Install NFS client utilities (Debian)
       apt:
         name: nfs-common
