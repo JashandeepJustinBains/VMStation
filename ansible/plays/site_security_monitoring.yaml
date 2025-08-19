@@ -128,6 +128,15 @@
 
 
 
+
+    - name: Remove extra Grafana datasource YAML files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/grafana/provisioning/datasources/prometheus.yaml
+        - /etc/grafana/provisioning/datasources/sample.yaml
+
     - name: Provision Prometheus and Loki data sources for Grafana
       copy:
         dest: /etc/grafana/provisioning/datasources/datasources.yaml
