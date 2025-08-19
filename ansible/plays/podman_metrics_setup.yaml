@@ -20,15 +20,15 @@
       notify:
         - Reload systemd
         - Start podman-metrics
-
+  handlers:
     - name: Reload systemd
+      become: true
       systemd:
         daemon_reload: yes
-      listen: Reload systemd
 
     - name: Start podman-metrics
+      become: true
       systemd:
         name: podman-metrics.service
         enabled: yes
         state: started
-      listen: Start podman-metrics
