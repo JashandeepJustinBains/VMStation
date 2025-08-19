@@ -142,7 +142,8 @@
         mode: '0644'
       notify: Restart grafana-server
 
-    - name: Copy Podman dashboard JSON
+
+    - name: Copy Podman dashboard JSON for provisioning
       copy:
         src: grafana_podman_dashboard.json
         dest: /etc/grafana/provisioning/dashboards/podman_dashboard.json
@@ -159,7 +160,7 @@
           providers:
             - name: 'Podman Dashboards'
               orgId: 1
-              folder: ''
+              folder: 'Podman'
               type: file
               disableDeletion: false
               editable: true
