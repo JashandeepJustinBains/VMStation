@@ -114,6 +114,18 @@
 
 
 
+
+    - name: Ensure Grafana provisioning directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: '0755'
+      loop:
+        - /etc/grafana/provisioning/datasources
+        - /etc/grafana/provisioning/dashboards
+
     - name: Provision Prometheus data source for Grafana
       copy:
         dest: /etc/grafana/provisioning/datasources/prometheus.yaml
@@ -125,12 +137,18 @@
               access: proxy
               url: http://localhost:9090
               isDefault: true
+        owner: grafana
+        group: grafana
+        mode: '0644'
       notify: Restart grafana-server
 
     - name: Copy Podman dashboard JSON
       copy:
         src: grafana_podman_dashboard.json
         dest: /etc/grafana/provisioning/dashboards/podman_dashboard.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
       notify: Restart grafana-server
 
     - name: Provision Podman dashboard in Grafana
@@ -147,6 +165,9 @@
               editable: true
               options:
                 path: /etc/grafana/provisioning/dashboards
+        owner: grafana
+        group: grafana
+        mode: '0644'
       notify: Restart grafana-server
 
   handlers:
