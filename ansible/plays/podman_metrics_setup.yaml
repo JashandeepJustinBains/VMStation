@@ -2,6 +2,18 @@
   hosts: all
   become: true
   tasks:
+    - name: Install Podman plugins for metrics (Debian)
+      apt:
+        name: podman-plugins
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Podman plugins for metrics (RHEL)
+      yum:
+        name: podman-plugins
+        state: present
+      when: ansible_os_family == 'RedHat'
+
     - name: Enable Podman REST API for Prometheus metrics
       copy:
         dest: /etc/systemd/system/podman-metrics.service
