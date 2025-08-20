@@ -63,10 +63,49 @@
         command: -config.file=/etc/promtail/promtail.yaml
       tags: logs
 
-    - name: Ensure firewall allows Prometheus/Loki scraping
+    - name: Download node_exporter binary
+      ansible.builtin.get_url:
+        url: https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz
+        dest: /tmp/node_exporter.tar.gz
+        mode: '0644'
+      tags: node_exporter
+
+    - name: Extract node_exporter
+      ansible.builtin.unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /opt/
+        remote_src: yes
+      tags: node_exporter
+
+    - name: Create systemd service for node_exporter
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/node_exporter.service
+        content: |
+          [Unit]
+          Description=Node Exporter
+          After=network.target
+
+          [Service]
+          User=root
+          ExecStart=/opt/node_exporter-1.7.0.linux-amd64/node_exporter
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+      tags: node_exporter
+
+    - name: Start and enable node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: started
+        enabled: yes
+      tags: node_exporter
+
+    - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
       ansible.builtin.ufw:
         rule: allow
-        port: "9882,3100"
+        port: "9882,3100,9100"
         proto: tcp
       when: ansible_os_family == 'Debian'
       tags: firewall
