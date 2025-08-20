@@ -42,6 +42,15 @@
       when: ansible_service_mgr == 'systemd'
       tags: metrics
 
+    - name: Ensure /etc/promtail directory exists
+      ansible.builtin.file:
+        path: /etc/promtail
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags: logs
+
     - name: Deploy promtail container
       containers.podman.podman_container:
         name: promtail
