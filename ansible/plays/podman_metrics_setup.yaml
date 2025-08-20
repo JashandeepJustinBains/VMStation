@@ -31,7 +31,7 @@
         line: 'metrics_port = 9882'
         state: present
         create: yes
-      notify: Restart podman
+      # No handler needed; explicit restart task follows
       tags: metrics
 
     - name: Ensure Podman service is restarted to apply metrics config
