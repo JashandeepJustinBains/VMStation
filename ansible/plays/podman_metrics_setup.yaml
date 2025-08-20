@@ -103,6 +103,16 @@
       tags: node_exporter
 
 
+    - name: Ensure /etc/prometheus directory exists on monitoring_node
+      ansible.builtin.file:
+        path: /etc/prometheus
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
     - name: Copy prometheus.yml to monitoring_node
       ansible.builtin.copy:
         src: files/prometheus.yml
