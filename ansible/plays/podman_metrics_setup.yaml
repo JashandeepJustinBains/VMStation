@@ -102,9 +102,10 @@
         enabled: yes
       tags: node_exporter
 
+
     - name: Copy prometheus.yml to monitoring_node
       ansible.builtin.copy:
-        src: files/prometheus.yml
+        src: ../../files/prometheus.yml
         dest: /etc/prometheus/prometheus.yml
         owner: root
         group: root
@@ -114,7 +115,7 @@
 
     - name: Copy promtail config to all nodes
       ansible.builtin.copy:
-        src: files/promtail-config.yaml
+        src: ../../files/promtail-config.yaml
         dest: /etc/promtail/promtail.yaml
         owner: root
         group: root
