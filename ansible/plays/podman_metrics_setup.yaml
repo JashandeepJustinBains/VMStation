@@ -4,7 +4,7 @@
   hosts: all
   become: true
   tasks:
-
+    # ...existing code...
     - name: Add Podman repo key (Debian/Ubuntu)
       apt_key:
         url: 'https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_22.04/Release.key'
@@ -23,3 +23,33 @@
         state: latest
         update_cache: yes
       when: ansible_os_family == 'Debian'
+
+    - name: Deploy podman-exporter container
+      containers.podman.podman_container:
+        name: podman-exporter
+        image: quay.io/prometheuscommunity/podman-exporter:latest
+        state: started
+        ports:
+          - 9882:9882
+        restart_policy: always
+      tags: metrics
+
+    - name: Deploy promtail container
+      containers.podman.podman_container:
+        name: promtail
+        image: grafana/promtail:latest
+        state: started
+        volumes:
+          - /var/log:/var/log:ro
+          - /etc/promtail:/etc/promtail:ro
+        restart_policy: always
+        command: -config.file=/etc/promtail/promtail.yaml
+      tags: logs
+
+    - name: Ensure firewall allows Prometheus/Loki scraping
+      ansible.builtin.ufw:
+        rule: allow
+        port: "9882,3100"
+        proto: tcp
+      when: ansible_os_family == 'Debian'
+      tags: firewall
