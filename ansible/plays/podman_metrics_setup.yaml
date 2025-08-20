@@ -45,7 +45,7 @@
     - name: Deploy promtail container
       containers.podman.podman_container:
         name: promtail
-        image: grafana/promtail:latest
+        image: docker.io/grafana/promtail:latest
         state: started
         volumes:
           - /var/log:/var/log:ro
