@@ -102,6 +102,25 @@
         enabled: yes
       tags: node_exporter
 
+    - name: Copy prometheus.yml to monitoring_node
+      ansible.builtin.copy:
+        src: files/prometheus.yml
+        dest: /etc/prometheus/prometheus.yml
+        owner: root
+        group: root
+        mode: '0644'
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Copy promtail config to all nodes
+      ansible.builtin.copy:
+        src: files/promtail-config.yaml
+        dest: /etc/promtail/promtail.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      tags: promtail
+
     - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
       ansible.builtin.ufw:
         rule: allow
