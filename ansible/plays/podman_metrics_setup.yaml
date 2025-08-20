@@ -24,14 +24,22 @@
         update_cache: yes
       when: ansible_os_family == 'Debian'
 
-    - name: Deploy podman-exporter container
-      containers.podman.podman_container:
-        name: podman-exporter
-        image: quay.io/prometheuscommunity/podman-exporter:latest
-        state: started
-        ports:
-          - 9882:9882
-        restart_policy: always
+    - name: Enable Podman metrics endpoint
+      ansible.builtin.lineinfile:
+        path: /etc/containers/containers.conf
+        regexp: '^#?metrics_port ='
+        line: 'metrics_port = 9882'
+        state: present
+        create: yes
+      notify: Restart podman
+      tags: metrics
+
+    - name: Ensure Podman service is restarted to apply metrics config
+      ansible.builtin.systemd:
+        name: podman
+        state: restarted
+        enabled: yes
+      when: ansible_service_mgr == 'systemd'
       tags: metrics
 
     - name: Deploy promtail container
