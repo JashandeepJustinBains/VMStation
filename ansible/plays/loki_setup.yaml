@@ -24,7 +24,7 @@
         group: root
         mode: '0755'
 
-    - name: Ensure Loki index and chunk directories exist
+    - name: Ensure Loki index, chunk, and compactor directories exist
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
@@ -35,6 +35,7 @@
         - /tmp/loki/index
         - /tmp/loki/index_cache
         - /tmp/loki/chunks
+        - /tmp/loki/compactor
 
     - name: Download Loki binary
       ansible.builtin.get_url:
@@ -81,6 +82,7 @@
               shared_store: filesystem
             filesystem:
               directory: /tmp/loki/chunks
+              compactor_directory: /tmp/loki/compactor
           limits_config:
             enforce_metric_name: false
             reject_old_samples: true
