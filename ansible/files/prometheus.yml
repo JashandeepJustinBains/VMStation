@@ -2,10 +2,14 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'podman_metrics'
-    static_configs:
-      - targets: ['192.168.4.61:9882', '192.168.4.62:9882', '192.168.4.63:9882']
-
   - job_name: 'node_exporter'
     static_configs:
       - targets: ['192.168.4.61:9100', '192.168.4.62:9100', '192.168.4.63:9100']
+
+  - job_name: 'podman_system_metrics'
+    static_configs:
+      - targets: ['192.168.4.61:9882', '192.168.4.62:9882', '192.168.4.63:9882']
+
+  - job_name: 'podman_exporter'
+    static_configs:
+      - targets: ['192.168.4.61:9300', '192.168.4.62:9300', '192.168.4.63:9300']

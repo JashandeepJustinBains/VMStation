@@ -207,6 +207,15 @@
       changed_when: node_exporter_pull.rc == 0
       tags: node_exporter
 
+    - name: Ensure node_exporter textfile collector directory exists
+      ansible.builtin.file:
+        path: /var/lib/node_exporter/textfile_collector
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags: node_exporter
+
     - name: Run node_exporter as a Podman container
       containers.podman.podman_container:
         name: node-exporter
@@ -219,7 +228,8 @@
           - /proc:/host/proc:ro
           - /sys:/host/sys:ro
           - /:/rootfs:ro
-        command: --path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs
+          - /var/lib/node_exporter/textfile_collector:/var/lib/node_exporter/textfile_collector:Z
+        command: --path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
       when: node_exporter_pull.rc == 0
       tags: node_exporter
 
