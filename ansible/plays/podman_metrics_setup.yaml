@@ -135,7 +135,11 @@
     - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
       ansible.builtin.ufw:
         rule: allow
-        port: "9882,3100,9100"
+        port: "{{ item }}"
         proto: tcp
+      loop:
+        - 9882
+        - 3100
+        - 9100
       when: ansible_os_family == 'Debian'
       tags: firewall
