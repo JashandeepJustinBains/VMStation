@@ -3,34 +3,7 @@
   become: true
   tasks:
     - name: Ensure Prometheus scrape config includes Podman endpoints
-      copy:
+      ansible.builtin.template:
+        src: templates/prometheus.yml.j2
         dest: /etc/prometheus/prometheus.yml
-        content: |
-          global:
-            scrape_interval: 15s
-          scrape_configs:
-            - job_name: 'node_exporters'
-              static_configs:
-                - targets:
-{% for h in groups['monitoring_nodes'] | default([]) %}
-                 - '{{ h }}:9100'
-{% endfor %}
-{% for h in groups['storage_nodes'] | default([]) %}
-                 - '{{ h }}:9100'
-{% endfor %}
-{% for h in groups['compute_nodes'] | default([]) %}
-                 - '{{ h }}:9100'
-{% endfor %}
-            - job_name: 'podman_metrics'
-              static_configs:
-                - targets:
-{% for h in groups['monitoring_nodes'] | default([]) %}
-                 - '{{ h }}:9882'
-{% endfor %}
-{% for h in groups['storage_nodes'] | default([]) %}
-                 - '{{ h }}:9882'
-{% endfor %}
-{% for h in groups['compute_nodes'] | default([]) %}
-                 - '{{ h }}:9882'
-{% endfor %}
-            # Add more scrape configs as needed
+        mode: '0644'
