@@ -1,6 +1,6 @@
 {
   "id": null,
-  "title": "Podman Containers Overview",
+  "title": "Podman Overview",
   "tags": ["podman", "containers"],
   "timezone": "browser",
   "schemaVersion": 36,
@@ -8,47 +8,40 @@
   "refresh": "30s",
   "panels": [
     {
-      "type": "table",
-      "title": "Running Containers by Node",
+      "type": "graph",
+      "title": "Container CPU Usage (sum by instance)",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "podman_container_running{instance=~'.*'}",
-          "format": "table"
+          "expr": "sum(rate(container_cpu_usage_seconds_total[5m])) by (instance)",
+          "legendFormat": "{{instance}}"
         }
       ],
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "options": {
-        "showHeader": true
-      },
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8}
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
     },
     {
       "type": "graph",
-      "title": "Container CPU Usage (per node)",
+      "title": "Container Memory Usage (sum by instance)",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(podman_container_cpu_usage_seconds_total[5m])) by (instance, name)",
-          "legendFormat": "{{instance}} {{name}}"
+          "expr": "sum(container_memory_usage_bytes) by (instance)",
+          "legendFormat": "{{instance}}"
         }
       ],
-      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
     },
     {
-      "type": "graph",
-      "title": "Container Memory Usage (per node)",
-      "datasource": "Prometheus",
+      "type": "logs",
+      "title": "Podman Stats Logs (Loki)",
+      "datasource": "Loki",
       "targets": [
         {
-          "expr": "sum(podman_container_memory_usage_bytes) by (instance, name)",
-          "legendFormat": "{{instance}} {{name}}"
+          "expr": "{job=\"varlogs\"}",
+          "refId": "A"
         }
       ],
-      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8}
     }
   ]
 }

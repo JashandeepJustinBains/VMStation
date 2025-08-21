@@ -317,7 +317,7 @@
               PODMAN_SOCKET: /var/run/podman.sock
           when: podman_exporter_build.rc == 0
 
-      when: podman_exporter_pull.rc != 0
+  when: podman_exporter_pull.rc != 0
   tags: podman_exporter
 
     - name: Ensure podman stats log directory exists
@@ -505,7 +505,8 @@
         owner: root
         group: root
         mode: '0644'
-      tags: promtail
+  notify: Restart Promtail Container
+  tags: promtail
 
     - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
       ansible.builtin.ufw:
@@ -524,3 +525,7 @@
       ansible.builtin.command: podman restart prometheus || true
       become: true
       listen: Restart Prometheus Container
+    - name: Restart Promtail Container
+      ansible.builtin.command: podman restart promtail || true
+      become: true
+      listen: Restart Promtail Container
