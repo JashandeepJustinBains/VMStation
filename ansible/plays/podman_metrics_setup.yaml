@@ -132,45 +132,33 @@
         command: -config.file=/etc/promtail/promtail.yaml -positions.file=/var/promtail/positions.yaml
       tags: logs
 
-    - name: Download node_exporter binary on the control host
-      ansible.builtin.get_url:
-        url: https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz
-        dest: /tmp/node_exporter.tar.gz
-        mode: '0644'
-      delegate_to: localhost
-      run_once: true
+    - name: Pull node_exporter image from Docker Hub
+      ansible.builtin.command: podman pull docker.io/prom/node-exporter:latest
+      register: node_exporter_pull
+      failed_when: false
+      changed_when: node_exporter_pull.rc == 0
       tags: node_exporter
 
-    - name: Extract node_exporter on target hosts (archive copied from control)
-      ansible.builtin.unarchive:
-        src: /tmp/node_exporter.tar.gz
-        dest: /opt/
-        remote_src: no
-      tags: node_exporter
-
-    - name: Create systemd service for node_exporter
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/node_exporter.service
-        content: |
-          [Unit]
-          Description=Node Exporter
-          After=network.target
-
-          [Service]
-          User=root
-          ExecStart=/opt/node_exporter-1.7.0.linux-amd64/node_exporter
-          Restart=always
-
-          [Install]
-          WantedBy=multi-user.target
-        mode: '0644'
-      tags: node_exporter
-
-    - name: Start and enable node_exporter
-      ansible.builtin.systemd:
-        name: node_exporter
+    - name: Run node_exporter as a Podman container
+      containers.podman.podman_container:
+        name: node-exporter
+        image: docker.io/prom/node-exporter:latest
         state: started
-        enabled: yes
+        restart_policy: always
+        ports:
+          - "9100:9100"
+        volumes:
+          - /proc:/host/proc:ro
+          - /sys:/host/sys:ro
+          - /:/rootfs:ro
+        command: --path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs
+      when: node_exporter_pull.rc == 0
+      tags: node_exporter
+
+    - name: Warn if node_exporter image pull failed
+      ansible.builtin.debug:
+        msg: "node_exporter image pull failed (docker.io/prom/node-exporter:latest). Falling back to system package or local binary setup."
+      when: node_exporter_pull.rc != 0
       tags: node_exporter
 
     - name: Pull podman_exporter image from Docker Hub (public)
