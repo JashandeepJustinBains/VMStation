@@ -240,6 +240,17 @@
           ansible.builtin.set_fact:
             podman_exporter_git_repo: "{{ podman_exporter_git_repo | default('https://github.com/containers/prometheus-podman-exporter.git') }}"
 
+          - name: Ensure git is installed (required to clone when building from source)
+            ansible.builtin.package:
+              name: git
+              state: present
+            become: true
+
+          - name: Set target architecture for podman build args
+            ansible.builtin.set_fact:
+              podman_build_targetarch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture in ['aarch64','arm64'] else ansible_architecture) }}"
+              podman_build_targetplatform: "linux/{{ podman_build_targetarch }}"
+
         - name: Detect Podman socket path (check common locations)
           ansible.builtin.shell: |
             if [ -S /run/podman/podman.sock ]; then
@@ -281,7 +292,12 @@
           register: podman_exporter_git
 
         - name: Build podman_exporter image locally with Podman
-          ansible.builtin.command: podman build -t local/prometheus-podman-exporter:latest /tmp/prometheus-podman-exporter
+          ansible.builtin.command: >-
+            podman build
+            --build-arg TARGETPLATFORM={{ podman_build_targetplatform }}
+            --build-arg TARGETOS=linux
+            --build-arg TARGETARCH={{ podman_build_targetarch }}
+            -t local/prometheus-podman-exporter:latest /tmp/prometheus-podman-exporter
           register: podman_exporter_build
           failed_when: podman_exporter_build.rc != 0
 
