@@ -144,7 +144,8 @@
       tags: node_exporter
 
     - name: Get PID owning 9100 (if any)
-      ansible.builtin.shell: "ss -ltnp | grep ':9100' | sed -n 's/.*pid=\\\([0-9]*\\\),.*/\\1/p' | head -n1 || true"
+      ansible.builtin.shell: |
+        ss -ltnp | grep ':9100' | sed -n 's/.*pid=\([0-9]*\),.*/\1/p' | head -n1 || true
       register: port_9100_pid
       changed_when: false
       when: port_9100_in_use
