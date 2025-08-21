@@ -227,8 +227,11 @@
       tags: node_exporter
 
     - name: Pull podman_exporter image from Docker Hub (public)
-      image: docker.io/prometheus_podman_exporter:latest
-      state: started      register: podman_exporter_pull
+      containers.podman.podman_container:
+        name: podman-exporter
+        image: docker.io/prometheus_podman_exporter:latest
+        state: started
+      register: podman_exporter_pull
       failed_when: false
       changed_when: podman_exporter_pull.rc == 0
       tags: podman_exporter
@@ -236,7 +239,7 @@
     - name: Deploy podman_exporter container on hosts (exposes Prometheus metrics on 9300)
       containers.podman.podman_container:
         name: podman-exporter
-        image: docker.io/veemero/podman_exporter:latest
+        image: docker.io/prometheus_podman_exporter:latest
         state: started
         restart_policy: always
         ports:
