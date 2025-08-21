@@ -3,7 +3,33 @@
   hosts: monitoring_nodes
   become: true
   tasks:
-    - name: Remove Loki index and chunk directories
+    - name: Optionally migrate existing Loki data into /srv/monitoring_data/loki
+      block:
+        - name: Create temporary migration directory
+          ansible.builtin.file:
+            path: /tmp/loki_migration
+            state: directory
+            mode: '0755'
+
+        - name: Move existing /var/lib/loki into /srv/monitoring_data (if present)
+          ansible.builtin.shell: |
+            set -e
+            if [ -d /var/lib/loki ]; then
+              mv /var/lib/loki/* /srv/monitoring_data/loki/ || true
+            fi
+            if [ -d /tmp/loki ]; then
+              mv /tmp/loki/* /srv/monitoring_data/loki/ || true
+            fi
+          args:
+            warn: false
+
+        - name: Remove temporary migration directory
+          ansible.builtin.file:
+            path: /tmp/loki_migration
+            state: absent
+      when: monitoring_migrate_existing | default(false)
+
+    - name: Remove legacy and current Loki index and chunk directories (cleanup)
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
@@ -11,6 +37,14 @@
         - /tmp/loki/index
         - /tmp/loki/index_cache
         - /tmp/loki/chunks
+        - /var/lib/loki/index
+        - /var/lib/loki/index_cache
+        - /var/lib/loki/chunks
+        - /var/lib/loki/compactor
+        - /srv/monitoring_data/loki/index
+        - /srv/monitoring_data/loki/index_cache
+        - /srv/monitoring_data/loki/chunks
+        - /srv/monitoring_data/loki/compactor
       tags: loki_cleanup
 - name: Loki Setup
   hosts: monitoring_nodes
@@ -24,7 +58,15 @@
         group: root
         mode: '0755'
 
-    - name: Ensure Loki index, chunk, and compactor directories exist
+    - name: Ensure persistent Loki base directory exists
+      ansible.builtin.file:
+        path: /srv/monitoring_data/loki
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Ensure Loki index, chunk, and compactor directories exist under /srv/monitoring_data
       ansible.builtin.file:
         path: "{{ item }}"
         state: directory
@@ -32,10 +74,17 @@
         group: root
         mode: '0755'
       loop:
-        - /tmp/loki/index
-        - /tmp/loki/index_cache
-        - /tmp/loki/chunks
-        - /tmp/loki/compactor
+        - /srv/monitoring_data/loki/index
+        - /srv/monitoring_data/loki/index_cache
+        - /srv/monitoring_data/loki/chunks
+        - /srv/monitoring_data/loki/compactor
+    - name: Ensure recursive ownership and permissions for /srv/monitoring_data/loki
+      ansible.builtin.file:
+        path: /srv/monitoring_data/loki
+        owner: root
+        group: root
+        mode: '0755'
+        recurse: yes
 
     - name: Download Loki binary
       ansible.builtin.get_url:
@@ -77,14 +126,14 @@
                   period: 24h
           storage_config:
             boltdb_shipper:
-              active_index_directory: /tmp/loki/index
-              cache_location: /tmp/loki/index_cache
+              active_index_directory: /srv/monitoring_data/loki/index
+              cache_location: /srv/monitoring_data/loki/index_cache
               shared_store: filesystem
             filesystem:
-              directory: /tmp/loki/chunks
+              directory: /srv/monitoring_data/loki/chunks
           compactor:
             shared_store: filesystem
-            working_directory: /tmp/loki/compactor
+            working_directory: /srv/monitoring_data/loki/compactor
           limits_config:
             enforce_metric_name: false
             reject_old_samples: true
@@ -97,6 +146,7 @@
         owner: root
         group: root
         mode: '0644'
+      notify: Restart Loki
 
     - name: Create systemd service for Loki
       ansible.builtin.copy:
@@ -123,4 +173,11 @@
         name: loki
         state: started
         enabled: yes
+        daemon_reload: yes
+
+  handlers:
+    - name: Restart Loki
+      ansible.builtin.systemd:
+        name: loki
+        state: restarted
         daemon_reload: yes

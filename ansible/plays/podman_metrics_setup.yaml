@@ -4,6 +4,17 @@
   hosts: all
   become: true
   tasks:
+    - name: Validate /srv/monitoring_data is mounted
+      ansible.builtin.fail:
+        msg: "/srv/monitoring_data is not mounted. Mount your monitoring partition (e.g. /dev/sda1) to /srv/monitoring_data and re-run the playbook."
+      when: (ansible_mounts | selectattr('mount','equalto','/srv/monitoring_data') | list | length) == 0
+
+    - name: Validate /srv/monitoring_data is writable
+      ansible.builtin.command: test -w /srv/monitoring_data
+      register: monitoring_write_test
+      failed_when: monitoring_write_test.rc != 0
+      changed_when: false
+
     # ...existing code...
     - name: Add Podman repo key (Debian/Ubuntu)
       apt_key:
@@ -51,6 +62,36 @@
         mode: '0755'
       tags: logs
 
+    - name: Ensure monitoring data base exists on hosts
+      ansible.builtin.file:
+        path: /srv/monitoring_data
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags: monitoring_storage
+
+    - name: Ensure promtail data directory exists on hosts
+      ansible.builtin.file:
+        path: /srv/monitoring_data/promtail
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+        recurse: yes
+      tags: monitoring_storage
+
+    - name: Ensure prometheus data directory exists on monitoring nodes
+      ansible.builtin.file:
+        path: /srv/monitoring_data/prometheus
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+        recurse: yes
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: monitoring_storage
+
     - name: Deploy promtail container
       containers.podman.podman_container:
         name: promtail
@@ -59,8 +100,9 @@
         volumes:
           - /var/log:/var/log:ro
           - /etc/promtail:/etc/promtail:ro
+          - /srv/monitoring_data/promtail:/var/promtail:rw
         restart_policy: always
-        command: -config.file=/etc/promtail/promtail.yaml
+        command: -config.file=/etc/promtail/promtail.yaml -positions.file=/var/promtail/positions.yaml
       tags: logs
 
     - name: Download node_exporter binary
@@ -121,6 +163,28 @@
         group: root
         mode: '0644'
       when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Create a systemd unit for local Prometheus (if binary exists)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus Server
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/srv/monitoring_data/prometheus
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+      when: inventory_hostname in groups['monitoring_nodes'] and ansible_stat.exists is defined and ansible_stat.exists
+      vars:
+        ansible_stat: "{{ lookup('ansible.builtin.stat', '/usr/local/bin/prometheus', wantlist=false) }}"
       tags: prometheus
 
     - name: Copy promtail config to all nodes
