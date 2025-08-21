@@ -173,6 +173,38 @@
         enabled: yes
       tags: node_exporter
 
+    - name: Deploy podman_exporter container on hosts (exposes Prometheus metrics on 9300)
+      containers.podman.podman_container:
+        name: podman-exporter
+        image: ghcr.io/veemero/podman_exporter:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "9300:9300"
+        command: --web.listen-address=0.0.0.0:9300
+      tags: podman_exporter
+
+    - name: Wait for podman_exporter to listen on 9300 (non-fatal)
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9300
+        timeout: 30
+      register: podman_exporter_wait
+      failed_when: false
+      changed_when: false
+      tags: podman_exporter
+
+    - name: Validate podman_exporter /metrics endpoint (sample)
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9300/metrics
+        method: GET
+        return_content: false
+        status_code: 200
+      register: podman_exporter_probe
+      failed_when: false
+      changed_when: false
+      tags: podman_exporter
+
 
     - name: Ensure /etc/prometheus directory exists on monitoring_node
       ansible.builtin.file:

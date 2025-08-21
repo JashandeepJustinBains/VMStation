@@ -19,12 +19,12 @@ scrape_configs:
     static_configs:
       - targets:
 {% for h in groups['monitoring_nodes'] | default([]) %}
-        - '{{ h }}:9882'
+        - '{{ h }}:9300'
 {% endfor %}
 {% for h in groups['storage_nodes'] | default([]) %}
-        - '{{ h }}:9882'
+        - '{{ h }}:9300'
 {% endfor %}
 {% for h in groups['compute_nodes'] | default([]) %}
-        - '{{ h }}:9882'
+        - '{{ h }}:9300'
 {% endfor %}
 # Add more scrape configs as needed
