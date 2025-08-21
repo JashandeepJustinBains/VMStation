@@ -48,13 +48,13 @@
                 index:
                   prefix: index_
                   period: 168h
-            storage_config:
-              boltdb_shipper:
-                active_index_directory: /tmp/loki/index
-                cache_location: /tmp/loki/index_cache
-                shared_store: filesystem
-              filesystem:
-                directory: /tmp/loki/chunks
+          storage_config:
+            boltdb_shipper:
+              active_index_directory: /tmp/loki/index
+              cache_location: /tmp/loki/index_cache
+              shared_store: filesystem
+            filesystem:
+              directory: /tmp/loki/chunks
           limits_config:
             enforce_metric_name: false
             reject_old_samples: true
