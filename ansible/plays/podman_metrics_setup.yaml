@@ -215,11 +215,38 @@
       when: inventory_hostname in groups['monitoring_nodes']
       tags: prometheus
 
-    - name: Wait for Prometheus to listen on 9090
+    - name: Wait for Prometheus to listen on 9090 (non-fatal)
       ansible.builtin.wait_for:
         host: 127.0.0.1
         port: 9090
         timeout: 60
+      register: prometheus_wait
+      failed_when: false
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Gather podman containers state for Prometheus
+      ansible.builtin.command: podman ps -a --format json
+      register: podman_ps
+      failed_when: false
+      changed_when: false
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Collect Prometheus container logs (last 200 lines)
+      ansible.builtin.command: podman logs --tail 200 prometheus
+      register: prometheus_logs
+      failed_when: false
+      changed_when: false
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Debug Prometheus startup status
+      ansible.builtin.debug:
+        msg: |
+          Prometheus wait result: rc={{ prometheus_wait.rc }} elapsed={{ prometheus_wait.elapsed | default('n/a') }}
+          podman ps (sample): {{ podman_ps.stdout | default('') | truncate(1000) }}
+          prometheus logs (sample): {{ prometheus_logs.stdout | default('') | truncate(2000) }}
       when: inventory_hostname in groups['monitoring_nodes']
       tags: prometheus
 
