@@ -250,16 +250,16 @@
           ansible.builtin.set_fact:
             podman_exporter_git_repo: "{{ podman_exporter_git_repo | default('https://github.com/containers/prometheus-podman-exporter.git') }}"
 
-          - name: Ensure git is installed (required to clone when building from source)
-            ansible.builtin.package:
-              name: git
-              state: present
-            become: true
+        - name: Ensure git is installed (required to clone when building from source)
+          ansible.builtin.package:
+            name: git
+            state: present
+          become: true
 
-          - name: Set target architecture for podman build args
-            ansible.builtin.set_fact:
-              podman_build_targetarch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture in ['aarch64','arm64'] else ansible_architecture) }}"
-              podman_build_targetplatform: "linux/{{ podman_build_targetarch }}"
+        - name: Set target architecture for podman build args
+          ansible.builtin.set_fact:
+            podman_build_targetarch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture in ['aarch64','arm64'] else ansible_architecture) }}"
+            podman_build_targetplatform: "linux/{{ podman_build_targetarch }}"
 
         - name: Detect Podman socket path (check common locations)
           ansible.builtin.shell: |
