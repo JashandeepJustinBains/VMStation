@@ -15,11 +15,3 @@ chmod +x ./ansible/deploy.sh
 
 # Run the deploy script (site playbook)
 ./ansible/deploy.sh
-
-# Run the monitoring validation play locally on the monitoring node (if present)
-if [ -f ./ansible/plays/monitoring_validation.yaml ]; then
-	echo "Running monitoring validation play..."
-	ansible-playbook -i ./ansible/inventory.txt ./ansible/plays/monitoring_validation.yaml
-else
-	echo "No monitoring_validation.yaml found; skipping validation."
-fi

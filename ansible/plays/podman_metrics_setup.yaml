@@ -244,7 +244,7 @@
     - name: Debug Prometheus startup status
       ansible.builtin.debug:
         msg: |
-          Prometheus wait result: rc={{ prometheus_wait.rc | default('n/a') }} elapsed={{ prometheus_wait.elapsed | default('n/a') }}
+          Prometheus wait result: rc={{ (prometheus_wait | default({})).get('rc', 'n/a') }} elapsed={{ (prometheus_wait | default({})).get('elapsed', 'n/a') }}
           podman ps (sample): {{ (podman_ps.stdout | default('')) | truncate(1000) }}
           prometheus logs (sample): {{ (prometheus_logs.stdout | default('')) | truncate(2000) }}
       when: inventory_hostname in groups['monitoring_nodes']
