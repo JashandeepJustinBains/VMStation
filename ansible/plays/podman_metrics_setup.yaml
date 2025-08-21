@@ -3,6 +3,9 @@
 - name: Podman Metrics Exporter Setup
   hosts: all
   become: true
+  vars:
+    node_exporter_image: docker.io/prom/node-exporter:latest
+    podman_exporter_image: docker.io/veemero/podman_exporter:latest
   tasks:
     - name: Validate /srv/monitoring_data is mounted on monitoring nodes
       ansible.builtin.fail:
@@ -207,7 +210,7 @@
     - name: Run node_exporter as a Podman container
       containers.podman.podman_container:
         name: node-exporter
-        image: docker.io/prom/node-exporter:latest
+        image: "{{ node_exporter_image }}"
         state: started
         restart_policy: always
         ports:
@@ -231,45 +234,85 @@
       register: podman_exporter_pull
       failed_when: false
       changed_when: podman_exporter_pull.rc == 0
+      - name: Attempt to build and run podman_exporter from source if pull failed
+        block:
+          - name: Set default git repo for prometheus-podman-exporter
+            ansible.builtin.set_fact:
+              podman_exporter_git_repo: "{{ podman_exporter_git_repo | default('https://github.com/containers/prometheus-podman-exporter.git') }}"
+
+          - name: Detect Podman socket path (check common locations)
+            ansible.builtin.shell: |
+              if [ -S /run/podman/podman.sock ]; then
+                echo /run/podman/podman.sock
+              elif [ -S /run/podman/io.podman ]; then
+                echo /run/podman/io.podman
+              elif [ -S /run/user/$(id -u)/podman/podman.sock ]; then
+                echo /run/user/$(id -u)/podman/podman.sock
+              elif [ -S /run/user/$(id -u)/podman/io.podman ]; then
+                echo /run/user/$(id -u)/podman/io.podman
+              else
+                echo ""
+              fi
+            register: podman_socket_detect
+            changed_when: false
+
+          - name: Set discovered podman socket path
+            ansible.builtin.set_fact:
+              podman_socket_path: "{{ podman_socket_detect.stdout }}"
+
+          - name: Fail if no podman socket detected
+            ansible.builtin.fail:
+              msg: |
+                No Podman socket found on this host; the exporter requires access to the Podman socket.
+                Start the Podman system service (system or user) or set `podman_socket_path` variable to the socket path.
+            when: podman_socket_path == ''
+
+          - name: Ensure build directory exists
+            ansible.builtin.file:
+              path: /tmp/prometheus-podman-exporter
+              state: directory
+              mode: '0755'
+
+          - name: Clone prometheus-podman-exporter repo
+            ansible.builtin.git:
+              repo: "{{ podman_exporter_git_repo }}"
+              dest: /tmp/prometheus-podman-exporter
+              update: yes
+            register: podman_exporter_git
+
+          - name: Build podman_exporter image locally with Podman
+            ansible.builtin.command: podman build -t local/prometheus-podman-exporter:latest /tmp/prometheus-podman-exporter
+            register: podman_exporter_build
+            failed_when: podman_exporter_build.rc != 0
+
+          - name: Run locally-built podman_exporter image
+            containers.podman.podman_container:
+              name: podman-exporter
+              image: local/prometheus-podman-exporter:latest
+              state: started
+              restart_policy: always
+              ports:
+                - "9300:9300"
+              volumes:
+                - "{{ podman_socket_path }}:/var/run/podman.sock:ro"
+              env:
+                PODMAN_SOCKET: /var/run/podman.sock
+            when: podman_exporter_build.rc == 0
+
+        when: podman_exporter_pull.rc != 0
+        tags: podman_exporter
+          OnUnitActiveSec=30
+
+          [Install]
+          WantedBy=timers.target
       tags: podman_exporter
 
-    - name: Deploy podman_exporter container on hosts (exposes Prometheus metrics on 9300)
-      containers.podman.podman_container:
-        name: podman-exporter
-        image: docker.io/veemero/podman_exporter:latest
+    - name: Enable and start podman textfile collector timer
+      ansible.builtin.systemd:
+        name: podman-textfile-collector.timer
+        enabled: yes
         state: started
-        restart_policy: always
-        ports:
-          - "9300:9300"
-        command: --web.listen-address=0.0.0.0:9300
-      when: podman_exporter_pull.rc == 0
-      tags: podman_exporter
-
-    - name: Warn if podman_exporter image pull failed
-      ansible.builtin.debug:
-        msg: "podman_exporter image pull failed (docker.io/veemero/podman_exporter:latest). Set up alternate exporter or login to registry."
-      when: podman_exporter_pull.rc != 0
-      tags: podman_exporter
-
-    - name: Wait for podman_exporter to listen on 9300 (non-fatal)
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: 9300
-        timeout: 30
-      register: podman_exporter_wait
-      failed_when: false
-      changed_when: false
-      tags: podman_exporter
-
-    - name: Validate podman_exporter /metrics endpoint (sample)
-      ansible.builtin.uri:
-        url: http://127.0.0.1:9300/metrics
-        method: GET
-        return_content: false
-        status_code: 200
-      register: podman_exporter_probe
-      failed_when: false
-      changed_when: false
+        daemon_reload: yes
       tags: podman_exporter
 
 
