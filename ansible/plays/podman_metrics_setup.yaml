@@ -63,6 +63,32 @@
         mode: '0755'
       tags: logs
 
+    - name: Create systemd unit for Podman metrics service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-metrics.service
+        content: |
+          [Unit]
+          Description=Podman Metrics Service
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/bin/podman system service --time=0 tcp:0.0.0.0:9882
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+      tags: metrics
+
+    - name: Reload systemd and enable/start podman-metrics
+      ansible.builtin.systemd:
+        name: podman-metrics.service
+        state: started
+        enabled: yes
+        daemon_reload: yes
+      tags: metrics
+
     - name: Ensure monitoring data base exists on hosts
       ansible.builtin.file:
         path: /srv/monitoring_data
