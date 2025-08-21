@@ -1,0 +1,3 @@
+- import_playbook: podman_metrics_setup.yaml
+- import_playbook: prometheus_scrape_config.yaml
+- import_playbook: loki_setup.yaml
