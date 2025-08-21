@@ -132,6 +132,70 @@
         command: -config.file=/etc/promtail/promtail.yaml -positions.file=/var/promtail/positions.yaml
       tags: logs
 
+    - name: Check if port 9100 is in use
+      ansible.builtin.shell: ss -ltnp | grep ':9100' || true
+      register: port_9100_check
+      changed_when: false
+      tags: node_exporter
+
+    - name: Set fact if 9100 is in use
+      ansible.builtin.set_fact:
+        port_9100_in_use: "{{ port_9100_check.stdout != '' }}"
+      tags: node_exporter
+
+    - name: Get PID owning 9100 (if any)
+      ansible.builtin.shell: "ss -ltnp | grep ':9100' | sed -n 's/.*pid=\\\([0-9]*\\\),.*/\\1/p' | head -n1 || true"
+      register: port_9100_pid
+      changed_when: false
+      when: port_9100_in_use
+      tags: node_exporter
+
+    - name: Stop systemd node_exporter service if present
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: stopped
+        enabled: no
+      failed_when: false
+      changed_when: true
+      when: port_9100_in_use
+      tags: node_exporter
+
+    - name: Stop and remove any existing podman container named node-exporter
+      containers.podman.podman_container:
+        name: node-exporter
+        state: absent
+        remove: true
+      failed_when: false
+      changed_when: true
+      when: port_9100_in_use
+      tags: node_exporter
+
+    - name: Kill leftover PID owning 9100 if still present
+      ansible.builtin.shell: "kill -TERM {{ port_9100_pid.stdout }} || true"
+      when:
+        - port_9100_in_use
+        - port_9100_pid.stdout is defined
+        - port_9100_pid.stdout | length > 0
+      failed_when: false
+      changed_when: true
+      tags: node_exporter
+
+    - name: Wait for port 9100 to become free
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9100
+        state: stopped
+        timeout: 15
+      register: wait_9100_free
+      failed_when: false
+      changed_when: false
+      tags: node_exporter
+
+    - name: Debug port free result
+      ansible.builtin.debug:
+        msg: "port_9100_in_use={{ port_9100_in_use }} port_pid='{{ port_9100_pid.stdout | default('') }}' wait_result={{ wait_9100_free }}"
+      tags: node_exporter
+
     - name: Pull node_exporter image from Docker Hub
       ansible.builtin.command: podman pull docker.io/prom/node-exporter:latest
       register: node_exporter_pull
