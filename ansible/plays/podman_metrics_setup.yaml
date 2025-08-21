@@ -4,16 +4,17 @@
   hosts: all
   become: true
   tasks:
-    - name: Validate /srv/monitoring_data is mounted
+    - name: Validate /srv/monitoring_data is mounted on monitoring nodes
       ansible.builtin.fail:
         msg: "/srv/monitoring_data is not mounted. Mount your monitoring partition (e.g. /dev/sda1) to /srv/monitoring_data and re-run the playbook."
-      when: (ansible_mounts | selectattr('mount','equalto','/srv/monitoring_data') | list | length) == 0
+      when: (inventory_hostname in groups['monitoring_nodes']) and ((ansible_mounts | selectattr('mount','equalto','/srv/monitoring_data') | list | length) == 0)
 
-    - name: Validate /srv/monitoring_data is writable
+    - name: Validate /srv/monitoring_data is writable on monitoring nodes
       ansible.builtin.command: test -w /srv/monitoring_data
       register: monitoring_write_test
       failed_when: monitoring_write_test.rc != 0
       changed_when: false
+      when: inventory_hostname in groups['monitoring_nodes']
 
     # ...existing code...
     - name: Add Podman repo key (Debian/Ubuntu)
