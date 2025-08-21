@@ -5,3 +5,5 @@
 #- import_playbook: jellyfin_setup.yaml
 - import_playbook: site_security_monitoring.yaml
 - import_playbook: podman_metrics_setup.yaml
+- import_playbook: prometheus_setup.yaml
+- import_playbook: loki_setup.yaml
