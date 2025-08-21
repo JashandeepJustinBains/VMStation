@@ -82,6 +82,9 @@
               shared_store: filesystem
             filesystem:
               directory: /tmp/loki/chunks
+          compactor:
+            shared_store: filesystem
+            working_directory: /tmp/loki/compactor
           limits_config:
             enforce_metric_name: false
             reject_old_samples: true
