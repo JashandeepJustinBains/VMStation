@@ -1,0 +1,96 @@
+- name: Loki Setup
+  hosts: monitoring_nodes
+  become: true
+  tasks:
+    - name: Ensure /etc/loki directory exists
+      ansible.builtin.file:
+        path: /etc/loki
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Download Loki binary
+      ansible.builtin.get_url:
+        url: https://github.com/grafana/loki/releases/download/v2.9.4/loki-linux-amd64.zip
+        dest: /tmp/loki.zip
+        mode: '0644'
+
+    - name: Unzip Loki binary
+      ansible.builtin.unarchive:
+        src: /tmp/loki.zip
+        dest: /usr/local/bin/
+        remote_src: yes
+
+    - name: Create Loki config file
+      ansible.builtin.copy:
+        dest: /etc/loki/loki-config.yaml
+        content: |
+          auth_enabled: false
+          server:
+            http_listen_port: 3100
+          ingester:
+            lifecycler:
+              address: 127.0.0.1
+              ring:
+                kvstore:
+                  store: inmemory
+              final_sleep: 0s
+            chunk_idle_period: 5m
+            chunk_retain_period: 30s
+            max_transfer_retries: 0
+          schema_config:
+            configs:
+              - from: 2020-10-24
+                store: boltdb-shipper
+                object_store: filesystem
+                schema: v11
+                index:
+                  prefix: index_
+                  period: 168h
+            storage_config:
+              boltdb_shipper:
+                active_index_directory: /tmp/loki/index
+                cache_location: /tmp/loki/index_cache
+                shared_store: filesystem
+              filesystem:
+                directory: /tmp/loki/chunks
+          limits_config:
+            enforce_metric_name: false
+            reject_old_samples: true
+            reject_old_samples_max_age: 168h
+          chunk_store_config:
+            max_look_back_period: 0s
+          table_manager:
+            retention_deletes_enabled: true
+            retention_period: 336h
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create systemd service for Loki
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/loki.service
+        content: |
+          [Unit]
+          Description=Loki Log Aggregation System
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/local/bin/loki-linux-amd64 -config.file=/etc/loki/loki-config.yaml
+          Restart=always
+          User=root
+          Group=root
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reload systemd and start Loki
+      ansible.builtin.systemd:
+        name: loki
+        state: started
+        enabled: yes
+        daemon_reload: yes
