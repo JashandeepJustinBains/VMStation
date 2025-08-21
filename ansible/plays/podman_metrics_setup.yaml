@@ -112,10 +112,10 @@
       ansible.builtin.file:
         path: /srv/monitoring_data/prometheus
         state: directory
-  owner: 65534
-  group: 65534
-  mode: '0755'
-  recurse: yes
+        owner: 65534
+        group: 65534
+        mode: '0755'
+        recurse: yes
       when: inventory_hostname in groups['monitoring_nodes']
       tags: monitoring_storage
 
