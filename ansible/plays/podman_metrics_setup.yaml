@@ -173,15 +173,29 @@
         enabled: yes
       tags: node_exporter
 
+    - name: Pull podman_exporter image from Docker Hub (public)
+      ansible.builtin.command: podman pull docker.io/veemero/podman_exporter:latest
+      register: podman_exporter_pull
+      failed_when: false
+      changed_when: podman_exporter_pull.rc == 0
+      tags: podman_exporter
+
     - name: Deploy podman_exporter container on hosts (exposes Prometheus metrics on 9300)
       containers.podman.podman_container:
         name: podman-exporter
-        image: ghcr.io/veemero/podman_exporter:latest
+        image: docker.io/veemero/podman_exporter:latest
         state: started
         restart_policy: always
         ports:
           - "9300:9300"
         command: --web.listen-address=0.0.0.0:9300
+      when: podman_exporter_pull.rc == 0
+      tags: podman_exporter
+
+    - name: Warn if podman_exporter image pull failed
+      ansible.builtin.debug:
+        msg: "podman_exporter image pull failed (docker.io/veemero/podman_exporter:latest). Set up alternate exporter or login to registry."
+      when: podman_exporter_pull.rc != 0
       tags: podman_exporter
 
     - name: Wait for podman_exporter to listen on 9300 (non-fatal)
