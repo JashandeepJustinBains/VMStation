@@ -191,6 +191,22 @@
         owner: root
         group: root
         mode: '0644'
+      notify: Restart Prometheus Container
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Run Prometheus as a Podman container on monitoring nodes
+      containers.podman.podman_container:
+        name: prometheus
+        image: docker.io/prom/prometheus:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "9090:9090"
+        volumes:
+          - /etc/prometheus:/etc/prometheus:Z
+          - /srv/monitoring_data/prometheus:/prometheus:Z
+        command: --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
       when: inventory_hostname in groups['monitoring_nodes']
       tags: prometheus
 
@@ -241,3 +257,10 @@
         - 9100
       when: ansible_os_family == 'Debian'
       tags: firewall
+
+  handlers:
+    - name: Restart Prometheus Container
+      containers.podman.podman_container:
+        name: prometheus
+        state: restarted
+      listen: Restart Prometheus Container
