@@ -320,20 +320,24 @@
   when: podman_exporter_pull.rc != 0
   tags: podman_exporter
 
-    - name: Ensure podman stats log directory exists
+    - name: Ensure podman stats directory exists on monitoring hosts (persisted)
       ansible.builtin.file:
-        path: /var/log
+        path: /srv/monitoring_data/promtail
         state: directory
+        owner: root
+        group: root
         mode: '0755'
 
-    - name: Deploy podman-stats forwarder script
+    - name: Deploy podman-stats forwarder script (persisted to /srv/monitoring_data)
       ansible.builtin.copy:
         dest: /usr/local/bin/podman-stats-forward.sh
         mode: '0755'
         content: |
           #!/bin/bash
-          # Write podman stats as JSON lines to /var/log/podman_stats.log
-          out=/var/log/podman_stats.log
+          # Write podman stats as JSON lines to persistent monitoring storage
+          out=/srv/monitoring_data/promtail/podman_stats.log
+          # ensure directory exists
+          mkdir -p "$(dirname "$out")"
           timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           # Use podman stats --no-stream --format json (if supported)
           if podman stats --no-stream --format json >/dev/null 2>&1; then
@@ -369,7 +373,7 @@
         dest: /etc/systemd/system/podman-stats-forwarder.timer
         content: |
           [Unit]
-          Description=Run podman-stats forwarder every 30s
+          Description=Run podman-stats forwarder every 30s (writes to /srv/monitoring_data/promtail/podman_stats.log)
 
           [Timer]
           OnBootSec=30s

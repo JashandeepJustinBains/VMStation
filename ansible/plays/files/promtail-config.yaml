@@ -18,3 +18,4 @@ scrape_configs:
           __path__:
             - /var/log/*log
             - /var/log/podman_stats.log
+            - /var/promtail/podman_stats.log
