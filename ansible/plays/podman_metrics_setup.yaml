@@ -260,6 +260,6 @@
 
   handlers:
     - name: Restart Prometheus Container
-  ansible.builtin.command: podman restart prometheus
-  become: true
-  listen: Restart Prometheus Container
+      ansible.builtin.command: podman restart prometheus
+      become: true
+      listen: Restart Prometheus Container
