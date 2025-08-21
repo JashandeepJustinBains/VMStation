@@ -103,6 +103,44 @@
       apt:
         deb: /tmp/grafana.deb
         state: present
+    - name: Stop grafana-server if running (prepare data migration)
+      become: true
+      systemd:
+        name: grafana-server
+        state: stopped
+      failed_when: false
+
+    - name: Ensure persistent Grafana data directory exists
+      file:
+        path: /srv/monitoring_data/grafana
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: '0755'
+
+    - name: Move existing Grafana data into /srv/monitoring_data/grafana (if present)
+      shell: |
+        set -e
+        if [ -d /var/lib/grafana ] && [ ! -L /var/lib/grafana ]; then
+          mv /var/lib/grafana/* /srv/monitoring_data/grafana/ || true
+          rm -rf /var/lib/grafana
+        fi
+      args:
+        warn: false
+
+    - name: Ensure /var/lib/grafana is a symlink to persistent storage
+      file:
+        src: /srv/monitoring_data/grafana
+        path: /var/lib/grafana
+        state: link
+
+    - name: Ensure ownership for persisted Grafana data
+      file:
+        path: /srv/monitoring_data/grafana
+        owner: grafana
+        group: grafana
+        recurse: yes
+
     - name: Ensure Grafana service is enabled and started
       systemd:
         name: grafana-server
