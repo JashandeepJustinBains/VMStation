@@ -12,13 +12,25 @@
             - job_name: 'node_exporters'
               static_configs:
                 - targets:
-{{ groups['monitoring_nodes'] | default([]) | map('regex_replace','^(.*)$','\1:9100') | join("\n                    - '") | default('') }}
-{{ groups['storage_nodes'] | default([]) | map('regex_replace','^(.*)$','\1:9100') | join("\n                    - '") | default('') }}
-{{ groups['compute_nodes'] | default([]) | map('regex_replace','^(.*)$','\1:9100') | join("\n                    - '") | default('') }}
+{% for h in groups['monitoring_nodes'] | default([]) %}
+                 - '{{ h }}:9100'
+{% endfor %}
+{% for h in groups['storage_nodes'] | default([]) %}
+                 - '{{ h }}:9100'
+{% endfor %}
+{% for h in groups['compute_nodes'] | default([]) %}
+                 - '{{ h }}:9100'
+{% endfor %}
             - job_name: 'podman_metrics'
               static_configs:
                 - targets:
-{{ groups['monitoring_nodes'] | default([]) | map('regex_replace','^(.*)$','\1:9882') | join("\n                    - '") | default('') }}
-{{ groups['storage_nodes'] | default([]) | map('regex_replace','^(.*)$','\1:9882') | join("\n                    - '") | default('') }}
-{{ groups['compute_nodes'] | default([]) | map('regex_replace','^(.*)$','\1:9882') | join("\n                    - '") | default('') }}
+{% for h in groups['monitoring_nodes'] | default([]) %}
+                 - '{{ h }}:9882'
+{% endfor %}
+{% for h in groups['storage_nodes'] | default([]) %}
+                 - '{{ h }}:9882'
+{% endfor %}
+{% for h in groups['compute_nodes'] | default([]) %}
+                 - '{{ h }}:9882'
+{% endfor %}
             # Add more scrape configs as needed
