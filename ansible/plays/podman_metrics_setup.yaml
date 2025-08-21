@@ -227,8 +227,8 @@
       tags: node_exporter
 
     - name: Pull podman_exporter image from Docker Hub (public)
-      ansible.builtin.command: podman pull docker.io/veemero/podman_exporter:latest
-      register: podman_exporter_pull
+      image: docker.io/prometheus_podman_exporter:latest
+      state: started      register: podman_exporter_pull
       failed_when: false
       changed_when: podman_exporter_pull.rc == 0
       tags: podman_exporter
