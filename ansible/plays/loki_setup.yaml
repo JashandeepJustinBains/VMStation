@@ -1,3 +1,12 @@
+    - name: Clean up Loki index and chunk directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/loki/index
+        - /tmp/loki/index_cache
+        - /tmp/loki/chunks
+      tags: loki_cleanup
 - name: Loki Setup
   hosts: monitoring_nodes
   become: true
