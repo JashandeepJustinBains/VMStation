@@ -184,14 +184,19 @@
       when: inventory_hostname in groups['monitoring_nodes']
       tags: prometheus
 
-    - name: Copy prometheus.yml to monitoring_node
-      ansible.builtin.copy:
-        src: files/prometheus.yml
+    - name: Template prometheus.yml to monitoring_node from inventory
+      ansible.builtin.template:
+        src: ../templates/prometheus.yml.j2
         dest: /etc/prometheus/prometheus.yml
         owner: root
         group: root
         mode: '0644'
       notify: Restart Prometheus Container
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Ensure Prometheus image is pulled on monitoring nodes
+      ansible.builtin.command: podman pull docker.io/prom/prometheus:latest
       when: inventory_hostname in groups['monitoring_nodes']
       tags: prometheus
 
@@ -207,6 +212,14 @@
           - /etc/prometheus:/etc/prometheus:Z
           - /srv/monitoring_data/prometheus:/prometheus:Z
         command: --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+      when: inventory_hostname in groups['monitoring_nodes']
+      tags: prometheus
+
+    - name: Wait for Prometheus to listen on 9090
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 9090
+        timeout: 60
       when: inventory_hostname in groups['monitoring_nodes']
       tags: prometheus
 
@@ -260,6 +273,6 @@
 
   handlers:
     - name: Restart Prometheus Container
-      ansible.builtin.command: podman restart prometheus
+      ansible.builtin.command: podman restart prometheus || true
       become: true
       listen: Restart Prometheus Container

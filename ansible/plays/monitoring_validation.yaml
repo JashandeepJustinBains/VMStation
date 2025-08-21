@@ -1,0 +1,49 @@
+- name: Monitoring stack validation
+  hosts: monitoring_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check Prometheus is listening on 9090
+      ansible.builtin.shell: ss -ltnp | grep ':9090' || true
+      register: prometheus_socket
+      changed_when: false
+
+    - name: Query Prometheus targets API
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9090/api/v1/targets
+        return_content: yes
+        status_code: 200
+      register: prometheus_targets
+      failed_when: false
+      changed_when: false
+
+    - name: Check Loki service is listening on 3100
+      ansible.builtin.shell: ss -ltnp | grep ':3100' || true
+      register: loki_socket
+      changed_when: false
+
+    - name: Check promtail positions file exists
+      ansible.builtin.stat:
+        path: /srv/monitoring_data/promtail/positions.yaml
+      register: promtail_positions
+      changed_when: false
+
+    - name: Check podman metrics endpoints for all inventory hosts
+      vars:
+        targets: "{{ groups['monitoring_nodes'] + groups['storage_nodes'] + groups['compute_nodes'] | unique }}"
+      ansible.builtin.shell: |
+        for h in {{ targets | to_json }}; do
+          echo "host:$h"; curl -sS --max-time 3 http://$h:9882/metrics | head -n1 || echo "NO_CONN:$h";
+        done
+      register: podman_metrics_check
+      changed_when: false
+
+    - name: Print Validation Summary
+      ansible.builtin.debug:
+        msg: |
+          Prometheus socket: {{ prometheus_socket.stdout_lines | default([]) }}
+          Prometheus API: {{ prometheus_targets.status }}
+          Loki socket: {{ loki_socket.stdout_lines | default([]) }}
+          Promtail positions exists: {{ promtail_positions.stat.exists }}
+          Podman metrics check (sample): {{ podman_metrics_check.stdout_lines | default([]) | join('\n') }}
+      changed_when: false
