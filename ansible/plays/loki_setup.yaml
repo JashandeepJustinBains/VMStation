@@ -24,6 +24,18 @@
         group: root
         mode: '0755'
 
+    - name: Ensure Loki index and chunk directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /tmp/loki/index
+        - /tmp/loki/index_cache
+        - /tmp/loki/chunks
+
     - name: Download Loki binary
       ansible.builtin.get_url:
         url: https://github.com/grafana/loki/releases/download/v2.9.4/loki-linux-amd64.zip
