@@ -207,14 +207,7 @@
       changed_when: node_exporter_pull.rc == 0
       tags: node_exporter
 
-    - name: Ensure node_exporter textfile collector directory exists
-      ansible.builtin.file:
-        path: /var/lib/node_exporter/textfile_collector
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-      tags: node_exporter
+  # textfile collector removed per user preference; using Promtail + podman-stats forwarding instead
 
     - name: Run node_exporter as a Podman container
       containers.podman.podman_container:
@@ -228,8 +221,7 @@
           - /proc:/host/proc:ro
           - /sys:/host/sys:ro
           - /:/rootfs:ro
-          - /var/lib/node_exporter/textfile_collector:/var/lib/node_exporter/textfile_collector:Z
-        command: --path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+        command: --path.procfs=/host/proc --path.sysfs=/host/sys --path.rootfs=/rootfs
       when: node_exporter_pull.rc == 0
       tags: node_exporter
 
@@ -326,11 +318,72 @@
           when: podman_exporter_build.rc == 0
 
       when: podman_exporter_pull.rc != 0
-      tags: podman_exporter
-          OnUnitActiveSec=30
+  tags: podman_exporter
+
+    - name: Ensure podman stats log directory exists
+      ansible.builtin.file:
+        path: /var/log
+        state: directory
+        mode: '0755'
+
+    - name: Deploy podman-stats forwarder script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/podman-stats-forward.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # Write podman stats as JSON lines to /var/log/podman_stats.log
+          out=/var/log/podman_stats.log
+          timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          # Use podman stats --no-stream --format json (if supported)
+          if podman stats --no-stream --format json >/dev/null 2>&1; then
+            podman stats --no-stream --format json | jq -c '.[]' | while read -r line; do
+              echo "${timestamp} ${line}" >> "$out"
+            done
+          else
+            # Fallback: use podman ps --format json and basic inspect for each container
+            podman ps -a --format json | jq -c '.[]' | while read -r c; do
+              id=$(echo "$c" | jq -r '.Id')
+              insp=$(podman inspect "$id" --format json 2>/dev/null | jq -c '.[0]')
+              echo "${timestamp} ${insp}" >> "$out"
+            done
+          fi
+
+    - name: Create systemd service for podman-stats forwarder
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-stats-forwarder.service
+        content: |
+          [Unit]
+          Description=Run podman-stats forwarder (writes JSON lines to /var/log/podman_stats.log)
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/podman-stats-forward.sh
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd timer for podman-stats forwarder
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-stats-forwarder.timer
+        content: |
+          [Unit]
+          Description=Run podman-stats forwarder every 30s
+
+          [Timer]
+          OnBootSec=30s
+          OnUnitActiveSec=30s
 
           [Install]
           WantedBy=timers.target
+
+    - name: Enable and start podman-stats forwarder timer
+      ansible.builtin.systemd:
+        name: podman-stats-forwarder.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes
       tags: podman_exporter
 
     - name: Enable and start podman textfile collector timer
