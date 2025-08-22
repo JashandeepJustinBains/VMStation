@@ -1,0 +1,49 @@
+- name: Basic hardening and firewall (former site_security_monitoring trimmed)
+  hosts: all
+  become: true
+  tasks:
+    - name: Install and configure UFW (Debian)
+      apt:
+        name: ufw
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Set UFW default deny incoming
+      command: ufw default deny incoming
+      when: ansible_os_family == 'Debian'
+
+    - name: Set UFW default allow outgoing
+      command: ufw default allow outgoing
+      when: ansible_os_family == 'Debian'
+
+    - name: Allow all local network connections
+      command: ufw allow from 192.168.0.0/16
+      when: ansible_os_family == 'Debian'
+
+    - name: Allow SSH from local network
+      command: ufw allow from 192.168.0.0/16 to any port ssh
+      when: ansible_os_family == 'Debian'
+
+    - name: Install and configure firewalld (RHEL)
+      yum:
+        name: firewalld
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Harden SSH configuration (disable password auth)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+      notify: Restart SSH
+
+    - name: Install fail2ban (Debian)
+      apt:
+        name: fail2ban
+        state: present
+      when: ansible_os_family == 'Debian'
+
+  handlers:
+    - name: Restart SSH
+      command: systemctl restart sshd
