@@ -74,6 +74,15 @@
       vars:
         loki_url: "http://loki:{{ loki_port }}"
 
+    - name: Render Loki local config
+      template:
+        src: templates/loki-local-config.yaml.j2
+        dest: "{{ monit_root }}/loki/local-config.yaml"
+        owner: root
+        mode: '0644'
+      vars:
+        loki_port: "{{ loki_port }}"
+
     - name: Ensure monitoring Pod exists (podman)
       containers.podman.podman_pod:
         name: monitoring_pod

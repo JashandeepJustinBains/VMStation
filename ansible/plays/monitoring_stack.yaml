@@ -1,5 +1,6 @@
 ---
 # Monitoring stack site: imports modular plays that deploy the stack.
 # No credentials are stored in these plays.
+- import_playbook: monitoring/cleanup.yaml
 - import_playbook: monitoring/install_node.yaml
 - import_playbook: monitoring/deploy_promtail.yaml
