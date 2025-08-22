@@ -48,7 +48,7 @@
       tags: prometheus
 
     - name: Attempt to free port {{ prometheus_host_port }} (podman/systemd/kill) if enabled
-      ansible.builtin.block:
+      block:
         - name: Attempt to remove podman container named {{ prometheus_container }}
           ansible.builtin.command:
             cmd: podman rm -f {{ prometheus_container }}
