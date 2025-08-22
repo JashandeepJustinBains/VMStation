@@ -191,6 +191,49 @@
         var: podman_journal.stdout_lines
       tags: prometheus
 
+    - name: Get Prometheus container id
+      ansible.builtin.command:
+        cmd: podman inspect --format '{{.Id}}' {{ prometheus_container }} || true
+      register: prometheus_cid
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug Prometheus container id
+      ansible.builtin.debug:
+        var: prometheus_cid.stdout_lines
+      tags: prometheus
+
+    - name: Show podman logs with timestamps for prometheus
+      ansible.builtin.command:
+        cmd: podman logs --timestamps --tail 200 {{ prometheus_container }} || true
+      register: prometheus_logs_timed
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug timed prometheus logs
+      ansible.builtin.debug:
+        var: prometheus_logs_timed.stdout_lines
+      tags: prometheus
+
+    - name: Show journal entries for container id (fallback to container name)
+      ansible.builtin.shell: |
+        if [ -n "{{ prometheus_cid.stdout | default('') }}" ]; then
+          journalctl _CONTAINER_ID={{ prometheus_cid.stdout }} -n 200 || true
+        else
+          journalctl CONTAINER_NAME={{ prometheus_container }} -n 200 || true
+        fi
+      register: prometheus_journal
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug prometheus journal
+      ansible.builtin.debug:
+        var: prometheus_journal.stdout_lines
+      tags: prometheus
+
     - name: Wait for Prometheus to be ready
       ansible.builtin.uri:
         url: "http://{{ ansible_host | default(inventory_hostname) }}:{{ prometheus_host_port }}/-/ready"
