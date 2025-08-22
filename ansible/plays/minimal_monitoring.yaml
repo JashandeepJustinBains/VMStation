@@ -1,6 +1,6 @@
 ---
 - name: Minimal monitoring stack (Prometheus, node-exporter, Promtail, Grafana)
-  hosts: monitoring
+  hosts: monitoring_nodes
   become: true
   vars:
     prometheus_dir: /srv/prometheus
