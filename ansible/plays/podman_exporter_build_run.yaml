@@ -83,7 +83,7 @@
 
     - name: Ensure Promtail config contains the podman-stats log target
       ansible.builtin.blockinfile:
-        path: ../files/promtail-config.yaml
+        path: "{{ playbook_dir }}/../files/promtail-config.yaml"
         marker: "# {mark} ANSIBLE MANAGED PODMAN STATS"
         block: |
           - job_name: podman_stats
@@ -92,6 +92,8 @@
                 labels:
                   job: podman_stats
                   __path__: /var/promtail/podman_stats.log
+      delegate_to: localhost
+      run_once: true
       tags: promtail
 
   handlers:

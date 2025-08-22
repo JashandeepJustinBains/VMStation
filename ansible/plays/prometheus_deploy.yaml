@@ -26,6 +26,14 @@
       failed_when: prometheus_pull.rc != 0
       tags: prometheus
 
+    - name: Remove existing Prometheus container if present
+      ansible.builtin.command:
+        cmd: podman rm -f {{ prometheus_container }}
+      register: prometheus_rm
+      failed_when: false
+      changed_when: prometheus_rm.rc == 0
+      tags: prometheus
+
     - name: Copy static prometheus.yml
       ansible.builtin.copy:
         src: ../files/prometheus.yml

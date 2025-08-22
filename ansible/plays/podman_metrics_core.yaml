@@ -107,6 +107,36 @@
         mode: '0644'
       tags: promtail
 
+    - name: Ensure promtail positions file exists
+      ansible.builtin.file:
+        path: /srv/monitoring_data/promtail/positions.yaml
+        state: touch
+        owner: root
+        group: root
+        mode: '0644'
+      tags: promtail
+
+    - name: Remove existing promtail container if present
+      ansible.builtin.command:
+        cmd: podman rm -f promtail
+      register: promtail_rm
+      failed_when: false
+      changed_when: promtail_rm.rc == 0
+      tags: promtail
+
+    - name: Run Promtail container
+      ansible.builtin.command:
+        cmd: >-
+          podman run -d --name promtail --restart=always
+          -v /etc/promtail:/etc/promtail:ro
+          -v /srv/monitoring_data/promtail:/var/promtail:rw
+          docker.io/grafana/promtail:latest
+          -config.file=/etc/promtail/promtail.yaml -positions.file=/var/promtail/positions.yaml
+      register: promtail_run
+      changed_when: promtail_run.rc == 0
+      failed_when: promtail_run.rc != 0
+      tags: promtail
+
     - name: Ensure prometheus data directory exists on monitoring nodes
       ansible.builtin.file:
         path: /srv/monitoring_data/prometheus
