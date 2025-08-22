@@ -6,7 +6,7 @@
     prometheus_dir: /srv/prometheus
     grafana_dir: /srv/grafana
     promtail_dir: /srv/promtail
-  loki_dir: /srv/loki
+    loki_dir: /srv/loki
     podman_bin: /usr/bin/podman
 
   tasks:
