@@ -16,8 +16,8 @@
 
     - name: Copy static prometheus.yml
       ansible.builtin.copy:
-        src: ../files/prometheus.yml
-        dest: /srv/monitoring_data/prometheus/prometheus.yml
+  src: ../files/prometheus.yml
+  dest: /srv/monitoring_data/prometheus/prometheus.yml
         owner: root
         group: root
         mode: '0644'
@@ -27,8 +27,8 @@
       ansible.builtin.command:
         cmd: >-
           podman run -d --name {{ prometheus_container }} --rm -p 9090:9090
-          -v {{ prometheus_data_dir }}:/etc/prometheus
-          -v {{ prometheus_data_dir }}/data:/prometheus
+          -v {{ prometheus_data_dir }}:/etc/prometheus:Z
+          -v {{ prometheus_data_dir }}/data:/prometheus:Z
           {{ prometheus_image }}
       register: prometheus_run
       changed_when: prometheus_run.rc == 0

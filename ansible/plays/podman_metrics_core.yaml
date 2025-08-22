@@ -98,6 +98,15 @@
         recurse: yes
       tags: monitoring_storage
 
+    - name: Copy promtail config to /etc/promtail
+      ansible.builtin.copy:
+        src: ../files/promtail-config.yaml
+        dest: /etc/promtail/promtail.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      tags: promtail
+
     - name: Ensure prometheus data directory exists on monitoring nodes
       ansible.builtin.file:
         path: /srv/monitoring_data/prometheus
