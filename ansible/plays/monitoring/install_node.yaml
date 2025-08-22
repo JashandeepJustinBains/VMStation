@@ -1,5 +1,4 @@
 ---
----
 - name: Install and start monitoring services on monitoring node
   hosts: monitoring_nodes
   become: true
