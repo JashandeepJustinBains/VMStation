@@ -38,6 +38,13 @@ microk8s enable dns storage ingress
 Create alias for kubectl:
 ```bash
 alias kubectl='microk8s kubectl'
+
+## Developer convenience - syntax checks before deploy
+This repository includes a helper script to validate Ansible playbooks before running the deploy script.
+
+| Script | Purpose |
+|---|---|
+| `./update_and_syntax.sh` | Runs `ansible-playbook --syntax-check` on all playbooks under `ansible/plays` and optionally `ansible-lint`/`yamllint` if installed. Run this before `./update_and_deploy.sh` to catch syntax and lint issues early. |
 echo "alias kubectl='microk8s kubectl'" >> ~/.bashrc
 source ~/.bashrc
 ```
