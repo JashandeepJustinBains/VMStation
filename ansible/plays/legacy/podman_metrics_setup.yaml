@@ -1,3 +1,5 @@
+
+
 - name: Podman Metrics Exporter Setup
   hosts: all
   become: true
@@ -495,7 +497,7 @@
         Restart=on-failure
 
         [Install]
-        WantedBy=multi-user-target
+        WantedBy=multi-user.target
       mode: '0644'
     when: inventory_hostname in groups['monitoring_nodes'] and prometheus_stat.stat.exists
     tags: prometheus
@@ -507,8 +509,8 @@
       owner: root
       group: root
       mode: '0644'
-  notify: Restart Promtail Container
-  tags: promtail
+notify: Restart Promtail Container
+tags: promtail
 
   - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
     ansible.builtin.ufw:
