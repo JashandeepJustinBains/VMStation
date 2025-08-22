@@ -35,8 +35,8 @@
     - name: Start promtail container (collect host logs & podman logs)
       containers.podman.podman_container:
         name: promtail
-  image: docker.io/grafana/promtail:2.8.2
-  state: started
+        image: docker.io/grafana/promtail:2.8.2
+        state: started
         restart_policy: always
         volumes:
           - "/var/log:/var/log:ro,Z"
