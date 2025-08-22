@@ -1,4 +1,4 @@
----
+```yaml
 - name: Deploy Prometheus container
   hosts: all
   become: true
@@ -6,8 +6,8 @@
     prometheus_image: docker.io/prom/prometheus:latest
     prometheus_container: prometheus
     prometheus_data_dir: /srv/monitoring_data/prometheus
-    prometheus_host_port: 9090
-    prometheus_force_port_free: true
+  prometheus_host_port: 9090
+  prometheus_force_port_free: true
   tasks:
     - name: Ensure Prometheus data directories exist
       ansible.builtin.file:
@@ -124,3 +124,5 @@
       delay: 5
       until: prometheus_ready.status == 200
       tags: prometheus
+
+```
