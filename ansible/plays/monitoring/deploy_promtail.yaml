@@ -46,7 +46,7 @@
             mode: '0755'
 
         - name: Move existing /var/promtail into /srv/monitoring_data/promtail if not empty
-          command: >
+          shell: >
             if [ -d /var/promtail ] && [ "$(ls -A /var/promtail)" ]; then
               rsync -a /var/promtail/ /srv/monitoring_data/promtail/ || true
               rm -rf /var/promtail/* || true
