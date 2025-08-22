@@ -4,7 +4,7 @@
   become: true
   vars:
     monitoring_dirs:
-      - /opt/monitoring
+      - /srv/monitoring_data
       - /var/lib/grafana
       - /etc/grafana
       - /var/lib/loki
@@ -66,8 +66,9 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - /opt/promtail
-        - /var/promtail
+  - /opt/promtail
+  - /var/promtail
+  - /srv/monitoring_data/promtail
       ignore_errors: yes
 
     - name: Wait a moment for ports to free

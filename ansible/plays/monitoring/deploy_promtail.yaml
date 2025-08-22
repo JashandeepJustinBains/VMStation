@@ -23,6 +23,52 @@
         state: directory
         mode: '0755'
 
+    - name: Ensure /var/promtail exists on all hosts
+      file:
+        path: /var/promtail
+        state: directory
+        mode: '0755'
+
+    - name: Ensure /var/promtail is a real directory on non-monitoring hosts
+      file:
+        path: /var/promtail
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      when: inventory_hostname not in groups['monitoring_nodes']
+
+  - name: On monitoring node, move /var/promtail into /srv/monitoring_data and symlink
+    - name: On monitoring node, move /var/promtail into /srv/monitoring_data and symlink
+      block:
+  - name: Create /srv/monitoring_data/promtail
+          file:
+            path: /srv/monitoring_data/promtail
+            state: directory
+            mode: '0755'
+
+    - name: Move existing /var/promtail into /srv/monitoring_data/promtail if not empty
+          command: |
+            if [ -d /var/promtail ] && [ "$(ls -A /var/promtail)" ]; then
+      rsync -a /var/promtail/ /srv/monitoring_data/promtail/ || true
+              rm -rf /var/promtail/* || true
+            fi
+          args:
+            warn: false
+
+  - name: Remove /var/promtail and create symlink to /srv/monitoring_data/promtail
+          file:
+            path: /var/promtail
+            state: absent
+      when: inventory_hostname in groups['monitoring_nodes']
+
+  - name: Create symlink from /var/promtail to /srv/monitoring_data/promtail on monitoring node
+      file:
+    src: /srv/monitoring_data/promtail
+        dest: /var/promtail
+        state: link
+      when: inventory_hostname in groups['monitoring_nodes']
+
     - name: Render promtail config for this host
       template:
         src: templates/promtail-config.yaml.j2
