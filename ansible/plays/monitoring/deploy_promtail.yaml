@@ -1,0 +1,46 @@
+---
+- name: Deploy Promtail to all nodes (collect Podman logs & host logs)
+  hosts: all
+  become: true
+  vars:
+    loki_push_url: "http://{{ hostvars[groups['monitoring_nodes'][0]]['ansible_host'] | default(groups['monitoring_nodes'][0]) }}:3100"
+  tasks:
+    - name: Ensure Podman is installed (Debian)
+      apt:
+        name: podman
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure Podman is installed (RedHat)
+      yum:
+        name: podman
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Create promtail config dir
+      file:
+        path: /opt/promtail
+        state: directory
+        mode: '0755'
+
+    - name: Render promtail config for this host
+      template:
+        src: templates/promtail-config.yaml.j2
+        dest: /opt/promtail/promtail-config.yaml
+        owner: root
+        mode: '0644'
+      vars:
+        loki_url: "{{ loki_push_url }}"
+
+    - name: Start promtail container (collect host logs & podman logs)
+      containers.podman.podman_container:
+        name: promtail
+        image: grafana/promtail:2.8.2
+        state: started
+        restart_policy: always
+        volumes:
+          - "/var/log:/var/log:ro,Z"
+          - "/var/promtail:/var/promtail:Z"
+          - "/opt/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:Z"
+        command: -config.file=/etc/promtail/promtail-config.yaml
+      ignore_errors: yes

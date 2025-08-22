@@ -1,9 +1,0 @@
-- name: Update Prometheus scrape config for Podman metrics
-  hosts: monitoring_nodes
-  become: true
-  tasks:
-    - name: Ensure Prometheus scrape config includes Podman endpoints
-      ansible.builtin.template:
-        src: ../templates/prometheus.yml.j2
-        dest: /etc/prometheus/prometheus.yml
-        mode: '0644'

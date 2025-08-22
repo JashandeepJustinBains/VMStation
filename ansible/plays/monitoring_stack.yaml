@@ -1,5 +1,5 @@
-- import_playbook: podman_metrics_core.yaml
-- import_playbook: podman_exporter_build_run.yaml
-- import_playbook: prometheus_deploy.yaml
-- import_playbook: prometheus_scrape_config.yaml
-- import_playbook: loki_setup.yaml
+---
+# Monitoring stack site: imports modular plays that deploy the stack.
+# No credentials are stored in these plays.
+- import_playbook: monitoring/install_node.yaml
+- import_playbook: monitoring/deploy_promtail.yaml
