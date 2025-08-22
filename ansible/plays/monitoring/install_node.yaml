@@ -42,15 +42,15 @@
 
     - name: Render Prometheus scrape config from repository template
       template:
-  src: ../../templates/prometheus.yml.j2
-  dest: "{{ monit_root }}/prometheus/prometheus.yml"
+        src: ../../templates/prometheus.yml.j2
+        dest: "{{ monit_root }}/prometheus/prometheus.yml"
         owner: root
         mode: '0644'
 
     - name: Render Grafana datasources (no credentials)
       template:
         src: templates/grafana_datasources.yml.j2
-  dest: "{{ monit_root }}/grafana/provisioning/datasources/datasources.yml"
+        dest: "{{ monit_root }}/grafana/provisioning/datasources/datasources.yml"
         owner: root
         mode: '0644'
       vars:
@@ -60,21 +60,21 @@
 
     - name: Copy Grafana dashboards provider (existing)
       copy:
-  src: ../files/grafana_provisioning/dashboards.yml
-  dest: "{{ monit_root }}/grafana/provisioning/dashboards/dashboards.yml"
+        src: ../files/grafana_provisioning/dashboards.yml
+        dest: "{{ monit_root }}/grafana/provisioning/dashboards/dashboards.yml"
         mode: '0644'
 
     - name: Copy example Podman dashboard (existing)
       copy:
         src: ../files/../grafana_podman_dashboard.json
-  dest: "{{ monit_root }}/grafana/dashboards/podman_dashboard.json"
+        dest: "{{ monit_root }}/grafana/dashboards/podman_dashboard.json"
         mode: '0644'
       ignore_errors: yes
 
     - name: Render promtail config for monitoring pod
       template:
         src: templates/promtail-config.yaml.j2
-  dest: "{{ monit_root }}/promtail/promtail-config.yaml"
+        dest: "{{ monit_root }}/promtail/promtail-config.yaml"
         owner: root
         mode: '0644'
       vars:
@@ -86,22 +86,22 @@
         state: directory
         mode: '0755'
       loop:
-  - prometheus/data
+        - prometheus/data
         - prometheus
-  - loki
-  - loki/chunks
-  - loki/index
+        - loki
+        - loki/chunks
+        - loki/index
         - grafana
         - grafana/data
         - grafana/provisioning
         - grafana/dashboards
         - promtail
-  - promtail/data
+        - promtail/data
 
     - name: Render Loki local config
       template:
-  src: templates/loki-local-config.yaml.j2
-  dest: "{{ monit_root }}/loki/local-config.yaml"
+        src: templates/loki-local-config.yaml.j2
+        dest: "{{ monit_root }}/loki/local-config.yaml"
         owner: root
         mode: '0644'
   # Use the play-level `loki_port` var directly; do not reassign here (avoids recursion)
