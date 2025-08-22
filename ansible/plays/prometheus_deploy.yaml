@@ -5,7 +5,8 @@
     prometheus_image: docker.io/prom/prometheus:latest
     prometheus_container: prometheus
     prometheus_data_dir: /srv/monitoring_data/prometheus
-    prometheus_host_port: 9090
+  prometheus_host_port: 9090
+  prometheus_force_port_free: true
   tasks:
     - name: Ensure Prometheus data directories exist
       ansible.builtin.file:
@@ -28,16 +29,59 @@
       tags: prometheus
 
     - name: Check if port {{ prometheus_host_port }} is available
-      ansible.builtin.shell: ss -ltn "sport = :{{ prometheus_host_port }}" || true
+      ansible.builtin.shell: ss -ltn "sport = :{{ prometheus_host_port }}" | sed -n '2,$p' || true
       register: port_check
       changed_when: false
       failed_when: false
       tags: prometheus
 
-    - name: Fail if port {{ prometheus_host_port }} is in use
+    - name: Set flag if port {{ prometheus_host_port }} is in use
+      ansible.builtin.set_fact:
+        prometheus_port_in_use: "{{ port_check.stdout != '' }}"
+      tags: prometheus
+
+    - name: Fail if port {{ prometheus_host_port }} is in use and force free not enabled
       ansible.builtin.fail:
-        msg: "Port {{ prometheus_host_port }} appears to be in use on the target. Stop the process or choose a different port before deploying Prometheus. Output: {{ port_check.stdout }}"
-      when: port_check.stdout != ""
+        msg: "Port {{ prometheus_host_port }} appears to be in use on the target. Set prometheus_force_port_free: true to attempt to stop the owner automatically. Output: {{ port_check.stdout }}"
+      when: prometheus_port_in_use and (not prometheus_force_port_free)
+      tags: prometheus
+
+    - name: Attempt to free port {{ prometheus_host_port }} (podman/systemd/kill) if enabled
+      ansible.builtin.block:
+        - name: Attempt to remove podman container named {{ prometheus_container }}
+          ansible.builtin.command:
+            cmd: podman rm -f {{ prometheus_container }}
+          register: try_podman_rm
+          failed_when: false
+
+        - name: Attempt to stop systemd unit prometheus
+          ansible.builtin.systemd:
+            name: prometheus
+            state: stopped
+            enabled: no
+          failed_when: false
+
+        - name: Find PID owning port {{ prometheus_host_port }}
+          ansible.builtin.shell: |
+            ss -ltnp | grep ':{{ prometheus_host_port }}' | sed -n 's/.*pid=\([0-9]*\),.*/\1/p' | head -n1 || true
+          register: prometheus_port_pid
+          changed_when: false
+          failed_when: false
+
+        - name: Kill process owning port {{ prometheus_host_port }} if present
+          ansible.builtin.shell: |
+            if [ -n "{{ prometheus_port_pid.stdout }}" ]; then
+              kill -TERM {{ prometheus_port_pid.stdout }} >/dev/null 2>&1 || kill -KILL {{ prometheus_port_pid.stdout }} >/dev/null 2>&1 || true
+            fi
+          failed_when: false
+
+        - name: Wait for Prometheus port {{ prometheus_host_port }} to be free after forced stop
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ prometheus_host_port }}"
+            state: stopped
+            timeout: 30
+      when: prometheus_port_in_use and prometheus_force_port_free
       tags: prometheus
 
     - name: Remove existing Prometheus container if present
