@@ -65,18 +65,19 @@
         mode: '0644'
       ignore_errors: yes
 
-    - name: Copy example promtail config (fallback)
+    - name: Render promtail config for monitoring pod
       template:
         src: templates/promtail-config.yaml.j2
         dest: "{{ monit_root }}/promtail/promtail-config.yaml"
         owner: root
         mode: '0644'
-      ignore_errors: yes
+      vars:
+        loki_url: "http://loki:{{ loki_port }}"
 
     - name: Ensure monitoring Pod exists (podman)
       containers.podman.podman_pod:
         name: monitoring_pod
-        state: present
+        state: started
         ports:
           - "{{ prometheus_port }}:{{ prometheus_port }}"
           - "{{ loki_port }}:{{ loki_port }}"
