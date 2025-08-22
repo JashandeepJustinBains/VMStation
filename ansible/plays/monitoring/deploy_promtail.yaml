@@ -37,34 +37,32 @@
         owner: root
         group: root
       when: inventory_hostname not in groups['monitoring_nodes']
-
-  - name: On monitoring node, move /var/promtail into /srv/monitoring_data and symlink
     - name: On monitoring node, move /var/promtail into /srv/monitoring_data and symlink
       block:
-  - name: Create /srv/monitoring_data/promtail
+        - name: Create /srv/monitoring_data/promtail
           file:
             path: /srv/monitoring_data/promtail
             state: directory
             mode: '0755'
 
-    - name: Move existing /var/promtail into /srv/monitoring_data/promtail if not empty
+        - name: Move existing /var/promtail into /srv/monitoring_data/promtail if not empty
           command: |
             if [ -d /var/promtail ] && [ "$(ls -A /var/promtail)" ]; then
-      rsync -a /var/promtail/ /srv/monitoring_data/promtail/ || true
+              rsync -a /var/promtail/ /srv/monitoring_data/promtail/ || true
               rm -rf /var/promtail/* || true
             fi
           args:
             warn: false
 
-  - name: Remove /var/promtail and create symlink to /srv/monitoring_data/promtail
+        - name: Remove /var/promtail so a symlink can be created
           file:
             path: /var/promtail
             state: absent
       when: inventory_hostname in groups['monitoring_nodes']
 
-  - name: Create symlink from /var/promtail to /srv/monitoring_data/promtail on monitoring node
+    - name: Create symlink from /var/promtail to /srv/monitoring_data/promtail on monitoring node
       file:
-    src: /srv/monitoring_data/promtail
+        src: /srv/monitoring_data/promtail
         dest: /var/promtail
         state: link
       when: inventory_hostname in groups['monitoring_nodes']

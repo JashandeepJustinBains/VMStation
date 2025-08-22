@@ -66,9 +66,9 @@
         path: "{{ item }}"
         state: absent
       loop:
-  - /opt/promtail
-  - /var/promtail
-  - /srv/monitoring_data/promtail
+        - /opt/promtail
+        - /var/promtail
+        - /srv/monitoring_data/promtail
       ignore_errors: yes
 
     - name: Wait a moment for ports to free
