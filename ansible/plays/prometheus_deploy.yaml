@@ -152,6 +152,45 @@
         var: prometheus_logs.stdout_lines
       tags: prometheus
 
+    - name: List Prometheus containers (all states)
+      ansible.builtin.command:
+        cmd: podman ps -a --filter name={{ prometheus_container }} --no-trunc
+      register: prometheus_ps
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug podman ps
+      ansible.builtin.debug:
+        var: prometheus_ps.stdout_lines
+      tags: prometheus
+
+    - name: Inspect Prometheus container if present
+      ansible.builtin.command:
+        cmd: podman inspect {{ prometheus_container }} || true
+      register: prometheus_inspect
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug prometheus inspect
+      ansible.builtin.debug:
+        var: prometheus_inspect.stdout_lines
+      tags: prometheus
+
+    - name: Show recent podman journal (last hour)
+      ansible.builtin.command:
+        cmd: journalctl -u podman --since '1 hour ago' -n 200 || true
+      register: podman_journal
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug podman journal
+      ansible.builtin.debug:
+        var: podman_journal.stdout_lines
+      tags: prometheus
+
     - name: Wait for Prometheus to be ready
       ansible.builtin.uri:
         url: "http://{{ ansible_host | default(inventory_hostname) }}:{{ prometheus_host_port }}/-/ready"
