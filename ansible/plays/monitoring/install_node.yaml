@@ -80,8 +80,7 @@
         dest: "{{ monit_root }}/loki/local-config.yaml"
         owner: root
         mode: '0644'
-      vars:
-        loki_port: "{{ loki_port }}"
+  # Use the play-level `loki_port` var directly; do not reassign here (avoids recursion)
 
     - name: Ensure monitoring Pod exists (podman)
       containers.podman.podman_pod:
