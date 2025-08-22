@@ -16,11 +16,11 @@
 
     - name: Copy static prometheus.yml
       ansible.builtin.copy:
-  src: ../files/prometheus.yml
-  dest: /srv/monitoring_data/prometheus/prometheus.yml
-  owner: root
-  group: root
-  mode: '0644'
+        src: ../files/prometheus.yml
+        dest: /srv/monitoring_data/prometheus/prometheus.yml
+        owner: root
+        group: root
+        mode: '0644'
       tags: prometheus
 
     - name: Run Prometheus container
