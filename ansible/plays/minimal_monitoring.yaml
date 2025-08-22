@@ -1,0 +1,136 @@
+---
+- name: Minimal monitoring stack (Prometheus, node-exporter, Promtail, Grafana)
+  hosts: monitoring
+  become: true
+  vars:
+    prometheus_dir: /srv/prometheus
+    grafana_dir: /srv/grafana
+    promtail_dir: /srv/promtail
+    podman_bin: /usr/bin/podman
+
+  tasks:
+    - name: Ensure apt cache is up to date (Debian/Ubuntu assumed)
+      apt:
+        update_cache: yes
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Install podman (Debian/Ubuntu)
+      apt:
+        name: podman
+        state: present
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Create directories for services
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ prometheus_dir }}"
+        - "{{ grafana_dir }}"
+        - "{{ grafana_dir }}/provisioning/datasources"
+        - "{{ grafana_dir }}/provisioning/dashboards"
+        - "{{ grafana_dir }}/dashboards"
+        - "{{ promtail_dir }}"
+
+    - name: Copy Prometheus config
+      copy:
+        src: files/prometheus.yml
+        dest: "{{ prometheus_dir }}/prometheus.yml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy Promtail config
+      copy:
+        src: files/promtail-config.yaml
+        dest: "{{ promtail_dir }}/promtail-config.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy Grafana provisioning datasource
+      copy:
+        src: files/grafana_provisioning/datasources.yml
+        dest: "{{ grafana_dir }}/provisioning/datasources/datasources.yml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy Grafana provisioning dashboards provider
+      copy:
+        src: files/grafana_provisioning/dashboards.yml
+        dest: "{{ grafana_dir }}/provisioning/dashboards/dashboards.yml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy example dashboard JSON
+      copy:
+        src: files/grafana_provisioning/minimal_dashboard.json
+        dest: "{{ grafana_dir }}/dashboards/minimal_dashboard.json"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Start Prometheus container if not running
+      shell: |
+        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^prometheus$'; then
+          {{ podman_bin }} run -d --name prometheus -p 9090:9090 \
+            -v {{ prometheus_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:Z \
+            --restart=always prom/prometheus:latest
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Start node_exporter container if not running
+      shell: |
+        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^node_exporter$'; then
+          {{ podman_bin }} run -d --name node_exporter -p 9100:9100 --restart=always \
+            quay.io/prometheus/node-exporter:latest
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Start Promtail container if not running
+      shell: |
+        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^promtail$'; then
+          {{ podman_bin }} run -d --name promtail \
+            -v /var/log:/var/log:Z \
+            -v {{ promtail_dir }}/promtail-config.yaml:/etc/promtail/config.yaml:Z \
+            --restart=always grafana/promtail:latest -config.file=/etc/promtail/config.yaml
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Start Grafana container if not running
+      shell: |
+        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^grafana$'; then
+          {{ podman_bin }} run -d --name grafana -p 3000:3000 \
+            -v {{ grafana_dir }}/provisioning:/etc/grafana/provisioning:Z \
+            -v {{ grafana_dir }}/dashboards:/var/lib/grafana/dashboards:Z \
+            --restart=always grafana/grafana:latest
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Wait for Grafana HTTP to become ready
+      uri:
+        url: http://localhost:3000/api/health
+        status_code: 200
+        timeout: 30
+      register: grafana_health
+      retries: 6
+      delay: 5
+      until: grafana_health.status == 200
+
+    - name: Done - show services
+      shell: '{{ podman_bin }} ps --format "table {{'{{'}}.Names{{'}}'}}\t{{'{{'}}.Status{{'}}'}}"'
+      register: podman_ps
+      changed_when: false
+
+    - name: Print running containers
+      debug:
+        var: podman_ps.stdout_lines
