@@ -28,10 +28,10 @@
       tags: prometheus
 
     - name: Check if port {{ prometheus_host_port }} is available
-      ansible.builtin.command:
-        cmd: ss -ltn "sport = :{{ prometheus_host_port }}" || true
+      ansible.builtin.shell: ss -ltn "sport = :{{ prometheus_host_port }}" || true
       register: port_check
       changed_when: false
+      failed_when: false
       tags: prometheus
 
     - name: Fail if port {{ prometheus_host_port }} is in use
