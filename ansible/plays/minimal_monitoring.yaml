@@ -6,6 +6,7 @@
     prometheus_dir: /srv/prometheus
     grafana_dir: /srv/grafana
     promtail_dir: /srv/promtail
+  loki_dir: /srv/loki
     podman_bin: /usr/bin/podman
 
   tasks:
@@ -74,6 +75,32 @@
         owner: root
         group: root
         mode: '0644'
+
+    - name: Create Loki directory
+      file:
+        path: "{{ loki_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy minimal Loki config
+      copy:
+        src: files/loki-local-config.yaml
+        dest: "{{ loki_dir }}/local-config.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Start Loki container if not running
+      shell: |
+        if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^loki$'; then
+          {{ podman_bin }} run -d --name loki -p 3100:3100 \
+            -v {{ loki_dir }}/local-config.yaml:/etc/loki/local-config.yaml:Z \
+            --restart=always grafana/loki:2.8.2 -config.file=/etc/loki/local-config.yaml
+        fi
+      args:
+        executable: /bin/bash
 
     - name: Start Prometheus container if not running
       shell: |
