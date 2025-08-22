@@ -1,4 +1,3 @@
----
 - name: Deploy Prometheus container
   hosts: all
   become: true
