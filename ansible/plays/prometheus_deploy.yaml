@@ -78,7 +78,7 @@
 
         - name: Wait for Prometheus port {{ prometheus_host_port }} to be free after forced stop
           ansible.builtin.wait_for:
-            host: 127.0.0.1
+            host: "{{ ansible_host | default(inventory_hostname) }}"
             port: "{{ prometheus_host_port }}"
             state: stopped
             timeout: 30
@@ -116,9 +116,9 @@
 
     - name: Wait for Prometheus to be ready
       ansible.builtin.uri:
-        url: "http://localhost:{{ prometheus_host_port }}/-/ready"
-        status_code: 200
-        timeout: 10
+  url: "http://{{ ansible_host | default(inventory_hostname) }}:{{ prometheus_host_port }}/-/ready"
+  status_code: 200
+  timeout: 10
       register: prometheus_ready
       retries: 6
       delay: 5
