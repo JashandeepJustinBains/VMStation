@@ -54,7 +54,7 @@
 
           [Install]
           WantedBy=multi-user.target
-      mode: '0644'
+        mode: '0644'
       tags: podman_stats
 
     - name: Create systemd timer for podman-stats forwarder
@@ -70,7 +70,7 @@
 
           [Install]
           WantedBy=timers.target
-      mode: '0644'
+        mode: '0644'
       tags: podman_stats
 
     - name: Enable and start podman-stats forwarder timer
