@@ -114,6 +114,44 @@
       failed_when: prometheus_run.rc != 0
       tags: prometheus
 
+    - name: Show listening sockets for Prometheus port on host
+      ansible.builtin.shell: ss -ltnp | grep ':{{ prometheus_host_port }}' || true
+      register: prometheus_ss
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug listening sockets
+      ansible.builtin.debug:
+        var: prometheus_ss.stdout_lines
+      tags: prometheus
+
+    - name: Show Podman port mapping for Prometheus container
+      ansible.builtin.command:
+        cmd: podman port {{ prometheus_container }} || true
+      register: prometheus_podman_port
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug Podman port mapping
+      ansible.builtin.debug:
+        var: prometheus_podman_port.stdout_lines
+      tags: prometheus
+
+    - name: Tail Prometheus container logs (last 50 lines)
+      ansible.builtin.command:
+        cmd: podman logs --tail 50 {{ prometheus_container }} || true
+      register: prometheus_logs
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug Prometheus logs
+      ansible.builtin.debug:
+        var: prometheus_logs.stdout_lines
+      tags: prometheus
+
     - name: Wait for Prometheus to be ready
       ansible.builtin.uri:
         url: "http://{{ ansible_host | default(inventory_hostname) }}:{{ prometheus_host_port }}/-/ready"
