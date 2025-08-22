@@ -92,22 +92,47 @@
         group: root
         mode: '0644'
 
-    - name: Start Loki container if not running
+    - name: Check if a systemd loki service is active
+      command: systemctl is-active loki
+      register: loki_svc
+      failed_when: false
+      changed_when: false
+
+    - name: Check if a podman container named loki is running
+      shell: "{{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^loki$'"
+      register: loki_container
+      failed_when: false
+      changed_when: false
+      args:
+        executable: /bin/bash
+
+    - name: Skip starting container because a systemd loki service is active
+      debug:
+        msg: "A systemd loki service is active on this host (will not start a container)."
+      when: loki_svc.rc == 0
+
+    - name: Skip starting container because a podman loki container already exists
+      debug:
+        msg: "A podman container named 'loki' is already running (will not start another)."
+      when: loki_container.rc == 0 and loki_svc.rc != 0
+
+    - name: Start Loki container if not running and no systemd service exists
       shell: |
         if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^loki$'; then
           {{ podman_bin }} run -d --name loki -p 3100:3100 \
             -v {{ loki_dir }}/local-config.yaml:/etc/loki/local-config.yaml:Z \
-            --restart=always grafana/loki:2.8.2 -config.file=/etc/loki/local-config.yaml
+            --restart=always docker.io/grafana/loki:2.8.2 -config.file=/etc/loki/local-config.yaml
         fi
       args:
         executable: /bin/bash
+      when: loki_svc.rc != 0 and loki_container.rc != 0
 
     - name: Start Prometheus container if not running
       shell: |
         if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^prometheus$'; then
           {{ podman_bin }} run -d --name prometheus -p 9090:9090 \
             -v {{ prometheus_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:Z \
-            --restart=always prom/prometheus:latest
+            --restart=always docker.io/prom/prometheus:latest
         fi
       args:
         executable: /bin/bash
@@ -127,7 +152,7 @@
           {{ podman_bin }} run -d --name promtail \
             -v /var/log:/var/log:Z \
             -v {{ promtail_dir }}/promtail-config.yaml:/etc/promtail/config.yaml:Z \
-            --restart=always grafana/promtail:latest -config.file=/etc/promtail/config.yaml
+            --restart=always docker.io/grafana/promtail:latest -config.file=/etc/promtail/config.yaml
         fi
       args:
         executable: /bin/bash
@@ -138,7 +163,7 @@
           {{ podman_bin }} run -d --name grafana -p 3000:3000 \
             -v {{ grafana_dir }}/provisioning:/etc/grafana/provisioning:Z \
             -v {{ grafana_dir }}/dashboards:/var/lib/grafana/dashboards:Z \
-            --restart=always grafana/grafana:latest
+            --restart=always docker.io/grafana/grafana:latest
         fi
       args:
         executable: /bin/bash
