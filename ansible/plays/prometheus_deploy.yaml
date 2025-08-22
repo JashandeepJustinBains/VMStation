@@ -6,6 +6,18 @@
     prometheus_container: prometheus
     prometheus_data_dir: /srv/monitoring_data/prometheus
   tasks:
+    - name: Ensure Prometheus data directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ prometheus_data_dir }}"
+        - "{{ prometheus_data_dir }}/data"
+      tags: prometheus
+
     - name: Pull Prometheus image
       ansible.builtin.command:
         cmd: podman pull {{ prometheus_image }}
