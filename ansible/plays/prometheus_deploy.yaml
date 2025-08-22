@@ -193,7 +193,7 @@
 
     - name: Get Prometheus container id
       ansible.builtin.command:
-  cmd: podman inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ prometheus_container }} || true
+        cmd: podman inspect --format '{% raw %}{{.Id}}{% endraw %}' {{ prometheus_container }} || true
       register: prometheus_cid
       changed_when: false
       failed_when: false
