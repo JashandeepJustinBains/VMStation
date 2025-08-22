@@ -51,7 +51,6 @@
               rsync -a /var/promtail/ /srv/monitoring_data/promtail/ || true
               rm -rf /var/promtail/* || true
             fi
-          warn: false
 
         - name: Remove /var/promtail so a symlink can be created
           file:
