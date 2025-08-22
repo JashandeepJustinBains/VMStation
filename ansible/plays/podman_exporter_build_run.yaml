@@ -1,0 +1,38 @@
+- name: Podman exporter build and run
+  hosts: all
+  become: true
+  vars:
+    podman_exporter_image: docker.io/veemero/podman_exporter:latest
+    podman_exporter_container: podman_exporter
+  tasks:
+    - name: Pull podman_exporter image
+      ansible.builtin.command:
+        cmd: podman pull {{ podman_exporter_image }}
+      register: podman_exporter_pull
+      changed_when: podman_exporter_pull.rc == 0
+      failed_when: podman_exporter_pull.rc not in [0,1]
+      tags: podman_exporter
+
+    - name: Run podman_exporter container
+      ansible.builtin.command:
+        cmd: >-
+          podman run -d --name {{ podman_exporter_container }} --rm -p 9300:9300
+          -v /run/podman/podman.sock:/run/podman/podman.sock:ro
+          {{ podman_exporter_image }}
+      register: podman_exporter_run
+      changed_when: podman_exporter_run.rc == 0
+      failed_when: podman_exporter_run.rc != 0
+      tags: podman_exporter
+
+    - name: Ensure podman_exporter systemd unit (optional)
+      ansible.builtin.template:
+        src: ../templates/podman_exporter.service.j2
+        dest: /etc/systemd/system/podman_exporter.service
+        mode: '0644'
+      notify: Reload systemd
+      tags: podman_exporter
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes

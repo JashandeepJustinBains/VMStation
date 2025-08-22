@@ -1,0 +1,47 @@
+- name: Deploy Prometheus container
+  hosts: all
+  become: true
+  vars:
+    prometheus_image: docker.io/prom/prometheus:latest
+    prometheus_container: prometheus
+    prometheus_data_dir: /srv/monitoring_data/prometheus
+  tasks:
+    - name: Pull Prometheus image
+      ansible.builtin.command:
+        cmd: podman pull {{ prometheus_image }}
+      register: prometheus_pull
+      changed_when: prometheus_pull.rc == 0
+      failed_when: prometheus_pull.rc != 0
+      tags: prometheus
+
+    - name: Copy static prometheus.yml
+      ansible.builtin.copy:
+        src: ../files/prometheus.yml
+        dest: /srv/monitoring_data/prometheus/prometheus.yml
+        owner: root
+        group: root
+        mode: '0644'
+      tags: prometheus
+
+    - name: Run Prometheus container
+      ansible.builtin.command:
+        cmd: >-
+          podman run -d --name {{ prometheus_container }} --rm -p 9090:9090
+          -v {{ prometheus_data_dir }}:/etc/prometheus
+          -v {{ prometheus_data_dir }}/data:/prometheus
+          {{ prometheus_image }}
+      register: prometheus_run
+      changed_when: prometheus_run.rc == 0
+      failed_when: prometheus_run.rc != 0
+      tags: prometheus
+
+    - name: Wait for Prometheus to be ready
+      ansible.builtin.uri:
+        url: http://localhost:9090/-/ready
+        status_code: 200
+        timeout: 10
+      register: prometheus_ready
+      retries: 6
+      delay: 5
+      until: prometheus_ready.status == 200
+      tags: prometheus

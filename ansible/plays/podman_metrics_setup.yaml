@@ -320,216 +320,216 @@
   when: podman_exporter_pull.rc != 0
   tags: podman_exporter
 
-    - name: Ensure podman stats directory exists on monitoring hosts (persisted)
-      ansible.builtin.file:
-        path: /srv/monitoring_data/promtail
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
+  - name: Ensure podman stats directory exists on monitoring hosts (persisted)
+    ansible.builtin.file:
+      path: /srv/monitoring_data/promtail
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
 
-    - name: Deploy podman-stats forwarder script (persisted to /srv/monitoring_data)
-      ansible.builtin.copy:
-        dest: /usr/local/bin/podman-stats-forward.sh
-        mode: '0755'
-        content: |
-          #!/bin/bash
-          # Write podman stats as JSON lines to persistent monitoring storage
-          out=/srv/monitoring_data/promtail/podman_stats.log
-          # ensure directory exists
-          mkdir -p "$(dirname "$out")"
-          timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          # Use podman stats --no-stream --format json (if supported)
-          if podman stats --no-stream --format json >/dev/null 2>&1; then
-            podman stats --no-stream --format json | jq -c '.[]' | while read -r line; do
-              echo "${timestamp} ${line}" >> "$out"
-            done
-          else
-            # Fallback: use podman ps --format json and basic inspect for each container
-            podman ps -a --format json | jq -c '.[]' | while read -r c; do
-              id=$(echo "$c" | jq -r '.Id')
-              insp=$(podman inspect "$id" --format json 2>/dev/null | jq -c '.[0]')
-              echo "${timestamp} ${insp}" >> "$out"
-            done
-          fi
+  - name: Deploy podman-stats forwarder script (persisted to /srv/monitoring_data)
+    ansible.builtin.copy:
+      dest: /usr/local/bin/podman-stats-forward.sh
+      mode: '0755'
+      content: |
+        #!/bin/bash
+        # Write podman stats as JSON lines to persistent monitoring storage
+        out=/srv/monitoring_data/promtail/podman_stats.log
+        # ensure directory exists
+        mkdir -p "$(dirname "$out")"
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        # Use podman stats --no-stream --format json (if supported)
+        if podman stats --no-stream --format json >/dev/null 2>&1; then
+          podman stats --no-stream --format json | jq -c '.[]' | while read -r line; do
+            echo "${timestamp} ${line}" >> "$out"
+          done
+        else
+          # Fallback: use podman ps --format json and basic inspect for each container
+          podman ps -a --format json | jq -c '.[]' | while read -r c; do
+            id=$(echo "$c" | jq -r '.Id')
+            insp=$(podman inspect "$id" --format json 2>/dev/null | jq -c '.[0]')
+            echo "${timestamp} ${insp}" >> "$out"
+          done
+        fi
 
-    - name: Create systemd service for podman-stats forwarder
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/podman-stats-forwarder.service
-        content: |
-          [Unit]
-          Description=Run podman-stats forwarder (writes JSON lines to /var/log/podman_stats.log)
-          After=network.target
+  - name: Create systemd service for podman-stats forwarder
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/podman-stats-forwarder.service
+      content: |
+        [Unit]
+        Description=Run podman-stats forwarder (writes JSON lines to /var/log/podman_stats.log)
+        After=network.target
 
-          [Service]
-          Type=oneshot
-          ExecStart=/usr/local/bin/podman-stats-forward.sh
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/bin/podman-stats-forward.sh
 
-          [Install]
-          WantedBy=multi-user.target
+        [Install]
+        WantedBy=multi-user.target
 
-    - name: Create systemd timer for podman-stats forwarder
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/podman-stats-forwarder.timer
-        content: |
-          [Unit]
-          Description=Run podman-stats forwarder every 30s (writes to /srv/monitoring_data/promtail/podman_stats.log)
+  - name: Create systemd timer for podman-stats forwarder
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/podman-stats-forwarder.timer
+      content: |
+        [Unit]
+        Description=Run podman-stats forwarder every 30s (writes to /srv/monitoring_data/promtail/podman_stats.log)
 
-          [Timer]
-          OnBootSec=30s
-          OnUnitActiveSec=30s
+        [Timer]
+        OnBootSec=30s
+        OnUnitActiveSec=30s
 
-          [Install]
-          WantedBy=timers.target
+        [Install]
+        WantedBy=timers.target
 
-    - name: Enable and start podman-stats forwarder timer
-      ansible.builtin.systemd:
-        name: podman-stats-forwarder.timer
-        enabled: yes
-        state: started
-        daemon_reload: yes
-      tags: podman_exporter
+  - name: Enable and start podman-stats forwarder timer
+    ansible.builtin.systemd:
+      name: podman-stats-forwarder.timer
+      enabled: yes
+      state: started
+      daemon_reload: yes
+    tags: podman_exporter
 
-    - name: Enable and start podman textfile collector timer
-      ansible.builtin.systemd:
-        name: podman-textfile-collector.timer
-        enabled: yes
-        state: started
-        daemon_reload: yes
-      tags: podman_exporter
+  - name: Enable and start podman textfile collector timer
+    ansible.builtin.systemd:
+      name: podman-textfile-collector.timer
+      enabled: yes
+      state: started
+      daemon_reload: yes
+    tags: podman_exporter
 
 
-    - name: Ensure /etc/prometheus directory exists on monitoring_node
-      ansible.builtin.file:
-        path: /etc/prometheus
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Ensure /etc/prometheus directory exists on monitoring_node
+    ansible.builtin.file:
+      path: /etc/prometheus
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Template prometheus.yml to monitoring_node from inventory
-      ansible.builtin.template:
-        src: ../templates/prometheus.yml.j2
-        dest: /etc/prometheus/prometheus.yml
-        owner: root
-        group: root
-        mode: '0644'
-      notify: Restart Prometheus Container
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Template prometheus.yml to monitoring_node from inventory
+    ansible.builtin.template:
+      src: ../templates/prometheus.yml.j2
+      dest: /etc/prometheus/prometheus.yml
+      owner: root
+      group: root
+      mode: '0644'
+    notify: Restart Prometheus Container
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Ensure Prometheus image is pulled on monitoring nodes
-      ansible.builtin.command: podman pull docker.io/prom/prometheus:latest
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Ensure Prometheus image is pulled on monitoring nodes
+    ansible.builtin.command: podman pull docker.io/prom/prometheus:latest
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Run Prometheus as a Podman container on monitoring nodes
-      containers.podman.podman_container:
-        name: prometheus
-        image: docker.io/prom/prometheus:latest
-        state: started
-        restart_policy: always
-        ports:
-          - "9090:9090"
-        volumes:
-          - /etc/prometheus:/etc/prometheus:Z
-          - /srv/monitoring_data/prometheus:/prometheus:Z
-        command: --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Run Prometheus as a Podman container on monitoring nodes
+    containers.podman.podman_container:
+      name: prometheus
+      image: docker.io/prom/prometheus:latest
+      state: started
+      restart_policy: always
+      ports:
+        - "9090:9090"
+      volumes:
+        - /etc/prometheus:/etc/prometheus:Z
+        - /srv/monitoring_data/prometheus:/prometheus:Z
+      command: --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Wait for Prometheus to listen on 9090 (non-fatal)
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: 9090
-        timeout: 60
-      register: prometheus_wait
-      failed_when: false
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Wait for Prometheus to listen on 9090 (non-fatal)
+    ansible.builtin.wait_for:
+      host: 127.0.0.1
+      port: 9090
+      timeout: 60
+    register: prometheus_wait
+    failed_when: false
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Gather podman containers state for Prometheus
-      ansible.builtin.command: podman ps -a --format json
-      register: podman_ps
-      failed_when: false
-      changed_when: false
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Gather podman containers state for Prometheus
+    ansible.builtin.command: podman ps -a --format json
+    register: podman_ps
+    failed_when: false
+    changed_when: false
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Collect Prometheus container logs (last 200 lines)
-      ansible.builtin.command: podman logs --tail 200 prometheus
-      register: prometheus_logs
-      failed_when: false
-      changed_when: false
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Collect Prometheus container logs (last 200 lines)
+    ansible.builtin.command: podman logs --tail 200 prometheus
+    register: prometheus_logs
+    failed_when: false
+    changed_when: false
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Debug Prometheus startup status
-      ansible.builtin.debug:
-        msg: |
-          Prometheus wait result: rc={{ (prometheus_wait | default({})).get('rc', 'n/a') }} elapsed={{ (prometheus_wait | default({})).get('elapsed', 'n/a') }}
-          podman ps (sample): {{ (podman_ps.stdout | default('')) | truncate(1000) }}
-          prometheus logs (sample): {{ (prometheus_logs.stdout | default('')) | truncate(2000) }}
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Debug Prometheus startup status
+    ansible.builtin.debug:
+      msg: |
+        Prometheus wait result: rc={{ (prometheus_wait | default({})).get('rc', 'n/a') }} elapsed={{ (prometheus_wait | default({})).get('elapsed', 'n/a') }}
+        podman ps (sample): {{ (podman_ps.stdout | default('')) | truncate(1000) }}
+        prometheus logs (sample): {{ (prometheus_logs.stdout | default('')) | truncate(2000) }}
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Stat for local prometheus binary
-      ansible.builtin.stat:
-        path: /usr/local/bin/prometheus
-      register: prometheus_stat
-      when: inventory_hostname in groups['monitoring_nodes']
-      tags: prometheus
+  - name: Stat for local prometheus binary
+    ansible.builtin.stat:
+      path: /usr/local/bin/prometheus
+    register: prometheus_stat
+    when: inventory_hostname in groups['monitoring_nodes']
+    tags: prometheus
 
-    - name: Create a systemd unit for local Prometheus (if binary exists)
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/prometheus.service
-        content: |
-          [Unit]
-          Description=Prometheus Server
-          Wants=network-online.target
-          After=network-online.target
+  - name: Create a systemd unit for local Prometheus (if binary exists)
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/prometheus.service
+      content: |
+        [Unit]
+        Description=Prometheus Server
+        Wants=network-online.target
+        After=network-online.target
 
-          [Service]
-          Type=simple
-          ExecStart=/usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/srv/monitoring_data/prometheus
-          Restart=on-failure
+        [Service]
+        Type=simple
+        ExecStart=/usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/srv/monitoring_data/prometheus
+        Restart=on-failure
 
-          [Install]
-          WantedBy=multi-user.target
-        mode: '0644'
-      when: inventory_hostname in groups['monitoring_nodes'] and prometheus_stat.stat.exists
-      tags: prometheus
+        [Install]
+        WantedBy=multi-user.target
+      mode: '0644'
+    when: inventory_hostname in groups['monitoring_nodes'] and prometheus_stat.stat.exists
+    tags: prometheus
 
-    - name: Copy promtail config to all nodes
-      ansible.builtin.copy:
-        src: files/promtail-config.yaml
-        dest: /etc/promtail/promtail.yaml
-        owner: root
-        group: root
-        mode: '0644'
-  notify: Restart Promtail Container
-  tags: promtail
+  - name: Copy promtail config to all nodes
+    ansible.builtin.copy:
+      src: files/promtail-config.yaml
+      dest: /etc/promtail/promtail.yaml
+      owner: root
+      group: root
+      mode: '0644'
+notify: Restart Promtail Container
+tags: promtail
 
-    - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
-      ansible.builtin.ufw:
-        rule: allow
-        port: "{{ item }}"
-        proto: tcp
-      loop:
-        - 9882
-        - 3100
-        - 9100
-      when: ansible_os_family == 'Debian'
-      tags: firewall
+  - name: Ensure firewall allows Prometheus/Loki/node_exporter scraping
+    ansible.builtin.ufw:
+      rule: allow
+      port: "{{ item }}"
+      proto: tcp
+    loop:
+      - 9882
+      - 3100
+      - 9100
+    when: ansible_os_family == 'Debian'
+    tags: firewall
 
-  handlers:
-    - name: Restart Prometheus Container
-      ansible.builtin.command: podman restart prometheus || true
-      become: true
-      listen: Restart Prometheus Container
-    - name: Restart Promtail Container
-      ansible.builtin.command: podman restart promtail || true
-      become: true
-      listen: Restart Promtail Container
+handlers:
+  - name: Restart Prometheus Container
+    ansible.builtin.command: podman restart prometheus || true
+    become: true
+    listen: Restart Prometheus Container
+  - name: Restart Promtail Container
+    ansible.builtin.command: podman restart promtail || true
+    become: true
+    listen: Restart Promtail Container
