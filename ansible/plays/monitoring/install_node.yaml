@@ -94,7 +94,7 @@
     - name: Start Prometheus container in pod
       containers.podman.podman_container:
         name: prometheus
-        image: prom/prometheus:latest
+  image: docker.io/prom/prometheus:latest
         state: started
         pod: monitoring_pod
         restart_policy: always
@@ -104,7 +104,7 @@
     - name: Start Loki container in pod
       containers.podman.podman_container:
         name: loki
-        image: grafana/loki:2.8.2
+  image: docker.io/grafana/loki:2.8.2
         state: started
         pod: monitoring_pod
         restart_policy: always
@@ -116,7 +116,7 @@
     - name: Start Grafana container in pod (no stored admin password)
       containers.podman.podman_container:
         name: grafana
-        image: grafana/grafana:latest
+  image: docker.io/grafana/grafana:latest
         state: started
         pod: monitoring_pod
         restart_policy: always
@@ -127,7 +127,7 @@
     - name: Start Promtail on monitoring node (collect local logs)
       containers.podman.podman_container:
         name: promtail_local
-        image: grafana/promtail:2.8.2
+  image: docker.io/grafana/promtail:2.8.2
         state: started
         pod: monitoring_pod
         restart_policy: always
