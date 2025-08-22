@@ -3,7 +3,7 @@
   hosts: monitoring_nodes
   become: true
   vars:
-  monit_root: /srv/monitoring_data
+    monit_root: /srv/monitoring_data
     loki_port: 3100
     prometheus_port: 9090
     grafana_port: 3000
