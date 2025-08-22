@@ -104,8 +104,8 @@
 
     - name: Run Prometheus container
       ansible.builtin.command:
-        cmd: >-
-          podman run -d --name {{ prometheus_container }} --rm -p {{ prometheus_host_port }}:9090
+      cmd: >-
+        podman run -d --name {{ prometheus_container }} -p {{ prometheus_host_port }}:9090
           -v {{ prometheus_data_dir }}:/etc/prometheus:Z
           -v {{ prometheus_data_dir }}/data:/prometheus:Z
           {{ prometheus_image }}
