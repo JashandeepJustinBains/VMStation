@@ -154,6 +154,16 @@
         var: promtool_check.stdout_lines
       tags: prometheus
 
+    - name: Ensure Prometheus data directory is writable by container user
+      ansible.builtin.file:
+        path: "{{ prometheus_data_dir }}/data"
+        state: directory
+        owner: nobody
+        group: nogroup
+        mode: '0755'
+        recurse: yes
+      tags: prometheus
+
     - name: Run Prometheus container
       ansible.builtin.command:
         cmd: >-
