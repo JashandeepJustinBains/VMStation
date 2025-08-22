@@ -1,0 +1,17 @@
+{
+  "id": null,
+  "title": "Podman Containers Overview",
+  "schemaVersion": 36,
+  "version": 1,
+  "panels": [
+    {
+      "type": "text",
+      "title": "Instructions",
+      "options": {
+        "content": "This is a placeholder dashboard for Podman container metrics. Add panels as needed.",
+        "mode": "markdown"
+      },
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 6 }
+    }
+  ]
+}
