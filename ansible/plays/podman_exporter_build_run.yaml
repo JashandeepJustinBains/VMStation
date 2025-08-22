@@ -1,100 +1,100 @@
- - name: Podman stats forwarder and promtail integration
-   hosts: all
-   become: true
-   vars:
-     podman_stats_script: /usr/local/bin/podman-stats-forward.sh
-     podman_stats_log: /srv/monitoring_data/promtail/podman_stats.log
-   tasks:
+- name: Podman stats forwarder and promtail integration
+  hosts: all
+  become: true
+  vars:
+    podman_stats_script: /usr/local/bin/podman-stats-forward.sh
+    podman_stats_log: /srv/monitoring_data/promtail/podman_stats.log
+  tasks:
     - name: Ensure jq is installed (used by podman-stats-forwarder)
       ansible.builtin.package:
         name: jq
         state: present
       tags: podman_stats
 
-     - name: Ensure podman stats forwarder script directory exists
-       ansible.builtin.file:
-         path: /usr/local/bin
-         state: directory
-         mode: '0755'
+    - name: Ensure podman stats forwarder script directory exists
+      ansible.builtin.file:
+        path: /usr/local/bin
+        state: directory
+        mode: '0755'
 
-     - name: Deploy podman-stats forwarder script
-       ansible.builtin.copy:
-         dest: "{{ podman_stats_script }}"
-         mode: '0755'
-         content: |
-           #!/bin/bash
-           # Write podman stats as JSON lines to persistent monitoring storage
-           out={{ podman_stats_log }}
-           mkdir -p "$(dirname "$out")"
-           timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-           if podman stats --no-stream --format json >/dev/null 2>&1; then
-             podman stats --no-stream --format json | jq -c '.[]' | while read -r line; do
-               echo "${timestamp} ${line}" >> "${out}"
-             done
-           else
-             podman ps -a --format json | jq -c '.[]' | while read -r c; do
-               id=$(echo "$c" | jq -r '.Id')
-               insp=$(podman inspect "$id" --format json 2>/dev/null | jq -c '.[0]')
-               echo "${timestamp} ${insp}" >> "${out}"
-             done
-           fi
-       tags: podman_stats
+    - name: Deploy podman-stats forwarder script
+      ansible.builtin.copy:
+        dest: "{{ podman_stats_script }}"
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # Write podman stats as JSON lines to persistent monitoring storage
+          out={{ podman_stats_log }}
+          mkdir -p "$(dirname "$out")"
+          timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if podman stats --no-stream --format json >/dev/null 2>&1; then
+            podman stats --no-stream --format json | jq -c '.[]' | while read -r line; do
+              echo "${timestamp} ${line}" >> "${out}"
+            done
+          else
+            podman ps -a --format json | jq -c '.[]' | while read -r c; do
+              id=$(echo "$c" | jq -r '.Id')
+              insp=$(podman inspect "$id" --format json 2>/dev/null | jq -c '.[0]')
+              echo "${timestamp} ${insp}" >> "${out}"
+            done
+          fi
+      tags: podman_stats
 
-     - name: Create systemd service for podman-stats forwarder
-       ansible.builtin.copy:
-         dest: /etc/systemd/system/podman-stats-forwarder.service
-         content: |
-           [Unit]
-           Description=Run podman-stats forwarder (writes JSON lines to /srv/monitoring_data/promtail/podman_stats.log)
-           After=network.target
+    - name: Create systemd service for podman-stats forwarder
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-stats-forwarder.service
+        content: |
+          [Unit]
+          Description=Run podman-stats forwarder (writes JSON lines to /srv/monitoring_data/promtail/podman_stats.log)
+          After=network.target
 
-           [Service]
-           Type=oneshot
-           ExecStart={{ podman_stats_script }}
+          [Service]
+          Type=oneshot
+          ExecStart={{ podman_stats_script }}
 
-           [Install]
-           WantedBy=multi-user.target
-       mode: '0644'
-       tags: podman_stats
+          [Install]
+          WantedBy=multi-user.target
+      mode: '0644'
+      tags: podman_stats
 
-     - name: Create systemd timer for podman-stats forwarder
-       ansible.builtin.copy:
-         dest: /etc/systemd/system/podman-stats-forwarder.timer
-         content: |
-           [Unit]
-           Description=Run podman-stats forwarder every 30s
+    - name: Create systemd timer for podman-stats forwarder
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-stats-forwarder.timer
+        content: |
+          [Unit]
+          Description=Run podman-stats forwarder every 30s
 
-           [Timer]
-           OnBootSec=30s
-           OnUnitActiveSec=30s
+          [Timer]
+          OnBootSec=30s
+          OnUnitActiveSec=30s
 
-           [Install]
-           WantedBy=timers.target
-       mode: '0644'
-       tags: podman_stats
+          [Install]
+          WantedBy=timers.target
+      mode: '0644'
+      tags: podman_stats
 
-     - name: Enable and start podman-stats forwarder timer
-       ansible.builtin.systemd:
-         name: podman-stats-forwarder.timer
-         enabled: yes
-         state: started
-         daemon_reload: yes
-       tags: podman_stats
+    - name: Enable and start podman-stats forwarder timer
+      ansible.builtin.systemd:
+        name: podman-stats-forwarder.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      tags: podman_stats
 
-     - name: Ensure Promtail config contains the podman-stats log target
-       ansible.builtin.blockinfile:
-         path: ../files/promtail-config.yaml
-         marker: "# {mark} ANSIBLE MANAGED PODMAN STATS"
-         block: |
-           - job_name: podman_stats
-             static_configs:
-               - targets: ['localhost']
-                 labels:
-                   job: podman_stats
-                   __path__: {{ podman_stats_log }}
-       tags: promtail
+    - name: Ensure Promtail config contains the podman-stats log target
+      ansible.builtin.blockinfile:
+        path: ../files/promtail-config.yaml
+        marker: "# {mark} ANSIBLE MANAGED PODMAN STATS"
+        block: |
+          - job_name: podman_stats
+            static_configs:
+              - targets: ['localhost']
+                labels:
+                  job: podman_stats
+                  __path__: /var/promtail/podman_stats.log
+      tags: promtail
 
-   handlers:
-     - name: Reload systemd
-       ansible.builtin.systemd:
-         daemon_reload: yes
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: yes
