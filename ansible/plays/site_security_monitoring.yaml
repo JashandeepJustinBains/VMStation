@@ -88,86 +88,44 @@
         state: started
 
 
-- name: Install and configure Grafana
+- name: Deploy Grafana as a Podman container and provision it
   hosts: monitoring_nodes
   become: true
   vars:
     grafana_version: "10.2.3"
-    grafana_deb_url: "https://dl.grafana.com/oss/release/grafana_{{ grafana_version }}_amd64.deb"
+    grafana_image: "docker.io/grafana/grafana:{{ grafana_version }}"
+    grafana_host_prometheus_url: "http://{{ ansible_default_ipv4.address }}:9090"
+    grafana_host_loki_url: "http://{{ ansible_default_ipv4.address }}:3100"
+    grafana_data_dir: /srv/monitoring_data/grafana
   tasks:
-    - name: Download Grafana deb package
-      get_url:
-        url: "{{ grafana_deb_url }}"
-        dest: /tmp/grafana.deb
-    - name: Install Grafana
-      apt:
-        deb: /tmp/grafana.deb
-        state: present
-    - name: Stop grafana-server if running (prepare data migration)
-      become: true
+    - name: Ensure persistent Grafana data and provisioning directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - "{{ grafana_data_dir }}"
+        - "{{ grafana_data_dir }}/provisioning/datasources"
+        - "{{ grafana_data_dir }}/provisioning/dashboards"
+        - "{{ grafana_data_dir }}/dashboards"
+
+    - name: Remove legacy systemd grafana setup (stop service if present)
       systemd:
         name: grafana-server
         state: stopped
       failed_when: false
-
-    - name: Ensure persistent Grafana data directory exists
-      file:
-        path: /srv/monitoring_data/grafana
-        state: directory
-        owner: grafana
-        group: grafana
-        mode: '0755'
-
-    - name: Move existing Grafana data into /srv/monitoring_data/grafana (if present)
-      shell: |
-        set -e
-        if [ -d /var/lib/grafana ] && [ ! -L /var/lib/grafana ]; then
-          mv /var/lib/grafana/* /srv/monitoring_data/grafana/ || true
-          rm -rf /var/lib/grafana
-        fi
-      args:
-        warn: false
-
-    - name: Ensure /var/lib/grafana is a symlink to persistent storage
-      file:
-        src: /srv/monitoring_data/grafana
-        path: /var/lib/grafana
-        state: link
+      changed_when: false
 
     - name: Ensure ownership for persisted Grafana data
       file:
-        path: /srv/monitoring_data/grafana
-        owner: grafana
-        group: grafana
+        path: "{{ grafana_data_dir }}"
+        owner: 472
+        group: 472
         recurse: yes
 
-    - name: Ensure Grafana service is enabled and started
-      systemd:
-        name: grafana-server
-        enabled: yes
-        state: started
-    - name: Allow Grafana port 3000 through UFW (Debian)
-      command: ufw allow 3000/tcp
-      when: ansible_os_family == 'Debian'
-
-
-
-
-    - name: Ensure Grafana provisioning directories exist
-      file:
-        path: "{{ item }}"
-        state: directory
-        owner: grafana
-        group: grafana
-        mode: '0755'
-      loop:
-        - /etc/grafana/provisioning/datasources
-        - /etc/grafana/provisioning/dashboards
-
-
-
-
-    - name: Remove extra Grafana datasource YAML files
+    - name: Remove extra Grafana datasource YAML files from legacy locations
       file:
         path: "{{ item }}"
         state: absent
@@ -175,26 +133,115 @@
         - /etc/grafana/provisioning/datasources/prometheus.yaml
         - /etc/grafana/provisioning/datasources/sample.yaml
 
-    - name: Provision Prometheus and Loki data sources for Grafana
+    - name: Provision Prometheus and Loki data sources for Grafana (file for provisioning)
       copy:
-        dest: /etc/grafana/provisioning/datasources/datasources.yaml
+        dest: "{{ grafana_data_dir }}/provisioning/datasources/datasources.yaml"
         content: |
           apiVersion: 1
           datasources:
             - name: Prometheus
               type: prometheus
               access: proxy
-              url: http://localhost:9090
+              url: "{{ grafana_host_prometheus_url }}"
               isDefault: true
             - name: Loki
               type: loki
               access: proxy
-              url: http://localhost:3100
+              url: "{{ grafana_host_loki_url }}"
               isDefault: false
-        owner: grafana
-        group: grafana
+        owner: root
+        group: root
         mode: '0644'
-      notify: Restart grafana-server
+
+    - name: Copy Podman dashboard JSON for provisioning into persisted data
+      copy:
+        src: grafana_podman_dashboard.json
+        dest: "{{ grafana_data_dir }}/provisioning/dashboards/podman_dashboard.json"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy Loki dashboard JSON for provisioning into persisted data
+      copy:
+        content: |
+          {
+            "id": null,
+            "title": "Loki Logs Overview",
+            "tags": ["loki", "logs"],
+            "timezone": "browser",
+            "schemaVersion": 36,
+            "version": 1,
+            "refresh": "30s",
+            "panels": [
+              {
+                "type": "logs",
+                "title": "Recent Loki Logs",
+                "datasource": "Loki",
+                "targets": [
+                  {
+                    "expr": "{job=\"varlogs\"}",
+                    "format": "logs"
+                  }
+                ],
+                "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12}
+              }
+            ]
+          }
+        dest: "{{ grafana_data_dir }}/provisioning/dashboards/loki_dashboard.json"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Provision Podman and Loki dashboards provider file
+      copy:
+        dest: "{{ grafana_data_dir }}/provisioning/dashboards/dashboards.yaml"
+        content: |
+          apiVersion: 1
+          providers:
+            - name: 'Podman Dashboards'
+              orgId: 1
+              folder: 'Podman'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /etc/grafana/provisioning/dashboards
+            - name: 'Loki Dashboards'
+              orgId: 1
+              folder: 'Loki'
+              type: file
+              disableDeletion: false
+              editable: true
+              options:
+                path: /etc/grafana/provisioning/dashboards
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Run Grafana container (Podman)
+      containers.podman.podman_container:
+        name: grafana
+        image: "{{ grafana_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "3000:3000"
+        volumes:
+          - "{{ grafana_data_dir }}/provisioning:/etc/grafana/provisioning:Z"
+          - "{{ grafana_data_dir }}/dashboards:/var/lib/grafana/dashboards:Z"
+          - "{{ grafana_data_dir }}:/var/lib/grafana:Z"
+      register: grafana_container
+
+    - name: Wait for Grafana HTTP to become ready
+      uri:
+        url: http://127.0.0.1:3000/api/health
+        status_code: 200
+        timeout: 30
+      register: grafana_health
+      retries: 6
+      delay: 5
+      until: grafana_health.status == 200
+
 
 
 
