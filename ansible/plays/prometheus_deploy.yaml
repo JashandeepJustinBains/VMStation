@@ -102,6 +102,58 @@
         mode: '0644'
       tags: prometheus
 
+    - name: Stat prometheus config file on host
+      ansible.builtin.stat:
+        path: /srv/monitoring_data/prometheus/prometheus.yml
+      register: prometheus_config_stat
+      tags: prometheus
+
+    - name: Debug prometheus config stat
+      ansible.builtin.debug:
+        var: prometheus_config_stat
+      tags: prometheus
+
+    - name: Show prometheus config (first 200 lines)
+      ansible.builtin.command:
+        cmd: sed -n '1,200p' /srv/monitoring_data/prometheus/prometheus.yml || true
+      register: prometheus_config_head
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug prometheus config head
+      ansible.builtin.debug:
+        var: prometheus_config_head.stdout_lines
+      tags: prometheus
+
+    - name: Show permissions of prometheus data dir
+      ansible.builtin.command:
+        cmd: ls -la /srv/monitoring_data/prometheus || true
+      register: prometheus_dir_ls
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug prometheus dir listing
+      ansible.builtin.debug:
+        var: prometheus_dir_ls.stdout_lines
+      tags: prometheus
+
+    - name: Validate prometheus config with promtool (containerized)
+      ansible.builtin.command:
+        cmd: >-
+          podman run --rm -v /srv/monitoring_data/prometheus:/etc/prometheus:Z
+          docker.io/prom/prometheus:latest promtool check config /etc/prometheus/prometheus.yml
+      register: promtool_check
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug promtool output
+      ansible.builtin.debug:
+        var: promtool_check.stdout_lines
+      tags: prometheus
+
     - name: Run Prometheus container
       ansible.builtin.command:
         cmd: >-
