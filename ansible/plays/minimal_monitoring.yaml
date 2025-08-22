@@ -77,7 +77,7 @@
 
     - name: Start Prometheus container if not running
       shell: |
-        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^prometheus$'; then
+        if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^prometheus$'; then
           {{ podman_bin }} run -d --name prometheus -p 9090:9090 \
             -v {{ prometheus_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:Z \
             --restart=always prom/prometheus:latest
@@ -87,7 +87,7 @@
 
     - name: Start node_exporter container if not running
       shell: |
-        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^node_exporter$'; then
+        if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^node_exporter$'; then
           {{ podman_bin }} run -d --name node_exporter -p 9100:9100 --restart=always \
             quay.io/prometheus/node-exporter:latest
         fi
@@ -96,7 +96,7 @@
 
     - name: Start Promtail container if not running
       shell: |
-        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^promtail$'; then
+        if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^promtail$'; then
           {{ podman_bin }} run -d --name promtail \
             -v /var/log:/var/log:Z \
             -v {{ promtail_dir }}/promtail-config.yaml:/etc/promtail/config.yaml:Z \
@@ -107,7 +107,7 @@
 
     - name: Start Grafana container if not running
       shell: |
-        if ! {{ podman_bin }} ps --format '{{'{{'}}.Names{{'}}'}}' | grep -q '^grafana$'; then
+        if ! {{ podman_bin }} ps --format '{% raw %}{{.Names}}{% endraw %}' | grep -q '^grafana$'; then
           {{ podman_bin }} run -d --name grafana -p 3000:3000 \
             -v {{ grafana_dir }}/provisioning:/etc/grafana/provisioning:Z \
             -v {{ grafana_dir }}/dashboards:/var/lib/grafana/dashboards:Z \
@@ -127,7 +127,8 @@
       until: grafana_health.status == 200
 
     - name: Done - show services
-      shell: '{{ podman_bin }} ps --format "table {{'{{'}}.Names{{'}}'}}\t{{'{{'}}.Status{{'}}'}}"'
+      shell: |
+        {{ podman_bin }} ps --format "table {% raw %}{{.Names}}{% endraw %}\t{% raw %}{{.Status}}{% endraw %}"
       register: podman_ps
       changed_when: false
 
