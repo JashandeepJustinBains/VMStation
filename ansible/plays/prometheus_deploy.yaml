@@ -1,3 +1,4 @@
+---
 - name: Deploy Prometheus container
   hosts: all
   become: true
@@ -115,11 +116,11 @@
 
     - name: Wait for Prometheus to be ready
       ansible.builtin.uri:
-  url: "http://{{ ansible_host | default(inventory_hostname) }}:{{ prometheus_host_port }}/-/ready"
-  status_code: 200
-  timeout: 10
-  register: prometheus_ready
-  retries: 6
-  delay: 5
-  until: prometheus_ready.status == 200
-  tags: prometheus
+        url: "http://{{ ansible_host | default(inventory_hostname) }}:{{ prometheus_host_port }}/-/ready"
+        status_code: 200
+        timeout: 10
+      register: prometheus_ready
+      retries: 6
+      delay: 5
+      until: prometheus_ready.status == 200
+      tags: prometheus
