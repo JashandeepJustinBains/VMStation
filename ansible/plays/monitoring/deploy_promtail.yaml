@@ -46,13 +46,12 @@
             mode: '0755'
 
         - name: Move existing /var/promtail into /srv/monitoring_data/promtail if not empty
-          command: |
+          command: >
             if [ -d /var/promtail ] && [ "$(ls -A /var/promtail)" ]; then
               rsync -a /var/promtail/ /srv/monitoring_data/promtail/ || true
               rm -rf /var/promtail/* || true
             fi
-          args:
-            warn: false
+          warn: false
 
         - name: Remove /var/promtail so a symlink can be created
           file:
@@ -83,8 +82,8 @@
         state: started
         restart_policy: always
         volumes:
-          - "/var/log:/var/log:ro,Z"
-          - "/var/promtail:/var/promtail:Z"
-          - "/opt/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:Z"
+          - "{{ '/var/log:/var/log:ro' + (':Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
+          - "{{ '/var/promtail:/var/promtail' + (':Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
+          - "{{ '/opt/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml' + (':Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
         command: -config.file=/etc/promtail/promtail-config.yaml
       ignore_errors: yes

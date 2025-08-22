@@ -1,166 +1,166 @@
 ---
-- name: Install and start monitoring services on monitoring node
-  hosts: monitoring_nodes
-  become: true
-  vars:
-    monit_root: /srv/monitoring_data
-    loki_port: 3100
-    prometheus_port: 9090
-    grafana_port: 3000
-  tasks:
-    - name: Ensure Podman is installed (Debian)
-      apt:
-        name: podman
-        state: present
-      when: ansible_os_family == 'Debian'
+name: Install and start monitoring services on monitoring node
+hosts: monitoring_nodes
+become: true
+vars:
+  monit_root: /srv/monitoring_data
+  loki_port: 3100
+  prometheus_port: 9090
+  grafana_port: 3000
+tasks:
+  - name: Ensure Podman is installed (Debian)
+    apt:
+      name: podman
+      state: present
+    when: ansible_os_family == 'Debian'
 
-    - name: Ensure Podman is installed (RedHat)
-      yum:
-        name: podman
-        state: present
-      when: ansible_os_family == 'RedHat'
+  - name: Ensure Podman is installed (RedHat)
+    yum:
+      name: podman
+      state: present
+    when: ansible_os_family == 'RedHat'
 
-    - name: Ensure monit_root exists (mounted drive)
-      file:
-        path: "{{ monit_root }}"
-        state: directory
-        mode: '0755'
+  - name: Ensure monit_root exists (mounted drive)
+    file:
+      path: "{{ monit_root }}"
+      state: directory
+      mode: '0755'
 
-    - name: Create monitoring directories
-      file:
-        path: "{{ monit_root }}/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop:
-        - prometheus
-        - grafana
-        - grafana/provisioning/datasources
-        - grafana/provisioning/dashboards
-        - grafana/dashboards
-        - loki
-        - promtail
+  - name: Create monitoring directories
+    file:
+      path: "{{ monit_root }}/{{ item }}"
+      state: directory
+      mode: '0755'
+    loop:
+      - prometheus
+      - grafana
+      - grafana/provisioning/datasources
+      - grafana/provisioning/dashboards
+      - grafana/dashboards
+      - loki
+      - promtail
 
-    - name: Render Prometheus scrape config from repository template
-      template:
-        src: ../../templates/prometheus.yml.j2
-        dest: "{{ monit_root }}/prometheus/prometheus.yml"
-        owner: root
-        mode: '0644'
+  - name: Render Prometheus scrape config from repository template
+    template:
+      src: ../../templates/prometheus.yml.j2
+      dest: "{{ monit_root }}/prometheus/prometheus.yml"
+      owner: root
+      mode: '0644'
 
-    - name: Render Grafana datasources (no credentials)
-      template:
-        src: templates/grafana_datasources.yml.j2
-        dest: "{{ monit_root }}/grafana/provisioning/datasources/datasources.yml"
-        owner: root
-        mode: '0644'
-      vars:
-        prometheus_url: "http://prometheus:{{ prometheus_port }}"
-        loki_url: "http://loki:{{ loki_port }}"
-        promtail_url: "http://promtail:9080"
+  - name: Render Grafana datasources (no credentials)
+    template:
+      src: templates/grafana_datasources.yml.j2
+      dest: "{{ monit_root }}/grafana/provisioning/datasources/datasources.yml"
+      owner: root
+      mode: '0644'
+    vars:
+      prometheus_url: "http://prometheus:{{ prometheus_port }}"
+      loki_url: "http://loki:{{ loki_port }}"
+      promtail_url: "http://promtail:9080"
 
-    - name: Copy Grafana dashboards provider (existing)
-      copy:
-        src: ../files/grafana_provisioning/dashboards.yml
-        dest: "{{ monit_root }}/grafana/provisioning/dashboards/dashboards.yml"
-        mode: '0644'
+  - name: Copy Grafana dashboards provider (existing)
+    copy:
+      src: ../files/grafana_provisioning/dashboards.yml
+      dest: "{{ monit_root }}/grafana/provisioning/dashboards/dashboards.yml"
+      mode: '0644'
 
-    - name: Copy example Podman dashboard (existing)
-      copy:
-        src: ../files/../grafana_podman_dashboard.json
-        dest: "{{ monit_root }}/grafana/dashboards/podman_dashboard.json"
-        mode: '0644'
-      ignore_errors: yes
+  - name: Copy example Podman dashboard (existing)
+    copy:
+      src: ../../files/grafana_podman_dashboard.json
+      dest: "{{ monit_root }}/grafana/dashboards/podman_dashboard.json"
+      mode: '0644'
+    ignore_errors: yes
 
-    - name: Render promtail config for monitoring pod
-      template:
-        src: templates/promtail-config.yaml.j2
-        dest: "{{ monit_root }}/promtail/promtail-config.yaml"
-        owner: root
-        mode: '0644'
-      vars:
-        loki_url: "http://loki:{{ loki_port }}"
+  - name: Render promtail config for monitoring pod
+    template:
+      src: templates/promtail-config.yaml.j2
+      dest: "{{ monit_root }}/promtail/promtail-config.yaml"
+      owner: root
+      mode: '0644'
+    vars:
+      loki_url: "http://loki:{{ loki_port }}"
 
-    - name: Ensure monitoring data directories exist under monit_root
-      file:
-        path: "{{ monit_root }}/{{ item }}"
-        state: directory
-        mode: '0755'
-      loop:
-        - prometheus/data
-        - prometheus
-        - loki
-        - loki/chunks
-        - loki/index
-        - grafana
-        - grafana/data
-        - grafana/provisioning
-        - grafana/dashboards
-        - promtail
-        - promtail/data
+  - name: Ensure monitoring data directories exist under monit_root
+    file:
+      path: "{{ monit_root }}/{{ item }}"
+      state: directory
+      mode: '0755'
+    loop:
+      - prometheus/data
+      - prometheus
+      - loki
+      - loki/chunks
+      - loki/index
+      - grafana
+      - grafana/data
+      - grafana/provisioning
+      - grafana/dashboards
+      - promtail
+      - promtail/data
 
-    - name: Render Loki local config
-      template:
-        src: templates/loki-local-config.yaml.j2
-        dest: "{{ monit_root }}/loki/local-config.yaml"
-        owner: root
-        mode: '0644'
-  # Use the play-level `loki_port` var directly; do not reassign here (avoids recursion)
+  - name: Render Loki local config
+    template:
+      src: templates/loki-local-config.yaml.j2
+      dest: "{{ monit_root }}/loki/local-config.yaml"
+      owner: root
+      mode: '0644'
+    # Use the play-level `loki_port` var directly; do not reassign here (avoids recursion)
 
-    - name: Ensure monitoring Pod exists (podman)
-      containers.podman.podman_pod:
-        name: monitoring_pod
-        state: started
-        ports:
-          - "{{ prometheus_port }}:{{ prometheus_port }}"
-          - "{{ loki_port }}:{{ loki_port }}"
-          - "{{ grafana_port }}:{{ grafana_port }}"
+  - name: Ensure monitoring Pod exists (podman)
+    containers.podman.podman_pod:
+      name: monitoring_pod
+      state: started
+      ports:
+        - "{{ prometheus_port }}:{{ prometheus_port }}"
+        - "{{ loki_port }}:{{ loki_port }}"
+        - "{{ grafana_port }}:{{ grafana_port }}"
 
-    - name: Start Prometheus container in pod
-      containers.podman.podman_container:
-        name: prometheus
-        image: docker.io/prom/prometheus:latest
-        state: started
-        pod: monitoring_pod
-        restart_policy: always
-        volumes:
-          - "{{ monit_root }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:Z"
-          - "{{ monit_root }}/prometheus/data:/var/lib/prometheus:Z"
+  - name: Start Prometheus container in pod
+    containers.podman.podman_container:
+      name: prometheus
+      image: docker.io/prom/prometheus:latest
+      state: started
+      pod: monitoring_pod
+      restart_policy: always
+      volumes:
+        - "{{ monit_root }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:Z"
+        - "{{ monit_root }}/prometheus/data:/var/lib/prometheus:Z"
 
-    - name: Start Loki container in pod
-      containers.podman.podman_container:
-        name: loki
-        image: docker.io/grafana/loki:2.8.2
-        state: started
-        pod: monitoring_pod
-        restart_policy: always
-        volumes:
-          - "{{ monit_root }}/loki:/etc/loki:Z"
-          - "{{ monit_root }}/loki/chunks:/loki/chunks:Z"
-          - "{{ monit_root }}/loki/index:/loki/index:Z"
-        command: -config.file=/etc/loki/local-config.yaml
-      ignore_errors: yes
+  - name: Start Loki container in pod
+    containers.podman.podman_container:
+      name: loki
+      image: docker.io/grafana/loki:2.8.2
+      state: started
+      pod: monitoring_pod
+      restart_policy: always
+      volumes:
+        - "{{ monit_root }}/loki:/etc/loki:Z"
+        - "{{ monit_root }}/loki/chunks:/loki/chunks:Z"
+        - "{{ monit_root }}/loki/index:/loki/index:Z"
+      command: -config.file=/etc/loki/local-config.yaml
+    ignore_errors: yes
 
-    - name: Start Grafana container in pod (no stored admin password)
-      containers.podman.podman_container:
-        name: grafana
-        image: docker.io/grafana/grafana:latest
-        state: started
-        pod: monitoring_pod
-        restart_policy: always
-        volumes:
-          - "{{ monit_root }}/grafana/provisioning:/etc/grafana/provisioning:Z"
-          - "{{ monit_root }}/grafana/dashboards:/var/lib/grafana/dashboards:Z"
-          - "{{ monit_root }}/grafana/data:/var/lib/grafana:Z"
+  - name: Start Grafana container in pod (no stored admin password)
+    containers.podman.podman_container:
+      name: grafana
+      image: docker.io/grafana/grafana:latest
+      state: started
+      pod: monitoring_pod
+      restart_policy: always
+      volumes:
+        - "{{ monit_root }}/grafana/provisioning:/etc/grafana/provisioning:Z"
+        - "{{ monit_root }}/grafana/dashboards:/var/lib/grafana/dashboards:Z"
+        - "{{ monit_root }}/grafana/data:/var/lib/grafana:Z"
 
-    - name: Start Promtail on monitoring node (collect local logs)
-      containers.podman.podman_container:
-        name: promtail_local
-        image: docker.io/grafana/promtail:2.8.2
-        state: started
-        pod: monitoring_pod
-        restart_policy: always
-        volumes:
-          - "/var/log:/var/log:ro,Z"
-          - "{{ monit_root }}/promtail:/etc/promtail:Z"
-          - "{{ monit_root }}/promtail/data:/var/promtail:Z"
-        command: -config.file=/etc/promtail/promtail-config.yaml
+  - name: Start Promtail on monitoring node (collect local logs)
+    containers.podman.podman_container:
+      name: promtail_local
+      image: docker.io/grafana/promtail:2.8.2
+      state: started
+      pod: monitoring_pod
+      restart_policy: always
+      volumes:
+        - "/var/log:/var/log:ro,Z"
+        - "{{ monit_root }}/promtail:/etc/promtail:Z"
+        - "{{ monit_root }}/promtail/data:/var/promtail:Z"
+      command: -config.file=/etc/promtail/promtail-config.yaml
