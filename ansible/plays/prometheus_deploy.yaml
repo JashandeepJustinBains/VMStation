@@ -164,6 +164,20 @@
         recurse: yes
       tags: prometheus
 
+    - name: Debug container access to data dir (check permissions as nobody)
+      ansible.builtin.command:
+        cmd: >-
+          podman run --rm --entrypoint /bin/sh -v {{ prometheus_data_dir }}:/etc/prometheus:Z -v {{ prometheus_data_dir }}/data:/prometheus:Z {{ prometheus_image }} -c "id && echo '--- /prometheus ---' && ls -la /prometheus || true && echo '--- /etc/prometheus ---' && ls -la /etc/prometheus || true && echo '--- grep nobody in /etc/passwd ---' && grep nobody /etc/passwd || true"
+      register: prometheus_debug_run
+      changed_when: false
+      failed_when: false
+      tags: prometheus
+
+    - name: Debug container access result
+      ansible.builtin.debug:
+        var: prometheus_debug_run.stdout_lines
+      tags: prometheus
+
     - name: Run Prometheus container
       ansible.builtin.command:
         cmd: >-
