@@ -5,6 +5,7 @@
     prometheus_image: docker.io/prom/prometheus:latest
     prometheus_container: prometheus
     prometheus_data_dir: /srv/monitoring_data/prometheus
+    prometheus_host_port: 9090
   tasks:
     - name: Ensure Prometheus data directories exist
       ansible.builtin.file:
@@ -24,6 +25,19 @@
       register: prometheus_pull
       changed_when: prometheus_pull.rc == 0
       failed_when: prometheus_pull.rc != 0
+      tags: prometheus
+
+    - name: Check if port {{ prometheus_host_port }} is available
+      ansible.builtin.command:
+        cmd: ss -ltn "sport = :{{ prometheus_host_port }}" || true
+      register: port_check
+      changed_when: false
+      tags: prometheus
+
+    - name: Fail if port {{ prometheus_host_port }} is in use
+      ansible.builtin.fail:
+        msg: "Port {{ prometheus_host_port }} appears to be in use on the target. Stop the process or choose a different port before deploying Prometheus. Output: {{ port_check.stdout }}"
+      when: port_check.stdout != ""
       tags: prometheus
 
     - name: Remove existing Prometheus container if present
@@ -46,7 +60,7 @@
     - name: Run Prometheus container
       ansible.builtin.command:
         cmd: >-
-          podman run -d --name {{ prometheus_container }} --rm -p 9090:9090
+          podman run -d --name {{ prometheus_container }} --rm -p {{ prometheus_host_port }}:9090
           -v {{ prometheus_data_dir }}:/etc/prometheus:Z
           -v {{ prometheus_data_dir }}/data:/prometheus:Z
           {{ prometheus_image }}
@@ -57,7 +71,7 @@
 
     - name: Wait for Prometheus to be ready
       ansible.builtin.uri:
-        url: http://localhost:9090/-/ready
+        url: "http://localhost:{{ prometheus_host_port }}/-/ready"
         status_code: 200
         timeout: 10
       register: prometheus_ready

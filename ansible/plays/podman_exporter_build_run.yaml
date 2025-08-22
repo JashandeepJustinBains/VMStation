@@ -96,6 +96,105 @@
       run_once: true
       tags: promtail
 
+    - name: Deploy monitoring cleanup script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/monitoring_cleanup.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          # Simple cleanup: delete files older than X days under /srv/monitoring_data when usage >= threshold
+          base=/srv/monitoring_data
+          threshold=70
+          min_age_days=3
+
+          get_usage() {
+            df -P "$base" | awk 'NR==2{print int($5)}'
+          }
+
+          usage=$(get_usage)
+          echo "monitoring_cleanup: current usage=${usage}%"
+
+          if [ "$usage" -lt "$threshold" ]; then
+            # also perform periodic trim of files older than min_age
+            find "$base" -type f -mtime +$min_age_days -print0 | xargs -0 -r rm -f
+            exit 0
+          fi
+
+          # Aggressive cleanup loop: remove oldest files first until usage falls below threshold
+          while [ "$usage" -ge "$threshold" ]; do
+            # find the oldest file (exclude directories)
+            file=$(find "$base" -type f -printf '%T+ %p\n' | sort | head -n 1 | awk '{print $2}')
+            if [ -z "$file" ]; then
+              echo "No files left to delete, exiting"
+              break
+            fi
+            echo "Deleting $file to reduce usage"
+            rm -f "$file"
+            usage=$(get_usage)
+            echo "monitoring_cleanup: new usage=${usage}%"
+          done
+      tags: monitoring_cleanup
+
+    - name: Create systemd service for monitoring cleanup
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/monitoring-cleanup.service
+        content: |
+          [Unit]
+          Description=Monitoring data cleanup
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/monitoring_cleanup.sh
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+      tags: monitoring_cleanup
+
+    - name: Create systemd timer for monitoring cleanup
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/monitoring-cleanup.timer
+        content: |
+          [Unit]
+          Description=Run monitoring cleanup daily
+
+          [Timer]
+          OnCalendar=daily
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+        mode: '0644'
+      tags: monitoring_cleanup
+
+    - name: Enable and start monitoring cleanup timer
+      ansible.builtin.systemd:
+        name: monitoring-cleanup.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      tags: monitoring_cleanup
+
+    - name: Install logrotate config for monitoring promtail logs
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/monitoring-promtail
+        mode: '0644'
+        content: |
+          /srv/monitoring_data/promtail/*.log {
+              daily
+              rotate 7
+              compress
+              missingok
+              notifempty
+              create 0644 root root
+              sharedscripts
+              postrotate
+                  # no-op
+              endscript
+          }
+      tags: monitoring_cleanup
+
   handlers:
     - name: Reload systemd
       ansible.builtin.systemd:
