@@ -81,8 +81,8 @@
         state: started
         restart_policy: always
         volumes:
-          - "{{ '/var/log:/var/log:ro' + (':Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
-          - "{{ '/var/promtail:/var/promtail' + (':Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
-          - "{{ '/opt/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml' + (':Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
+          - "{{ '/var/log:/var/log:ro' + (',Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
+          - "{{ '/var/promtail:/var/promtail' + (',Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
+          - "{{ '/opt/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml' + (',Z' if (ansible_selinux is defined and ansible_selinux.status == 'enabled') else '') }}"
         command: -config.file=/etc/promtail/promtail-config.yaml
       ignore_errors: yes
