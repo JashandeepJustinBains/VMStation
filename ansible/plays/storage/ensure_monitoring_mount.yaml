@@ -1,0 +1,67 @@
+---
+- name: Ensure monitoring data mount exists and uses UUID in fstab
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    mount_point: /srv/monitoring_data
+    fstype: ext4
+    mount_opts: defaults
+  tasks:
+    - name: Fail if monitoring_device not set
+      fail:
+        msg: "Please set monitoring_device in group_vars/all.yml to the block device (e.g. /dev/sdb1)"
+      when: monitoring_device == ""
+
+    - name: Get device UUID
+      command: blkid -s UUID -o value {{ monitoring_device }}
+      register: device_uuid
+      changed_when: false
+      failed_when: device_uuid.rc != 0
+
+    - name: Create mount point directory
+      file:
+        path: "{{ mount_point }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Remove existing fstab entries referencing the mount point
+      lineinfile:
+        path: /etc/fstab
+        regexp: '(^.*\s+{{ mount_point }}\s+.*$)'
+        state: absent
+        backup: yes
+
+    - name: Remove existing fstab entries referencing the raw device path
+      lineinfile:
+        path: /etc/fstab
+        regexp: '(^{{ monitoring_device }}\s+{{ mount_point }}\s+.*$)'
+        state: absent
+        backup: yes
+      when: monitoring_device != ''
+
+    - name: Ensure fstab uses UUID for the device
+      lineinfile:
+        path: /etc/fstab
+        regexp: '(^UUID={{ device_uuid.stdout }}\s+{{ mount_point }}\s+)'
+        line: 'UUID={{ device_uuid.stdout }} {{ mount_point }} {{ fstype }} {{ mount_opts }} 0 2'
+        state: present
+        insertafter: EOF
+
+    - name: Reload systemd daemons (noop if no change)
+      command: systemctl daemon-reload
+      changed_when: false
+
+    - name: Mount all filesystems from fstab
+      command: mount -a
+      register: mount_all
+      changed_when: mount_all.rc == 0
+
+    - name: Show mount status
+      shell: mount | grep "{{ mount_point }}" || true
+      register: mount_status
+      changed_when: false
+
+    - debug:
+        var: mount_status.stdout
