@@ -4,3 +4,4 @@
 - import_playbook: monitoring/cleanup.yaml
 - import_playbook: monitoring/install_node.yaml
 - import_playbook: monitoring/deploy_promtail.yaml
+ - import_playbook: monitoring/install_exporters.yaml
