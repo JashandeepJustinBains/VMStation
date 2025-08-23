@@ -1,0 +1,103 @@
+---
+- name: monitoring debug collection
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Dump podman ps (json)
+      shell: podman ps --format json || true
+      register: podman_ps
+
+    - name: Show podman ps output
+      debug:
+        var: podman_ps.stdout_lines
+
+    - name: Get grafana container logs (last 200 lines)
+      shell: podman logs grafana --tail 200 || true
+      register: grafana_logs
+
+    - name: Show grafana logs
+      debug:
+        var: grafana_logs.stdout_lines
+
+    - name: Inspect grafana container
+      shell: podman inspect grafana || true
+      register: grafana_inspect
+
+    - name: Show grafana inspect
+      debug:
+        var: grafana_inspect.stdout_lines
+
+    - name: List key grafana host paths if present
+      shell: |
+        for p in \
+          /srv/monitoring_data/grafana \
+          /srv/monitoring_data/grafana* \
+          /var/lib/grafana \
+          /etc/grafana/provisioning; do
+          if [ -e "$p" ]; then
+            echo "--- PATH: $p ---"
+            ls -ld "$p" || true
+            ls -l "$p" || true
+          fi
+        done
+      register: grafana_host_fs
+
+    - name: Show grafana host filesystem listing
+      debug:
+        var: grafana_host_fs.stdout_lines
+
+    - name: Show Grafana provisioning datasource file (if present)
+      shell: |
+        if [ -f /srv/monitoring_data/grafana/provisioning/datasources/datasources.yml ]; then
+          echo "--- DATASOURCES ---"
+          sed -n '1,200p' /srv/monitoring_data/grafana/provisioning/datasources/datasources.yml || true
+        else
+          echo "datasources.yml not present at /srv/monitoring_data/grafana/provisioning/datasources/datasources.yml"
+        fi
+      register: grafana_datasource
+
+    - name: Show grafana provisioning datasource file content
+      debug:
+        var: grafana_datasource.stdout_lines
+
+    - name: Show Prometheus configuration deployed
+      shell: cat /srv/monitoring_data/prometheus/prometheus.yml || true
+      register: prometheus_conf
+
+    - name: Show Prometheus configuration
+      debug:
+        var: prometheus_conf.stdout_lines
+
+    - name: Get Prometheus logs (last 200 lines)
+      shell: podman logs prometheus --tail 200 || true
+      register: prometheus_logs
+
+    - name: Show Prometheus logs
+      debug:
+        var: prometheus_logs.stdout_lines
+
+    - name: Check local node-exporter metrics (127.0.0.1)
+      shell: curl -sS http://127.0.0.1:9100/metrics || true
+      register: ne_local
+
+    - name: Show node-exporter snippet
+      debug:
+        var: (ne_local.stdout_lines[:30] if ne_local.stdout_lines is defined else ne_local.stdout)
+
+    - name: Get journal (last 100 lines) for podman service if systemd present
+      shell: (command -v journalctl >/dev/null 2>&1 && journalctl -u podman --no-pager -n 100) || true
+      register: podman_journal
+
+    - name: Show podman journal snippet
+      debug:
+        var: podman_journal.stdout_lines
+
+    - name: Collect uid/gid of grafana data dir (if exists)
+      shell: if [ -e /srv/monitoring_data/grafana ]; then stat -c '%U %G %a %n' /srv/monitoring_data/grafana || true; else echo 'absent'; fi
+      register: grafana_stat
+
+    - name: Show grafana stat
+      debug:
+        var: grafana_stat.stdout_lines
