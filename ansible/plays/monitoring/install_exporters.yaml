@@ -38,7 +38,7 @@
         restart_policy: always
         ports:
           - 9300:9300
-  when: enable_podman_exporters | default(false)
+      when: enable_podman_exporters | default(false)
 
     - name: Ensure podman_system_metrics container is running (optional)
       containers.podman.podman_container:
