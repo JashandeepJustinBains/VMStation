@@ -1,0 +1,50 @@
+---
+- name: Install and run exporters (node_exporter and podman exporters)
+  hosts: all
+  become: true
+  vars:
+    node_exporter_image: docker.io/prom/node-exporter:latest
+    podman_exporter_image: docker.io/vega/podman_exporter:latest
+    podman_system_metrics_image: quay.io/containers/podman-system-metrics:latest
+  tasks:
+    - name: Ensure Podman is installed (Debian)
+      apt:
+        name: podman
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Ensure Podman is installed (RedHat)
+      yum:
+        name: podman
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure node_exporter container is running
+      containers.podman.podman_container:
+        name: node_exporter
+        image: "{{ node_exporter_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - 9100:9100
+        command: --web.listen-address=0.0.0.0:9100
+
+    - name: Ensure podman_exporter container is running (optional)
+      containers.podman.podman_container:
+        name: podman_exporter
+        image: "{{ podman_exporter_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - 9300:9300
+      when: enable_podman_exporters | default(false)
+
+    - name: Ensure podman_system_metrics container is running (optional)
+      containers.podman.podman_container:
+        name: podman_system_metrics
+        image: "{{ podman_system_metrics_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - 9882:9882
+      when: enable_podman_exporters | default(false)
