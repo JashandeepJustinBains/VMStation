@@ -1,5 +1,5 @@
 ---
-- hosts: debian_nodes
+- hosts: "monitoring_nodes:storage_nodes"
   become: true
   tasks:
     - name: Remove Tailscale
