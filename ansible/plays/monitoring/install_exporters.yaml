@@ -4,8 +4,9 @@
   become: true
   vars:
     node_exporter_image: docker.io/prom/node-exporter:latest
-    podman_exporter_image: docker.io/vega/podman_exporter:latest
-    podman_system_metrics_image: quay.io/containers/podman-system-metrics:latest
+  # Use the public podman system metrics image instead of a private docker.io image
+  podman_exporter_image: quay.io/containers/podman-system-metrics:latest
+  podman_system_metrics_image: quay.io/containers/podman-system-metrics:latest
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
