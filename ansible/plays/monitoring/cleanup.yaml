@@ -4,7 +4,8 @@
   become: true
   vars:
     monitoring_dirs:
-      - /srv/monitoring_data
+  # Do NOT remove the monitoring mount itself; keep drives mounted at all times
+  # - /srv/monitoring_data
       - /var/lib/grafana
       - /etc/grafana
       - /var/lib/loki
@@ -82,16 +83,7 @@
         executable: /bin/bash
       ignore_errors: yes
 
-    - name: Attempt to unmount monitoring mount (lazy fallback) before directory removal
-      shell: |
-        MP="/srv/monitoring_data"
-        if mountpoint -q "$MP"; then
-          umount "$MP" || umount -l "$MP" || true
-        fi
-      args:
-        executable: /bin/bash
-      when: inventory_hostname in groups['monitoring_nodes']
-      ignore_errors: yes
+  # Do not unmount /srv/monitoring_data: keep mounts stable on this host
 
     - name: Remove monitoring data and config directories on monitoring node
       file:
@@ -108,7 +100,6 @@
       loop:
         - /opt/promtail
         - /var/promtail
-        - /srv/monitoring_data/promtail
       ignore_errors: yes
 
     - name: Wait a moment for ports to free
