@@ -47,5 +47,6 @@
         state: started
         restart_policy: always
         ports:
-          - 9882:9882
+          # bind to loopback on the host to avoid collisions with other services
+          - 127.0.0.1:9882:9882
       when: enable_podman_exporters | default(false)
