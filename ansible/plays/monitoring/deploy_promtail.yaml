@@ -3,7 +3,7 @@
   hosts: all
   become: true
   vars:
-    loki_push_url: "http://{{ hostvars[groups['monitoring_nodes'][0]]['ansible_host'] | default(groups['monitoring_nodes'][0]) }}:3100"
+    loki_push_url: "http://{{ hostvars[groups['monitoring_nodes'][0]]['ansible_host'] | default(groups['monitoring_nodes'][0]) }}:3100/loki/api/v1/push"
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
