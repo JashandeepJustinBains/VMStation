@@ -8,7 +8,7 @@
     podman_exporter_image: 192.168.4.63:5000/podman-system-metrics:latest
     podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
     # Host port for podman_system_metrics (set to a different port in group_vars if needed)
-    podman_system_metrics_host_port: 19882
+    podman_system_metrics_host_port: 9882
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
