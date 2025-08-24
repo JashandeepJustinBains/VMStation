@@ -31,6 +31,35 @@
         state: absent
       ignore_errors: yes
 
+    - name: Force-stop all podman containers (best-effort)
+      shell: |
+        if command -v podman >/dev/null 2>&1; then
+          # try graceful kill first, fall back to kill and force remove
+          podman ps -q | xargs -r podman stop || true
+          podman ps -q | xargs -r podman kill || true
+        fi
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+
+    - name: Force-remove all podman containers (best-effort)
+      shell: |
+        if command -v podman >/dev/null 2>&1; then
+          podman rm -af || true
+        fi
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+
+    - name: Stop podman service/socket if present
+      service:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - podman
+        - podman.socket
+      ignore_errors: yes
+
     - name: Remove monitoring pod (if present) on monitoring nodes
       containers.podman.podman_pod:
         name: monitoring_pod
@@ -51,6 +80,17 @@
         done
       args:
         executable: /bin/bash
+      ignore_errors: yes
+
+    - name: Attempt to unmount monitoring mount (lazy fallback) before directory removal
+      shell: |
+        MP="/srv/monitoring_data"
+        if mountpoint -q "$MP"; then
+          umount "$MP" || umount -l "$MP" || true
+        fi
+      args:
+        executable: /bin/bash
+      when: inventory_hostname in groups['monitoring_nodes']
       ignore_errors: yes
 
     - name: Remove monitoring data and config directories on monitoring node
