@@ -20,13 +20,13 @@ scrape_configs:
       - targets:
 {% if enable_podman_exporters | default(true) %}
 {% for h in groups['monitoring_nodes'] | default([]) %}
-        - '{{ h }}:{{ podman_system_metrics_host_port | default(19882) }}'
+        - '{{ h }}:{{ podman_system_metrics_host_port | default(9882) }}'
 {% endfor %}
 {% for h in groups['storage_nodes'] | default([]) %}
-        - '{{ h }}:{{ podman_system_metrics_host_port | default(19882) }}'
+        - '{{ h }}:{{ podman_system_metrics_host_port | default(9882) }}'
 {% endfor %}
 {% for h in groups['compute_nodes'] | default([]) %}
-        - '{{ h }}:{{ podman_system_metrics_host_port | default(19882) }}'
+        - '{{ h }}:{{ podman_system_metrics_host_port | default(9882) }}'
 {% endfor %}
 {% endif %}
 
