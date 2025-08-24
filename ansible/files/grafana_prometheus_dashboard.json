@@ -1,0 +1,265 @@
+{
+  "id": null,
+  "title": "Prometheus Overview",
+  "tags": ["prometheus", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Targets Up",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(up)",
+          "refId": "A",
+          "legendFormat": "Up"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "thresholds": {
+        "steps": [
+          {"color": "red", "value": null},
+          {"color": "yellow", "value": 1},
+          {"color": "green", "value": 3}
+        ]
+      },
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Targets",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "count(up)",
+          "refId": "A",
+          "legendFormat": "Total"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Scraped Samples/sec",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(prometheus_tsdb_head_samples_appended_total[5m])",
+          "refId": "A",
+          "legendFormat": "Samples/sec"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "unit": "short",
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "TSDB Size",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "prometheus_tsdb_head_max_time - prometheus_tsdb_head_min_time",
+          "refId": "A",
+          "legendFormat": "Head Range"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "unit": "ms",
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Target Status",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "up",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Status",
+              "instance": "Instance",
+              "job": "Job"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "displayMode": "color-background"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Down"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Up"
+                }
+              },
+              "type": "value"
+            }
+          ]
+        }
+      },
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Scrape Duration",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "scrape_duration_seconds",
+          "refId": "A",
+          "legendFormat": "{{instance}} - {{job}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Prometheus Memory Usage",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=\"prometheus\"}",
+          "refId": "A",
+          "legendFormat": "RSS Memory"
+        },
+        {
+          "expr": "process_virtual_memory_bytes{job=\"prometheus\"}",
+          "refId": "B",
+          "legendFormat": "Virtual Memory"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Query Rate",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(prometheus_http_requests_total{handler=\"/api/v1/query\"}[5m])",
+          "refId": "A",
+          "legendFormat": "Query Rate"
+        },
+        {
+          "expr": "rate(prometheus_http_requests_total{handler=\"/api/v1/query_range\"}[5m])",
+          "refId": "B",
+          "legendFormat": "Range Query Rate"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8}
+    }
+  ]
+}
