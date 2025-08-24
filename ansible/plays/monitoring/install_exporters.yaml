@@ -51,7 +51,7 @@
     - name: Find containers publishing port 9882 on the host
       shell: |
         {% raw %}
-        podman ps -a --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E ':9882\b' | awk '{print $1}' || true
+        podman ps -a --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E '127\.0\.0\.1:9882|:9882->' | awk '{print $1}' || true
         {% endraw %}
       register: podman_9882_containers
       changed_when: false
@@ -62,6 +62,44 @@
       when: podman_9882_containers.stdout != ""
       register: removed_9882
       failed_when: removed_9882 is failed and removed_9882.rc != 0
+
+    - name: Wait for port 9882 to be released
+      wait_for:
+        port: 9882
+        host: 127.0.0.1
+        state: stopped
+        timeout: 30
+        delay: 2
+      when: podman_9882_containers.stdout != ""
+      ignore_errors: yes
+
+    - name: Check if port 9882 is still in use by any process
+      shell: |
+        # Try lsof first, fallback to ss if lsof is not available
+        if command -v lsof >/dev/null 2>&1; then
+          lsof -ti :9882 2>/dev/null || true
+        elif command -v ss >/dev/null 2>&1; then
+          ss -tlnp | grep ':9882 ' | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' || true
+        else
+          # Last resort: use netstat
+          netstat -tlnp 2>/dev/null | grep ':9882 ' | awk '{print $7}' | cut -d'/' -f1 || true
+        fi
+      register: port_9882_processes
+      changed_when: false
+      when: enable_podman_exporters | default(false)
+
+    - name: Kill processes using port 9882 if any exist
+      shell: |
+        if [ -n "{{ port_9882_processes.stdout }}" ]; then
+          echo "Found processes using port 9882: {{ port_9882_processes.stdout }}"
+          kill -9 {{ port_9882_processes.stdout }} || true
+          sleep 2
+        fi
+      when: 
+        - enable_podman_exporters | default(false)
+        - port_9882_processes.stdout != ""
+      register: killed_processes
+      changed_when: port_9882_processes.stdout != ""
 
     - name: Ensure podman_system_metrics container is running (optional)
       containers.podman.podman_container:
