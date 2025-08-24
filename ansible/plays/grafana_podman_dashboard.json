@@ -1,47 +1,224 @@
 {
   "id": null,
-  "title": "Podman Overview",
+  "title": "Podman Container Metrics",
   "tags": ["podman", "containers"],
   "timezone": "browser",
   "schemaVersion": 36,
   "version": 1,
   "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "panels": [
     {
-      "type": "graph",
-      "title": "Container CPU Usage (sum by instance)",
+      "id": 1,
+      "type": "stat",
+      "title": "Running Containers",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total[5m])) by (instance)",
-          "legendFormat": "{{instance}}"
+          "expr": "count(up{job=\"podman_exporter\"})",
+          "refId": "A",
+          "legendFormat": "Total Running"
         }
       ],
-      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}
     },
     {
-      "type": "graph",
-      "title": "Container Memory Usage (sum by instance)",
+      "id": 2,
+      "type": "stat",
+      "title": "Total Pods",
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(container_memory_usage_bytes) by (instance)",
-          "legendFormat": "{{instance}}"
+          "expr": "count(up{job=\"podman_system_metrics\"})",
+          "refId": "A",
+          "legendFormat": "Total Pods"
         }
       ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Container CPU Usage",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total[5m])",
+          "refId": "A",
+          "legendFormat": "{{instance}} - {{name}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        }
+      },
       "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
     },
     {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Container Memory Usage",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes",
+          "refId": "A",
+          "legendFormat": "{{instance}} - {{name}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Container Network I/O",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(container_network_receive_bytes_total[5m])",
+          "refId": "A",
+          "legendFormat": "{{instance}} - {{name}} RX"
+        },
+        {
+          "expr": "rate(container_network_transmit_bytes_total[5m])",
+          "refId": "B",
+          "legendFormat": "{{instance}} - {{name}} TX"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        }
+      },
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8}
+    },
+    {
+      "id": 6,
       "type": "logs",
-      "title": "Podman Stats Logs (Loki)",
+      "title": "Container Logs (Loki)",
       "datasource": "Loki",
       "targets": [
         {
-          "expr": "{job=\"varlogs\"}",
+          "expr": "{job=\"podman\"}",
           "refId": "A"
         }
       ],
-      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8}
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 12}
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Container Status",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "up{job=~\"podman.*\"}",
+          "refId": "A",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Status",
+              "instance": "Instance",
+              "job": "Job"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "displayMode": "color-background"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Down"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Up"
+                }
+              },
+              "type": "value"
+            }
+          ]
+        }
+      },
+      "gridPos": {"x": 0, "y": 20, "w": 24, "h": 6}
     }
   ]
 }

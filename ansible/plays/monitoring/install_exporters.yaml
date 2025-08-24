@@ -4,9 +4,9 @@
   become: true
   vars:
     node_exporter_image: docker.io/prom/node-exporter:latest
-    # Use the public podman system metrics image instead of a private docker.io image
-  podman_exporter_image: 192.168.4.63:5000/podman-system-metrics:latest
-  podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
+    # Use the public podman system metrics image instead of private docker.io
+    podman_exporter_image: 192.168.4.63:5000/podman-system-metrics:latest
+    podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:

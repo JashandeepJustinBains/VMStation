@@ -8,6 +8,7 @@
     loki_port: 3100
     prometheus_port: 9090
     grafana_port: 3000
+    enable_podman_exporters: true
   tasks:
     - name: Ensure Podman is installed (package module - distro agnostic)
       package:
@@ -33,6 +34,7 @@
         - grafana/dashboards
         - loki
         - promtail
+        - registry
 
     - name: Render Prometheus scrape config from repository template
       template:
@@ -58,12 +60,29 @@
         dest: "{{ monit_root }}/grafana/provisioning/dashboards/dashboards.yml"
         mode: '0644'
 
-    - name: Copy example Podman dashboard (existing)
+    - name: Copy Podman dashboard
       copy:
         src: ../../files/grafana_podman_dashboard.json
         dest: "{{ monit_root }}/grafana/dashboards/podman_dashboard.json"
         mode: '0644'
-      ignore_errors: yes
+
+    - name: Copy Node metrics dashboard
+      copy:
+        src: ../../files/grafana_node_dashboard.json
+        dest: "{{ monit_root }}/grafana/dashboards/node_dashboard.json"
+        mode: '0644'
+
+    - name: Copy Prometheus overview dashboard
+      copy:
+        src: ../../files/grafana_prometheus_dashboard.json
+        dest: "{{ monit_root }}/grafana/dashboards/prometheus_dashboard.json"
+        mode: '0644'
+
+    - name: Copy Loki logs dashboard
+      copy:
+        src: ../../files/grafana_loki_dashboard.json
+        dest: "{{ monit_root }}/grafana/dashboards/loki_dashboard.json"
+        mode: '0644'
 
     - name: Render promtail config for monitoring pod
       template:
@@ -108,6 +127,7 @@
           - "{{ prometheus_port }}:{{ prometheus_port }}"
           - "{{ loki_port }}:{{ loki_port }}"
           - "{{ grafana_port }}:{{ grafana_port }}"
+          - "5000:5000"  # Local registry
 
     - name: Start Prometheus container in pod
       containers.podman.podman_container:
@@ -158,3 +178,13 @@
           - "{{ monit_root }}/promtail:/etc/promtail:Z"
           - "{{ monit_root }}/promtail/data:/var/promtail:Z"
         command: -config.file=/etc/promtail/promtail-config.yaml
+
+    - name: Start local registry container in pod
+      containers.podman.podman_container:
+        name: local_registry
+        image: docker.io/registry:2
+        state: started
+        pod: monitoring_pod
+        restart_policy: always
+        volumes:
+          - "{{ monit_root }}/registry:/var/lib/registry:Z"

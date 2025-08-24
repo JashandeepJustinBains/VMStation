@@ -1,0 +1,263 @@
+{
+  "id": null,
+  "title": "Node Metrics - System Overview",
+  "tags": ["node", "system", "metrics"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "System Uptime",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "time() - node_boot_time_seconds",
+          "refId": "A",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "unit": "s",
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "CPU Usage %",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "refId": "A",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "unit": "percent",
+      "min": 0,
+      "max": 100,
+      "thresholds": {
+        "steps": [
+          {"color": "green", "value": null},
+          {"color": "yellow", "value": 70},
+          {"color": "red", "value": 90}
+        ]
+      },
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Memory Usage %",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))",
+          "refId": "A",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "unit": "percent",
+      "min": 0,
+      "max": 100,
+      "thresholds": {
+        "steps": [
+          {"color": "green", "value": null},
+          {"color": "yellow", "value": 80},
+          {"color": "red", "value": 95}
+        ]
+      },
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Disk Usage %",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "100 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"} * 100)",
+          "refId": "A",
+          "legendFormat": "{{instance}}"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "unit": "percent",
+      "min": 0,
+      "max": 100,
+      "thresholds": {
+        "steps": [
+          {"color": "green", "value": null},
+          {"color": "yellow", "value": 80},
+          {"color": "red", "value": 95}
+        ]
+      },
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "CPU Usage by Core",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance, cpu) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "refId": "A",
+          "legendFormat": "{{instance}} - CPU {{cpu}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory Usage",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "refId": "A",
+          "legendFormat": "{{instance}} - Used"
+        },
+        {
+          "expr": "node_memory_MemAvailable_bytes",
+          "refId": "B",
+          "legendFormat": "{{instance}} - Available"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      },
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Network I/O",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "irate(node_network_receive_bytes_total{device!=\"lo\"}[5m])",
+          "refId": "A",
+          "legendFormat": "{{instance}} - {{device}} RX"
+        },
+        {
+          "expr": "irate(node_network_transmit_bytes_total{device!=\"lo\"}[5m])",
+          "refId": "B",
+          "legendFormat": "{{instance}} - {{device}} TX"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        }
+      },
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Disk I/O",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "irate(node_disk_read_bytes_total[5m])",
+          "refId": "A",
+          "legendFormat": "{{instance}} - {{device}} Read"
+        },
+        {
+          "expr": "irate(node_disk_written_bytes_total[5m])",
+          "refId": "B",
+          "legendFormat": "{{instance}} - {{device}} Write"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        }
+      },
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8}
+    }
+  ]
+}
