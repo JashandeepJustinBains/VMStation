@@ -42,6 +42,25 @@
           - 9300:9300
       when: enable_podman_exporters | default(false)
 
+    - name: Remove any existing container named podman_system_metrics (idempotent)
+      containers.podman.podman_container:
+        name: podman_system_metrics
+        state: absent
+      when: enable_podman_exporters | default(false)
+
+    - name: Find containers publishing port 9882 on the host
+      shell: |
+        podman ps -a --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E ':9882\b' | awk '{print $1}' || true
+      register: podman_9882_containers
+      changed_when: false
+
+    - name: Remove containers that publish port 9882 (if any)
+      shell: podman rm -f {{ item }}
+      loop: "{{ podman_9882_containers.stdout_lines }}"
+      when: podman_9882_containers.stdout != ""
+      register: removed_9882
+      failed_when: removed_9882 is failed and removed_9882.rc != 0
+
     - name: Ensure podman_system_metrics container is running (optional)
       containers.podman.podman_container:
         name: podman_system_metrics
