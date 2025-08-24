@@ -1,13 +1,13 @@
-- name: Install and run exporters (node_exporter and podman exporters)
+---
   hosts: all
   become: true
   vars:
     node_exporter_image: docker.io/prom/node-exporter:latest
     # Use the public podman system metrics image instead of private docker.io
     podman_exporter_image: 192.168.4.63:5000/podman-system-metrics:latest
-  podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
-  # Host port for podman_system_metrics (set to a different port in group_vars if needed)
-  podman_system_metrics_host_port: 9882
+    podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
+    # Host port for podman_system_metrics (set to a different port in group_vars if needed)
+    podman_system_metrics_host_port: 9882
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
@@ -51,3 +51,4 @@
           # bind to loopback on the host to avoid collisions with other services
           - "127.0.0.1:{{ podman_system_metrics_host_port }}:9882"
       when: enable_podman_exporters | default(false)
+  
