@@ -50,7 +50,9 @@
 
     - name: Find containers publishing port 9882 on the host
       shell: |
+        {% raw %}
         podman ps -a --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E ':9882\b' | awk '{print $1}' || true
+        {% endraw %}
       register: podman_9882_containers
       changed_when: false
 
