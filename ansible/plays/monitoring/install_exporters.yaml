@@ -48,11 +48,15 @@
         state: absent
       when: enable_podman_exporters | default(true)
 
-    - name: Find containers publishing port 9882 on the host
+    - name: Find containers publishing the configured podman_system_metrics host port on the host
       shell: |
-        {% raw %}
-        podman ps -a --format '{{.ID}} {{.Ports}} {{.Names}}' | grep -E '127\.0\.0\.1:9882|:9882->' | awk '{print $1}' || true
-        {% endraw %}
+        podman ps -a --format '{% raw %}{{.ID}} {{.Ports}} {{.Names}}{% endraw %}' \
+          | grep -E "127\\.0\\.0\\.1:{{ podman_system_metrics_host_port }}|:{{ podman_system_metrics_host_port }}->" \
+          | awk '{print $1}' || true
+      register: podman_9882_containers
+      changed_when: false
+      when: enable_podman_exporters | default(true)
+
       register: podman_9882_containers
       changed_when: false
 
@@ -63,9 +67,9 @@
       register: removed_9882
       failed_when: removed_9882 is failed and removed_9882.rc != 0
 
-    - name: Wait for port 9882 to be released
+    - name: Wait for configured podman_system_metrics host port to be released
       wait_for:
-        port: 9882
+        port: "{{ podman_system_metrics_host_port }}"
         host: 127.0.0.1
         state: stopped
         timeout: 30
@@ -77,12 +81,12 @@
       shell: |
         # Try lsof first, fallback to ss if lsof is not available
         if command -v lsof >/dev/null 2>&1; then
-          lsof -ti :9882 2>/dev/null || true
+          lsof -ti :{{ podman_system_metrics_host_port }} 2>/dev/null || true
         elif command -v ss >/dev/null 2>&1; then
-          ss -tlnp | grep ':9882 ' | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' || true
+          ss -tlnp | grep ':{{ podman_system_metrics_host_port }} ' | awk '{print $7}' | sed 's/.*pid=\([0-9]*\).*/\1/' || true
         else
           # Last resort: use netstat
-          netstat -tlnp 2>/dev/null | grep ':9882 ' | awk '{print $7}' | cut -d'/' -f1 || true
+          netstat -tlnp 2>/dev/null | grep ':{{ podman_system_metrics_host_port }} ' | awk '{print $7}' | cut -d'/' -f1 || true
         fi
       register: port_9882_processes
       changed_when: false
@@ -91,7 +95,7 @@
     - name: Kill processes using port 9882 if any exist
       shell: |
         if [ -n "{{ port_9882_processes.stdout }}" ]; then
-          echo "Found processes using port 9882: {{ port_9882_processes.stdout }}"
+          echo "Found processes using port {{ podman_system_metrics_host_port }}: {{ port_9882_processes.stdout }}"
           kill -9 {{ port_9882_processes.stdout }} || true
           sleep 2
         fi
