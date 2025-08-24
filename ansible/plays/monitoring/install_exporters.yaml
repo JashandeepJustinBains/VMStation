@@ -57,9 +57,6 @@
       changed_when: false
       when: enable_podman_exporters | default(true)
 
-      register: podman_9882_containers
-      changed_when: false
-
     - name: Remove containers that publish port 9882 (if any)
       shell: podman rm -f {{ item }}
       loop: "{{ podman_9882_containers.stdout_lines }}"
