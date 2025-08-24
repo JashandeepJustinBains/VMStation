@@ -8,7 +8,7 @@
     podman_exporter_image: 192.168.4.63:5000/podman-system-metrics:latest
     podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
     # Host port for podman_system_metrics (set to a different port in group_vars if needed)
-    podman_system_metrics_host_port: 9882
+    podman_system_metrics_host_port: 19882
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
@@ -40,13 +40,13 @@
         restart_policy: always
         ports:
           - 9300:9300
-      when: enable_podman_exporters | default(false)
+      when: enable_podman_exporters | default(true)
 
     - name: Remove any existing container named podman_system_metrics (idempotent)
       containers.podman.podman_container:
         name: podman_system_metrics
         state: absent
-      when: enable_podman_exporters | default(false)
+      when: enable_podman_exporters | default(true)
 
     - name: Find containers publishing port 9882 on the host
       shell: |
@@ -86,7 +86,7 @@
         fi
       register: port_9882_processes
       changed_when: false
-      when: enable_podman_exporters | default(false)
+      when: enable_podman_exporters | default(true)
 
     - name: Kill processes using port 9882 if any exist
       shell: |
@@ -96,7 +96,7 @@
           sleep 2
         fi
       when: 
-        - enable_podman_exporters | default(false)
+        - enable_podman_exporters | default(true)
         - port_9882_processes.stdout != ""
       register: killed_processes
       changed_when: port_9882_processes.stdout != ""
@@ -110,5 +110,5 @@
         ports:
           # bind to loopback on the host to avoid collisions with other services
           - "127.0.0.1:{{ podman_system_metrics_host_port }}:9882"
-      when: enable_podman_exporters | default(false)
+      when: enable_podman_exporters | default(true)
   
