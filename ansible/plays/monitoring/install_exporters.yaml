@@ -116,5 +116,8 @@
         volumes:
           # Mount podman socket for metrics collection
           - "/run/podman/podman.sock:/run/podman/podman.sock:Z"
+        cap_add:
+          # Required capability for system metrics collection
+          - SYS_ADMIN
       when: enable_podman_exporters | default(true)
   
