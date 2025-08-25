@@ -113,5 +113,8 @@
           # bind to loopback on the host to avoid collisions with other services; container listens on container port 9882
           - "127.0.0.1:{{ podman_system_metrics_host_port }}:9882"
           # Note: Ensure that the host port is set correctly in group_vars
+        volumes:
+          # Mount podman socket for metrics collection
+          - "/run/podman/podman.sock:/run/podman/podman.sock:Z"
       when: enable_podman_exporters | default(true)
   

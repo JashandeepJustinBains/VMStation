@@ -97,7 +97,7 @@
         owner: root
         mode: '0644'
       vars:
-        loki_url: "http://loki:{{ loki_port }}"
+        loki_url: "http://loki:{{ loki_port }}/loki/api/v1/push"
 
     - name: Ensure monitoring data directories exist under monit_root
       file:

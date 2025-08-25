@@ -42,7 +42,9 @@ ansible/group_vars/master.yml
 ansible/group_vars/all.yml
 ansible/group_vars/worker.yml
 ansible/group_vars/cloudflared_key.yml
-ansible/group_vars/
+ansible/group_vars/secrets.yml
+# Keep template files
+!ansible/group_vars/all.yml.template
 secrets/
 *.vault
 *.key
