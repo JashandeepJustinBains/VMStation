@@ -1,0 +1,246 @@
+---
+# Podman System Metrics Debugging Playbook
+# This playbook collects diagnostic artifacts and attempts to fix podman_system_metrics issues
+# Run with: ansible-playbook -i ansible/inventory.txt ansible/plays/monitoring/debug_podman_metrics.yaml
+
+- name: Debug and Fix podman_system_metrics Container Issues
+  hosts: all
+  become: true
+  vars:
+    container_name: "podman_system_metrics"
+    image_name: "{{ podman_system_metrics_image | default('192.168.4.63:5000/podman-system-metrics:latest') }}"
+    host_port: "{{ podman_system_metrics_host_port | default(19882) }}"
+    container_port: 9882
+    debug_dir: "{{ debug_output_dir | default('/srv/monitoring_data/VMStation/debug') }}"
+    
+  tasks:
+    - name: Ensure debug output directory exists
+      file:
+        path: "{{ debug_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: "Artifact 1: Container status with ports and image info"
+      shell: |
+        podman ps -a --filter name="{{ container_name }}" --format 'table {% raw %}{{.ID}} {{.Names}} {{.Status}} {{.Image}} {{.Ports}}{% endraw %}'
+      register: container_status
+      failed_when: false
+      changed_when: false
+
+    - name: "Artifact 2: Container inspect state"
+      shell: |
+        podman inspect {{ container_name }} --format '{{json .State}}' 2>/dev/null || echo "Container not found"
+      register: container_inspect
+      failed_when: false
+      changed_when: false
+
+    - name: "Artifact 3: Container logs (last 500 lines)"
+      shell: |
+        podman logs --timestamps --tail 500 {{ container_name }} 2>/dev/null || echo "No logs available"
+      register: container_logs
+      failed_when: false
+      changed_when: false
+
+    - name: "Artifact 4: Check port usage on host"
+      shell: |
+        ss -ltnp | grep -E '127\.0\.0\.1:{{ host_port }}|:{{ host_port }}\b' || echo "Port {{ host_port }} not in use"
+      register: port_usage
+      failed_when: false
+      changed_when: false
+
+    - name: "Artifact 5: Test metrics endpoint"
+      uri:
+        url: "http://127.0.0.1:{{ host_port }}/metrics"
+        method: GET
+        timeout: 5
+      register: metrics_test
+      failed_when: false
+      changed_when: false
+
+    - name: "Artifact 6: Image configuration inspect"
+      shell: |
+        podman inspect {{ image_name }} --format '{{json .Config}}' 2>/dev/null || echo "Image not found locally"
+      register: image_inspect
+      failed_when: false
+      changed_when: false
+
+    - name: Stop any conflicting host services on port
+      shell: |
+        PIDS=$(lsof -ti :{{ host_port }} 2>/dev/null || true)
+        if [ -n "${PIDS}" ]; then
+          echo "Found processes using port {{ host_port }}: ${PIDS}"
+          for pid in ${PIDS}; do
+            if ps -p ${pid} -o cmd= | grep -q "podman.*system.*service"; then
+              echo "Stopping podman system service (PID: ${pid})"
+              kill -TERM ${pid} || true
+              sleep 2
+              kill -KILL ${pid} 2>/dev/null || true
+            else
+              echo "WARNING: Port {{ host_port }} used by non-podman process (PID: ${pid})"
+            fi
+          done
+        fi
+      register: stop_services
+      failed_when: false
+      changed_when: stop_services.stdout != ""
+
+    - name: "Remove existing podman_system_metrics container"
+      containers.podman.podman_container:
+        name: "{{ container_name }}"
+        state: absent
+      register: container_removal
+      failed_when: false
+
+    - name: "Ensure image is available locally"
+      shell: |
+        if ! podman images | grep -q "podman-system-metrics"; then
+          echo "Image not found locally, attempting to pull..."
+          podman pull {{ image_name }} --tls-verify=false || exit 1
+        fi
+        echo "Image available"
+      register: image_pull
+      failed_when: false
+
+    - name: "Start podman_system_metrics container with proper configuration"
+      containers.podman.podman_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "127.0.0.1:{{ host_port }}:{{ container_port }}"
+        volumes:
+          - "/run/podman/podman.sock:/run/podman/podman.sock:ro"
+        cap_add:
+          - SYS_ADMIN
+      register: container_start
+      failed_when: false
+
+    - name: "Artifact 7: Foreground test run for debugging"
+      shell: |
+        # Remove test container if exists
+        podman rm -f {{ container_name }}_test 2>/dev/null || true
+        
+        # Run in foreground for 10 seconds to capture output
+        echo "Running container in foreground for debugging..."
+        timeout 10s podman run --rm --name {{ container_name }}_test \
+          --publish 127.0.0.1:{{ host_port | int + 1 }}:{{ container_port }} \
+          -v /run/podman/podman.sock:/run/podman/podman.sock:ro \
+          {{ image_name }} || echo "Container exited or timed out"
+      register: foreground_test
+      failed_when: false
+      changed_when: false
+
+    - name: "Wait for container to be ready"
+      wait_for:
+        port: "{{ host_port }}"
+        host: 127.0.0.1
+        timeout: 30
+      register: port_ready
+      failed_when: false
+
+    - name: "Final status check"
+      shell: |
+        echo "=== Final Container Status ==="
+        podman ps -a --filter name="{{ container_name }}"
+        echo ""
+        echo "=== Final Port Check ==="
+        ss -ltnp | grep ":{{ host_port }}" || echo "Port not listening"
+        echo ""
+        echo "=== Final Metrics Test ==="
+        curl -s --connect-timeout 5 http://127.0.0.1:{{ host_port }}/metrics | head -5 || echo "Metrics endpoint failed"
+      register: final_status
+      failed_when: false
+      changed_when: false
+
+    - name: "Save diagnostic results to file"
+      copy:
+        content: |
+          VMStation Podman System Metrics Diagnostic Report
+          Generated: {{ ansible_date_time.iso8601 }}
+          Host: {{ inventory_hostname }}
+          
+          === Configuration ===
+          Container Name: {{ container_name }}
+          Image: {{ image_name }}
+          Host Port: {{ host_port }}
+          Container Port: {{ container_port }}
+          
+          === Artifact 1: Container Status ===
+          {{ container_status.stdout }}
+          
+          === Artifact 2: Container Inspect ===
+          {{ container_inspect.stdout }}
+          
+          === Artifact 3: Container Logs ===
+          {{ container_logs.stdout }}
+          
+          === Artifact 4: Port Usage ===
+          {{ port_usage.stdout }}
+          
+          === Artifact 5: Metrics Test ===
+          {% if metrics_test.status is defined %}
+          Status: {{ metrics_test.status }}
+          {% else %}
+          Error: {{ metrics_test.msg | default('Connection failed') }}
+          {% endif %}
+          
+          === Artifact 6: Image Configuration ===
+          {{ image_inspect.stdout }}
+          
+          === Service Stop Results ===
+          {{ stop_services.stdout }}
+          
+          === Image Pull Results ===
+          {{ image_pull.stdout }}
+          
+          === Container Start Results ===
+          {% if container_start.failed %}
+          Failed: {{ container_start.msg }}
+          {% else %}
+          Success: Container started
+          {% endif %}
+          
+          === Artifact 7: Foreground Test ===
+          {{ foreground_test.stdout }}
+          
+          === Final Status ===
+          {{ final_status.stdout }}
+          
+          === Recommendations ===
+          {% if container_start.failed %}
+          - Container failed to start. Check image availability and permissions.
+          - Verify Podman socket is available at /run/podman/podman.sock
+          - Check if image requires different volumes or capabilities
+          {% elif not port_ready.failed %}
+          - Container started successfully and port is listening
+          - Verify metrics endpoint returns data
+          {% else %}
+          - Container started but port is not accessible
+          - Check container logs for errors
+          - Verify port mapping configuration
+          {% endif %}
+        dest: "{{ debug_dir }}/podman_metrics_debug_{{ inventory_hostname }}_{{ ansible_date_time.epoch }}.txt"
+        mode: '0644'
+
+    - name: "Display summary results"
+      debug:
+        msg: |
+          === Podman System Metrics Debug Summary ===
+          Host: {{ inventory_hostname }}
+          Container Status: {% if not container_start.failed %}STARTED{% else %}FAILED{% endif %}
+          Port Listening: {% if not port_ready.failed %}YES{% else %}NO{% endif %}
+          Metrics Endpoint: {% if metrics_test.status is defined and metrics_test.status == 200 %}WORKING{% else %}FAILED{% endif %}
+          
+          Diagnostic report saved to: {{ debug_dir }}/podman_metrics_debug_{{ inventory_hostname }}_{{ ansible_date_time.epoch }}.txt
+          
+          Next Steps:
+          {% if not container_start.failed and not port_ready.failed %}
+          - Container is running successfully
+          - Verify Prometheus can scrape metrics
+          - Check Grafana dashboards for data
+          {% else %}
+          - Review diagnostic report for detailed errors
+          - Check container logs: podman logs {{ container_name }}
+          - Verify image compatibility and requirements
+          {% endif %}
