@@ -167,6 +167,12 @@
         state: started
         pod: monitoring_pod
         restart_policy: always
+        # Enable anonymous access so dashboards are viewable without login.
+        # Security note: this exposes dashboards to anyone who can reach the Grafana HTTP port.
+        env:
+          GF_AUTH_ANONYMOUS_ENABLED: "true"
+          GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+          GF_USERS_ALLOW_SIGN_UP: "false"
         volumes:
           - "{{ monit_root }}/grafana/provisioning:/etc/grafana/provisioning:Z"
           - "{{ monit_root }}/grafana/dashboards:/var/lib/grafana/dashboards:Z"
