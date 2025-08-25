@@ -120,8 +120,11 @@ podman system info
 ### Fix 1: Missing Configuration
 If `podman_system_metrics_host_port` is undefined:
 ```bash
-# Create the configuration file
+# Create the configuration file from template
 mkdir -p ansible/group_vars
+cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
+
+# Or create manually:
 cat > ansible/group_vars/all.yml << EOF
 ---
 enable_podman_exporters: true

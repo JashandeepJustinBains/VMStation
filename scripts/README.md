@@ -58,6 +58,13 @@ This directory contains utility scripts for diagnosing and fixing monitoring iss
 
 ## Common Issues
 
+### Missing Configuration
+If `ansible/group_vars/all.yml` doesn't exist:
+```bash
+# Copy template and customize
+cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
+```
+
 ### podman_system_metrics exits immediately
 1. Run `./scripts/fix_podman_metrics.sh`
 2. If that fails, run `./scripts/podman_metrics_diagnostic.sh` for detailed analysis
