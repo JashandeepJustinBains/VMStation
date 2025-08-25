@@ -117,6 +117,11 @@
         - promtail
         - promtail/data
 
+    - name: Set SELinux context for monitoring directories (if SELinux enabled)
+      command: chcon -R -t container_file_t {{ monit_root }}
+      when: ansible_selinux is defined and ansible_selinux.status == 'enabled'
+      ignore_errors: yes
+
     - name: Render Loki local config
       template:
         src: templates/loki-local-config.yaml.j2
@@ -154,7 +159,7 @@
         pod: monitoring_pod
         restart_policy: always
         volumes:
-          - "{{ monit_root }}/loki:/etc/loki:Z"
+          - "{{ monit_root }}/loki/local-config.yaml:/etc/loki/local-config.yaml:Z"
           - "{{ monit_root }}/loki/chunks:/loki/chunks:Z"
           - "{{ monit_root }}/loki/index:/loki/index:Z"
         command: -config.file=/etc/loki/local-config.yaml
@@ -187,7 +192,7 @@
         restart_policy: always
         volumes:
           - "/var/log:/var/log:ro,Z"
-          - "{{ monit_root }}/promtail:/etc/promtail:Z"
+          - "{{ monit_root }}/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:Z"
           - "{{ monit_root }}/promtail/data:/var/promtail:Z"
         command: -config.file=/etc/promtail/promtail-config.yaml
 
