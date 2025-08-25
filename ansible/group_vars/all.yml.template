@@ -1,0 +1,41 @@
+# VMStation Ansible Configuration Variables Template
+# Copy this file to all.yml and customize for your environment
+# IMPORTANT: Never commit all.yml with real credentials
+
+# === Monitoring Configuration ===
+monit_root: /srv/monitoring_data
+grafana_port: 3000
+prometheus_port: 9090
+loki_port: 3100
+
+# === Podman Exporter Configuration ===
+enable_podman_exporters: true
+podman_system_metrics_host_port: 19882
+
+# === Registry Configuration ===
+local_registry_host: 192.168.4.63
+local_registry_port: 5000
+
+# === Prometheus Configuration ===
+prometheus_scrape_interval: 15s
+prometheus_scrape_timeout: 10s
+
+# === Quay Integration (Optional) ===
+enable_quay_metrics: false
+# quay_username: "your_username"  # Add to secrets.yml via ansible-vault
+# quay_password: "your_password"  # Add to secrets.yml via ansible-vault
+
+# === Security Configuration ===
+# grafana_admin_pass: "secure_password"     # Add to secrets.yml via ansible-vault
+# samba_password: "secure_password"         # Add to secrets.yml via ansible-vault
+# vault_r430_sudo_password: "sudo_password" # Add to secrets.yml via ansible-vault
+
+# === Advanced Configuration ===
+# ansible_become_pass: "{{ vault_r430_sudo_password }}"  # Uses vaulted password
+
+# === Container Registry Configuration ===
+container_registries:
+  - url: "quay.io"
+    insecure: false
+  - url: "{{ local_registry_host }}:{{ local_registry_port }}"
+    insecure: true
