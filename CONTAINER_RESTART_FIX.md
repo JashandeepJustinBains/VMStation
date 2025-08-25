@@ -176,6 +176,18 @@ curl http://localhost:3100/loki/api/v1/labels
 - `ansible/plays/monitoring_stack.yaml` - Added SELinux fix integration
 - `scripts/fix_container_restarts.sh` - **NEW** automated fix script
 
+## Jellyfin Container Preservation Fix
+
+**Issue:** The monitoring cleanup script was killing ALL podman containers, including non-monitoring containers like Jellyfin.
+
+**Root Cause:** `monitoring/cleanup.yaml` used `podman ps -q | xargs -r podman stop` which stops all containers indiscriminately.
+
+**Fix:** Modified cleanup to only target specific monitoring containers:
+- `prometheus`, `loki`, `grafana`, `promtail_local`, `local_registry`
+- `promtail`, `node-exporter`, `podman_exporter`, `podman_system_metrics`
+
+**Result:** Non-monitoring containers (like Jellyfin) are now preserved during deployment.
+
 ## Success Criteria
 
 - ✅ All containers show "Up" status consistently
@@ -184,3 +196,4 @@ curl http://localhost:3100/loki/api/v1/labels
 - ✅ Loki accepts log data without errors
 - ✅ SELinux contexts properly set for all container volumes
 - ✅ No SELinux AVC denials in audit logs
+- ✅ **NEW**: Non-monitoring containers (Jellyfin) preserved during monitoring stack deployment
