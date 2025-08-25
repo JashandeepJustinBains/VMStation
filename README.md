@@ -159,3 +159,15 @@ kubectl get svc --all-namespaces -o wide
 - Split documentation into sub-documents for each device
 - Harden SSH and firewall rules
 - Document troubleshooting steps for CI and registry
+
+## Recent Additions
+
+### Red Hat Quay Integration ✨
+VMStation now supports Red Hat Quay integration for enterprise-grade container registry features:
+- **Free Tier Support**: Use Quay.io free tier for public repositories
+- **Prometheus Metrics**: Monitor registry operations in your existing Grafana setup
+- **Hybrid Approach**: Keep local registry for development, use Quay for production
+- **Security Scanning**: Automated vulnerability detection for container images
+
+📖 **Setup Guide**: See `docs/stack/red_hat_quay_integration.md`
+🚀 **Quick Start**: See `docs/stack/quay_quick_start.md`

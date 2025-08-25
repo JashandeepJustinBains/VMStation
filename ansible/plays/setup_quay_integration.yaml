@@ -1,0 +1,81 @@
+---
+- name: Setup Red Hat Quay integration for VMStation
+  hosts: all
+  become: true
+  gather_facts: yes
+  vars_files:
+    - ../group_vars/all.yml
+  tasks:
+    - name: Ensure container registries configuration directory exists
+      file:
+        path: /etc/containers/registries.conf.d
+        state: directory
+        mode: '0755'
+
+    - name: Configure additional container registries (Quay, Red Hat)
+      template:
+        src: templates/additional-registries.conf.j2
+        dest: /etc/containers/registries.conf.d/additional-registries.conf
+        owner: root
+        group: root
+        mode: '0644'
+      when: container_registries is defined
+      notify: restart_podman_services
+
+    - name: Setup Quay authentication (if credentials provided)
+      block:
+        - name: Login to Quay.io registry
+          containers.podman.podman_login:
+            registry: quay.io
+            username: "{{ quay_username }}"
+            password: "{{ quay_password }}"
+          when: 
+            - quay_username is defined 
+            - quay_password is defined
+            - quay_username != ""
+            - quay_password != ""
+      rescue:
+        - name: Quay login failed - continuing without authentication
+          debug:
+            msg: "Quay login failed, will use anonymous access for public repositories"
+
+- name: Update monitoring node with Quay dashboard
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    monit_root: /srv/monitoring_data
+  tasks:
+    - name: Copy Quay metrics dashboard to Grafana
+      copy:
+        src: ../../files/grafana_quay_dashboard.json
+        dest: "{{ monit_root }}/grafana/dashboards/quay_dashboard.json"
+        mode: '0644'
+      when: enable_quay_metrics | default(false)
+      notify: restart_grafana
+
+    - name: Update Prometheus configuration with Quay metrics
+      template:
+        src: ../../templates/prometheus.yml.j2
+        dest: "{{ monit_root }}/prometheus/prometheus.yml"
+        owner: root
+        mode: '0644'
+      notify: restart_prometheus
+
+  handlers:
+    - name: restart_prometheus
+      containers.podman.podman_container:
+        name: prometheus
+        state: started
+        restart: yes
+
+    - name: restart_grafana
+      containers.podman.podman_container:
+        name: grafana
+        state: started
+        restart: yes
+
+    - name: restart_podman_services
+      systemd:
+        name: podman
+        state: restarted
+      ignore_errors: yes

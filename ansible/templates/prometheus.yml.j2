@@ -45,4 +45,21 @@ scrape_configs:
 {% endfor %}
 {% endif %}
 
+# Red Hat Quay metrics integration (optional)
+{% if enable_quay_metrics | default(false) %}
+  - job_name: 'quay_metrics'
+    static_configs:
+      - targets: 
+{% if quay_instance_url is defined %}
+        - '{{ quay_instance_url }}'
+{% else %}
+        - 'quay.io'
+{% endif %}
+    metrics_path: '/metrics'
+    scheme: https
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    honor_labels: true
+{% endif %}
+
 # Add more scrape configs as needed

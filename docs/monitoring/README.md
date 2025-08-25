@@ -110,6 +110,17 @@ The monitoring setup uses these key configuration files:
 - `ansible/templates/prometheus.yml.j2`: Prometheus scrape configuration
 - `ansible/plays/monitoring/templates/`: Service configuration templates
 - `ansible/files/grafana_*_dashboard.json`: Pre-built Grafana dashboards
+- `ansible/group_vars/all.yml`: Global configuration (create from template)
+
+### Red Hat Quay Integration (Optional)
+
+VMStation now supports Red Hat Quay integration for enhanced container registry capabilities:
+
+- **Quay Metrics Monitoring**: Track repository operations, storage usage, and security scans
+- **Hybrid Registry Setup**: Use both local registry and Quay.io
+- **Free Tier Support**: Utilize Quay.io free tier for public repositories
+
+See: `docs/stack/red_hat_quay_integration.md` for detailed setup instructions.
 
 ## Features
 
