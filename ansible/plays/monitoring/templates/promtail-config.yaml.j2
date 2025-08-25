@@ -16,6 +16,7 @@ scrape_configs:
           job: varlogs
           __path__:
             - /var/log/*log
+            - /var/log/*/*log
             - /var/promtail/podman_stats.log
   - job_name: podman_logs
     static_configs:
@@ -25,3 +26,4 @@ scrape_configs:
           __path__:
             - /var/lib/containers/storage/overlay-containers/*/userdata/ctr.log
             - /var/lib/containers/storage/overlay-containers/*/userdata/*-json.log
+            - /var/log/containers/*.log
