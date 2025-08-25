@@ -87,8 +87,11 @@ ansible-playbook -i ansible/inventory.txt ansible/plays/monitoring_stack.yaml
 # Check syntax and configuration
 ./syntax_validator.sh
 
+# Run comprehensive monitoring validation
+./scripts/validate_monitoring.sh
+
 # Run monitoring validation (if available)
-/tmp/validate_monitoring.sh
+./scripts/validate_monitoring.sh
 ```
 
 ## Access
@@ -130,6 +133,17 @@ ansible-playbook -i ansible/inventory.txt ansible/plays/monitoring/debug_collect
 - Check firewall rules for monitoring ports
 - Verify Podman service is running on all nodes
 - Check container logs: `podman logs <container_name>`
+
+### Podman System Metrics Issues:
+If `podman_system_metrics` exits immediately or port 19882 refuses connections:
+```bash
+# Run automated fix
+./scripts/fix_podman_metrics.sh
+
+# Or run diagnostics
+./scripts/podman_metrics_diagnostic.sh
+```
+See detailed guide: `docs/monitoring/troubleshooting_podman_metrics.md`
 
 ## Maintenance
 
