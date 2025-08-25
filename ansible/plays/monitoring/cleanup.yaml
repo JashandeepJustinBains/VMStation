@@ -34,6 +34,7 @@
 
     - name: Stop monitoring containers selectively (preserve non-monitoring containers)
       shell: |
+        {% raw %}
         if command -v podman >/dev/null 2>&1; then
           # Define monitoring container names to clean up
           MONITORING_CONTAINERS=(
@@ -50,6 +51,7 @@
             fi
           done
         fi
+        {% endraw %}
       args:
         executable: /bin/bash
       ignore_errors: yes
