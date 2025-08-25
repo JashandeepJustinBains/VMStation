@@ -7,8 +7,8 @@
     # Use the public podman system metrics image instead of private docker.io
     podman_exporter_image: 192.168.4.63:5000/podman-system-metrics:latest
     podman_system_metrics_image: 192.168.4.63:5000/podman-system-metrics:latest
-    # Host port for podman_system_metrics (set to a different port in group_vars if needed)
-    podman_system_metrics_host_port: 9882
+    # Host port for podman_system_metrics is expected to be provided from group_vars
+    # (do not hardcode here so group_vars/all.yml can override safely)
   tasks:
     - name: Ensure Podman is installed (Debian)
       apt:
@@ -53,16 +53,16 @@
         podman ps -a --format '{% raw %}{{.ID}} {{.Ports}} {{.Names}}{% endraw %}' \
           | grep -E "127\\.0\\.0\\.1:{{ podman_system_metrics_host_port }}|:{{ podman_system_metrics_host_port }}->" \
           | awk '{print $1}' || true
-      register: podman_9882_containers
+      register: podman_port_containers
       changed_when: false
       when: enable_podman_exporters | default(true)
 
-    - name: Remove containers that publish port 9882 (if any)
+    - name: Remove containers that publish the configured host port (if any)
       shell: podman rm -f {{ item }}
-      loop: "{{ podman_9882_containers.stdout_lines }}"
-      when: podman_9882_containers.stdout != ""
-      register: removed_9882
-      failed_when: removed_9882 is failed and removed_9882.rc != 0
+      loop: "{{ podman_port_containers.stdout_lines }}"
+      when: podman_port_containers.stdout != ""
+      register: removed_port_containers
+      failed_when: removed_port_containers is failed and removed_port_containers.rc != 0
 
     - name: Wait for configured podman_system_metrics host port to be released
       wait_for:
@@ -71,10 +71,10 @@
         state: stopped
         timeout: 30
         delay: 2
-      when: podman_9882_containers.stdout != ""
+      when: podman_port_containers.stdout != ""
       ignore_errors: yes
 
-    - name: Check if port 9882 is still in use by any process
+    - name: Check if configured podman_system_metrics host port is still in use by any process
       shell: |
         # Try lsof first, fallback to ss if lsof is not available
         if command -v lsof >/dev/null 2>&1; then
@@ -85,22 +85,22 @@
           # Last resort: use netstat
           netstat -tlnp 2>/dev/null | grep ':{{ podman_system_metrics_host_port }} ' | awk '{print $7}' | cut -d'/' -f1 || true
         fi
-      register: port_9882_processes
+      register: port_processes
       changed_when: false
       when: enable_podman_exporters | default(true)
 
-    - name: Kill processes using port 9882 if any exist
+    - name: Kill processes using configured podman_system_metrics host port if any exist
       shell: |
-        if [ -n "{{ port_9882_processes.stdout }}" ]; then
-          echo "Found processes using port {{ podman_system_metrics_host_port }}: {{ port_9882_processes.stdout }}"
-          kill -9 {{ port_9882_processes.stdout }} || true
+        if [ -n "{{ port_processes.stdout }}" ]; then
+          echo "Found processes using port {{ podman_system_metrics_host_port }}: {{ port_processes.stdout }}"
+          kill -9 {{ port_processes.stdout }} || true
           sleep 2
         fi
-      when: 
+      when:
         - enable_podman_exporters | default(true)
-        - port_9882_processes.stdout != ""
+        - port_processes.stdout != ""
       register: killed_processes
-      changed_when: port_9882_processes.stdout != ""
+      changed_when: port_processes.stdout != ""
 
     - name: Ensure podman_system_metrics container is running (optional)
       containers.podman.podman_container:
@@ -110,6 +110,8 @@
         restart_policy: always
         ports:
           # bind to loopback on the host to avoid collisions with other services
+          # bind to loopback on the host to avoid collisions with other services; container listens on container port 9882
           - "127.0.0.1:{{ podman_system_metrics_host_port }}:9882"
+          # Note: Ensure that the host port is set correctly in group_vars
       when: enable_podman_exporters | default(true)
   

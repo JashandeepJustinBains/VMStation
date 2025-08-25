@@ -4,7 +4,7 @@ global:
 scrape_configs:
   - job_name: 'podman_metrics'
     static_configs:
-      - targets: ['192.168.4.61:9882', '192.168.4.62:9882', '192.168.4.63:9882']
+  - targets: ['192.168.4.61:19882', '192.168.4.62:19882', '192.168.4.63:19882']
 
   - job_name: 'node_exporter'
     static_configs:

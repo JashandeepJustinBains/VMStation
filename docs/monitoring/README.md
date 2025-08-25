@@ -20,6 +20,7 @@ This repository contains a comprehensive monitoring solution for the VMStation h
 ### Exporters
 - **Node Exporter** (port 9100): System metrics (CPU, memory, disk, network)
 - **Podman System Metrics** (port 9882): Podman system-level metrics
+- **Podman System Metrics** (host port configurable via `podman_system_metrics_host_port`, default 19882): Podman system-level metrics
 - **Podman Exporter** (port 9300): Container-level metrics
 
 ## Pre-built Dashboards

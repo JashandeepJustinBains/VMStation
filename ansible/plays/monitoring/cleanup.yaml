@@ -70,7 +70,12 @@
 
     - name: Kill processes bound to common monitoring ports (best-effort)
       shell: |
-        for p in 9090 3100 3000 9080 9300 9882 9100; do
+        # build list of common ports, include configured podman_system_metrics_host_port if set
+        COMMON_PORTS=(9090 3100 3000 9080 9300 9100)
+        if [ -n "${PODMAN_PORT:-}" ]; then
+          COMMON_PORTS+=("${PODMAN_PORT}")
+        fi
+        for p in "${COMMON_PORTS[@]}"; do
           if command -v fuser >/dev/null 2>&1; then
             fuser -k ${p}/tcp || true
           elif command -v lsof >/dev/null 2>&1; then
@@ -81,6 +86,8 @@
         done
       args:
         executable: /bin/bash
+      environment:
+        PODMAN_PORT: "{{ podman_system_metrics_host_port | default('') }}"
       ignore_errors: yes
 
   # Do not unmount /srv/monitoring_data: keep mounts stable on this host
