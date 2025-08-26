@@ -159,7 +159,24 @@
                 state: present
                 permanent: yes
               ignore_errors: yes
-              
+            - name: Allow SSH in kubernetes zone (runtime + permanent)
+              firewalld:
+                zone: kubernetes
+                service: ssh
+                permanent: yes
+                immediate: yes
+                state: enabled
+              ignore_errors: no
+
+            - name: Allow admin subnet SSH in kubernetes zone (runtime + permanent)
+              firewalld:
+                zone: kubernetes
+                source: 192.168.4.0/24
+                permanent: yes
+                immediate: yes
+                state: enabled
+              ignore_errors: no
+
             - name: Set default interface to kubernetes zone
               firewalld:
                 zone: kubernetes
