@@ -51,6 +51,42 @@
         state: present
       when: ansible_os_family == 'Debian'
 
+    - name: Install Kubernetes and containerd packages on RHEL-family systems
+      package:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+          - containerd
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure yum-utils is installed on RHEL-family systems
+      package:
+        name: yum-utils
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Add Kubernetes yum repository for RHEL-family systems
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes repo
+        baseurl: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/
+        gpgcheck: yes
+        repo_gpgcheck: yes
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/Release.key
+        enabled: yes
+      when: ansible_os_family == 'RedHat'
+
+    - name: Update yum cache on RHEL-family systems
+      command: yum makecache -q
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
+      selinux:
+        state: permissive
+      when: ansible_os_family == 'RedHat'
+
     - name: Hold Kubernetes packages
       dpkg_selections:
         name: "{{ item }}"
@@ -137,11 +173,15 @@
         enabled: yes
       when: containerd_bin.stat.exists
 
-    - name: Restart and enable kubelet
+    - name: Gather service facts
+      service_facts:
+
+    - name: Restart and enable kubelet (only if service exists)
       systemd:
         name: kubelet
         state: restarted
         enabled: yes
+      when: "'kubelet.service' in ansible_facts.services"
 
 # Control plane initialization (only on monitoring_nodes)
 - name: Initialize Kubernetes control plane
