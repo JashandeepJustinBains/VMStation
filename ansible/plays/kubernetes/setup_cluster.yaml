@@ -121,21 +121,21 @@
       copy:
         content: "{{ containerd_config.stdout }}"
         dest: /etc/containerd/config.toml
-  when: containerd_bin.stat.exists
+      when: containerd_bin.stat.exists
 
     - name: Configure containerd to use systemd cgroup driver
       replace:
         path: /etc/containerd/config.toml
         regexp: 'SystemdCgroup = false'
         replace: 'SystemdCgroup = true'
-  when: containerd_bin.stat.exists
+      when: containerd_bin.stat.exists
 
     - name: Restart and enable containerd
       systemd:
         name: containerd
         state: restarted
         enabled: yes
-  when: containerd_bin.stat.exists
+      when: containerd_bin.stat.exists
 
     - name: Restart and enable kubelet
       systemd:
