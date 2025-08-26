@@ -103,6 +103,14 @@
       when: ansible_os_family == 'RedHat' and (rhel_major | int) < 10
 
     - block:
+        - name: Install required packages for RHEL 10+
+          package:
+            name:
+              - curl
+              - wget
+              - dnf-plugins-core
+            state: present
+          ignore_errors: yes
         - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
           shell: |
             if command -v curl >/dev/null 2>&1; then
@@ -142,73 +150,143 @@
             name: containerd
             state: restarted
             enabled: yes
+        - name: Get latest stable Kubernetes version for specified minor version
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -s -L "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt" 2>/dev/null || echo "v{{ kubernetes_version }}.0"
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O - "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt" 2>/dev/null || echo "v{{ kubernetes_version }}.0"
+            else
+              echo "v{{ kubernetes_version }}.0"
+            fi
+          register: k8s_version_result
+          changed_when: false
+        - name: Set Kubernetes version fact with fallback
+          set_fact:
+            k8s_full_version: "{{ k8s_version_result.stdout.strip() if k8s_version_result.stdout.strip() and k8s_version_result.stdout.strip() != '' else 'v' + kubernetes_version + '.0' }}"
+        - name: Display Kubernetes version being installed
+          debug:
+            msg: "Installing Kubernetes version: {{ k8s_full_version }}"
         - name: Download kubeadm binary (RHEL 10+ fallback)
           shell: |
             if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm" -o /usr/bin/kubeadm
+              curl -fsSL "https://dl.k8s.io/release/{{ k8s_full_version }}/bin/linux/amd64/kubeadm" -o /usr/bin/kubeadm
             elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /usr/bin/kubeadm "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm"
+              wget -q -O /usr/bin/kubeadm "https://dl.k8s.io/release/{{ k8s_full_version }}/bin/linux/amd64/kubeadm"
             fi
           args:
             creates: /usr/bin/kubeadm
-        - name: Ensure kubeadm is executable
+        - name: Ensure kubeadm is executable and validate
           file:
             path: /usr/bin/kubeadm
             mode: '0755'
             owner: root
             group: root
+        - name: Verify kubeadm binary works
+          command: /usr/bin/kubeadm version --short
+          register: kubeadm_version_check
+          changed_when: false
+          failed_when: kubeadm_version_check.rc != 0
         - name: Download kubectl binary (RHEL 10+ fallback)
           shell: |
             if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl" -o /usr/bin/kubectl
+              curl -fsSL "https://dl.k8s.io/release/{{ k8s_full_version }}/bin/linux/amd64/kubectl" -o /usr/bin/kubectl
             elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /usr/bin/kubectl "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl"
+              wget -q -O /usr/bin/kubectl "https://dl.k8s.io/release/{{ k8s_full_version }}/bin/linux/amd64/kubectl"
             fi
           args:
             creates: /usr/bin/kubectl
-        - name: Ensure kubectl is executable
+        - name: Ensure kubectl is executable and validate
           file:
             path: /usr/bin/kubectl
             mode: '0755'
             owner: root
             group: root
+        - name: Verify kubectl binary works
+          command: /usr/bin/kubectl version --client --short
+          register: kubectl_version_check
+          changed_when: false
+          failed_when: kubectl_version_check.rc != 0
         - name: Download kubelet binary (RHEL 10+ fallback)
           shell: |
             if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet" -o /usr/bin/kubelet
+              curl -fsSL "https://dl.k8s.io/release/{{ k8s_full_version }}/bin/linux/amd64/kubelet" -o /usr/bin/kubelet
             elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /usr/bin/kubelet "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet"
+              wget -q -O /usr/bin/kubelet "https://dl.k8s.io/release/{{ k8s_full_version }}/bin/linux/amd64/kubelet"
             fi
           args:
             creates: /usr/bin/kubelet
-        - name: Ensure kubelet is executable
+        - name: Ensure kubelet is executable and validate
           file:
             path: /usr/bin/kubelet
             mode: '0755'
             owner: root
             group: root
-        - name: Create minimal kubelet systemd unit (RHEL 10+ fallback)
+        - name: Verify kubelet binary works
+          command: /usr/bin/kubelet --version
+          register: kubelet_version_check
+          changed_when: false
+          failed_when: kubelet_version_check.rc != 0
+        - name: Create kubelet configuration directory
+          file:
+            path: /var/lib/kubelet
+            state: directory
+            mode: '0755'
+        - name: Create kubelet systemd drop-in directory
+          file:
+            path: /etc/systemd/system/kubelet.service.d
+            state: directory
+            mode: '0755'
+        - name: Create kubelet systemd unit (RHEL 10+ fallback)
           copy:
             dest: /etc/systemd/system/kubelet.service
             content: |
               [Unit]
               Description=kubelet: The Kubernetes Node Agent
               Documentation=https://kubernetes.io/docs/
-              After=network.target containerd.service
+              Wants=network-online.target
+              After=network-online.target containerd.service
               Requires=containerd.service
 
               [Service]
               ExecStart=/usr/bin/kubelet
               Restart=always
+              StartLimitInterval=0
               RestartSec=10
+              CPUAccounting=true
+              MemoryAccounting=true
 
               [Install]
               WantedBy=multi-user.target
-        - name: Reload systemd and enable/start kubelet (RHEL 10+ fallback)
+        - name: Create kubelet systemd drop-in configuration
+          copy:
+            dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+            content: |
+              # Note: This dropin only works with kubeadm and kubelet v1.11+
+              [Service]
+              Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+              Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+              # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+              EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+              # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+              # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+              EnvironmentFile=-/etc/default/kubelet
+              ExecStart=
+              ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+        - name: Reload systemd daemon and enable/start kubelet (RHEL 10+ fallback)
+          systemd:
+            daemon_reload: yes
+            name: kubelet
+            enabled: yes
+            state: started
+          register: kubelet_service_result
+        - name: Verify kubelet service is running
           systemd:
             name: kubelet
-            state: restarted
-            enabled: yes
+          register: kubelet_status
+        - name: Display kubelet service status
+          debug:
+            msg: "Kubelet service is {{ kubelet_status.status.ActiveState }} and {{ kubelet_status.status.SubState }}"
       when: ansible_os_family == 'RedHat' and (rhel_major | int) >= 10
 
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)

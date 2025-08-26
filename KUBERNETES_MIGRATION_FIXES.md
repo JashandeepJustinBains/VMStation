@@ -29,6 +29,31 @@ ansible-galaxy collection install -r ansible/requirements.yml --force
 - New playbook: `ansible/plays/kubernetes/setup_storage.yaml`
 - Node selectors in monitoring deployment for proper placement
 
+### 3. RHEL 10 Kubernetes Requirements Installation Fix
+**Problem:** setup_cluster playbook failed to install Kubernetes requirements on RHEL 10 compute_nodes
+
+**Solution Applied:**
+- **Fixed Kubernetes binary download URLs**: Changed from incorrect `stable-{{ kubernetes_version }}` format to proper version detection and `{{ k8s_full_version }}` usage
+- **Enhanced dependency installation**: Added explicit installation of required packages (curl, wget, dnf-plugins-core) for RHEL 10+
+- **Improved kubelet systemd service**: Added proper systemd unit configuration with kubeadm integration via drop-in files
+- **Added binary validation**: Each downloaded binary (kubeadm, kubectl, kubelet) is now validated to ensure successful installation
+- **Enhanced systemd management**: Added daemon reload and service verification to ensure kubelet starts correctly
+- **Better error handling**: Added fallback mechanisms and proper error detection for package installation failures
+
+**Key Changes Made:**
+- Version detection logic that properly fetches latest stable version for specified minor version
+- Fallback to `v{{ kubernetes_version }}.0` when version detection fails
+- Comprehensive kubelet systemd configuration with proper drop-in files at `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf`
+- Binary validation commands to verify each component works before proceeding
+- Improved service management with daemon reload and status verification
+
+**To Apply:**
+```bash
+# The fixes are automatically applied when running setup_cluster.yaml
+# Validate fixes with the new validation script
+./scripts/validate_rhel10_k8s_fixes.sh
+```
+
 ## How to Use the Fixes
 
 ### Quick Migration (Recommended)
@@ -43,7 +68,10 @@ cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 # 3. Validate storage setup
 ./scripts/validate_k8s_storage.sh
 
-# 4. Deploy Kubernetes with fixed configuration
+# 4. Validate RHEL 10 fixes
+./scripts/validate_rhel10_k8s_fixes.sh
+
+# 5. Deploy Kubernetes with fixed configuration
 ./deploy_kubernetes.sh
 ```
 
@@ -57,6 +85,12 @@ ansible-playbook --syntax-check -i ansible/inventory.txt ansible/plays/kubernete
 
 # Check storage configuration
 ansible-playbook --syntax-check -i ansible/inventory.txt ansible/plays/kubernetes/setup_storage.yaml
+
+# Check RHEL 10 fixes
+ansible-playbook --syntax-check -i ansible/inventory.txt ansible/plays/kubernetes/setup_cluster.yaml
+
+# Validate RHEL 10 fixes
+./scripts/validate_rhel10_k8s_fixes.sh
 ```
 
 ## Validation Commands
@@ -89,12 +123,23 @@ kubectl get pods -n monitoring
 - `ansible/plays/kubernetes/setup_storage.yaml` - New storage setup playbook
 - `ansible/plays/kubernetes_stack.yaml` - Include storage setup
 - `ansible/plays/kubernetes/deploy_monitoring.yaml` - Node-specific placement
+- `ansible/plays/kubernetes/setup_cluster.yaml` - **MAJOR IMPROVEMENTS for RHEL 10 support**
 - `deploy_kubernetes.sh` - Collection version validation
 - `scripts/validate_k8s_storage.sh` - Storage validation script
+- `scripts/validate_rhel10_k8s_fixes.sh` - **NEW: RHEL 10 fixes validation script**
 - `docs/MIGRATION_GUIDE.md` - Updated troubleshooting guide
 
 ## Troubleshooting
 
+### RHEL 10 Specific Issues
+If you encounter issues with RHEL 10 Kubernetes installation:
+1. Check that required packages are installed: `dnf list installed curl wget dnf-plugins-core`
+2. Verify binary downloads: Check `/usr/bin/kubeadm`, `/usr/bin/kubectl`, `/usr/bin/kubelet` exist and are executable
+3. Check kubelet service status: `systemctl status kubelet`
+4. Review kubelet logs: `journalctl -u kubelet -f`
+5. Validate systemd configuration: Check `/etc/systemd/system/kubelet.service.d/10-kubeadm.conf` exists
+
+### General Troubleshooting
 If you still get the collection warning:
 1. Check your Ansible version: `ansible --version`
 2. Update to Ansible 2.15+ if possible
@@ -102,3 +147,5 @@ If you still get the collection warning:
 4. See updated troubleshooting section in `docs/MIGRATION_GUIDE.md`
 
 The storage validation script (`./scripts/validate_k8s_storage.sh`) will help verify that proper directories are created and accessible on each node type.
+
+The RHEL 10 validation script (`./scripts/validate_rhel10_k8s_fixes.sh`) will verify that all fixes for RHEL 10 Kubernetes requirements installation are properly implemented.
