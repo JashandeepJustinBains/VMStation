@@ -249,7 +249,7 @@
             content: |
               # Kubelet environment
               KUBELET_EXTRA_ARGS=--cgroup-driver=systemd
-          mode: '0644'
+            mode: '0644'
         - name: Reload systemd after kubelet unit and sysconfig changes (RHEL 10+)
           command: systemctl daemon-reload
         - name: Start kubelet and wait for active (RHEL 10+)
