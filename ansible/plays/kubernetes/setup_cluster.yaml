@@ -214,7 +214,8 @@
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
       selinux:
         state: permissive
-      when: ansible_os_family == 'RedHat'
+        policy: targeted
+      when: ansible_os_family == 'RedHat' and (ansible_selinux is defined and ansible_selinux.status != 'Disabled')
 
     - name: Hold Kubernetes packages
       dpkg_selections:
