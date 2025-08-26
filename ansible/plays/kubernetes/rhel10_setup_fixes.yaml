@@ -105,7 +105,7 @@
             - br_netfilter
             - ip_tables
             - ip6_tables
-            - netfilter_conntrack
+            - nf_conntrack
             
         - name: Create kernel modules configuration
           copy:
@@ -115,7 +115,7 @@
               br_netfilter
               ip_tables
               ip6_tables
-              netfilter_conntrack
+              nf_conntrack
             dest: /etc/modules-load.d/kubernetes.conf
             mode: '0644'
             
