@@ -426,6 +426,20 @@
         mode: '0755'
       when: not kubelet_conf.stat.exists
 
+    - name: Backup existing /etc/kubernetes if ca.crt exists to avoid kubeadm preflight error
+      shell: |
+        if [ -f /etc/kubernetes/pki/ca.crt ]; then
+          ts=$(date +%s)
+          mv /etc/kubernetes /etc/kubernetes.backup.$ts || true
+          echo "backed_up=/etc/kubernetes.backup.$ts"
+        else
+          echo "backed_up=none"
+        fi
+      register: backup_k8s
+      changed_when: "'backed_up=' in backup_k8s.stdout and 'none' not in backup_k8s.stdout"
+      failed_when: false
+      when: not kubelet_conf.stat.exists
+
     - name: Join worker nodes to cluster
       # Run join with extra verbosity and capture output so we can gather logs on failure.
       # We run the script with --v=5 for detailed stack traces from kubeadm if available.
