@@ -121,6 +121,14 @@
             
     - name: Configure systemd for container workloads
       block:
+        - name: Ensure systemd drop-in directory exists
+          file:
+            path: /etc/systemd/system.conf.d
+            state: directory
+            mode: '0755'
+            owner: root
+            group: root
+
         - name: Increase systemd limits for containers
           copy:
             content: |
