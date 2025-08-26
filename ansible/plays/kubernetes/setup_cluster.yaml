@@ -143,20 +143,50 @@
             state: restarted
             enabled: yes
         - name: Download kubeadm binary (RHEL 10+ fallback)
-          get_url:
-            url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm"
-            dest: /usr/bin/kubeadm
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm" -o /usr/bin/kubeadm
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /usr/bin/kubeadm "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm"
+            fi
+          args:
+            creates: /usr/bin/kubeadm
+        - name: Ensure kubeadm is executable
+          file:
+            path: /usr/bin/kubeadm
             mode: '0755'
+            owner: root
+            group: root
         - name: Download kubectl binary (RHEL 10+ fallback)
-          get_url:
-            url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl"
-            dest: /usr/bin/kubectl
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl" -o /usr/bin/kubectl
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /usr/bin/kubectl "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl"
+            fi
+          args:
+            creates: /usr/bin/kubectl
+        - name: Ensure kubectl is executable
+          file:
+            path: /usr/bin/kubectl
             mode: '0755'
+            owner: root
+            group: root
         - name: Download kubelet binary (RHEL 10+ fallback)
-          get_url:
-            url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet"
-            dest: /usr/bin/kubelet
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet" -o /usr/bin/kubelet
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /usr/bin/kubelet "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet"
+            fi
+          args:
+            creates: /usr/bin/kubelet
+        - name: Ensure kubelet is executable
+          file:
+            path: /usr/bin/kubelet
             mode: '0755'
+            owner: root
+            group: root
         - name: Create minimal kubelet systemd unit (RHEL 10+ fallback)
           copy:
             dest: /etc/systemd/system/kubelet.service
