@@ -265,10 +265,10 @@
         - name: Show monitoring diagnostics summary
           debug:
             msg:
-              pods: "{{ monitoring_pods.resources | map(attribute='metadata.name') | list }}"
-              events_count: "{{ monitoring_events.resources | length }}"
-              pod_describes: "{{ pod_describes.results | map(attribute='stdout') | list }}"
-              pod_logs: "{{ pod_logs.results | map(attribute='stdout') | list }}"
+              pods: "{{ (monitoring_pods.resources | default([])) | map(attribute='metadata.name') | list }}"
+              events_count: "{{ (monitoring_events.resources | default([])) | length }}"
+              pod_describes: "{{ (pod_describes.results | default([])) | map(attribute='stdout') | list }}"
+              pod_logs: "{{ (pod_logs.results | default([])) | map(attribute='stdout') | list }}"
 
     - name: Get monitoring service endpoints
       kubernetes.core.k8s_info:
