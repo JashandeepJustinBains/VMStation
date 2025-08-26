@@ -7,20 +7,20 @@
     helm_version: "3.13.3"
     
   tasks:
-    - name: Ensure python3-pip is installed (required to install kubernetes client)
+    - name: Ensure kubernetes Python package is available (Debian package preferred)
       apt:
-        name: python3-pip
+        name: python3-kubernetes
         state: present
         update_cache: yes
       when: ansible_facts['pkg_mgr'] == 'apt' or ansible_pkg_mgr is defined and ansible_pkg_mgr == 'apt'
 
-    - name: Install kubernetes Python library for Ansible k8s module
+    - name: Fallback - install kubernetes Python library via pip if apt package missing
       pip:
         name: kubernetes
         state: present
         executable: pip3
       become: true
-      when: ansible_facts is defined and ansible_facts['python'] is defined
+      when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
     - name: Download Helm installer script
       get_url:
