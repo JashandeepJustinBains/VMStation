@@ -17,8 +17,6 @@
         else
           yum clean all || true
         fi
-      args:
-        warn: false
       when: ansible_os_family == 'RedHat'
       ignore_errors: yes
 
