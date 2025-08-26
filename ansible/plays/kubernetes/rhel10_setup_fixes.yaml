@@ -145,9 +145,18 @@
             
     - name: Configure firewall for Kubernetes (if firewalld is active)
       block:
-        - name: Check firewalld status
+        - name: Ensure firewalld package is installed (RHEL)
+          package:
+            name: firewalld
+            state: present
+          when: ansible_os_family == 'RedHat'
+          ignore_errors: yes
+
+        - name: Ensure firewalld is started and enabled
           systemd:
             name: firewalld
+            state: started
+            enabled: yes
           register: firewalld_check
           ignore_errors: yes
           
