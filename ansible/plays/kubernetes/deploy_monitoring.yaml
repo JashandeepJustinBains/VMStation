@@ -214,19 +214,61 @@
                     maxLines: 1000
         kubeconfig: /root/.kube/config
 
-    - name: Wait for monitoring stack to be ready
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Pod
-        namespace: "{{ monitoring_namespace }}"
-        label_selectors:
-          - app.kubernetes.io/name=prometheus
-        wait: true
-        wait_condition:
-          type: Ready
-          status: "True"
-        wait_timeout: 600
-        kubeconfig: /root/.kube/config
+    - block:
+        - name: Wait for monitoring stack to be ready
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: "{{ monitoring_namespace }}"
+            label_selectors:
+              - app.kubernetes.io/name=prometheus
+            wait: true
+            wait_condition:
+              type: Ready
+              status: "True"
+            wait_timeout: 300
+            kubeconfig: /root/.kube/config
+          register: monitoring_wait
+      rescue:
+        - name: Gather pods in monitoring namespace
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: "{{ monitoring_namespace }}"
+            kubeconfig: /root/.kube/config
+          register: monitoring_pods
+
+        - name: Gather events in monitoring namespace
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Event
+            namespace: "{{ monitoring_namespace }}"
+            kubeconfig: /root/.kube/config
+          register: monitoring_events
+
+        - name: Describe non-ready pods for diagnostics
+          shell: kubectl describe pod {{ item.metadata.name }} -n {{ monitoring_namespace }}
+          environment:
+            KUBECONFIG: /root/.kube/config
+          register: pod_describes
+          loop: "{{ monitoring_pods.resources }}"
+          when: item.status.conditions is defined and (item.status.conditions | selectattr('type','equalto','Ready') | selectattr('status','equalto','False') | list) | length > 0
+
+        - name: Collect recent logs for non-ready pods
+          shell: kubectl logs {{ item.metadata.name }} -n {{ monitoring_namespace }} --tail=200 --all-containers
+          environment:
+            KUBECONFIG: /root/.kube/config
+          register: pod_logs
+          loop: "{{ monitoring_pods.resources }}"
+          when: item.status.conditions is defined and (item.status.conditions | selectattr('type','equalto','Ready') | selectattr('status','equalto','False') | list) | length > 0
+
+        - name: Show monitoring diagnostics summary
+          debug:
+            msg:
+              pods: "{{ monitoring_pods.resources | map(attribute='metadata.name') | list }}"
+              events_count: "{{ monitoring_events.resources | length }}"
+              pod_describes: "{{ pod_describes.results | map(attribute='stdout') | list }}"
+              pod_logs: "{{ pod_logs.results | map(attribute='stdout') | list }}"
 
     - name: Get monitoring service endpoints
       kubernetes.core.k8s_info:
