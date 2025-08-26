@@ -36,7 +36,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-
 # Ansible and secrets
 ansible/group_vars/master.yml
 ansible/group_vars/all.yml
@@ -52,3 +51,82 @@ secrets/
 *.env
 inventory.yml
 
+# Kubernetes configuration files with credentials
+kubeconfig
+*.kubeconfig
+.kube/
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+*.log
+*.bak
+*.backup
+
+# Ansible generated files
+*.retry
+.ansible/
+
+# Helm charts cache
+.helm/
+charts/*.tgz
+
+# Container images and archives
+*.tar
+*.tar.gz
+*.tar.bz2
+docker-images/
+container-images/
+
+# Local development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Backup and archive files
+/backup/
+/archives/
+*_backup_*
+*.old
+
+# Migration temporary files
+/migration_backup/
+/legacy_backup/
+/podman_backup/
+
+# Build artifacts
+dist/
+build/
+target/
+node_modules/
+*.pyc
+__pycache__/
+
+# Monitoring data
+/srv/monitoring_data/
+monitoring_data/
+prometheus_data/
+grafana_data/
+loki_data/
+
+# Local registry data
+registry_data/
+local_registry/
+
+# Development and testing
+test_results/
+coverage/
+.pytest_cache/
+.coverage
+
+# Documentation build artifacts
+docs/_build/
+site/

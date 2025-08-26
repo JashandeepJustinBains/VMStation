@@ -1,100 +1,176 @@
-# VMStation Monitoring Scripts
+# VMStation Scripts Documentation
 
-This directory contains utility scripts for diagnosing and fixing monitoring issues.
+This directory contains operational scripts for VMStation infrastructure management.
 
-## Scripts
+## Infrastructure Scripts
 
-### `fix_podman_metrics.sh`
-**Purpose**: Complete automated fix for podman_system_metrics container issues.
+### Kubernetes (Primary)
+- **`validate_k8s_monitoring.sh`** - Validates Kubernetes monitoring stack health
+- **`validate_infrastructure.sh`** - Auto-detects and validates current infrastructure mode
 
-**Usage**:
-```bash
-./scripts/fix_podman_metrics.sh
-```
+### Legacy Podman (Deprecated)
+- **`validate_monitoring.sh`** - Legacy Podman monitoring validation
+- **`fix_podman_metrics.sh`** - Fixes Podman metrics issues
+- **`podman_metrics_diagnostic.sh`** - Diagnoses Podman metrics problems
+- **`cleanup_podman_legacy.sh`** - Removes legacy Podman infrastructure
 
-**What it does**:
-- Ensures local registry is running
-- Pulls and publishes required container images
-- Configures insecure registry access
-- Stops conflicting processes
-- Starts podman_system_metrics container
-- Verifies the fix worked
-
-### `podman_metrics_diagnostic.sh`
-**Purpose**: Comprehensive diagnostic analysis for monitoring issues.
-
-**Usage**:
-```bash
-./scripts/podman_metrics_diagnostic.sh
-```
-
-**What it reports**:
-- System information and Podman version
-- Network and port status
-- Container status and logs
-- Image availability
-- Podman system state
-- Manual container testing
-- Firewall status
-- Recommended actions
-
-### `validate_monitoring.sh`
-**Purpose**: Quick validation of entire monitoring stack health.
-
-**Usage**:
-```bash
-./scripts/validate_monitoring.sh
-```
-
-**What it checks**:
-- Core monitoring services (Prometheus, Grafana, Loki)
-- Node exporters on all nodes
-- Podman system metrics on all nodes
-- Podman exporters on all nodes
-- Prometheus target status
-- Sample metrics collection
-- Container status
-- Provides access URLs and troubleshooting tips
-
-## Common Issues
-
-### Missing Configuration
-If `ansible/group_vars/all.yml` doesn't exist:
-```bash
-# Copy template and customize
-cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
-```
-
-### podman_system_metrics exits immediately
-1. Run `./scripts/fix_podman_metrics.sh`
-2. If that fails, run `./scripts/podman_metrics_diagnostic.sh` for detailed analysis
-3. Check logs: `podman logs podman_system_metrics`
-
-### Port 19882 refuses connections
-1. Check if service is running: `podman ps | grep podman_system_metrics`
-2. Check port usage: `lsof -i :19882`
-3. Run fix script: `./scripts/fix_podman_metrics.sh`
-
-### Local registry issues
-1. Check registry: `curl http://192.168.4.63:5000/v2/_catalog`
-2. Restart registry: `podman restart local_registry`
-3. Run full fix: `./scripts/fix_podman_metrics.sh`
+### Container Management (Legacy)
+- **`fix_container_restarts.sh`** - Fixes container restart issues in Podman
+- **`validate_container_fixes.sh`** - Validates container restart fixes
+- **`verify_container_fixes.sh`** - Verifies container fixes
+- **`validate_grafana_fix.sh`** - Validates Grafana-specific fixes
 
 ## Quick Reference
 
+### For Kubernetes Infrastructure
 ```bash
-# Full monitoring health check
+# Validate monitoring stack
+./scripts/validate_k8s_monitoring.sh
+
+# Auto-detect and validate
+./scripts/validate_infrastructure.sh
+
+# Deploy infrastructure
+./deploy_kubernetes.sh
+```
+
+### For Legacy Podman (Migration Path)
+```bash
+# Validate current Podman setup
 ./scripts/validate_monitoring.sh
 
-# Fix podman metrics issues
+# Fix Podman metrics issues
 ./scripts/fix_podman_metrics.sh
 
-# Detailed diagnostic
+# Diagnose problems
 ./scripts/podman_metrics_diagnostic.sh
 
-# Deploy monitoring stack
-ansible-playbook -i ansible/inventory.txt ansible/plays/monitoring_stack.yaml
+# Migrate to Kubernetes
+./deploy_kubernetes.sh
 
-# Deploy only exporters
-ansible-playbook -i ansible/inventory.txt ansible/plays/monitoring/install_exporters.yaml
+# Clean up after migration
+./scripts/cleanup_podman_legacy.sh
 ```
+
+## Script Categories
+
+### Validation Scripts
+| Script | Purpose | Infrastructure |
+|--------|---------|----------------|
+| `validate_k8s_monitoring.sh` | Kubernetes monitoring validation | Kubernetes |
+| `validate_infrastructure.sh` | Auto-detecting validation | Both |
+| `validate_monitoring.sh` | Podman monitoring validation | Podman (Legacy) |
+
+### Diagnostic Scripts
+| Script | Purpose | Infrastructure |
+|--------|---------|----------------|
+| `podman_metrics_diagnostic.sh` | Podman metrics diagnostics | Podman (Legacy) |
+
+### Fix Scripts
+| Script | Purpose | Infrastructure |
+|--------|---------|----------------|
+| `fix_podman_metrics.sh` | Fix Podman metrics issues | Podman (Legacy) |
+| `fix_container_restarts.sh` | Fix container restart issues | Podman (Legacy) |
+
+### Migration Scripts
+| Script | Purpose | Infrastructure |
+|--------|---------|----------------|
+| `cleanup_podman_legacy.sh` | Remove legacy Podman setup | Migration |
+
+## Migration Workflow
+
+1. **Validate Current Setup**
+   ```bash
+   ./scripts/validate_monitoring.sh
+   ```
+
+2. **Deploy Kubernetes**
+   ```bash
+   ./deploy_kubernetes.sh
+   ```
+
+3. **Validate New Setup**
+   ```bash
+   ./scripts/validate_k8s_monitoring.sh
+   ```
+
+4. **Clean Up Legacy**
+   ```bash
+   ./scripts/cleanup_podman_legacy.sh
+   ```
+
+## Troubleshooting
+
+### Kubernetes Issues
+```bash
+# Check cluster status
+kubectl get nodes
+kubectl get pods -n monitoring
+
+# Check service endpoints
+kubectl get svc -n monitoring
+
+# View pod logs
+kubectl logs -n monitoring deployment/grafana
+```
+
+### Legacy Podman Issues
+```bash
+# Check container status
+podman ps -a
+
+# View container logs
+podman logs <container-name>
+
+# Fix metrics specifically
+./scripts/fix_podman_metrics.sh
+```
+
+## Environment Detection
+
+The `validate_infrastructure.sh` script automatically detects your infrastructure:
+
+- **Kubernetes**: Checks for `kubectl` and cluster connectivity
+- **Podman**: Checks for `podman` and monitoring pod
+- **Configuration**: Falls back to `ansible/group_vars/all.yml`
+
+## Best Practices
+
+1. **Always validate** before and after changes
+2. **Use auto-detection** with `validate_infrastructure.sh`
+3. **Back up data** before migration
+4. **Test changes** in development first
+5. **Monitor logs** during deployments
+
+## Legacy Support
+
+Legacy Podman scripts are maintained for:
+- Migration scenarios
+- Troubleshooting existing setups
+- Reference documentation
+
+New deployments should use Kubernetes infrastructure.
+
+## Output Interpretation
+
+### Success Indicators
+- ✅ Green checkmarks indicate healthy services
+- 📊 Service endpoints responding correctly
+- 🔍 All monitoring targets are up
+
+### Warning Indicators  
+- ⚠️ Yellow warnings for non-critical issues
+- 📝 Configuration recommendations
+- 🔄 Services starting or restarting
+
+### Error Indicators
+- ❌ Red errors require immediate attention
+- 🚨 Service failures or connectivity issues
+- 💥 Infrastructure problems
+
+## Getting Help
+
+- **Documentation**: Check `docs/` directory
+- **Logs**: Use script output and system logs
+- **Validation**: Run validation scripts for health checks
+- **Migration**: Follow `docs/MIGRATION_GUIDE.md`
