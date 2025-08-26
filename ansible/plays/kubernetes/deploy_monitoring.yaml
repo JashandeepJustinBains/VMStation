@@ -7,6 +7,21 @@
     monitoring_namespace: monitoring
     
   tasks:
+    - name: Ensure python3-pip is installed (required to install kubernetes client)
+      apt:
+        name: python3-pip
+        state: present
+        update_cache: yes
+      when: ansible_facts['pkg_mgr'] == 'apt' or ansible_pkg_mgr is defined and ansible_pkg_mgr == 'apt'
+
+    - name: Install kubernetes Python library for Ansible k8s module
+      pip:
+        name: kubernetes
+        state: present
+        executable: pip3
+      become: true
+      when: ansible_facts is defined and ansible_facts['python'] is defined
+
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:
         name: kube-prometheus-stack
