@@ -10,14 +10,15 @@
     
   pre_tasks:
     - name: Remove bad kubernetes-upstream repo and clean yum/dnf cache (preflight)
-      shell: |
-        rm -f /etc/yum.repos.d/kubernetes-upstream.repo || true
-        if command -v dnf >/dev/null 2>&1; then
-          dnf clean all || true
-        else
-          yum clean all || true
-        fi
-      warn: false
+      shell:
+        cmd: |
+          rm -f /etc/yum.repos.d/kubernetes-upstream.repo || true
+          if command -v dnf >/dev/null 2>&1; then
+            dnf clean all || true
+          else
+            yum clean all || true
+          fi
+        warn: false
       when: ansible_os_family == 'RedHat'
       ignore_errors: yes
 
@@ -105,11 +106,13 @@
 
     - block:
         - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
-          shell: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-          warn: false
+          shell:
+            cmd: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+            warn: false
         - name: Refresh package cache (dnf)
-          shell: dnf makecache --refresh
-          warn: false
+          shell:
+            cmd: dnf makecache --refresh
+            warn: false
         - name: Try install containerd.io (RHEL 10+)
           package:
             name: containerd.io
