@@ -182,11 +182,18 @@
             state: restarted
             enabled: yes
             daemon_reload: yes
-        - name: Get latest stable Kubernetes version for RHEL 10+
-          uri:
-            url: https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt
-            return_content: yes
+        - name: Get latest stable Kubernetes version for RHEL 10+ (curl/wget fallback)
+          shell: |
+            set -o pipefail
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt" || true
+            elif command -v wget >/dev/null 2>&1; then
+              wget -qO- "https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt" || true
+            else
+              echo "";
+            fi
           register: k8s_stable_version
+          changed_when: false
           ignore_errors: yes
           
         - name: Set Kubernetes version for download
