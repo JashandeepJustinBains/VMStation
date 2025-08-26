@@ -16,7 +16,14 @@ Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalab
 
 ## Quick Start
 
-### 1. Deploy Kubernetes Infrastructure
+### 1. Pre-Deployment Checks (RHEL 10 Systems)
+If you have RHEL 10 compute nodes, run the compatibility checker first:
+```bash
+# Check RHEL 10 compatibility (especially for 192.168.4.62)
+./scripts/check_rhel10_compatibility.sh
+```
+
+### 2. Deploy Kubernetes Infrastructure
 ```bash
 # Clone the repository
 git clone https://github.com/JashandeepJustinBains/VMStation.git
@@ -26,18 +33,18 @@ cd VMStation
 cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 # Edit all.yml with your specific settings
 
-# Deploy complete Kubernetes stack
+# Deploy complete Kubernetes stack (with RHEL 10 support)
 ./deploy_kubernetes.sh
 ```
 
-### 2. Access Services
+### 3. Access Services
 After deployment, access your monitoring services:
 - **Grafana**: http://192.168.4.63:30300 (admin/admin)
 - **Prometheus**: http://192.168.4.63:30090
 - **Loki**: http://192.168.4.63:31100
 - **AlertManager**: http://192.168.4.63:30903
 
-### 3. Validate Deployment
+### 4. Validate Deployment
 ```bash
 # Run comprehensive validation
 ./scripts/validate_k8s_monitoring.sh
@@ -45,6 +52,9 @@ After deployment, access your monitoring services:
 # Check cluster status
 kubectl get nodes -o wide
 kubectl get pods -n monitoring
+
+# Validate RHEL 10 fixes were applied
+./scripts/validate_rhel10_fixes.sh
 ```
 
 ## Infrastructure Overview
@@ -155,10 +165,42 @@ kubectl apply --dry-run=client -f k8s/
 ```
 
 ### Troubleshooting Tools
+- **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
+- **RHEL 10 fixes validation**: `./scripts/validate_rhel10_fixes.sh`
 - **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
 - **Pod debugging**: `kubectl logs -n monitoring <pod-name>`
 - **Service debugging**: `kubectl describe svc -n monitoring <service-name>`
 - **Network debugging**: `kubectl exec -it <pod-name> -- /bin/bash`
+
+### Common Issues & Solutions
+
+#### RHEL 10 Worker Node Join Failures
+If RHEL 10 compute nodes (192.168.4.62) fail to join:
+```bash
+# 1. Check compatibility first
+./scripts/check_rhel10_compatibility.sh
+
+# 2. Review debug logs
+ls -la debug_logs/
+
+# 3. Manual troubleshooting
+# See docs/RHEL10_TROUBLESHOOTING.md for detailed guide
+
+# 4. Re-run RHEL 10 fixes
+ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/rhel10_setup_fixes.yaml
+```
+
+#### General Deployment Issues
+```bash
+# Check cluster status
+kubectl get nodes -o wide
+
+# Verify all pods are running
+kubectl get pods --all-namespaces
+
+# Check for failed services
+systemctl status kubelet containerd
+```
 
 ## Stack Options
 - **Kubernetes** (Current): Full container orchestration with high availability

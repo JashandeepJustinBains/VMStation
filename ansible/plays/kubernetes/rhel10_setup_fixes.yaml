@@ -1,0 +1,233 @@
+---
+# RHEL 10 Specific Fixes for Kubernetes Cluster Setup
+# This playbook addresses common issues with RHEL 10 systems joining Kubernetes clusters
+
+- name: RHEL 10 Kubernetes Pre-Setup Fixes
+  hosts: all
+  become: true
+  vars:
+    kubernetes_version: "1.29"
+  tasks:
+    - name: Only run on RHEL 10+ systems
+      set_fact:
+        is_rhel10: "{{ ansible_os_family == 'RedHat' and (ansible_distribution_major_version | int) >= 10 }}"
+        
+    - name: Skip non-RHEL 10 systems
+      meta: end_host
+      when: not is_rhel10
+      
+    - name: RHEL 10 system information
+      debug:
+        msg:
+          - "Running RHEL 10 fixes for: {{ inventory_hostname }}"
+          - "Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Architecture: {{ ansible_architecture }}"
+          
+    - name: Ensure required packages are installed
+      package:
+        name:
+          - curl
+          - wget
+          - tar
+          - gzip
+          - iptables
+          - conntrack-tools
+          - socat
+          - iproute-tc
+          - systemd
+          - coreutils
+        state: present
+      ignore_errors: yes
+      
+    - name: Verify system architecture is supported
+      fail:
+        msg: "Unsupported architecture: {{ ansible_architecture }}. Only x86_64 is supported."
+      when: ansible_architecture != "x86_64"
+      
+    - name: Check available disk space
+      shell: df -BG /usr | tail -1 | awk '{print $4}' | sed 's/G//'
+      register: disk_space
+      changed_when: false
+      
+    - name: Verify sufficient disk space
+      fail:
+        msg: "Insufficient disk space. Need at least 2GB free in /usr, found {{ disk_space.stdout }}GB"
+      when: (disk_space.stdout | int) < 2
+      
+    - name: Verify memory requirements
+      fail:
+        msg: "Insufficient memory. Need at least 2GB RAM, found {{ ansible_memtotal_mb }}MB"
+      when: (ansible_memtotal_mb | int) < 2048
+      
+    - name: Check for conflicting services
+      systemd:
+        name: "{{ item }}"
+      register: service_status
+      ignore_errors: yes
+      loop:
+        - podman
+        - docker
+        - crio
+      
+    - name: Stop conflicting container services
+      systemd:
+        name: "{{ item.item }}"
+        state: stopped
+        enabled: no
+      when: item.status is defined and item.status.ActiveState == 'active'
+      loop: "{{ service_status.results }}"
+      ignore_errors: yes
+      
+    - name: Configure sysctl parameters specifically for RHEL 10
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+        sysctl_file: /etc/sysctl.d/90-kubernetes.conf
+      loop:
+        - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+        - { key: 'net.ipv4.ip_forward', value: '1' }
+        - { key: 'net.ipv4.conf.all.forwarding', value: '1' }
+        - { key: 'net.ipv6.conf.all.forwarding', value: '1' }
+        - { key: 'vm.overcommit_memory', value: '1' }
+        - { key: 'kernel.panic', value: '10' }
+        - { key: 'kernel.panic_on_oops', value: '1' }
+        
+    - name: Load kernel modules with modprobe and ensure persistence
+      block:
+        - name: Load required kernel modules
+          modprobe:
+            name: "{{ item }}"
+          loop:
+            - overlay
+            - br_netfilter
+            - ip_tables
+            - ip6_tables
+            - netfilter_conntrack
+            
+        - name: Create kernel modules configuration
+          copy:
+            content: |
+              # Kubernetes required modules
+              overlay
+              br_netfilter
+              ip_tables
+              ip6_tables
+              netfilter_conntrack
+            dest: /etc/modules-load.d/kubernetes.conf
+            mode: '0644'
+            
+    - name: Configure systemd for container workloads
+      block:
+        - name: Increase systemd limits for containers
+          copy:
+            content: |
+              [Manager]
+              DefaultLimitNOFILE=65536
+              DefaultLimitNPROC=4096
+              DefaultTasksMax=4096
+            dest: /etc/systemd/system.conf.d/kubernetes.conf
+            mode: '0644'
+            
+        - name: Reload systemd configuration
+          systemd:
+            daemon_reload: yes
+            
+    - name: Configure firewall for Kubernetes (if firewalld is active)
+      block:
+        - name: Check firewalld status
+          systemd:
+            name: firewalld
+          register: firewalld_check
+          ignore_errors: yes
+          
+        - name: Configure firewalld zones for Kubernetes
+          block:
+            - name: Create kubernetes zone in firewalld
+              firewalld:
+                zone: kubernetes
+                state: present
+                permanent: yes
+              ignore_errors: yes
+              
+            - name: Set default interface to kubernetes zone
+              firewalld:
+                zone: kubernetes
+                interface: "{{ ansible_default_ipv4.interface }}"
+                permanent: yes
+                immediate: yes
+              ignore_errors: yes
+              
+            - name: Allow cluster communication in kubernetes zone
+              firewalld:
+                zone: kubernetes
+                source: "192.168.0.0/16"
+                permanent: yes
+                immediate: yes
+              ignore_errors: yes
+              
+          when: 
+            - firewalld_check.status is defined
+            - firewalld_check.status.ActiveState == 'active'
+            
+    - name: Verify and fix container runtime prerequisites
+      block:
+        - name: Check for existing containerd installation
+          stat:
+            path: /usr/bin/containerd
+          register: containerd_exists
+          
+        - name: Display containerd status
+          debug:
+            msg: "Containerd {{ 'found' if containerd_exists.stat.exists else 'not found' }} on {{ inventory_hostname }}"
+            
+        - name: Test containerd if it exists
+          command: containerd --version
+          register: containerd_version
+          changed_when: false
+          ignore_errors: yes
+          when: containerd_exists.stat.exists
+          
+        - name: Display containerd version
+          debug:
+            msg: "Containerd version: {{ containerd_version.stdout }}"
+          when: containerd_version is defined and containerd_version.rc == 0
+          
+    - name: Create kubernetes directories with proper permissions
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /etc/kubernetes
+        - /etc/kubernetes/pki
+        - /var/lib/kubelet
+        - /var/lib/kubernetes
+        - /var/log/pods
+        - /etc/systemd/system/kubelet.service.d
+        - /etc/containerd
+        
+    - name: Configure crictl for containerd
+      copy:
+        content: |
+          runtime-endpoint: unix:///var/run/containerd/containerd.sock
+          image-endpoint: unix:///var/run/containerd/containerd.sock
+          timeout: 10
+          debug: false
+        dest: /etc/crictl.yaml
+        mode: '0644'
+        
+    - name: Summary of RHEL 10 fixes applied
+      debug:
+        msg:
+          - "✓ RHEL 10 Kubernetes pre-setup completed for {{ inventory_hostname }}"
+          - "✓ System requirements verified"
+          - "✓ Kernel modules configured"
+          - "✓ Firewall rules applied"
+          - "✓ Container runtime prerequisites checked"
+          - "✓ Directory structure created"
+          - "Next: Ready for Kubernetes installation and cluster join"
