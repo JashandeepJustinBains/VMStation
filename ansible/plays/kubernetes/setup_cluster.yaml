@@ -104,10 +104,22 @@
 
     - block:
         - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
-          get_url:
-            url: https://download.docker.com/linux/centos/docker-ce.repo
-            dest: /etc/yum.repos.d/docker-ce.repo
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /etc/yum.repos.d/docker-ce.repo https://download.docker.com/linux/centos/docker-ce.repo
+            else
+              dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
+            fi
+          args:
+            creates: /etc/yum.repos.d/docker-ce.repo
+        - name: Ensure Docker CE repo file has correct permissions
+          file:
+            path: /etc/yum.repos.d/docker-ce.repo
             mode: '0644'
+            owner: root
+            group: root
         - name: Refresh package cache (dnf)
           command: dnf makecache --refresh
         - name: Try install containerd.io (RHEL 10+)
