@@ -29,6 +29,9 @@
               serviceMonitorSelectorNilUsesHelmValues: false
               podMonitorSelectorNilUsesHelmValues: false
               ruleSelectorNilUsesHelmValues: false
+              # Ensure Prometheus runs on monitoring nodes
+              nodeSelector:
+                kubernetes.io/hostname: "{{ ansible_hostname }}"
             service:
               type: NodePort
               nodePort: 30090
@@ -57,6 +60,9 @@
                 enabled: true
               datasources:
                 enabled: true
+            # Ensure Grafana runs on monitoring nodes  
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ansible_hostname }}"
                 
           # AlertManager configuration
           alertmanager:
@@ -69,6 +75,9 @@
                     resources:
                       requests:
                         storage: 2Gi
+              # Ensure AlertManager runs on monitoring nodes
+              nodeSelector:
+                kubernetes.io/hostname: "{{ ansible_hostname }}"
             service:
               type: NodePort
               nodePort: 30903
@@ -95,6 +104,9 @@
               enabled: true
               storageClassName: local-path
               size: 10Gi
+            # Ensure Loki runs on monitoring nodes
+            nodeSelector:
+              kubernetes.io/hostname: "{{ ansible_hostname }}"
             config:
               auth_enabled: false
               server:

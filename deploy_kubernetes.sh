@@ -68,6 +68,24 @@ fi
 info "Pre-flight checks completed successfully"
 echo ""
 
+# Check and install required Ansible collections
+info "Checking Ansible collections..."
+if [ -f "ansible/requirements.yml" ]; then
+    info "Installing/updating required Ansible collections..."
+    if ansible-galaxy collection install -r ansible/requirements.yml --force-with-deps 2>/dev/null; then
+        info "Ansible collections updated successfully"
+    else
+        warn "Failed to update collections from Galaxy (possibly offline). Using existing collections."
+    fi
+else
+    warn "No requirements.yml found, skipping collection update"
+fi
+
+# Display current Ansible and collection versions
+info "Current Ansible version: $(ansible --version | head -1)"
+info "Kubernetes collection version: $(ansible-galaxy collection list | grep kubernetes.core | awk '{print $2}' || echo 'Not installed')"
+echo ""
+
 # Syntax check
 info "Performing syntax check..."
 if ansible-playbook --syntax-check -i "$ANSIBLE_INVENTORY" "$KUBERNETES_PLAYBOOK"; then

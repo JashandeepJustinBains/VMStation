@@ -49,6 +49,29 @@ cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 # Edit all.yml and set infrastructure_mode: kubernetes
 ```
 
+### 2.1. Prepare Storage Directories
+The migration ensures proper storage directories are used for each node type:
+
+**Monitoring Nodes (192.168.4.63):**
+- Uses existing `/srv/monitoring_data` directory
+- Stores Kubernetes monitoring data, logs, and metrics
+- Preserves existing monitoring data structure
+
+**Compute Nodes (192.168.4.62):**
+- Creates `/mnt/storage/kubernetes` directory within mounted storage
+- Ensures Kubernetes data is stored on the mounted drive
+- Separates Kubernetes data from other compute workloads
+
+**Storage Nodes (192.168.4.61):**
+- Uses `/var/lib/kubernetes` on root filesystem storage
+- Utilizes non-network mounted drives like `/dev/mapper/debian--vg-root`
+- Provides reliable local storage for Kubernetes components
+
+```bash
+# Validate storage setup before migration
+./scripts/validate_k8s_storage.sh
+```
+
 ### 3. Deploy Kubernetes Cluster
 ```bash
 # Deploy complete Kubernetes stack
@@ -59,6 +82,9 @@ cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 ```bash
 # Validate Kubernetes monitoring stack
 ./scripts/validate_k8s_monitoring.sh
+
+# Validate storage configuration
+./scripts/validate_k8s_storage.sh
 ```
 
 ## Configuration Changes
@@ -201,6 +227,29 @@ kubectl logs -n kube-system daemonset/kube-flannel-ds
 # Test pod connectivity
 kubectl exec -n monitoring deployment/grafana -- nslookup prometheus
 ```
+
+#### 5. Ansible Collection Warnings
+If you encounter warnings like "Collection kubernetes.core does not support Ansible version X.Y.Z":
+
+```bash
+# Check current Ansible version
+ansible --version
+
+# Check collection versions
+ansible-galaxy collection list | grep kubernetes
+
+# Update collections to compatible versions
+ansible-galaxy collection install -r ansible/requirements.yml --force
+
+# For Ansible 2.14.x, ensure kubernetes.core is at least 2.4.0
+# For Ansible 2.15+, use kubernetes.core 3.0.0+
+# For Ansible 2.18+, use kubernetes.core 5.0.0+
+```
+
+**Solution for version compatibility:**
+- Update Ansible to a supported version (2.15+ recommended)
+- Or downgrade kubernetes.core collection to match your Ansible version
+- The repository requirements.yml has been updated to specify compatible version ranges
 
 ### Log Locations
 - **Kubernetes system logs**: `journalctl -u kubelet`
