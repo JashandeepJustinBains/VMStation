@@ -1,7 +1,7 @@
 # Ansible Collections Requirements for VMStation Kubernetes
 collections:
   - name: kubernetes.core
-    version: ">=2.4.0"
+    version: ">=2.4.0,<6.0.0"  # Support Ansible 2.14+ through 2.18+
   - name: containers.podman
     version: ">=1.10.0"
   - name: community.general

@@ -44,6 +44,13 @@ grafana_storage_size: 5Gi
 loki_storage_size: 10Gi
 alertmanager_storage_size: 2Gi
 
+# === Node-Specific Storage Paths ===
+# Storage paths for different node types during Kubernetes migration
+storage_paths:
+  monitoring_nodes: /srv/monitoring_data  # Existing monitoring data directory
+  compute_nodes: /mnt/storage/kubernetes  # New directory within mounted storage
+  storage_nodes: /var/lib/kubernetes      # Use root filesystem storage
+
 # === TLS Configuration ===
 enable_tls: true
 ca_common_name: "VMStation Root CA"
