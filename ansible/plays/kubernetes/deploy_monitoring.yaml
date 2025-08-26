@@ -1,0 +1,221 @@
+---
+# Deploy monitoring stack (Prometheus, Grafana, Loki) using Helm charts
+- name: Deploy monitoring stack on Kubernetes
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    monitoring_namespace: monitoring
+    
+  tasks:
+    - name: Install kube-prometheus-stack (Prometheus + Grafana)
+      kubernetes.core.helm:
+        name: kube-prometheus-stack
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: "{{ monitoring_namespace }}"
+        create_namespace: yes
+        values:
+          # Prometheus configuration
+          prometheus:
+            prometheusSpec:
+              retention: 30d
+              storageSpec:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: local-path
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 10Gi
+              serviceMonitorSelectorNilUsesHelmValues: false
+              podMonitorSelectorNilUsesHelmValues: false
+              ruleSelectorNilUsesHelmValues: false
+            service:
+              type: NodePort
+              nodePort: 30090
+              
+          # Grafana configuration
+          grafana:
+            enabled: true
+            adminPassword: admin  # TODO: Use vault for production
+            service:
+              type: NodePort
+              nodePort: 30300
+            persistence:
+              enabled: true
+              storageClassName: local-path
+              size: 5Gi
+            ingress:
+              enabled: false
+            grafana.ini:
+              security:
+                allow_embedding: true
+              auth.anonymous:
+                enabled: true
+                org_role: Viewer
+            sidecar:
+              dashboards:
+                enabled: true
+              datasources:
+                enabled: true
+                
+          # AlertManager configuration
+          alertmanager:
+            alertmanagerSpec:
+              storage:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: local-path
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 2Gi
+            service:
+              type: NodePort
+              nodePort: 30903
+              
+          # Node exporter configuration
+          nodeExporter:
+            enabled: true
+            
+          # Prometheus operator configuration
+          prometheusOperator:
+            enabled: true
+            
+        kubeconfig: /root/.kube/config
+
+    - name: Install Loki stack
+      kubernetes.core.helm:
+        name: loki-stack
+        chart_ref: grafana/loki-stack
+        release_namespace: "{{ monitoring_namespace }}"
+        values:
+          loki:
+            enabled: true
+            persistence:
+              enabled: true
+              storageClassName: local-path
+              size: 10Gi
+            config:
+              auth_enabled: false
+              server:
+                http_listen_port: 3100
+              ingester:
+                lifecycler:
+                  address: 127.0.0.1
+                  ring:
+                    kvstore:
+                      store: inmemory
+                    replication_factor: 1
+                  final_sleep: 0s
+                chunk_idle_period: 5m
+                chunk_retain_period: 30s
+              schema_config:
+                configs:
+                - from: 2020-05-15
+                  store: boltdb
+                  object_store: filesystem
+                  schema: v11
+                  index:
+                    prefix: index_
+                    period: 168h
+              storage_config:
+                boltdb:
+                  directory: /loki/index
+                filesystem:
+                  directory: /loki/chunks
+              limits_config:
+                enforce_metric_name: false
+                reject_old_samples: true
+                reject_old_samples_max_age: 168h
+            service:
+              type: NodePort
+              nodePort: 31100
+              
+          promtail:
+            enabled: true
+            config:
+              serverPort: 3101
+              clients:
+                - url: http://loki:3100/loki/api/v1/push
+                  
+          grafana:
+            enabled: false  # We already have Grafana from kube-prometheus-stack
+            
+        kubeconfig: /root/.kube/config
+
+    - name: Create node exporter service monitor
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: monitoring.coreos.com/v1
+          kind: ServiceMonitor
+          metadata:
+            name: node-exporter
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              app: node-exporter
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: node-exporter
+            endpoints:
+            - port: http-metrics
+              interval: 30s
+              path: /metrics
+        kubeconfig: /root/.kube/config
+
+    - name: Create Loki data source for Grafana
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: loki-datasource
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              grafana_datasource: "1"
+          data:
+            loki-datasource.yaml: |
+              apiVersion: 1
+              datasources:
+                - name: Loki
+                  type: loki
+                  access: proxy
+                  url: http://loki-stack:3100
+                  jsonData:
+                    maxLines: 1000
+        kubeconfig: /root/.kube/config
+
+    - name: Wait for monitoring stack to be ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ monitoring_namespace }}"
+        label_selectors:
+          - app.kubernetes.io/name=prometheus
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 600
+        kubeconfig: /root/.kube/config
+
+    - name: Get monitoring service endpoints
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: "{{ monitoring_namespace }}"
+        kubeconfig: /root/.kube/config
+      register: monitoring_services
+
+    - name: Display monitoring access URLs
+      debug:
+        msg: |
+          Monitoring stack deployed successfully!
+          
+          Access URLs (NodePort services):
+          - Grafana: http://{{ ansible_default_ipv4.address }}:30300 (admin/admin)
+          - Prometheus: http://{{ ansible_default_ipv4.address }}:30090
+          - AlertManager: http://{{ ansible_default_ipv4.address }}:30903
+          - Loki: http://{{ ansible_default_ipv4.address }}:31100

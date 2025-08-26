@@ -1,173 +1,241 @@
 
-# VMStation Home Cloud Overview
+# VMStation Kubernetes Cloud Overview
 
-Welcome to VMStation! The documentation has been reorganized for clarity and maintainability.
+Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalable, reliable self-hosted services.
 
 ## Where to Find Things
 - See [docs/README.md](./docs/README.md) for the new documentation index.
 - Device-specific guides, stack setup, security, monitoring, and troubleshooting are now in the `docs/` folder.
+- **Migration Guide**: See [docs/MIGRATION_GUIDE.md](./docs/MIGRATION_GUIDE.md) for Podman to Kubernetes migration
 
 ## Device Roles (2025)
-- **T3500**: NAS Server
-- **R430**: Compute Engine (Kubernetes/Podman/VMs)
+- **MiniPC (192.168.4.63)**: Kubernetes Control Plane & Monitoring
+- **T3500 (192.168.4.61)**: Kubernetes Worker Node & Storage
+- **R430 (192.168.4.62)**: Kubernetes Worker Node & Compute Engine
 - **Catalyst 3650V02**: Managed Switch (VLANs, QoS)
-- **MiniPC**: Monitoring & k3s Controller
+
+## Quick Start
+
+### 1. Deploy Kubernetes Infrastructure
+```bash
+# Clone the repository
+git clone https://github.com/JashandeepJustinBains/VMStation.git
+cd VMStation
+
+# Configure your environment
+cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
+# Edit all.yml with your specific settings
+
+# Deploy complete Kubernetes stack
+./deploy_kubernetes.sh
+```
+
+### 2. Access Services
+After deployment, access your monitoring services:
+- **Grafana**: http://192.168.4.63:30300 (admin/admin)
+- **Prometheus**: http://192.168.4.63:30090
+- **Loki**: http://192.168.4.63:31100
+- **AlertManager**: http://192.168.4.63:30903
+
+### 3. Validate Deployment
+```bash
+# Run comprehensive validation
+./scripts/validate_k8s_monitoring.sh
+
+# Check cluster status
+kubectl get nodes -o wide
+kubectl get pods -n monitoring
+```
+
+## Infrastructure Overview
+
+### Kubernetes Cluster
+- **Control Plane**: MiniPC (192.168.4.63) - Manages cluster state and API
+- **Worker Nodes**: T3500 and R430 - Run application workloads
+- **CNI**: Flannel for pod networking (10.244.0.0/16)
+- **Runtime**: containerd for container execution
+- **Storage**: local-path storage class for persistent volumes
+
+### Monitoring Stack
+- **Prometheus**: Metrics collection, alerting, and time-series database
+- **Grafana**: Visualization dashboards and analytics
+- **Loki**: Log aggregation and querying
+- **AlertManager**: Alert routing and notification management
+- **Node Exporter**: Host-level metrics collection
+- **cert-manager**: Automated TLS certificate management
+
+### Key Features
+- **High Availability**: Automatic pod restart and health checks
+- **Scalability**: Horizontal pod autoscaling capabilities
+- **Security**: RBAC, network policies, and TLS certificates
+- **Storage**: Persistent volumes with backup capabilities
+- **Monitoring**: Comprehensive observability stack
+- **CI/CD Ready**: GitOps and automation-friendly
+
+## Architecture Highlights
+
+### Certificate Management
+- Self-signed CA for internal communications
+- Automated certificate lifecycle with cert-manager
+- TLS encryption for all service communications
+
+### Storage Strategy
+- Persistent volumes for data retention
+- Configurable storage classes
+- Backup and snapshot capabilities
+
+### Network Design
+- Pod-to-pod communication via CNI
+- Service discovery through Kubernetes DNS
+- NodePort services for external access
+- Ingress controllers for advanced routing
+
+## Migration from Podman
+
+VMStation has migrated from Podman containers to Kubernetes:
+
+### What's New
+✅ **Kubernetes cluster** with full orchestration  
+✅ **Helm package management** for easy application deployment  
+✅ **cert-manager** for automated TLS certificate management  
+✅ **Enhanced monitoring** with ServiceMonitors and PodMonitors  
+✅ **Persistent storage** with volume management  
+✅ **Rolling updates** with zero-downtime deployments  
+
+### Migration Path
+If you're upgrading from a Podman-based VMStation:
+1. Follow the [Migration Guide](./docs/MIGRATION_GUIDE.md)
+2. Use `./scripts/cleanup_podman_legacy.sh` after successful migration
+3. Update your firewall rules for NodePort services (30000-32767)
+
+## Advanced Usage
+
+### Cluster Management
+```bash
+# Scale services
+kubectl scale deployment grafana -n monitoring --replicas=2
+
+# Rolling updates
+helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack -n monitoring
+
+# Resource monitoring
+kubectl top nodes
+kubectl top pods -n monitoring
+```
+
+### Application Deployment
+```bash
+# Deploy new applications
+helm install myapp ./charts/myapp -n myapp --create-namespace
+
+# Manage configurations
+kubectl create configmap myconfig --from-file=config.yaml
+kubectl create secret generic mysecret --from-literal=password=secret
+```
+
+### Backup and Recovery
+```bash
+# Backup cluster state
+kubectl get all --all-namespaces -o yaml > cluster-backup.yaml
+
+# Backup persistent volumes
+kubectl get pv,pvc -o yaml > storage-backup.yaml
+```
+
+## Development & Validation
+
+### Syntax Validation
+Before deploying, validate your configuration:
+```bash
+# Validate Ansible playbooks
+ansible-playbook --syntax-check -i ansible/inventory.txt ansible/plays/kubernetes_stack.yaml
+
+# Validate Kubernetes manifests
+kubectl apply --dry-run=client -f k8s/
+```
+
+### Troubleshooting Tools
+- **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
+- **Pod debugging**: `kubectl logs -n monitoring <pod-name>`
+- **Service debugging**: `kubectl describe svc -n monitoring <service-name>`
+- **Network debugging**: `kubectl exec -it <pod-name> -- /bin/bash`
 
 ## Stack Options
-- Kubernetes (k8s), Podman, VMs — see docs/stack/overview.md for recommendations
+- **Kubernetes** (Current): Full container orchestration with high availability
+- **Podman** (Legacy): Simple container management (deprecated)
+- **VMs**: Traditional virtual machines for specific workloads
 
-## Note
-Outdated info (e.g., ngrok, old device roles) has been removed. Please refer to the new docs for up-to-date instructions and best practices.
+See [docs/stack/overview.md](./docs/stack/overview.md) for detailed comparisons.
 
-## Base System Setup
+## Security & Hardening
+
+### Base System Requirements
 Before installing services, ensure:
 - Debian Linux (Headless) installed on each node
 - Static IP addresses configured
-- SSH access enabled
+- SSH access enabled with key-based authentication
+- Firewall configured for Kubernetes ports
 
----
-
-## Kubernetes & MicroK8s
-Install MicroK8s:
+### Cluster Security
 ```bash
-sudo apt update && sudo apt install microk8s -y
-sudo usermod -aG microk8s $USER
-sudo microk8s status
-microk8s enable dns storage ingress
-```
-Create alias for kubectl:
-```bash
-alias kubectl='microk8s kubectl'
+# Enable firewall for Kubernetes
+sudo ufw allow 6443/tcp     # Kubernetes API server
+sudo ufw allow 10250/tcp    # Kubelet API
+sudo ufw allow 30000:32767/tcp  # NodePort services
 
-## Developer convenience - syntax checks before deploy
-This repository includes a helper script to validate Ansible playbooks before running the deploy script.
-
-| Script | Purpose |
-|---|---|
-| `./update_and_syntax.sh` | Runs `ansible-playbook --syntax-check` on all playbooks under `ansible/plays` and optionally `ansible-lint`/`yamllint` if installed. Run this before `./update_and_deploy.sh` to catch syntax and lint issues early. |
-echo "alias kubectl='microk8s kubectl'" >> ~/.bashrc
-source ~/.bashrc
-```
-Check node status:
-```bash
-microk8s stop
-microk8s start
-microk8s status --wait-ready
-```
-
----
-
-## Container Images (No Docker)
-Export image:
-```bash
-microk8s ctr images export myapp.tar myapp-image:latest
-```
-Transfer image:
-```bash
-scp myapp.tar user@remote-server:/home/user/
-```
-Import image:
-```bash
-microk8s ctr images import myapp.tar
-```
-
----
-
-## Ansible Automation
-Install Ansible:
-```bash
-sudo apt install ansible -y
-```
-Define inventory (`/etc/ansible/hosts`):
-```ini
-[master]
-node1 ansible_host=192.168.1.100
-[worker]
-node2 ansible_host=192.168.1.101
-node3 ansible_host=192.168.1.102
-```
-Test connection:
-```bash
-ansible all -m ping
-```
-Sample playbook:
-```yaml
-- hosts: microk8s
-  tasks:
-    - name: Install MicroK8s
-      apt:
-        name: microk8s
-        state: present
-    - name: Load container image
-      command: microk8s ctr images import /home/user/myapp.tar
-    - name: Deploy app
-      command: microk8s kubectl apply -f /home/user/deployment.yaml
-```
-Run playbook:
-```bash
-ansible-playbook deploy_microk8s.yaml
-```
-
----
-
-## Monitoring & Logging
-Stack: Grafana, Prometheus, Loki
-See `site.yaml` and `deploy.sh` for setup details.
-
----
-
-## Firewall & Security
-Harden exposed nodes (e.g., via DuckDNS):
-```bash
-sudo apt install ufw fail2ban
-sudo ufw default deny incoming
+# Harden SSH access
 sudo ufw allow ssh
 sudo ufw enable
-sudo systemctl enable fail2ban
-```
-Set Fail2Ban rules to prevent brute-force attacks.
-
----
-
-## ngrok Tunnel
-On worker node:
-```bash
-curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc |
-  sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null &&
-  echo "deb https://ngrok-agent.s3.amazonaws.com buster main" |
-  sudo tee /etc/apt/sources.list.d/ngrok.list &&
-  sudo apt update &&
-  sudo apt install ngrok
 ```
 
----
+## Monitoring & Observability
 
-## Useful kubectl Commands
-```bash
-kubectl get ns
-kubectl get pods -n [namespace] {-A, --watch, -o wide}
-kubectl get nodes -o wide
-kubectl get svc --all-namespaces | grep NodePort
-kubectl get svc --all-namespaces -o wide
+The integrated monitoring stack provides:
+- **Infrastructure monitoring**: CPU, memory, disk, network metrics
+- **Application monitoring**: Custom metrics via Prometheus exporters
+- **Log aggregation**: Centralized logging with Loki
+- **Alerting**: Configurable alerts with AlertManager
+- **Visualization**: Rich dashboards in Grafana
+
+### Custom Metrics
+Add monitoring for your applications:
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: myapp-metrics
+spec:
+  selector:
+    matchLabels:
+      app: myapp
+  endpoints:
+  - port: metrics
 ```
+
+## Contributing
+
+1. **Test changes**: Use the validation scripts before submitting
+2. **Documentation**: Update relevant docs for any changes
+3. **Security**: Never commit secrets or credentials
+4. **Compatibility**: Ensure changes work across all node types
+
+## Support & Troubleshooting
+
+- **Documentation**: Check `docs/` for comprehensive guides
+- **Validation**: Run `./scripts/validate_k8s_monitoring.sh` for health checks
+- **Logs**: Use `kubectl logs` and `journalctl` for debugging
+- **Community**: Kubernetes and Helm communities for platform-specific issues
 
 ---
 
 ## TODO
-- Set up cluster Grafana, Prometheus, Ansible, Drone, Loki, and more
-- Finalize kubeconfig secret formatting for Drone CI
-- Split documentation into sub-documents for each device
-- Harden SSH and firewall rules
-- Document troubleshooting steps for CI and registry
-
-## Recent Additions
-
-### Red Hat Quay Integration ✨
-VMStation now supports Red Hat Quay integration for enterprise-grade container registry features:
-- **Free Tier Support**: Use Quay.io free tier for public repositories
-- **Prometheus Metrics**: Monitor registry operations in your existing Grafana setup
-- **Hybrid Approach**: Keep local registry for development, use Quay for production
-- **Security Scanning**: Automated vulnerability detection for container images
-
-📖 **Setup Guide**: See `docs/stack/red_hat_quay_integration.md`
-🚀 **Quick Start**: See `docs/stack/quay_quick_start.md`
+- [x] Migrate from Podman to Kubernetes
+- [x] Implement TLS certificate management
+- [x] Set up Helm-based application deployment
+- [x] Create comprehensive monitoring stack
+- [ ] Implement ingress controllers for external access
+- [ ] Set up automated backups for persistent volumes
+- [ ] Add GitOps workflow with ArgoCD
+- [ ] Implement network policies for security
+- [ ] Set up log retention policies
+- [ ] Add custom application deployments

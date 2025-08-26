@@ -2,14 +2,30 @@
 # Copy this file to all.yml and customize for your environment
 # IMPORTANT: Never commit all.yml with real credentials
 
-# === Monitoring Configuration ===
+# === Infrastructure Mode ===
+# Set to 'kubernetes' for new k8s-based setup or 'podman' for legacy
+infrastructure_mode: kubernetes
+
+# === Kubernetes Configuration ===
+kubernetes_version: "1.29"
+pod_network_cidr: "10.244.0.0/16"
+cert_manager_version: "v1.13.3"
+helm_version: "3.13.3"
+
+# === Monitoring Configuration (Kubernetes NodePort) ===
+monitoring_namespace: monitoring
+grafana_nodeport: 30300
+prometheus_nodeport: 30090
+loki_nodeport: 31100
+alertmanager_nodeport: 30903
+
+# === Legacy Podman Configuration (Deprecated) ===
+# These are kept for backward compatibility during migration
 monit_root: /srv/monitoring_data
 grafana_port: 3000
 prometheus_port: 9090
 loki_port: 3100
-
-# === Podman Exporter Configuration ===
-enable_podman_exporters: true
+enable_podman_exporters: false  # Disabled in favor of Kubernetes
 podman_system_metrics_host_port: 19882
 
 # === Registry Configuration ===
@@ -19,6 +35,18 @@ local_registry_port: 5000
 # === Prometheus Configuration ===
 prometheus_scrape_interval: 15s
 prometheus_scrape_timeout: 10s
+prometheus_retention: 30d
+
+# === Storage Configuration ===
+storage_class: local-path
+prometheus_storage_size: 10Gi
+grafana_storage_size: 5Gi
+loki_storage_size: 10Gi
+alertmanager_storage_size: 2Gi
+
+# === TLS Configuration ===
+enable_tls: true
+ca_common_name: "VMStation Root CA"
 
 # === Quay Integration (Optional) ===
 enable_quay_metrics: false
