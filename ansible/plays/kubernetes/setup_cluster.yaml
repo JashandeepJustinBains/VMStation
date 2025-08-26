@@ -106,11 +106,11 @@
 
     - block:
         - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
-          command: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+          shell: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
           args:
             warn: false
         - name: Refresh package cache (dnf)
-          command: dnf makecache --refresh
+          shell: dnf makecache --refresh
           args:
             warn: false
         - name: Try install containerd.io (RHEL 10+)
