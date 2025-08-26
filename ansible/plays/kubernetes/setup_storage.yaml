@@ -65,7 +65,17 @@
 - name: Configure local-path storage class
   hosts: monitoring_nodes
   become: true
+  vars:
+    local_path_base: "{{ storage_paths.monitoring_nodes | default('/var/lib/kubernetes') }}/local-path-provisioner"
   tasks:
+    - name: Ensure local-path provisioner base path exists and is writable
+      file:
+        path: "{{ local_path_base }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0777'
+
     - name: Ensure kubernetes Python package is available (Debian package preferred)
       apt:
         name: python3-kubernetes
@@ -115,6 +125,16 @@
       register: provisioner_result
       changed_when: "'created' in provisioner_result.stdout or 'configured' in provisioner_result.stdout"
 
+    - name: Ensure provisioner base path and created volumes are writable (recursive)
+      file:
+        path: "{{ local_path_base }}"
+        state: directory
+        recurse: yes
+        owner: root
+        group: root
+        mode: '0777'
+      when: provisioner_result is defined
+
     - name: Configure local-path provisioner config map
       kubernetes.core.k8s:
         state: present
@@ -130,7 +150,7 @@
                 "nodePathMap": [
                   {
                     "node": "DEFAULT_PATH_FOR_NON_LISTED_NODES",
-                    "paths": ["/var/lib/kubernetes/local-path-provisioner"]
+                    "paths": ["{{ local_path_base }}"]
                   }
                 ]
               }
