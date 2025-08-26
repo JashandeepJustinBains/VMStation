@@ -8,6 +8,20 @@
     kubernetes_version: "1.29"
     pod_network_cidr: "10.244.0.0/16"
     
+  pre_tasks:
+    - name: Remove bad kubernetes-upstream repo and clean yum/dnf cache (preflight)
+      shell: |
+        rm -f /etc/yum.repos.d/kubernetes-upstream.repo || true
+        if command -v dnf >/dev/null 2>&1; then
+          dnf clean all || true
+        else
+          yum clean all || true
+        fi
+      args:
+        warn: false
+      when: ansible_os_family == 'RedHat'
+      ignore_errors: yes
+
   tasks:
     - name: Update apt cache
       apt:
@@ -68,8 +82,7 @@
       set_fact:
         rhel_major: "{{ ansible_distribution_major_version | int }}"
       when: ansible_os_family == 'RedHat'
-
-  - block:
+    - block:
       - name: Add Kubernetes yum repository for RHEL-family systems (EL9/EL8)
         yum_repository:
           name: kubernetes
@@ -89,7 +102,7 @@
             - kubectl
             - containerd
           state: present
-  when: ansible_os_family == 'RedHat' and (rhel_major | int) < 10
+    when: ansible_os_family == 'RedHat' and (rhel_major | int) < 10
 
     - block:
       - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
@@ -157,7 +170,7 @@
           name: kubelet
           state: restarted
           enabled: yes
-  when: ansible_os_family == 'RedHat' and (rhel_major | int) >= 10
+    when: ansible_os_family == 'RedHat' and (rhel_major | int) >= 10
 
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
       selinux:
