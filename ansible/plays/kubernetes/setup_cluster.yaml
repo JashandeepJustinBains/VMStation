@@ -187,6 +187,36 @@
             mode: '0755'
             owner: root
             group: root
+        - name: Download crictl binary (RHEL 10+ fallback)
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL \
+                "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz" \
+                -o /tmp/crictl.tar.gz
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /tmp/crictl.tar.gz \
+                "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz"
+            fi
+          args:
+            creates: /usr/bin/crictl
+        - name: Extract and install crictl
+          shell: |
+            tar -xzf /tmp/crictl.tar.gz -C /tmp/
+            mv /tmp/crictl /usr/bin/crictl
+            chmod +x /usr/bin/crictl
+            rm -f /tmp/crictl.tar.gz
+          args:
+            creates: /usr/bin/crictl
+        - name: Install conntrack package (RHEL 10+ fallback)
+          package:
+            name: conntrack-tools
+            state: present
+          ignore_errors: yes
+        - name: Install conntrack if conntrack-tools not available (RHEL 10+)
+          package:
+            name: conntrack
+            state: present
+          ignore_errors: yes
         - name: Create minimal kubelet systemd unit (RHEL 10+ fallback)
           copy:
             dest: /etc/systemd/system/kubelet.service
@@ -381,6 +411,13 @@
       stat:
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
+
+    - name: Stop kubelet service if running (to prevent port conflicts)
+      systemd:
+        name: kubelet
+        state: stopped
+      when: not kubelet_conf.stat.exists
+      ignore_errors: yes
 
     - name: Copy join command to worker nodes
       copy:
