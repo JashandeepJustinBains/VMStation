@@ -427,8 +427,62 @@
       when: not kubelet_conf.stat.exists
 
     - name: Join worker nodes to cluster
-      shell: /tmp/kubeadm-join.sh
+      # Run join with extra verbosity and capture output so we can gather logs on failure.
+      # We run the script with --v=5 for detailed stack traces from kubeadm if available.
+      shell: /tmp/kubeadm-join.sh --v=5
+      register: join_result
+      failed_when: join_result.rc != 0
       when: not kubelet_conf.stat.exists
+
+    - name: If join failed, extract join target from script (for connectivity checks)
+      shell: "awk '{print $3}' /tmp/kubeadm-join.sh"
+      register: join_target
+      changed_when: false
+      failed_when: false
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+
+    - name: If join failed, test API server reachability from node
+      shell: "curl -k --connect-timeout 5 https://{{ join_target.stdout }}/healthz"
+      register: api_health
+      failed_when: false
+      changed_when: false
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+
+    - name: If join failed, collect kubelet and containerd status for debugging
+      shell: |
+        systemctl status kubelet --no-pager || true
+        systemctl is-active containerd || true
+        systemctl status containerd --no-pager || true
+        echo '--- /var/lib/kubelet/kubeadm-flags.env ---' && cat /var/lib/kubelet/kubeadm-flags.env || true
+        echo '--- /var/lib/kubelet/config.yaml ---' && sed -n '1,200p' /var/lib/kubelet/config.yaml || true
+      register: runtime_debug
+      changed_when: false
+      failed_when: false
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+
+    - name: If join failed, save kubelet journal to a file for fetch
+      shell: "journalctl -u kubelet -n 200 --no-pager > /tmp/kubelet-journal.log || true"
+      changed_when: false
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+
+    - name: If join failed, save containerd journal to a file for fetch
+      shell: "journalctl -u containerd -n 200 --no-pager > /tmp/containerd-journal.log || true"
+      changed_when: false
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+
+    - name: If join failed, fetch kubelet journal to control machine
+      fetch:
+        src: /tmp/kubelet-journal.log
+        dest: ./debug_logs/{{ inventory_hostname }}-kubelet-journal.log
+        flat: yes
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+
+    - name: If join failed, fetch containerd journal to control machine
+      fetch:
+        src: /tmp/containerd-journal.log
+        dest: ./debug_logs/{{ inventory_hostname }}-containerd-journal.log
+        flat: yes
+      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
 
     - name: Remove join command file
       file:
