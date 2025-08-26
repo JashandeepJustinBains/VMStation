@@ -243,6 +243,24 @@
             name: kubelet
             state: restarted
             enabled: yes
+        - name: Ensure /etc/sysconfig/kubelet exists with systemd cgroup driver (RHEL 10+)
+          copy:
+            dest: /etc/sysconfig/kubelet
+            content: |
+              # Kubelet environment
+              KUBELET_EXTRA_ARGS=--cgroup-driver=systemd
+          mode: '0644'
+        - name: Reload systemd after kubelet unit and sysconfig changes (RHEL 10+)
+          command: systemctl daemon-reload
+        - name: Start kubelet and wait for active (RHEL 10+)
+          systemd:
+            name: kubelet
+            state: started
+            enabled: yes
+        - name: Wait for kubelet to be active (RHEL 10+)
+          wait_for:
+            path: /run/systemd/system
+            timeout: 10
       when: ansible_os_family == 'RedHat' and (rhel_major | int) >= 10
 
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
