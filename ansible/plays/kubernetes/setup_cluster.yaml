@@ -57,30 +57,100 @@
         state: present
       when: ansible_os_family == 'RedHat'
 
-    - name: Add Kubernetes yum repository for RHEL-family systems
-      yum_repository:
-        name: kubernetes
-        description: Kubernetes repo
-        baseurl: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/
-        gpgcheck: yes
-        repo_gpgcheck: yes
-        gpgkey: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/Release.key
-        enabled: yes
+    - name: Determine RHEL major version
+      set_fact:
+        rhel_major: "{{ ansible_distribution_major_version | int }}"
       when: ansible_os_family == 'RedHat'
 
-    - name: Update yum cache on RHEL-family systems
-      command: yum makecache -q
-      when: ansible_os_family == 'RedHat'
+    - block:
+      - name: Add Kubernetes yum repository for RHEL-family systems (EL9/EL8)
+        yum_repository:
+          name: kubernetes
+          description: Kubernetes repo
+          baseurl: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/
+          gpgcheck: yes
+          repo_gpgcheck: yes
+          gpgkey: https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/Release.key
+          enabled: yes
+      - name: Update yum cache on RHEL-family systems (EL9/EL8)
+        command: yum makecache -q
+      - name: Install Kubernetes and containerd packages on RHEL-family systems (EL9/EL8)
+        package:
+          name:
+            - kubelet
+            - kubeadm
+            - kubectl
+            - containerd
+          state: present
+      when: ansible_os_family == 'RedHat' and rhel_major < 10
 
-    - name: Install Kubernetes and containerd packages on RHEL-family systems
-      package:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-          - containerd
-        state: present
-      when: ansible_os_family == 'RedHat'
+    - block:
+      - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
+        command: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        args:
+          warn: false
+      - name: Refresh package cache (dnf)
+        command: dnf makecache --refresh
+        args:
+          warn: false
+      - name: Try install containerd.io (RHEL 10+)
+        package:
+          name: containerd.io
+          state: present
+        register: containerd_install
+        ignore_errors: yes
+      - name: Fallback install containerd package name (containerd) if containerd.io not available
+        package:
+          name: containerd
+          state: present
+        when: containerd_install is failed
+      - name: Ensure containerd directory exists
+        file:
+          path: /etc/containerd
+          state: directory
+      - name: Start and enable containerd (RHEL 10+)
+        systemd:
+          name: containerd
+          state: restarted
+          enabled: yes
+      - name: Download kubeadm binary (RHEL 10+ fallback)
+        get_url:
+          url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm"
+          dest: /usr/bin/kubeadm
+          mode: '0755'
+      - name: Download kubectl binary (RHEL 10+ fallback)
+        get_url:
+          url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl"
+          dest: /usr/bin/kubectl
+          mode: '0755'
+      - name: Download kubelet binary (RHEL 10+ fallback)
+        get_url:
+          url: "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet"
+          dest: /usr/bin/kubelet
+          mode: '0755'
+      - name: Create minimal kubelet systemd unit (RHEL 10+ fallback)
+        copy:
+          dest: /etc/systemd/system/kubelet.service
+          content: |
+            [Unit]
+            Description=kubelet: The Kubernetes Node Agent
+            Documentation=https://kubernetes.io/docs/
+            After=network.target containerd.service
+            Requires=containerd.service
+
+            [Service]
+            ExecStart=/usr/bin/kubelet
+            Restart=always
+            RestartSec=10
+
+            [Install]
+            WantedBy=multi-user.target
+      - name: Reload systemd and enable/start kubelet (RHEL 10+ fallback)
+        systemd:
+          name: kubelet
+          state: restarted
+          enabled: yes
+      when: ansible_os_family == 'RedHat' and rhel_major >= 10
 
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
       selinux:
