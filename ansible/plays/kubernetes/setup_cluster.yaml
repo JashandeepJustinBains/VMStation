@@ -51,16 +51,6 @@
         state: present
       when: ansible_os_family == 'Debian'
 
-    - name: Install Kubernetes and containerd packages on RHEL-family systems
-      package:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-          - containerd
-        state: present
-      when: ansible_os_family == 'RedHat'
-
     - name: Ensure yum-utils is installed on RHEL-family systems
       package:
         name: yum-utils
@@ -80,6 +70,16 @@
 
     - name: Update yum cache on RHEL-family systems
       command: yum makecache -q
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Kubernetes and containerd packages on RHEL-family systems
+      package:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+          - containerd
+        state: present
       when: ansible_os_family == 'RedHat'
 
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
