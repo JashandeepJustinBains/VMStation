@@ -48,7 +48,7 @@
         release_namespace: cert-manager
         create_namespace: yes
         values:
-          installCRDs: true
+          installCRDs: false
           prometheus:
             enabled: true
         kubeconfig: /root/.kube/config
