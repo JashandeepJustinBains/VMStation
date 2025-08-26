@@ -55,6 +55,13 @@ storage_paths:
 enable_tls: true
 ca_common_name: "VMStation Root CA"
 
+# VMStation TLS control (derived from enable_tls by default)
+# Set enable_tls: false in all.yml to skip creating TLS certs and installing cert-manager
+vmstation_manage_cert_manager: "{{ enable_tls | default(true) }}"
+vmstation_create_tls_certs: "{{ enable_tls | default(true) }}"
+# When true, the play will attempt to delete existing VMStation TLS resources/secrets at start
+vmstation_cleanup_tls_on_deploy: true
+
 # === Quay Integration (Optional) ===
 enable_quay_metrics: false
 # quay_username: "your_username"  # Add to secrets.yml via ansible-vault
