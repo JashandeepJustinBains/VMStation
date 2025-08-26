@@ -166,6 +166,7 @@
                 interface: "{{ ansible_default_ipv4.interface }}"
                 permanent: yes
                 immediate: yes
+                state: enabled
               ignore_errors: yes
               
             - name: Allow cluster communication in kubernetes zone
@@ -174,6 +175,7 @@
                 source: "192.168.0.0/16"
                 permanent: yes
                 immediate: yes
+                state: enabled
               ignore_errors: yes
               
           when: 
