@@ -103,6 +103,24 @@
       when: ansible_os_family == 'RedHat' and (rhel_major | int) < 10
 
     - block:
+        - name: Install required RHEL 10+ packages for Kubernetes
+          package:
+            name:
+              - curl
+              - wget
+              - conntrack-tools
+              - socat
+              - iproute-tc
+              - iptables
+            state: present
+          ignore_errors: yes
+        
+        - name: Fallback install conntrack if conntrack-tools not available
+          package:
+            name: conntrack
+            state: present
+          ignore_errors: yes
+            
         - name: Add Docker CE repo for containerd (RHEL 10+ fallback)
           shell: |
             if command -v curl >/dev/null 2>&1; then
@@ -114,20 +132,24 @@
             fi
           args:
             creates: /etc/yum.repos.d/docker-ce.repo
+        
         - name: Ensure Docker CE repo file has correct permissions
           file:
             path: /etc/yum.repos.d/docker-ce.repo
             mode: '0644'
             owner: root
             group: root
+        
         - name: Refresh package cache (dnf)
           command: dnf makecache --refresh
+          
         - name: Try install containerd.io (RHEL 10+)
           package:
             name: containerd.io
             state: present
           register: containerd_install
           ignore_errors: yes
+          
         - name: Fallback install containerd package name (containerd) if containerd.io not available
           package:
             name: containerd
@@ -137,76 +159,102 @@
           file:
             path: /etc/containerd
             state: directory
+            
+        - name: Generate default containerd configuration (RHEL 10+)
+          shell: containerd config default > /etc/containerd/config.toml
+          args:
+            creates: /etc/containerd/config.toml
+          ignore_errors: yes
+          
+        - name: Configure containerd to use systemd cgroup driver (RHEL 10+)
+          replace:
+            path: /etc/containerd/config.toml
+            regexp: 'SystemdCgroup = false'
+            replace: 'SystemdCgroup = true'
+          when: 
+            - ansible_os_family == 'RedHat' 
+            - (rhel_major | int) >= 10
+          ignore_errors: yes
+          
         - name: Start and enable containerd (RHEL 10+)
           systemd:
             name: containerd
             state: restarted
             enabled: yes
+            daemon_reload: yes
+        - name: Get latest stable Kubernetes version for RHEL 10+
+          uri:
+            url: https://dl.k8s.io/release/stable-{{ kubernetes_version }}.txt
+            return_content: yes
+          register: k8s_stable_version
+          ignore_errors: yes
+          
+        - name: Set Kubernetes version for download
+          set_fact:
+            k8s_download_version: "{{ k8s_stable_version.content.strip() if k8s_stable_version.status == 200 else 'v' + kubernetes_version + '.0' }}"
+            
         - name: Download kubeadm binary (RHEL 10+ fallback)
-          shell: |
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm" -o /usr/bin/kubeadm
-            elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /usr/bin/kubeadm "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubeadm"
-            fi
-          args:
-            creates: /usr/bin/kubeadm
-        - name: Ensure kubeadm is executable
-          file:
-            path: /usr/bin/kubeadm
+          get_url:
+            url: "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubeadm"
+            dest: /usr/bin/kubeadm
             mode: '0755'
             owner: root
             group: root
+          register: kubeadm_download
+          retries: 3
+          delay: 5
+          until: kubeadm_download is succeeded
+          
         - name: Download kubectl binary (RHEL 10+ fallback)
-          shell: |
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl" -o /usr/bin/kubectl
-            elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /usr/bin/kubectl "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubectl"
-            fi
-          args:
-            creates: /usr/bin/kubectl
-        - name: Ensure kubectl is executable
-          file:
-            path: /usr/bin/kubectl
+          get_url:
+            url: "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubectl"
+            dest: /usr/bin/kubectl
             mode: '0755'
             owner: root
             group: root
+          register: kubectl_download
+          retries: 3
+          delay: 5
+          until: kubectl_download is succeeded
+          
         - name: Download kubelet binary (RHEL 10+ fallback)
-          shell: |
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet" -o /usr/bin/kubelet
-            elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /usr/bin/kubelet "https://dl.k8s.io/release/stable-{{ kubernetes_version }}/bin/linux/amd64/kubelet"
-            fi
-          args:
-            creates: /usr/bin/kubelet
-        - name: Ensure kubelet is executable
-          file:
-            path: /usr/bin/kubelet
+          get_url:
+            url: "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubelet"
+            dest: /usr/bin/kubelet
             mode: '0755'
             owner: root
             group: root
+          register: kubelet_download
+          retries: 3
+          delay: 5
+          until: kubelet_download is succeeded
         - name: Download crictl binary (RHEL 10+ fallback)
-          shell: |
-            if command -v curl >/dev/null 2>&1; then
-              curl -fsSL \
-                "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz" \
-                -o /tmp/crictl.tar.gz
-            elif command -v wget >/dev/null 2>&1; then
-              wget -q -O /tmp/crictl.tar.gz \
-                "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz"
-            fi
-          args:
-            creates: /usr/bin/crictl
+          get_url:
+            url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz"
+            dest: /tmp/crictl.tar.gz
+          register: crictl_download
+          retries: 3
+          delay: 5
+          until: crictl_download is succeeded
+          
         - name: Extract and install crictl
-          shell: |
-            tar -xzf /tmp/crictl.tar.gz -C /tmp/
-            mv /tmp/crictl /usr/bin/crictl
-            chmod +x /usr/bin/crictl
-            rm -f /tmp/crictl.tar.gz
-          args:
+          unarchive:
+            src: /tmp/crictl.tar.gz
+            dest: /usr/bin/
+            remote_src: yes
             creates: /usr/bin/crictl
+            
+        - name: Ensure crictl is executable
+          file:
+            path: /usr/bin/crictl
+            mode: '0755'
+            owner: root
+            group: root
+            
+        - name: Clean up crictl download
+          file:
+            path: /tmp/crictl.tar.gz
+            state: absent
         - name: Install conntrack package (RHEL 10+ fallback)
           package:
             name: conntrack-tools
@@ -224,43 +272,71 @@
               [Unit]
               Description=kubelet: The Kubernetes Node Agent
               Documentation=https://kubernetes.io/docs/
-              After=network.target containerd.service
+              Wants=network-online.target
+              After=network-online.target containerd.service
               Requires=containerd.service
 
               [Service]
+              Type=notify
               EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
               EnvironmentFile=-/etc/sysconfig/kubelet
               # KUBELET_KUBEADM_ARGS is written by kubeadm when joining
               ExecStart=/usr/bin/kubelet $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
               Restart=always
               RestartSec=10
-              StartLimitBurst=0
+              StartLimitBurst=3
+              StartLimitInterval=60
 
               [Install]
               WantedBy=multi-user.target
-        - name: Reload systemd and enable/start kubelet (RHEL 10+ fallback)
-          systemd:
-            name: kubelet
-            state: restarted
-            enabled: yes
+              
+        - name: Create kubelet dropin directory
+          file:
+            path: /etc/systemd/system/kubelet.service.d
+            state: directory
+            mode: '0755'
+            
+        - name: Create kubeadm kubelet dropin
+          copy:
+            dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+            content: |
+              # Note: This dropin only works with kubeadm and kubelet v1.11+
+              [Service]
+              Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+              Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+              # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+              EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+              # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+              # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+              EnvironmentFile=-/etc/sysconfig/kubelet
+              ExecStart=
+              ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+              
         - name: Ensure /etc/sysconfig/kubelet exists with systemd cgroup driver (RHEL 10+)
           copy:
             dest: /etc/sysconfig/kubelet
             content: |
               # Kubelet environment
-              KUBELET_EXTRA_ARGS=--cgroup-driver=systemd
+              KUBELET_EXTRA_ARGS=--cgroup-driver=systemd --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock
             mode: '0644'
+            
         - name: Reload systemd after kubelet unit and sysconfig changes (RHEL 10+)
-          command: systemctl daemon-reload
-        - name: Start kubelet and wait for active (RHEL 10+)
+          systemd:
+            daemon_reload: yes
+            
+        - name: Enable kubelet service (RHEL 10+)
           systemd:
             name: kubelet
-            state: started
             enabled: yes
-        - name: Wait for kubelet to be active (RHEL 10+)
-          wait_for:
-            path: /run/systemd/system
-            timeout: 10
+            
+        - name: Verify kubelet binary works
+          command: /usr/bin/kubelet --version
+          register: kubelet_version_check
+          changed_when: false
+          
+        - name: Display kubelet version
+          debug:
+            msg: "Kubelet version: {{ kubelet_version_check.stdout }}"
       when: ansible_os_family == 'RedHat' and (rhel_major | int) >= 10
 
     - name: Ensure SELinux is permissive on RHEL-family systems (required for some container setups)
@@ -268,6 +344,62 @@
         state: permissive
         policy: targeted
       when: ansible_os_family == 'RedHat' and (ansible_selinux is defined and ansible_selinux.status != 'Disabled')
+
+    - name: Configure firewall for Kubernetes on RHEL systems
+      block:
+        - name: Check if firewalld is running
+          systemd:
+            name: firewalld
+          register: firewalld_status
+          ignore_errors: yes
+          
+        - name: Open Kubernetes ports in firewalld (control plane)
+          firewalld:
+            port: "{{ item }}"
+            permanent: yes
+            state: enabled
+            immediate: yes
+          loop:
+            - "6443/tcp"    # Kubernetes API server
+            - "2379-2380/tcp"  # etcd server client API
+            - "10250/tcp"   # kubelet API
+            - "10259/tcp"   # kube-scheduler
+            - "10257/tcp"   # kube-controller-manager
+          when: 
+            - ansible_os_family == 'RedHat'
+            - firewalld_status.status.ActiveState == 'active'
+            - inventory_hostname in groups['monitoring_nodes']
+          ignore_errors: yes
+          
+        - name: Open Kubernetes worker ports in firewalld
+          firewalld:
+            port: "{{ item }}"
+            permanent: yes
+            state: enabled
+            immediate: yes
+          loop:
+            - "10250/tcp"   # kubelet API
+            - "30000-32767/tcp"  # NodePort services
+          when: 
+            - ansible_os_family == 'RedHat'
+            - firewalld_status.status.ActiveState == 'active'
+            - inventory_hostname in groups['storage_nodes'] or inventory_hostname in groups['compute_nodes']
+          ignore_errors: yes
+          
+        - name: Open CNI ports (Flannel) in firewalld
+          firewalld:
+            port: "{{ item }}"
+            permanent: yes
+            state: enabled
+            immediate: yes
+          loop:
+            - "8285/udp"    # Flannel VXLAN
+            - "8472/udp"    # Flannel VXLAN
+          when: 
+            - ansible_os_family == 'RedHat'
+            - firewalld_status.status.ActiveState == 'active'
+          ignore_errors: yes
+      when: ansible_os_family == 'RedHat'
 
     - name: Hold Kubernetes packages
       dpkg_selections:
@@ -434,6 +566,68 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
+    - name: Pre-join validation for worker nodes
+      block:
+        - name: Verify containerd is running
+          systemd:
+            name: containerd
+          register: containerd_status
+          failed_when: containerd_status.status.ActiveState != 'active'
+          
+        - name: Verify kubelet binary exists and is executable
+          stat:
+            path: /usr/bin/kubelet
+          register: kubelet_binary
+          failed_when: not kubelet_binary.stat.exists or not kubelet_binary.stat.executable
+          
+        - name: Verify kubeadm binary exists and is executable
+          stat:
+            path: /usr/bin/kubeadm
+          register: kubeadm_binary
+          failed_when: not kubeadm_binary.stat.exists or not kubeadm_binary.stat.executable
+          
+        - name: Test kubeadm preflight checks
+          command: kubeadm join phase preflight --dry-run
+          register: preflight_check
+          changed_when: false
+          ignore_errors: yes
+          
+        - name: Display preflight results
+          debug:
+            msg: "Preflight check result: {{ preflight_check.rc }} - {{ preflight_check.stderr if preflight_check.rc != 0 else 'PASSED' }}"
+            
+        - name: Verify required kernel modules are loaded
+          command: lsmod
+          register: loaded_modules
+          changed_when: false
+          
+        - name: Check for required kernel modules
+          fail:
+            msg: "Required kernel module {{ item }} is not loaded"
+          when: item not in loaded_modules.stdout
+          loop:
+            - br_netfilter
+            - overlay
+          ignore_errors: yes
+          
+        - name: Check container runtime socket
+          stat:
+            path: /var/run/containerd/containerd.sock
+          register: containerd_socket
+          failed_when: not containerd_socket.stat.exists
+          
+        - name: Test container runtime connectivity
+          command: crictl version
+          register: crictl_test
+          changed_when: false
+          ignore_errors: yes
+          
+        - name: Display container runtime test
+          debug:
+            msg: "Container runtime test: {{ 'PASSED' if crictl_test.rc == 0 else 'FAILED - ' + crictl_test.stderr }}"
+            
+      when: not kubelet_conf.stat.exists
+
     - name: Stop kubelet service if running (to prevent port conflicts)
       systemd:
         name: kubelet
@@ -462,63 +656,193 @@
       failed_when: false
       when: not kubelet_conf.stat.exists
 
-    - name: Join worker nodes to cluster
-      # Run join with extra verbosity and capture output so we can gather logs on failure.
-      # We run the script with --v=5 for detailed stack traces from kubeadm if available.
-      shell: /tmp/kubeadm-join.sh --v=5
-      register: join_result
-      failed_when: join_result.rc != 0
+    - name: Join worker nodes to cluster with retries
+      block:
+        - name: Attempt to join cluster (attempt 1)
+          shell: /tmp/kubeadm-join.sh --v=5
+          register: join_result_1
+          failed_when: false
+          when: not kubelet_conf.stat.exists
+          
+        - name: Wait and retry if first attempt failed
+          block:
+            - name: Wait before retry
+              pause:
+                seconds: 30
+                
+            - name: Reset any partial join state
+              shell: |
+                kubeadm reset -f || true
+                systemctl stop kubelet || true
+                rm -rf /etc/kubernetes/kubelet.conf /etc/kubernetes/pki/ || true
+              ignore_errors: yes
+              
+            - name: Restart containerd before retry
+              systemd:
+                name: containerd
+                state: restarted
+                
+            - name: Attempt to join cluster (attempt 2)
+              shell: /tmp/kubeadm-join.sh --v=5
+              register: join_result_2
+              failed_when: false
+              
+            - name: Final retry if second attempt failed
+              block:
+                - name: Wait before final retry
+                  pause:
+                    seconds: 60
+                    
+                - name: Complete reset before final attempt
+                  shell: |
+                    kubeadm reset -f || true
+                    systemctl stop kubelet || true
+                    systemctl stop containerd || true
+                    rm -rf /etc/kubernetes/ /var/lib/kubelet/ || true
+                    systemctl start containerd
+                    sleep 10
+                  ignore_errors: yes
+                  
+                - name: Attempt to join cluster (final attempt)
+                  shell: /tmp/kubeadm-join.sh --v=5
+                  register: join_result_final
+                  
+              when: join_result_2.rc != 0
+              
+          when: join_result_1.rc != 0
+          
+        - name: Set final join result
+          set_fact:
+            join_result: "{{ join_result_final if join_result_final is defined else (join_result_2 if join_result_2 is defined else join_result_1) }}"
+            
       when: not kubelet_conf.stat.exists
 
-    - name: If join failed, extract join target from script (for connectivity checks)
-      shell: "awk '{print $3}' /tmp/kubeadm-join.sh"
-      register: join_target
-      changed_when: false
-      failed_when: false
+    - name: Enhanced error collection and diagnostics
+      block:
+        - name: Extract join target from script (for connectivity checks)
+          shell: "awk '{print $3}' /tmp/kubeadm-join.sh"
+          register: join_target
+          changed_when: false
+          failed_when: false
+          
+        - name: Test API server reachability from node
+          uri:
+            url: "https://{{ join_target.stdout }}/healthz"
+            validate_certs: no
+            timeout: 10
+          register: api_health
+          failed_when: false
+          changed_when: false
+          
+        - name: Test basic network connectivity to control plane
+          command: "ping -c 3 {{ join_target.stdout.split(':')[0] }}"
+          register: ping_test
+          failed_when: false
+          changed_when: false
+          
+        - name: Collect enhanced system diagnostics
+          shell: |
+            echo "=== System Information ==="
+            uname -a
+            echo "=== Container Runtime Status ==="
+            systemctl status containerd --no-pager || true
+            crictl version || true
+            crictl info || true
+            echo "=== Kubelet Status ==="
+            systemctl status kubelet --no-pager || true
+            echo "=== Network Configuration ==="
+            ip addr show || true
+            ip route show || true
+            echo "=== Firewall Status ==="
+            if command -v firewall-cmd >/dev/null; then
+              firewall-cmd --list-all || true
+            fi
+            if command -v iptables >/dev/null; then
+              iptables -L -n || true
+            fi
+            echo "=== SELinux Status ==="
+            if command -v getenforce >/dev/null; then
+              getenforce || true
+            fi
+            echo "=== Kernel Modules ==="
+            lsmod | grep -E "(br_netfilter|overlay)" || true
+            echo "=== Disk Space ==="
+            df -h || true
+            echo "=== Memory ==="
+            free -m || true
+          register: system_diagnostics
+          changed_when: false
+          failed_when: false
+          
+        - name: Save enhanced diagnostics to file
+          copy:
+            content: |
+              Join Result: {{ join_result }}
+              API Health: {{ api_health }}
+              Ping Test: {{ ping_test }}
+              System Diagnostics:
+              {{ system_diagnostics.stdout }}
+            dest: /tmp/join-diagnostics.log
+            
+        - name: Save kubelet journal to a file for fetch
+          shell: "journalctl -u kubelet -n 500 --no-pager > /tmp/kubelet-journal.log || true"
+          changed_when: false
+          
+        - name: Save containerd journal to a file for fetch
+          shell: "journalctl -u containerd -n 500 --no-pager > /tmp/containerd-journal.log || true"
+          changed_when: false
+          
+        - name: Save kubeadm audit logs if they exist
+          shell: "find /var/log -name '*kubeadm*' -exec cat {} \\; > /tmp/kubeadm-audit.log 2>/dev/null || echo 'No kubeadm logs found'"
+          changed_when: false
+          
+        - name: Ensure debug logs directory exists locally
+          file:
+            path: ./debug_logs
+            state: directory
+          delegate_to: localhost
+          become: no
+          
+        - name: Fetch comprehensive diagnostic logs
+          fetch:
+            src: "{{ item.src }}"
+            dest: "{{ item.dest }}"
+            flat: yes
+          loop:
+            - { src: "/tmp/join-diagnostics.log", dest: "./debug_logs/{{ inventory_hostname }}-join-diagnostics.log" }
+            - { src: "/tmp/kubelet-journal.log", dest: "./debug_logs/{{ inventory_hostname }}-kubelet-journal.log" }
+            - { src: "/tmp/containerd-journal.log", dest: "./debug_logs/{{ inventory_hostname }}-containerd-journal.log" }
+            - { src: "/tmp/kubeadm-audit.log", dest: "./debug_logs/{{ inventory_hostname }}-kubeadm-audit.log" }
+          ignore_errors: yes
+          
       when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
 
-    - name: If join failed, test API server reachability from node
-      shell: "curl -k --connect-timeout 5 https://{{ join_target.stdout }}/healthz"
-      register: api_health
-      failed_when: false
-      changed_when: false
-      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
-
-    - name: If join failed, collect kubelet and containerd status for debugging
-      shell: |
-        systemctl status kubelet --no-pager || true
-        systemctl is-active containerd || true
-        systemctl status containerd --no-pager || true
-        echo '--- /var/lib/kubelet/kubeadm-flags.env ---' && cat /var/lib/kubelet/kubeadm-flags.env || true
-        echo '--- /var/lib/kubelet/config.yaml ---' && sed -n '1,200p' /var/lib/kubelet/config.yaml || true
-      register: runtime_debug
-      changed_when: false
-      failed_when: false
-      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
-
-    - name: If join failed, save kubelet journal to a file for fetch
-      shell: "journalctl -u kubelet -n 200 --no-pager > /tmp/kubelet-journal.log || true"
-      changed_when: false
-      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
-
-    - name: If join failed, save containerd journal to a file for fetch
-      shell: "journalctl -u containerd -n 200 --no-pager > /tmp/containerd-journal.log || true"
-      changed_when: false
-      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
-
-    - name: If join failed, fetch kubelet journal to control machine
-      fetch:
-        src: /tmp/kubelet-journal.log
-        dest: ./debug_logs/{{ inventory_hostname }}-kubelet-journal.log
-        flat: yes
-      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
-
-    - name: If join failed, fetch containerd journal to control machine
-      fetch:
-        src: /tmp/containerd-journal.log
-        dest: ./debug_logs/{{ inventory_hostname }}-containerd-journal.log
-        flat: yes
-      when: not kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+    - name: Post-join verification
+      block:
+        - name: Wait for kubelet to be ready
+          systemd:
+            name: kubelet
+          register: kubelet_final_status
+          retries: 6
+          delay: 10
+          until: kubelet_final_status.status.ActiveState == 'active'
+          
+        - name: Verify node joined successfully
+          stat:
+            path: /etc/kubernetes/kubelet.conf
+          register: final_kubelet_conf
+          
+        - name: Display join success message
+          debug:
+            msg: "✓ Node {{ inventory_hostname }} successfully joined the Kubernetes cluster!"
+          when: final_kubelet_conf.stat.exists
+          
+        - name: Display join failure message
+          fail:
+            msg: "✗ Node {{ inventory_hostname }} failed to join the cluster. Check debug logs for details."
+          when: not final_kubelet_conf.stat.exists and (join_result is defined and join_result.rc != 0)
+          
+      when: not kubelet_conf.stat.exists
 
     - name: Remove join command file
       file:

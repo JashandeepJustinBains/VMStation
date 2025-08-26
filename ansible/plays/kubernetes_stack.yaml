@@ -1,6 +1,7 @@
 ---
 # Main Kubernetes deployment playbook for VMStation
 # This replaces the Podman-based infrastructure with Kubernetes
+- import_playbook: kubernetes/rhel10_setup_fixes.yaml
 - import_playbook: kubernetes/setup_cluster.yaml
 - import_playbook: kubernetes/setup_storage.yaml
 - import_playbook: kubernetes/setup_helm.yaml  
