@@ -217,7 +217,7 @@
             name: conntrack
             state: present
           ignore_errors: yes
-        - name: Create minimal kubelet systemd unit (RHEL 10+ fallback)
+        - name: Create kubeadm-compatible kubelet systemd unit (RHEL 10+ fallback)
           copy:
             dest: /etc/systemd/system/kubelet.service
             content: |
@@ -228,9 +228,13 @@
               Requires=containerd.service
 
               [Service]
-              ExecStart=/usr/bin/kubelet
+              EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+              EnvironmentFile=-/etc/sysconfig/kubelet
+              # KUBELET_KUBEADM_ARGS is written by kubeadm when joining
+              ExecStart=/usr/bin/kubelet $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
               Restart=always
               RestartSec=10
+              StartLimitBurst=0
 
               [Install]
               WantedBy=multi-user.target
