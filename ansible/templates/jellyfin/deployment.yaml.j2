@@ -20,13 +20,8 @@ spec:
     spec:
       # Prefer storage nodes for media access
       nodeSelector:
-        # This will be dynamically set to prefer storage_nodes
-        node-role: storage
-      tolerations:
-      - key: "storage-node"
-        operator: "Equal"
-        value: "true"
-        effect: "NoSchedule"
+        # Use the actual Kubernetes node hostname for the storage node
+        kubernetes.io/hostname: "{{ storage_node_hostname }}"
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
