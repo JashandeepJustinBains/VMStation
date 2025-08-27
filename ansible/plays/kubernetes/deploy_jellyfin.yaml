@@ -134,7 +134,7 @@
                   - key: kubernetes.io/hostname
                     operator: In
                     values:
-                    - "{{ storage_node_hostname }}"
+                    - "{{ storage_node_k8s_name }}"
         - apiVersion: v1
           kind: PersistentVolume
           metadata:
@@ -159,7 +159,7 @@
                   - key: kubernetes.io/hostname
                     operator: In
                     values:
-                    - "{{ storage_node_hostname }}"
+                    - "{{ storage_node_k8s_name }}"
 
     - name: Deploy Persistent Volume Claims
       kubernetes.core.k8s:
@@ -267,7 +267,7 @@
                   component: media-server
               spec:
                 nodeSelector:
-                  kubernetes.io/hostname: "{{ storage_node_hostname }}"
+                  kubernetes.io/hostname: "{{ storage_node_k8s_name }}"
                 affinity:
                   podAntiAffinity:
                     preferredDuringSchedulingIgnoredDuringExecution:
