@@ -168,6 +168,28 @@
                 state: present
                 permanent: yes
               ignore_errors: yes
+
+            - name: Check existing firewalld zones (fallback check)
+              shell: firewall-cmd --get-zones
+              register: firewalld_zones
+              changed_when: false
+              when:
+                - firewalld_check is defined
+                - firewalld_check.status is defined
+                - firewalld_check.status.ActiveState == 'active'
+
+            - name: Create kubernetes zone via firewall-cmd if still missing
+              shell: |
+                firewall-cmd --permanent --new-zone=kubernetes || true
+                firewall-cmd --reload || true
+              register: create_kube_zone
+              changed_when: false
+              when:
+                - firewalld_check is defined
+                - firewalld_check.status is defined
+                - firewalld_check.status.ActiveState == 'active'
+                - firewalld_zones is defined
+                - "'kubernetes' not in firewalld_zones.stdout"
             - name: Allow SSH in kubernetes zone (runtime + permanent)
               firewalld:
                 zone: kubernetes
