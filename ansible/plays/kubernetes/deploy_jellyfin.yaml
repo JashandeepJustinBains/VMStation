@@ -55,7 +55,8 @@
       when: storage_node_k8s_name is not defined
       
     - name: Check if existing Podman Jellyfin is running
-      shell: podman ps --filter name=jellyfin --format "table {{.Names}}\t{{.Status}}"
+      shell: >-
+        {% raw %}podman ps --filter name=jellyfin --format "table {{.Names}}\t{{.Status}}"{% endraw %}
       delegate_to: "{{ groups['storage_nodes'][0] }}"
       register: podman_jellyfin_status
       failed_when: false
