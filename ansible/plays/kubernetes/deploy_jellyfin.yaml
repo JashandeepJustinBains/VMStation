@@ -18,17 +18,26 @@
         kubeconfig: /root/.kube/config
       register: cluster_nodes
       
-    - name: Find matching Kubernetes node for storage node
+    - name: Build storage node matching candidates
+      set_fact:
+        storage_node_candidates: >-
+          {{ [ storage_node_hostname ]
+             + ( ([ hostvars[groups['storage_nodes'][0]].ansible_hostname ] ) if (groups['storage_nodes'] | length > 0 and hostvars[groups['storage_nodes'][0]] is defined and hostvars[groups['storage_nodes'][0]].ansible_hostname is defined) else [] )
+             + ( ([ hostvars[groups['storage_nodes'][0]].ansible_default_ipv4.address ] ) if (groups['storage_nodes'] | length > 0 and hostvars[groups['storage_nodes'][0]] is defined and hostvars[groups['storage_nodes'][0]].ansible_default_ipv4 is defined and hostvars[groups['storage_nodes'][0]].ansible_default_ipv4.address is defined) else [] )
+             + ( ([ groups['storage_nodes'][0] ] ) if (groups['storage_nodes'] | length > 0) else [] )
+          ] | unique }}
+
+    - name: Find matching Kubernetes node for storage node (compare metadata.name and node addresses)
       set_fact:
         storage_node_k8s_name: "{{ item.metadata.name }}"
       loop: "{{ cluster_nodes.resources }}"
-      when: >
-        (item.metadata.name == storage_node_hostname) or
-        ((item.status.addresses | selectattr('address','equalto', storage_node_hostname) | list | length) > 0)
+      when: >-
+        (item.metadata.name | lower) in (storage_node_candidates | map('lower') | list)
+        or ((item.status.addresses | map(attribute='address') | list | intersect(storage_node_candidates) | length) > 0)
 
     - name: Fail if storage node not found in cluster
       fail:
-        msg: "Storage node not found in cluster (checked metadata.name and node addresses). Value checked: {{ storage_node_hostname }}"
+        msg: "Storage node not found in cluster (checked metadata.name and node addresses). Value checked: {{ storage_node_hostname }}; candidates: {{ storage_node_candidates }}"
       when: storage_node_k8s_name is not defined
       
     - name: Check if existing Podman Jellyfin is running
