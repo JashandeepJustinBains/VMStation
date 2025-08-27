@@ -214,6 +214,39 @@
           retries: 3
           delay: 5
           until: kubeadm_download is succeeded
+          failed_when: false
+          
+        - name: Download kubeadm binary using shell fallback (RHEL 10+ urllib3 compatibility)
+          shell: |
+            set -o pipefail
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubeadm" -o /usr/bin/kubeadm
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /usr/bin/kubeadm "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubeadm"
+            else
+              echo "Neither curl nor wget available for download"
+              exit 1
+            fi
+            chmod 0755 /usr/bin/kubeadm
+            chown root:root /usr/bin/kubeadm
+          args:
+            creates: /usr/bin/kubeadm
+          when: kubeadm_download is failed and ('cert_file' in kubeadm_download.msg or 'urllib3' in kubeadm_download.msg)
+          retries: 3
+          delay: 5
+          
+        - name: Verify kubeadm binary was downloaded successfully
+          stat:
+            path: /usr/bin/kubeadm
+          register: kubeadm_binary_check
+          failed_when: not kubeadm_binary_check.stat.exists
+          
+        - name: Ensure kubeadm binary permissions are correct
+          file:
+            path: /usr/bin/kubeadm
+            mode: '0755'
+            owner: root
+            group: root
           
         - name: Download kubectl binary (RHEL 10+ fallback)
           get_url:
@@ -228,6 +261,39 @@
           retries: 3
           delay: 5
           until: kubectl_download is succeeded
+          failed_when: false
+          
+        - name: Download kubectl binary using shell fallback (RHEL 10+ urllib3 compatibility)
+          shell: |
+            set -o pipefail
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubectl" -o /usr/bin/kubectl
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /usr/bin/kubectl "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubectl"
+            else
+              echo "Neither curl nor wget available for download"
+              exit 1
+            fi
+            chmod 0755 /usr/bin/kubectl
+            chown root:root /usr/bin/kubectl
+          args:
+            creates: /usr/bin/kubectl
+          when: kubectl_download is failed and ('cert_file' in kubectl_download.msg or 'urllib3' in kubectl_download.msg)
+          retries: 3
+          delay: 5
+          
+        - name: Verify kubectl binary was downloaded successfully
+          stat:
+            path: /usr/bin/kubectl
+          register: kubectl_binary_check
+          failed_when: not kubectl_binary_check.stat.exists
+          
+        - name: Ensure kubectl binary permissions are correct
+          file:
+            path: /usr/bin/kubectl
+            mode: '0755'
+            owner: root
+            group: root
           
         - name: Download kubelet binary (RHEL 10+ fallback)
           get_url:
@@ -242,6 +308,39 @@
           retries: 3
           delay: 5
           until: kubelet_download is succeeded
+          failed_when: false
+          
+        - name: Download kubelet binary using shell fallback (RHEL 10+ urllib3 compatibility)
+          shell: |
+            set -o pipefail
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubelet" -o /usr/bin/kubelet
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /usr/bin/kubelet "https://dl.k8s.io/release/{{ k8s_download_version }}/bin/linux/amd64/kubelet"
+            else
+              echo "Neither curl nor wget available for download"
+              exit 1
+            fi
+            chmod 0755 /usr/bin/kubelet
+            chown root:root /usr/bin/kubelet
+          args:
+            creates: /usr/bin/kubelet
+          when: kubelet_download is failed and ('cert_file' in kubelet_download.msg or 'urllib3' in kubelet_download.msg)
+          retries: 3
+          delay: 5
+          
+        - name: Verify kubelet binary was downloaded successfully
+          stat:
+            path: /usr/bin/kubelet
+          register: kubelet_binary_check
+          failed_when: not kubelet_binary_check.stat.exists
+          
+        - name: Ensure kubelet binary permissions are correct
+          file:
+            path: /usr/bin/kubelet
+            mode: '0755'
+            owner: root
+            group: root
         - name: Download crictl binary (RHEL 10+ fallback)
           get_url:
             url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz"
@@ -252,6 +351,24 @@
           retries: 3
           delay: 5
           until: crictl_download is succeeded
+          failed_when: false
+          
+        - name: Download crictl binary using shell fallback (RHEL 10+ urllib3 compatibility)
+          shell: |
+            set -o pipefail
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz" -o /tmp/crictl.tar.gz
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O /tmp/crictl.tar.gz "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz"
+            else
+              echo "Neither curl nor wget available for download"
+              exit 1
+            fi
+          args:
+            creates: /tmp/crictl.tar.gz
+          when: crictl_download is failed and ('cert_file' in crictl_download.msg or 'urllib3' in crictl_download.msg)
+          retries: 3
+          delay: 5
           
         - name: Extract and install crictl
           unarchive:
