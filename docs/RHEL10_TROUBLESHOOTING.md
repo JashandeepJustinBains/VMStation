@@ -17,6 +17,10 @@ RHEL 10 systems require special handling for Kubernetes installation due to:
 - Download timeouts for kubeadm, kubelet, kubectl binaries
 - "Permission denied" errors when executing downloaded binaries
 - "No such file or directory" errors
+- **NEW**: SSL/TLS errors: "HTTPSConnection.__init__() got an unexpected keyword argument 'cert_file'"
+
+**Root Cause (SSL/TLS errors):**
+The error `HTTPSConnection.__init__() got an unexpected keyword argument 'cert_file'` occurs on RHEL 10+ systems due to compatibility issues between newer urllib3 library versions and Ansible's get_url module.
 
 **Solutions:**
 ```bash
@@ -28,6 +32,9 @@ ansible compute_nodes -i ansible/inventory.txt -m shell -a "ls -la /usr/bin/kube
 
 # Re-run RHEL 10 fixes playbook
 ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/rhel10_setup_fixes.yaml
+
+# For SSL/TLS errors, verify the fixed get_url parameters include:
+# validate_certs: false and use_proxy: false in setup_cluster.yaml
 ```
 
 ### 2. Container Runtime Issues
