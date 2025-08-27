@@ -208,6 +208,8 @@
             mode: '0755'
             owner: root
             group: root
+            validate_certs: false
+            use_proxy: false
           register: kubeadm_download
           retries: 3
           delay: 5
@@ -220,6 +222,8 @@
             mode: '0755'
             owner: root
             group: root
+            validate_certs: false
+            use_proxy: false
           register: kubectl_download
           retries: 3
           delay: 5
@@ -232,6 +236,8 @@
             mode: '0755'
             owner: root
             group: root
+            validate_certs: false
+            use_proxy: false
           register: kubelet_download
           retries: 3
           delay: 5
@@ -240,6 +246,8 @@
           get_url:
             url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v{{ kubernetes_version }}.0/crictl-v{{ kubernetes_version }}.0-linux-amd64.tar.gz"
             dest: /tmp/crictl.tar.gz
+            validate_certs: false
+            use_proxy: false
           register: crictl_download
           retries: 3
           delay: 5
