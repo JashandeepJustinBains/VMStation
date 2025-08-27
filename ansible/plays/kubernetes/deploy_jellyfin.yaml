@@ -137,62 +137,97 @@
               monitoring: enabled
         kubeconfig: /root/.kube/config
 
-    - name: Deploy Persistent Volumes
-      kubernetes.core.k8s:
-        state: present
-        definition: "{{ item }}"
+    - name: Check if Jellyfin Persistent Volumes already exist
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: PersistentVolume
+        name: "{{ item }}"
         kubeconfig: /root/.kube/config
       loop:
-        - apiVersion: v1
-          kind: PersistentVolume
-          metadata:
-            name: jellyfin-media-pv
-            labels:
-              app: jellyfin
-              component: media
-          spec:
-            capacity:
-              storage: 100Ti
-            accessModes:
-              - ReadWriteMany
-            persistentVolumeReclaimPolicy: Retain
-            storageClassName: jellyfin-media
-            hostPath:
-              path: "{{ jellyfin_media_path | default('/srv/media') }}"
-              type: Directory
-            nodeAffinity:
-              required:
-                nodeSelectorTerms:
-                - matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                    - "{{ storage_node_k8s_name }}"
-        - apiVersion: v1
-          kind: PersistentVolume
-          metadata:
-            name: jellyfin-config-pv
-            labels:
-              app: jellyfin
-              component: config
-          spec:
-            capacity:
-              storage: 50Gi
-            accessModes:
-              - ReadWriteOnce
-            persistentVolumeReclaimPolicy: Retain
-            storageClassName: jellyfin-config
-            hostPath:
-              path: /mnt/jellyfin-config
-              type: DirectoryOrCreate
-            nodeAffinity:
-              required:
-                nodeSelectorTerms:
-                - matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                    - "{{ storage_node_k8s_name }}"
+        - jellyfin-media-pv
+        - jellyfin-config-pv
+      register: existing_pvs
+      failed_when: false
+
+    - name: Display existing PV status
+      debug:
+        msg: |
+          Checking Persistent Volume status:
+          {% for result in existing_pvs.results %}
+          - {{ result.item }}: {% if result.resources %}EXISTS ({{ result.resources[0].status.phase | default('Unknown') }}){% else %}NOT FOUND{% endif %}
+          {% endfor %}
+
+    - name: Skip PV creation (already exists)
+      debug:
+        msg: "Skipping creation of {{ item.name }} - PersistentVolume already exists"
+      loop:
+        - name: jellyfin-media-pv
+        - name: jellyfin-config-pv
+      when: (existing_pvs.results | selectattr('item', 'equalto', item.name) | first).resources
+
+    - name: Deploy Persistent Volumes (only if they don't exist)
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item.definition }}"
+        kubeconfig: /root/.kube/config
+      loop:
+        - name: jellyfin-media-pv
+          definition:
+            apiVersion: v1
+            kind: PersistentVolume
+            metadata:
+              name: jellyfin-media-pv
+              labels:
+                app: jellyfin
+                component: media
+            spec:
+              capacity:
+                storage: 100Ti
+              accessModes:
+                - ReadWriteMany
+              persistentVolumeReclaimPolicy: Retain
+              storageClassName: jellyfin-media
+              hostPath:
+                path: "{{ jellyfin_media_path | default('/srv/media') }}"
+                type: Directory
+              nodeAffinity:
+                required:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                      - "{{ storage_node_k8s_name }}"
+        - name: jellyfin-config-pv
+          definition:
+            apiVersion: v1
+            kind: PersistentVolume
+            metadata:
+              name: jellyfin-config-pv
+              labels:
+                app: jellyfin
+                component: config
+            spec:
+              capacity:
+                storage: 50Gi
+              accessModes:
+                - ReadWriteOnce
+              persistentVolumeReclaimPolicy: Retain
+              storageClassName: jellyfin-config
+              hostPath:
+                path: /mnt/jellyfin-config
+                type: DirectoryOrCreate
+              nodeAffinity:
+                required:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                      - "{{ storage_node_k8s_name }}"
+      when: not (existing_pvs.results | selectattr('item', 'equalto', item.name) | first).resources
+      vars:
+        existing_pv_check: "{{ existing_pvs.results | selectattr('item', 'equalto', item.name) | first }}"
 
     - name: Deploy Persistent Volume Claims
       kubernetes.core.k8s:
