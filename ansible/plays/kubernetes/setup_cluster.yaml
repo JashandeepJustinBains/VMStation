@@ -198,7 +198,8 @@
           
         - name: Set Kubernetes version for download
           set_fact:
-            k8s_download_version: "{{ k8s_stable_version.content.strip() if k8s_stable_version.status == 200 else 'v' + kubernetes_version + '.0' }}"
+            k8s_download_version: >-
+              {{ (k8s_stable_version.stdout | default('') ).strip() if (k8s_stable_version is defined and k8s_stable_version.stdout is defined and (k8s_stable_version.stdout | trim) != '') else 'v' + kubernetes_version + '.0' }}
             
         - name: Download kubeadm binary (RHEL 10+ fallback)
           get_url:
