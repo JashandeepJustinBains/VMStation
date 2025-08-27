@@ -13,7 +13,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: jellyfin-media
   hostPath:
-    path: /mnt/media
+    path: "{{ jellyfin_media_path | default('/srv/media') }}"
     type: Directory
   nodeAffinity:
     required:

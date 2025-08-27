@@ -44,6 +44,12 @@ grafana_storage_size: 5Gi
 loki_storage_size: 10Gi
 alertmanager_storage_size: 2Gi
 
+# === Jellyfin Media Configuration ===
+# Path to existing media directory on storage nodes
+# Default: /srv/media (matches legacy NFS export)
+# Alternative: /mnt/media (if media is mounted from external source)
+jellyfin_media_path: /srv/media
+
 # === Node-Specific Storage Paths ===
 # Storage paths for different node types during Kubernetes migration
 storage_paths:

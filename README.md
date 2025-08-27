@@ -79,7 +79,7 @@ kubectl get pods -n monitoring
   - Hardware acceleration for 4K streaming (H.264, HEVC, VP9, AV1)
   - Session affinity for uninterrupted streaming experience
   - Auto-scaling based on CPU/memory usage (2.5GB RAM limit per pod)
-  - Preserves existing media structure at `/mnt/media`
+  - Preserves existing media structure (configurable path)
 
 ### Key Features
 - **High Availability**: Automatic pod restart and health checks
@@ -133,7 +133,7 @@ VMStation has migrated from Podman containers to Kubernetes:
 ### Media Server Features
 🎬 **Auto-scaling Jellyfin**: Scales 1-3 pods based on streaming load  
 🚀 **Hardware acceleration**: H.264, HEVC, VP9, AV1 codec support  
-💾 **Persistent media**: Preserves existing `/mnt/media` structure  
+💾 **Persistent media**: Configurable media directory path  
 🔄 **Session affinity**: Seamless streaming experience during scaling  
 📊 **Resource optimization**: 2-2.5GB RAM per pod constraint  
 
@@ -309,4 +309,5 @@ spec:
 - [ ] Add GitOps workflow with ArgoCD
 - [ ] Implement network policies for security
 - [ ] Set up log retention policies
+- [ ] Add custom application deployments
 - [ ] Add custom application deployments
