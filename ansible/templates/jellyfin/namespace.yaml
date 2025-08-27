@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jellyfin
+  labels:
+    name: jellyfin
+    app: jellyfin
+    monitoring: enabled

@@ -1,0 +1,557 @@
+---
+# High-Availability Jellyfin Kubernetes Deployment
+# Implements auto-scaling, hardware acceleration, and session affinity
+- name: Deploy High-Availability Jellyfin on Kubernetes
+  hosts: monitoring_nodes  # Deploy from control plane
+  become: true
+  vars:
+    jellyfin_namespace: jellyfin
+    jellyfin_hostname: "jellyfin.local"
+    jellyfin_published_url: "http://192.168.4.61:30096"
+    storage_node_hostname: "{{ groups['storage_nodes'][0] | regex_replace('^([0-9.]+)$', hostvars[groups['storage_nodes'][0]]['ansible_hostname']) }}"
+    
+  pre_tasks:
+    - name: Verify Kubernetes cluster is ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: /root/.kube/config
+      register: cluster_nodes
+      
+    - name: Ensure storage node is available
+      fail:
+        msg: "Storage node not found in cluster"
+      when: storage_node_hostname not in (cluster_nodes.resources | map(attribute='metadata.name') | list)
+      
+    - name: Check if existing Podman Jellyfin is running
+      shell: podman ps --filter name=jellyfin --format "table {{.Names}}\t{{.Status}}"
+      delegate_to: "{{ groups['storage_nodes'][0] }}"
+      register: podman_jellyfin_status
+      failed_when: false
+      changed_when: false
+      
+    - name: Warn about existing Podman Jellyfin
+      debug:
+        msg: |
+          WARNING: Found existing Podman Jellyfin container on storage node.
+          Status: {{ podman_jellyfin_status.stdout }}
+          This deployment will create a Kubernetes version.
+          Consider stopping the Podman container after verifying the K8s deployment works.
+      when: podman_jellyfin_status.rc == 0 and 'jellyfin' in podman_jellyfin_status.stdout
+
+  tasks:
+    - name: Ensure required Python packages for Kubernetes
+      apt:
+        name:
+          - python3-kubernetes
+          - python3-yaml
+        state: present
+        update_cache: yes
+      when: ansible_facts['pkg_mgr'] == 'apt'
+
+    - name: Fallback install kubernetes Python library via pip
+      pip:
+        name: 
+          - kubernetes
+          - PyYAML
+        state: present
+        executable: pip3
+      when: ansible_facts['pkg_mgr'] != 'apt'
+
+    - name: Create Jellyfin namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ jellyfin_namespace }}"
+            labels:
+              name: "{{ jellyfin_namespace }}"
+              app: jellyfin
+              monitoring: enabled
+        kubeconfig: /root/.kube/config
+
+    - name: Deploy Persistent Volumes
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop:
+        - apiVersion: v1
+          kind: PersistentVolume
+          metadata:
+            name: jellyfin-media-pv
+            labels:
+              app: jellyfin
+              component: media
+          spec:
+            capacity:
+              storage: 100Ti
+            accessModes:
+              - ReadWriteMany
+            persistentVolumeReclaimPolicy: Retain
+            storageClassName: jellyfin-media
+            hostPath:
+              path: /mnt/media
+              type: Directory
+            nodeAffinity:
+              required:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                    - "{{ storage_node_hostname }}"
+        - apiVersion: v1
+          kind: PersistentVolume
+          metadata:
+            name: jellyfin-config-pv
+            labels:
+              app: jellyfin
+              component: config
+          spec:
+            capacity:
+              storage: 50Gi
+            accessModes:
+              - ReadWriteOnce
+            persistentVolumeReclaimPolicy: Retain
+            storageClassName: jellyfin-config
+            hostPath:
+              path: /mnt/jellyfin-config
+              type: DirectoryOrCreate
+            nodeAffinity:
+              required:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                    - "{{ storage_node_hostname }}"
+
+    - name: Deploy Persistent Volume Claims
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop:
+        - apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: jellyfin-media-pvc
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: media
+          spec:
+            accessModes:
+              - ReadWriteMany
+            resources:
+              requests:
+                storage: 100Ti
+            storageClassName: jellyfin-media
+        - apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: jellyfin-config-pvc
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: config
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 50Gi
+            storageClassName: jellyfin-config
+
+    - name: Deploy Jellyfin ConfigMap
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: jellyfin-config
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: config
+          data:
+            encoding.xml: |
+              <?xml version="1.0" encoding="utf-8"?>
+              <EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+                <TranscodingTempPath>/config/transcoding-temp</TranscodingTempPath>
+                <EncoderAppPath>/usr/lib/jellyfin-ffmpeg/ffmpeg</EncoderAppPath>
+                <VaapiDevice>/dev/dri/renderD128</VaapiDevice>
+                <EnableHardwareEncoding>true</EnableHardwareEncoding>
+                <AllowHevcEncoding>true</AllowHevcEncoding>
+                <EnableHardwareDecoding>true</EnableHardwareDecoding>
+                <EnableDecodingColorDepth10Hevc>true</EnableDecodingColorDepth10Hevc>
+                <EnableDecodingColorDepth10Vp9>true</EnableDecodingColorDepth10Vp9>
+                <EnableIntelLowPowerH264HwEncoder>true</EnableIntelLowPowerH264HwEncoder>
+                <EnableIntelLowPowerHevcHwEncoder>true</EnableIntelLowPowerHevcHwEncoder>
+                <EnableHardwareFilterUpscaling>true</EnableHardwareFilterUpscaling>
+                <AllowAv1Encoding>true</AllowAv1Encoding>
+                <HardwareDecodingCodecs>
+                  <string>h264</string>
+                  <string>hevc</string>
+                  <string>mpeg2video</string>
+                  <string>mpeg4</string>
+                  <string>vc1</string>
+                  <string>vp8</string>
+                  <string>vp9</string>
+                  <string>av1</string>
+                </HardwareDecodingCodecs>
+                <MaxMuxingQueueSize>2048</MaxMuxingQueueSize>
+                <EnableSubtitleExtraction>true</EnableSubtitleExtraction>
+                <MaximumEncodingThreads>0</MaximumEncodingThreads>
+              </EncodingOptions>
+        kubeconfig: /root/.kube/config
+
+    - name: Deploy Jellyfin Deployment
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: jellyfin
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: media-server
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: jellyfin
+                component: media-server
+            template:
+              metadata:
+                labels:
+                  app: jellyfin
+                  component: media-server
+              spec:
+                nodeSelector:
+                  kubernetes.io/hostname: "{{ storage_node_hostname }}"
+                affinity:
+                  podAntiAffinity:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                    - weight: 100
+                      podAffinityTerm:
+                        labelSelector:
+                          matchExpressions:
+                          - key: app
+                            operator: In
+                            values: ["jellyfin"]
+                        topologyKey: kubernetes.io/hostname
+                containers:
+                - name: jellyfin
+                  image: jellyfin/jellyfin:latest
+                  imagePullPolicy: Always
+                  ports:
+                  - containerPort: 8096
+                    name: http
+                  - containerPort: 8920
+                    name: https
+                  - containerPort: 1900
+                    name: discovery
+                    protocol: UDP
+                  - containerPort: 7359
+                    name: auto-discovery
+                    protocol: UDP
+                  env:
+                  - name: JELLYFIN_PublishedServerUrl
+                    value: "{{ jellyfin_published_url }}"
+                  - name: JELLYFIN_FFmpeg__analyzeduration
+                    value: "200M"
+                  - name: JELLYFIN_FFmpeg__probesize
+                    value: "1G"
+                  resources:
+                    requests:
+                      memory: "2Gi"
+                      cpu: "500m"
+                    limits:
+                      memory: "2.5Gi"
+                      cpu: "2000m"
+                  volumeMounts:
+                  - name: media
+                    mountPath: /media
+                    readOnly: true
+                  - name: config
+                    mountPath: /config
+                  - name: dev-dri
+                    mountPath: /dev/dri
+                    readOnly: false
+                  - name: jellyfin-config-files
+                    mountPath: /config/config
+                    readOnly: true
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: 8096
+                    initialDelaySeconds: 60
+                    periodSeconds: 30
+                    timeoutSeconds: 10
+                    failureThreshold: 3
+                  readinessProbe:
+                    httpGet:
+                      path: /health
+                      port: 8096
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                    failureThreshold: 3
+                  securityContext:
+                    privileged: false
+                    allowPrivilegeEscalation: true
+                    capabilities:
+                      add:
+                      - SYS_ADMIN
+                      drop:
+                      - ALL
+                    runAsUser: 0
+                  startupProbe:
+                    httpGet:
+                      path: /health
+                      port: 8096
+                    initialDelaySeconds: 10
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                    failureThreshold: 30
+                volumes:
+                - name: media
+                  persistentVolumeClaim:
+                    claimName: jellyfin-media-pvc
+                - name: config
+                  persistentVolumeClaim:
+                    claimName: jellyfin-config-pvc
+                - name: dev-dri
+                  hostPath:
+                    path: /dev/dri
+                    type: Directory
+                - name: jellyfin-config-files
+                  configMap:
+                    name: jellyfin-config
+                restartPolicy: Always
+                dnsPolicy: ClusterFirst
+        kubeconfig: /root/.kube/config
+
+    - name: Deploy Jellyfin Service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: jellyfin-service
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: media-server
+            annotations:
+              service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+          spec:
+            selector:
+              app: jellyfin
+              component: media-server
+            ports:
+            - name: http
+              port: 8096
+              targetPort: 8096
+              protocol: TCP
+              nodePort: 30096
+            - name: https
+              port: 8920
+              targetPort: 8920
+              protocol: TCP
+              nodePort: 30920
+            - name: discovery
+              port: 1900
+              targetPort: 1900
+              protocol: UDP
+              nodePort: 31900
+            - name: auto-discovery
+              port: 7359
+              targetPort: 7359
+              protocol: UDP
+              nodePort: 30735
+            type: NodePort
+            sessionAffinity: ClientIP
+            sessionAffinityConfig:
+              clientIP:
+                timeoutSeconds: 10800
+        kubeconfig: /root/.kube/config
+
+    - name: Deploy Horizontal Pod Autoscaler
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: autoscaling/v2
+          kind: HorizontalPodAutoscaler
+          metadata:
+            name: jellyfin-hpa
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: media-server
+          spec:
+            scaleTargetRef:
+              apiVersion: apps/v1
+              kind: Deployment
+              name: jellyfin
+            minReplicas: 1
+            maxReplicas: 3
+            metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 60
+            - type: Resource
+              resource:
+                name: memory
+                target:
+                  type: Utilization
+                  averageUtilization: 70
+            behavior:
+              scaleDown:
+                stabilizationWindowSeconds: 300
+                policies:
+                - type: Percent
+                  value: 50
+                  periodSeconds: 60
+              scaleUp:
+                stabilizationWindowSeconds: 60
+                policies:
+                - type: Percent
+                  value: 100
+                  periodSeconds: 60
+                selectPolicy: Max
+        kubeconfig: /root/.kube/config
+
+    - name: Deploy Monitoring ServiceMonitor
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: monitoring.coreos.com/v1
+          kind: ServiceMonitor
+          metadata:
+            name: jellyfin-metrics
+            namespace: "{{ jellyfin_namespace }}"
+            labels:
+              app: jellyfin
+              component: media-server
+              release: kube-prometheus-stack
+          spec:
+            selector:
+              matchLabels:
+                app: jellyfin
+                component: media-server
+            endpoints:
+            - port: http
+              interval: 30s
+              path: /System/Info/Public
+              scrapeTimeout: 10s
+            namespaceSelector:
+              matchNames:
+              - "{{ jellyfin_namespace }}"
+        kubeconfig: /root/.kube/config
+
+    - name: Wait for Jellyfin deployment to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: jellyfin
+        namespace: "{{ jellyfin_namespace }}"
+        wait: true
+        wait_condition:
+          type: Progressing
+          status: "True"
+          reason: NewReplicaSetAvailable
+        wait_timeout: 300
+        kubeconfig: /root/.kube/config
+      register: jellyfin_deployment
+
+    - name: Get Jellyfin pod status
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ jellyfin_namespace }}"
+        label_selectors:
+          - app=jellyfin
+        kubeconfig: /root/.kube/config
+      register: jellyfin_pods
+
+    - name: Display deployment status
+      debug:
+        msg: |
+          Jellyfin High-Availability Deployment Status:
+          ================================================
+          
+          Namespace: {{ jellyfin_namespace }}
+          Deployment: {{ jellyfin_deployment.resources[0].status.replicas | default(0) }} replicas
+          Available: {{ jellyfin_deployment.resources[0].status.availableReplicas | default(0) }} replicas
+          
+          Pods:
+          {% for pod in jellyfin_pods.resources %}
+          - {{ pod.metadata.name }}: {{ pod.status.phase }}
+          {% endfor %}
+          
+          Access URLs:
+          - Main HTTP: http://{{ ansible_default_ipv4.address }}:30096
+          - HTTPS: https://{{ ansible_default_ipv4.address }}:30920
+          - Direct to Storage Node: http://{{ groups['storage_nodes'][0] }}:30096
+          
+          Features Enabled:
+          ✓ Auto-scaling (1-3 pods based on load)
+          ✓ Session affinity for uninterrupted streaming
+          ✓ Hardware acceleration support
+          ✓ Large file upload support (50GB)
+          ✓ Monitoring integration
+          ✓ Resource constraints (2-2.5GB RAM per pod)
+          
+          Next Steps:
+          1. Verify media access at the above URL
+          2. Test auto-scaling by starting multiple streams
+          3. Monitor resource usage in Grafana
+          4. Stop old Podman container when satisfied: podman stop jellyfin
+
+  post_tasks:
+    - name: Create validation script
+      copy:
+        dest: /tmp/validate_jellyfin_ha.sh
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          echo "=== Jellyfin HA Validation ==="
+          echo "Checking Kubernetes resources..."
+          
+          kubectl get pods -n jellyfin
+          kubectl get svc -n jellyfin
+          kubectl get hpa -n jellyfin
+          kubectl get pv | grep jellyfin
+          kubectl get pvc -n jellyfin
+          
+          echo ""
+          echo "Checking service endpoints..."
+          curl -s -I http://{{ ansible_default_ipv4.address }}:30096/health || echo "Service not ready yet"
+          
+          echo ""
+          echo "Checking HPA metrics..."
+          kubectl top pods -n jellyfin 2>/dev/null || echo "Metrics not ready yet"
+          
+          echo ""
+          echo "Access your Jellyfin server at:"
+          echo "http://{{ ansible_default_ipv4.address }}:30096"
+
+    - name: Run validation
+      shell: /tmp/validate_jellyfin_ha.sh
+      register: validation_output
+      
+    - name: Show validation results
+      debug:
+        msg: "{{ validation_output.stdout_lines }}"

@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jellyfin-ingress
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    component: media-server
+  annotations:
+    # NGINX Ingress specific annotations for streaming optimization
+    nginx.ingress.kubernetes.io/proxy-body-size: "50g"  # Allow 50GB uploads
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "1m"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    # Session affinity via ingress
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "jellyfin-server"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "10800"  # 3 hours
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "10800"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+    # SSL redirect (if using HTTPS)
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Custom headers for Jellyfin
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Forwarded-Proto $scheme";
+      more_set_headers "X-Forwarded-Host $host";
+      more_set_headers "X-Forwarded-For $proxy_add_x_forwarded_for";
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "{{ jellyfin_hostname | default('jellyfin.local') }}"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jellyfin-service
+            port:
+              number: 8096
+  # Optional TLS configuration
+  # tls:
+  # - hosts:
+  #   - "{{ jellyfin_hostname | default('jellyfin.local') }}"
+  #   secretName: jellyfin-tls
