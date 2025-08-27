@@ -8,6 +8,7 @@
     loki_port: 3100
     prometheus_port: 9090
     grafana_port: 3000
+  skip_host_podman: false
   tasks:
     - name: Ensure Podman is installed (package module - distro agnostic)
       package:
@@ -131,6 +132,7 @@
       # Use the play-level `loki_port` var directly; do not reassign here (avoids recursion)
 
     - name: Ensure monitoring Pod exists (podman)
+      when: not skip_host_podman | bool
       containers.podman.podman_pod:
         name: monitoring_pod
         state: started
@@ -141,6 +143,7 @@
           - "5000:5000"  # Local registry
 
     - name: Start Prometheus container in pod
+      when: not skip_host_podman | bool
       containers.podman.podman_container:
         name: prometheus
         image: docker.io/prom/prometheus:latest
@@ -152,6 +155,7 @@
           - "{{ monit_root }}/prometheus/data:/var/lib/prometheus:Z"
 
     - name: Start Loki container in pod
+      when: not skip_host_podman | bool
       containers.podman.podman_container:
         name: loki
         image: docker.io/grafana/loki:2.8.2
@@ -166,6 +170,7 @@
       ignore_errors: yes
 
     - name: Start Grafana container in pod (no stored admin password)
+      when: not skip_host_podman | bool
       containers.podman.podman_container:
         name: grafana
         image: docker.io/grafana/grafana:latest
@@ -184,6 +189,7 @@
           - "{{ monit_root }}/grafana/data:/var/lib/grafana:Z"
 
     - name: Start Promtail on monitoring node (collect local logs)
+      when: not skip_host_podman | bool
       containers.podman.podman_container:
         name: promtail_local
         image: docker.io/grafana/promtail:2.8.2
@@ -197,6 +203,7 @@
         command: -config.file=/etc/promtail/promtail-config.yaml
 
     - name: Start local registry container in pod
+      when: not skip_host_podman | bool
       containers.podman.podman_container:
         name: local_registry
         image: docker.io/registry:2
