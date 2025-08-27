@@ -243,6 +243,26 @@ kubectl get deployment jellyfin -n jellyfin -o yaml
 kubectl logs -n jellyfin -l app=jellyfin
 ```
 
+**Node affinity/scheduling issues**:
+```bash
+# Check node labels and ensure storage node is properly labeled
+kubectl get nodes --show-labels | grep storagenodet3500
+
+# Check for pods stuck in Pending due to node affinity
+kubectl get pods -n jellyfin --field-selector=status.phase=Pending
+kubectl describe pods -n jellyfin --field-selector=status.phase=Pending
+
+# If pods fail with "node(s) didn't match Pod's node affinity/selector":
+# 1. Delete the problematic deployment
+kubectl delete deployment jellyfin -n jellyfin
+
+# 2. Redeploy with correct configuration
+./deploy_jellyfin.sh
+
+# 3. Verify pods schedule on correct node
+kubectl get pods -n jellyfin -o wide
+```
+
 **Note**: The deployment wait timeout has been increased to 10 minutes to accommodate Jellyfin's startup time, especially during initial setup or when pulling large container images.
 
 ### Performance Optimization
