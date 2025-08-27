@@ -18,10 +18,18 @@
         kubeconfig: /root/.kube/config
       register: cluster_nodes
       
-    - name: Ensure storage node is available
+    - name: Find matching Kubernetes node for storage node
+      set_fact:
+        storage_node_k8s_name: "{{ item.metadata.name }}"
+      loop: "{{ cluster_nodes.resources }}"
+      when: >
+        (item.metadata.name == storage_node_hostname) or
+        ((item.status.addresses | selectattr('address','equalto', storage_node_hostname) | list | length) > 0)
+
+    - name: Fail if storage node not found in cluster
       fail:
-        msg: "Storage node not found in cluster"
-      when: storage_node_hostname not in (cluster_nodes.resources | map(attribute='metadata.name') | list)
+        msg: "Storage node not found in cluster (checked metadata.name and node addresses). Value checked: {{ storage_node_hostname }}"
+      when: storage_node_k8s_name is not defined
       
     - name: Check if existing Podman Jellyfin is running
       shell: podman ps --filter name=jellyfin --format "table {{.Names}}\t{{.Status}}"
