@@ -647,6 +647,7 @@
               - app=jellyfin
             kubeconfig: /root/.kube/config
           register: jellyfin_debug_pods
+          failed_when: false
           
         - name: Gather Jellyfin events for debugging
           kubernetes.core.k8s_info:
@@ -655,40 +656,156 @@
             namespace: "{{ jellyfin_namespace }}"
             kubeconfig: /root/.kube/config
           register: jellyfin_debug_events
+          failed_when: false
           
-        - name: Display debug information
+        - name: Gather Jellyfin deployment status for debugging
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: Deployment
+            name: jellyfin
+            namespace: "{{ jellyfin_namespace }}"
+            kubeconfig: /root/.kube/config
+          register: jellyfin_debug_deployment
+          failed_when: false
+          
+        - name: Gather Jellyfin PVC status for debugging
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: PersistentVolumeClaim
+            namespace: "{{ jellyfin_namespace }}"
+            kubeconfig: /root/.kube/config
+          register: jellyfin_debug_pvcs
+          failed_when: false
+          
+        - name: Display basic debug information
           debug:
             msg: |
-              Jellyfin deployment failed to become ready within timeout.
+              ==========================================
+              JELLYFIN DEPLOYMENT FAILURE DEBUG INFO
+              ==========================================
               
-              Pod Status:
+              Timeout: Jellyfin deployment failed to become ready within 10 minutes.
+              Namespace: {{ jellyfin_namespace }}
+              Storage Node: {{ storage_node_k8s_name | default('UNKNOWN') }}
+              
+        - name: Display pod debug information
+          debug:
+            msg: |
+              POD STATUS:
+              {% if jellyfin_debug_pods.resources is defined and jellyfin_debug_pods.resources | length > 0 %}
               {% for pod in jellyfin_debug_pods.resources %}
-              - {{ pod.metadata.name }}: {{ pod.status.phase }}
-                {% if pod.status.containerStatuses is defined %}
-                  Containers:
-                  {% for container in pod.status.containerStatuses %}
-                  - {{ container.name }}: ready={{ container.ready }}, restartCount={{ container.restartCount }}
+              - Pod: {{ pod.metadata.name | default('unknown') }}
+                Status: {{ pod.status.phase | default('unknown') }}
+                Node: {{ pod.spec.nodeName | default('unscheduled') }}
+                {% if pod.status.containerStatuses is defined and pod.status.containerStatuses | length > 0 %}
+                Containers:
+                {% for container in pod.status.containerStatuses %}
+                  - {{ container.name | default('unknown') }}: ready={{ container.ready | default('false') }}, restarts={{ container.restartCount | default('0') }}
                     {% if container.state.waiting is defined %}
-                    Waiting: {{ container.state.waiting.reason }} - {{ container.state.waiting.message | default('') }}
+                    Waiting: {{ container.state.waiting.reason | default('unknown') }}
+                    {% if container.state.waiting.message is defined %}
+                    Message: {{ container.state.waiting.message }}
                     {% endif %}
-                  {% endfor %}
+                    {% elif container.state.terminated is defined %}
+                    Terminated: {{ container.state.terminated.reason | default('unknown') }} (exit {{ container.state.terminated.exitCode | default('unknown') }})
+                    {% endif %}
+                {% endfor %}
+                {% else %}
+                Container status: Not available
                 {% endif %}
               {% endfor %}
+              {% else %}
+              No pods found or pod information unavailable
+              {% endif %}
               
-              Recent Events:
-              {% for event in jellyfin_debug_events.resources[-5:] %}
-              - {{ event.firstTimestamp }}: {{ event.reason }} - {{ event.message }}
+        - name: Display deployment debug information
+          debug:
+            msg: |
+              DEPLOYMENT STATUS:
+              {% if jellyfin_debug_deployment.resources is defined and jellyfin_debug_deployment.resources | length > 0 %}
+              {% set deploy = jellyfin_debug_deployment.resources[0] %}
+              - Replicas desired: {{ deploy.spec.replicas | default('unknown') }}
+              - Replicas available: {{ deploy.status.availableReplicas | default('0') }}
+              - Replicas ready: {{ deploy.status.readyReplicas | default('0') }}
+              - Replicas updated: {{ deploy.status.updatedReplicas | default('0') }}
+              {% if deploy.status.conditions is defined %}
+              Conditions:
+              {% for condition in deploy.status.conditions %}
+              - {{ condition.type | default('unknown') }}: {{ condition.status | default('unknown') }} ({{ condition.reason | default('no reason') }})
               {% endfor %}
+              {% endif %}
+              {% else %}
+              Deployment information unavailable
+              {% endif %}
+              
+        - name: Display PVC debug information
+          debug:
+            msg: |
+              PERSISTENT VOLUME CLAIMS:
+              {% if jellyfin_debug_pvcs.resources is defined and jellyfin_debug_pvcs.resources | length > 0 %}
+              {% for pvc in jellyfin_debug_pvcs.resources %}
+              - {{ pvc.metadata.name | default('unknown') }}: {{ pvc.status.phase | default('unknown') }}
+              {% endfor %}
+              {% else %}
+              No PVCs found or PVC information unavailable
+              {% endif %}
+              
+        - name: Display events debug information
+          debug:
+            msg: |
+              RECENT EVENTS:
+              {% if jellyfin_debug_events.resources is defined and jellyfin_debug_events.resources | length > 0 %}
+              {% for event in jellyfin_debug_events.resources[-10:] %}
+              - {{ event.firstTimestamp | default(event.eventTime | default('unknown time')) }}: {{ event.reason | default('unknown') }} - {{ event.message | default('no message') }}
+              {% endfor %}
+              {% else %}
+              No events found or event information unavailable
+              {% endif %}
               
         - name: Fail with helpful error message
           fail:
             msg: |
-              Jellyfin deployment failed to become ready within 10 minutes.
-              Check the debug information above for details.
-              You can manually check status with:
-              - kubectl get pods -n jellyfin
-              - kubectl describe pods -n jellyfin
-              - kubectl logs -n jellyfin -l app=jellyfin
+              ==========================================
+              JELLYFIN DEPLOYMENT FAILED
+              ==========================================
+              
+              The Jellyfin deployment failed to become ready within 10 minutes.
+              
+              TROUBLESHOOTING STEPS:
+              ==========================================
+              
+              1. Check pod status and logs:
+                 kubectl get pods -n jellyfin
+                 kubectl describe pods -n jellyfin
+                 kubectl logs -n jellyfin -l app=jellyfin
+              
+              2. Check persistent volume status:
+                 kubectl get pv | grep jellyfin
+                 kubectl get pvc -n jellyfin
+                 kubectl describe pvc -n jellyfin
+              
+              3. Check events for errors:
+                 kubectl get events -n jellyfin --sort-by=.metadata.creationTimestamp
+              
+              4. Verify storage node is accessible:
+                 kubectl get nodes -o wide
+                 ssh {{ groups['storage_nodes'][0] }} 'ls -la {{ jellyfin_media_path | default('/srv/media') }}'
+              
+              5. Check hardware acceleration devices (if needed):
+                 ssh {{ groups['storage_nodes'][0] }} 'ls -la /dev/dri/'
+              
+              6. Common solutions:
+                 - Ensure media directory exists: mkdir -p {{ jellyfin_media_path | default('/srv/media') }}
+                 - Check directory permissions: chown -R 1000:1000 {{ jellyfin_media_path | default('/srv/media') }}
+                 - Verify storage node is in cluster: kubectl get nodes
+                 - Check available resources: kubectl describe node {{ storage_node_k8s_name | default('storage-node') }}
+              
+              7. Manual cleanup if needed:
+                 kubectl delete deployment jellyfin -n jellyfin
+                 kubectl delete pvc jellyfin-config-pvc -n jellyfin
+                 # Then re-run the deployment
+              
+              Please check the debug information above for specific error details.
 
     - name: Display deployment status
       debug:
