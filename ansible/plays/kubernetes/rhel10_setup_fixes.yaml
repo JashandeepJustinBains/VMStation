@@ -203,8 +203,8 @@
                 immediate: yes
                 state: enabled
               ignore_errors: yes
-              
-          when: 
+          when:
+            - firewalld_check is defined
             - firewalld_check.status is defined
             - firewalld_check.status.ActiveState == 'active'
             
