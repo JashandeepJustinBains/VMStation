@@ -8,7 +8,7 @@
     jellyfin_namespace: jellyfin
     jellyfin_hostname: "jellyfin.local"
     jellyfin_published_url: "http://192.168.4.61:30096"
-    storage_node_hostname: "{{ groups['storage_nodes'][0] | regex_replace('^([0-9.]+)$', hostvars[groups['storage_nodes'][0]]['ansible_hostname']) }}"
+    storage_node_hostname: "{{ groups['storage_nodes'][0] }}"
   # jellyfin_media_path may be set in group_vars/all.yml; if not present we use '/srv/media' via defaults in tasks
     
   pre_tasks:
@@ -74,18 +74,67 @@
       set_fact:
         storage_node_candidates: "{{ storage_node_candidates | default([]) | map('string') | list | unique }}"
 
+    - name: Debug cluster nodes and storage candidates
+      debug:
+        msg: |
+          Cluster nodes found:
+          {% for node in cluster_nodes.resources %}
+          - Name: {{ node.metadata.name }}
+            Addresses: {{ node.status.addresses | map(attribute='address') | list }}
+          {% endfor %}
+          
+          Storage node candidates: {{ storage_node_candidates }}
+          Target storage node from inventory: {{ groups['storage_nodes'][0] }}
+
     - name: Find matching Kubernetes node for storage node (compare metadata.name and node addresses)
       set_fact:
         storage_node_k8s_name: "{{ item.metadata.name }}"
+        storage_node_k8s_addresses: "{{ item.status.addresses | map(attribute='address') | list }}"
       loop: "{{ cluster_nodes.resources }}"
       when: >-
         (item.metadata.name | lower) in (storage_node_candidates | map('lower') | list)
         or ((item.status.addresses | map(attribute='address') | list | intersect(storage_node_candidates) | length) > 0)
 
+    - name: Debug resolved storage node
+      debug:
+        msg: |
+          Resolved storage node:
+          - Kubernetes node name: {{ storage_node_k8s_name | default('NOT FOUND') }}
+          - Node addresses: {{ storage_node_k8s_addresses | default([]) }}
+          - Expected storage node IP: {{ groups['storage_nodes'][0] }}
+
     - name: Fail if storage node not found in cluster
       fail:
-        msg: "Storage node not found in cluster (checked metadata.name and node addresses). Value checked: {{ storage_node_hostname }}; candidates: {{ storage_node_candidates }}"
+        msg: |
+          Storage node not found in cluster (checked metadata.name and node addresses). 
+          
+          Expected storage node: {{ groups['storage_nodes'][0] }}
+          Storage node candidates: {{ storage_node_candidates }}
+          
+          Available cluster nodes:
+          {% for node in cluster_nodes.resources %}
+          - {{ node.metadata.name }}: {{ node.status.addresses | map(attribute='address') | list }}
+          {% endfor %}
+          
+          This usually means the storage node ({{ groups['storage_nodes'][0] }}) is not properly joined to the Kubernetes cluster.
+          Please verify with: kubectl get nodes -o wide
       when: storage_node_k8s_name is not defined
+
+    - name: Validate resolved storage node matches expected storage node
+      fail:
+        msg: |
+          ERROR: Resolved storage node does not match expected storage node!
+          
+          Expected: {{ groups['storage_nodes'][0] }}
+          Resolved: {{ storage_node_k8s_name }}
+          Node addresses: {{ storage_node_k8s_addresses }}
+          
+          This means the nodeSelector will schedule pods on the wrong node.
+          The Jellyfin deployment should run on {{ groups['storage_nodes'][0] }} but would run on {{ storage_node_k8s_name }}.
+      when: >-
+        storage_node_k8s_name is defined and 
+        groups['storage_nodes'][0] not in storage_node_k8s_addresses and
+        storage_node_k8s_name | lower != groups['storage_nodes'][0] | lower
       
     - name: Check if existing Podman Jellyfin is running
       shell: >-
@@ -650,16 +699,17 @@
           Namespace: {{ jellyfin_namespace }}
           Deployment: {{ jellyfin_deployment.resources[0].status.replicas | default(0) }} replicas
           Available: {{ jellyfin_deployment.resources[0].status.availableReplicas | default(0) }} replicas
+          Scheduled on: {{ storage_node_k8s_name }} ({{ groups['storage_nodes'][0] }})
           
           Pods:
           {% for pod in jellyfin_pods_wait.resources %}
-          - {{ pod.metadata.name }}: {{ pod.status.phase }}
+          - {{ pod.metadata.name }}: {{ pod.status.phase }} (Node: {{ pod.spec.nodeName | default('Pending') }})
           {% endfor %}
           
           Access URLs:
-          - Main HTTP: http://{{ ansible_default_ipv4.address }}:30096
-          - HTTPS: https://{{ ansible_default_ipv4.address }}:30920
-          - Direct to Storage Node: http://{{ groups['storage_nodes'][0] }}:30096
+          - Primary HTTP: http://{{ groups['storage_nodes'][0] }}:30096 (via storage node)
+          - Primary HTTPS: https://{{ groups['storage_nodes'][0] }}:30920 (via storage node)
+          - Alternative access via any cluster node: http://{{ ansible_default_ipv4.address }}:30096
           
           Features Enabled:
           ✓ Auto-scaling (1-3 pods based on load)
@@ -693,7 +743,11 @@
           
           echo ""
           echo "Checking service endpoints..."
-          curl -s -I http://{{ ansible_default_ipv4.address }}:30096/health || echo "Service not ready yet"
+          echo "Testing storage node endpoint (primary): http://{{ groups['storage_nodes'][0] }}:30096/health"
+          curl -s -I http://{{ groups['storage_nodes'][0] }}:30096/health || echo "Storage node service not ready yet"
+          
+          echo "Testing control plane endpoint (fallback): http://{{ ansible_default_ipv4.address }}:30096/health"  
+          curl -s -I http://{{ ansible_default_ipv4.address }}:30096/health || echo "Control plane service not ready yet"
           
           echo ""
           echo "Checking HPA metrics..."
@@ -701,7 +755,11 @@
           
           echo ""
           echo "Access your Jellyfin server at:"
-          echo "http://{{ ansible_default_ipv4.address }}:30096"
+          echo "Primary URL (storage node): http://{{ groups['storage_nodes'][0] }}:30096"
+          echo "Fallback URL (any node): http://{{ ansible_default_ipv4.address }}:30096"
+          echo ""
+          echo "Expected deployment location: {{ groups['storage_nodes'][0] }} (storage node)"
+          echo "Pods should be scheduled on: {{ storage_node_k8s_name | default('UNKNOWN') }}"
 
     - name: Run validation
       shell: /tmp/validate_jellyfin_ha.sh
