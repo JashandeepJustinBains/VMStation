@@ -127,6 +127,7 @@
             hostPath:
               path: /mnt/media
               type: Directory
+            # Bind PV to resolved storage node hostname
             nodeAffinity:
               required:
                 nodeSelectorTerms:
@@ -152,6 +153,7 @@
             hostPath:
               path: /mnt/jellyfin-config
               type: DirectoryOrCreate
+            # Bind PV to resolved storage node hostname  
             nodeAffinity:
               required:
                 nodeSelectorTerms:
@@ -266,6 +268,7 @@
                   app: jellyfin
                   component: media-server
               spec:
+                # Schedule pod on the resolved storage node (ensures correct hostname matching)
                 nodeSelector:
                   kubernetes.io/hostname: "{{ storage_node_k8s_name }}"
                 affinity:
