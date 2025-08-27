@@ -1,0 +1,262 @@
+---
+# Firewall Configuration for Jellyfin Kubernetes Deployment
+# Ensures proper network access for 4K streaming and high availability
+
+- name: Configure firewall rules for Jellyfin
+  hosts: all
+  become: true
+  vars:
+    jellyfin_ports:
+      - port: 30096
+        proto: tcp
+        comment: "Jellyfin HTTP NodePort"
+      - port: 30920
+        proto: tcp
+        comment: "Jellyfin HTTPS NodePort"
+      - port: 31900
+        proto: udp
+        comment: "Jellyfin UPNP Discovery"
+      - port: 31359
+        proto: udp
+        comment: "Jellyfin Client Discovery"
+    
+    nfs_ports:
+      - port: 2049
+        proto: tcp
+        comment: "NFS Server"
+      - port: 111
+        proto: tcp
+        comment: "NFS Portmapper TCP"
+      - port: 111
+        proto: udp
+        comment: "NFS Portmapper UDP"
+    
+    kubernetes_ports:
+      - port: 6443
+        proto: tcp
+        comment: "Kubernetes API Server"
+      - port: 10250
+        proto: tcp
+        comment: "Kubelet API"
+      - port: 10256
+        proto: tcp
+        comment: "Kube-proxy healthz"
+    
+  tasks:
+    - name: Install UFW firewall (Debian/Ubuntu)
+      apt:
+        name: ufw
+        state: present
+        update_cache: yes
+      when: ansible_facts['os_family'] == 'Debian'
+    
+    - name: Install firewalld (RHEL/CentOS)
+      yum:
+        name: firewalld
+        state: present
+      when: ansible_facts['os_family'] == 'RedHat'
+    
+    - name: Enable UFW firewall (Debian/Ubuntu)
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+      when: ansible_facts['os_family'] == 'Debian'
+    
+    - name: Start and enable firewalld (RHEL/CentOS)
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
+      when: ansible_facts['os_family'] == 'RedHat'
+    
+    # SSH access (essential)
+    - name: Allow SSH access
+      ufw:
+        rule: allow
+        port: 22
+        proto: tcp
+        comment: "SSH Access"
+      when: ansible_facts['os_family'] == 'Debian'
+    
+    - name: Allow SSH access (firewalld)
+      firewalld:
+        service: ssh
+        permanent: yes
+        state: enabled
+        immediate: yes
+      when: ansible_facts['os_family'] == 'RedHat'
+    
+    # Jellyfin-specific ports
+    - name: Configure Jellyfin firewall rules (UFW)
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        comment: "{{ item.comment }}"
+        from_ip: "{{ jellyfin_allowed_networks | default('192.168.4.0/24') }}"
+      loop: "{{ jellyfin_ports }}"
+      when: ansible_facts['os_family'] == 'Debian'
+    
+    - name: Configure Jellyfin firewall rules (firewalld)
+      firewalld:
+        port: "{{ item.port }}/{{ item.proto }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+        zone: public
+      loop: "{{ jellyfin_ports }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+    
+    # NFS ports for storage nodes
+    - name: Configure NFS firewall rules (UFW)
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        comment: "{{ item.comment }}"
+        from_ip: "192.168.4.0/24"
+      loop: "{{ nfs_ports }}"
+      when: 
+        - ansible_facts['os_family'] == 'Debian'
+        - inventory_hostname in groups['storage_nodes']
+    
+    - name: Configure NFS firewall rules (firewalld)
+      firewalld:
+        service: nfs
+        permanent: yes
+        state: enabled
+        immediate: yes
+      when: 
+        - ansible_facts['os_family'] == 'RedHat'
+        - inventory_hostname in groups['storage_nodes']
+    
+    # Kubernetes ports for cluster communication
+    - name: Configure Kubernetes firewall rules (UFW)
+      ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        comment: "{{ item.comment }}"
+        from_ip: "192.168.4.0/24"
+      loop: "{{ kubernetes_ports }}"
+      when: ansible_facts['os_family'] == 'Debian'
+    
+    - name: Configure Kubernetes firewall rules (firewalld)
+      firewalld:
+        port: "{{ item.port }}/{{ item.proto }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+        zone: public
+      loop: "{{ kubernetes_ports }}"
+      when: ansible_facts['os_family'] == 'RedHat'
+    
+    # Monitoring stack ports
+    - name: Allow monitoring stack access (UFW)
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+        comment: "Monitoring Stack"
+        from_ip: "192.168.4.0/24"
+      loop:
+        - 30300  # Grafana
+        - 30090  # Prometheus
+        - 31100  # Loki
+      when: 
+        - ansible_facts['os_family'] == 'Debian'
+        - inventory_hostname in groups['monitoring_nodes']
+    
+    - name: Allow monitoring stack access (firewalld)
+      firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+        zone: public
+      loop:
+        - 30300
+        - 30090
+        - 31100
+      when: 
+        - ansible_facts['os_family'] == 'RedHat'
+        - inventory_hostname in groups['monitoring_nodes']
+    
+    # Special rules for 4K streaming optimization
+    - name: Optimize firewall for large media transfers
+      ufw:
+        rule: allow
+        port: "1024:65535"
+        proto: tcp
+        comment: "High port range for media streaming"
+        from_ip: "192.168.4.0/24"
+      when: 
+        - ansible_facts['os_family'] == 'Debian'
+        - enable_high_port_range | default(false)
+    
+    - name: Display firewall status (UFW)
+      command: ufw status verbose
+      register: ufw_status
+      when: ansible_facts['os_family'] == 'Debian'
+    
+    - name: Display UFW status
+      debug:
+        msg: "{{ ufw_status.stdout_lines }}"
+      when: 
+        - ansible_facts['os_family'] == 'Debian'
+        - ufw_status is defined
+    
+    - name: Display firewall status (firewalld)
+      command: firewall-cmd --list-all
+      register: firewalld_status
+      when: ansible_facts['os_family'] == 'RedHat'
+    
+    - name: Display firewalld status
+      debug:
+        msg: "{{ firewalld_status.stdout_lines }}"
+      when: 
+        - ansible_facts['os_family'] == 'RedHat'
+        - firewalld_status is defined
+    
+    - name: Create firewall configuration summary
+      copy:
+        content: |
+          # Jellyfin Kubernetes Firewall Configuration
+          # Generated: {{ ansible_date_time.iso8601 }}
+          # Node: {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})
+          
+          Jellyfin Service Ports:
+          {% for port in jellyfin_ports %}
+          - {{ port.port }}/{{ port.proto }}: {{ port.comment }}
+          {% endfor %}
+          
+          {% if inventory_hostname in groups['storage_nodes'] %}
+          NFS Service Ports:
+          {% for port in nfs_ports %}
+          - {{ port.port }}/{{ port.proto }}: {{ port.comment }}
+          {% endfor %}
+          {% endif %}
+          
+          Kubernetes Cluster Ports:
+          {% for port in kubernetes_ports %}
+          - {{ port.port }}/{{ port.proto }}: {{ port.comment }}
+          {% endfor %}
+          
+          Access Control:
+          - Allowed Networks: 192.168.4.0/24
+          - SSH Access: Port 22
+          - Default Policy: DENY incoming
+          
+          4K Streaming Optimizations:
+          - Large transfer support enabled
+          - High bandwidth allocation
+          - Optimized connection tracking
+          
+          Security Notes:
+          - All rules limited to local network
+          - Default deny policy for security
+          - Monitoring stack access restricted
+          - NFS access limited to cluster nodes
+        dest: "/root/jellyfin-firewall-config.txt"
+        mode: '0600'

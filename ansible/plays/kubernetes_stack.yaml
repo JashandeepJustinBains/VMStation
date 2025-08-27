@@ -8,3 +8,4 @@
 - import_playbook: kubernetes/setup_cert_manager.yaml
 - import_playbook: kubernetes/deploy_monitoring.yaml
 - import_playbook: kubernetes/deploy_jellyfin.yaml
+- import_playbook: kubernetes/configure_jellyfin_firewall.yaml

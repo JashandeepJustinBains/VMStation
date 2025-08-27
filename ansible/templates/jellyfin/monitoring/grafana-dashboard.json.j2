@@ -1,0 +1,210 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Jellyfin Media Server - Kubernetes",
+    "tags": ["jellyfin", "kubernetes", "media", "streaming"],
+    "style": "dark",
+    "timezone": "browser",
+    "editable": true,
+    "hideControls": false,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Pod Status Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "kube_pod_status_ready{namespace=\"jellyfin\", condition=\"true\"}",
+            "legendFormat": "Ready Pods",
+            "refId": "A"
+          },
+          {
+            "expr": "kube_pod_status_phase{namespace=\"jellyfin\", phase=\"Running\"}",
+            "legendFormat": "Running Pods", 
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 2}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "CPU Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{namespace=\"jellyfin\", container=\"jellyfin\"}[5m]) * 100",
+            "legendFormat": "{{pod}} CPU %",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 70},
+                {"color": "red", "value": 90}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Memory Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{namespace=\"jellyfin\", container=\"jellyfin\"} / 1024 / 1024 / 1024",
+            "legendFormat": "{{pod}} Memory GB",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "decbytes",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1073741824},
+                {"color": "red", "value": 2147483648}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Network Traffic",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(container_network_receive_bytes_total{namespace=\"jellyfin\"}[5m])",
+            "legendFormat": "{{pod}} RX bytes/s",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(container_network_transmit_bytes_total{namespace=\"jellyfin\"}[5m])",
+            "legendFormat": "{{pod}} TX bytes/s",
+            "refId": "B"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "binBps"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Pod Restarts",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "kube_pod_container_status_restarts_total{namespace=\"jellyfin\", container=\"jellyfin\"}",
+            "legendFormat": "{{pod}} Restarts",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Storage Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "kubelet_volume_stats_used_bytes{namespace=\"jellyfin\"} / kubelet_volume_stats_capacity_bytes{namespace=\"jellyfin\"} * 100",
+            "legendFormat": "{{persistentvolumeclaim}} Usage %",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 80},
+                {"color": "red", "value": 95}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Service Response Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "probe_duration_seconds{job=\"jellyfin-http\"}",
+            "legendFormat": "HTTP Response Time",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "time": {"from": "now-1h", "to": "now"},
+    "timepicker": {},
+    "templating": {"list": []},
+    "annotations": {"list": []},
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 1,
+    "links": []
+  }
+}

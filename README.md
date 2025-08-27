@@ -38,16 +38,23 @@ cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 ```
 
 ### 3. Access Services
-After deployment, access your monitoring services:
+After deployment, access your services:
 - **Grafana**: http://192.168.4.63:30300 (admin/admin)
 - **Prometheus**: http://192.168.4.63:30090
 - **Loki**: http://192.168.4.63:31100
 - **AlertManager**: http://192.168.4.63:30903
+- **Jellyfin Media Server**: http://192.168.4.61:30096 (4K streaming ready)
 
 ### 4. Validate Deployment
 ```bash
 # Run comprehensive validation
 ./scripts/validate_k8s_monitoring.sh
+
+# Validate Jellyfin deployment
+./scripts/validate_jellyfin_k8s.sh
+
+# Test Jellyfin performance and 4K streaming
+./scripts/test_jellyfin_performance.sh
 
 # Check cluster status
 kubectl get nodes -o wide
@@ -73,6 +80,14 @@ kubectl get pods -n monitoring
 - **AlertManager**: Alert routing and notification management
 - **Node Exporter**: Host-level metrics collection
 - **cert-manager**: Automated TLS certificate management
+
+### Media Streaming (Jellyfin)
+- **High Availability**: 2 replica pods with anti-affinity rules for zero downtime
+- **4K Optimization**: Dedicated CPU/memory resources for hardware acceleration
+- **Storage Integration**: Preserves existing media libraries and configuration
+- **Multiple Access**: NodePort (30096), LoadBalancer, and Ingress endpoints
+- **Session Persistence**: Sticky sessions for uninterrupted streaming
+- **Monitoring Integration**: Prometheus metrics and Grafana dashboards
 
 ### Key Features
 - **High Availability**: Automatic pod restart and health checks
@@ -115,8 +130,9 @@ VMStation has migrated from Podman containers to Kubernetes:
 ### Migration Path
 If you're upgrading from a Podman-based VMStation:
 1. Follow the [Migration Guide](./docs/MIGRATION_GUIDE.md)
-2. Use `./scripts/cleanup_podman_legacy.sh` after successful migration
-3. Update your firewall rules for NodePort services (30000-32767)
+2. For Jellyfin migration: `./scripts/migrate_jellyfin_to_k8s.sh`
+3. Use `./scripts/cleanup_podman_legacy.sh` after successful migration
+4. Update your firewall rules for NodePort services (30000-32767)
 
 ## Advanced Usage
 
@@ -124,13 +140,16 @@ If you're upgrading from a Podman-based VMStation:
 ```bash
 # Scale services
 kubectl scale deployment grafana -n monitoring --replicas=2
+kubectl scale deployment jellyfin -n jellyfin --replicas=3
 
 # Rolling updates
 helm upgrade kube-prometheus-stack prometheus-community/kube-prometheus-stack -n monitoring
+kubectl set image deployment/jellyfin jellyfin=jellyfin/jellyfin:10.9.0 -n jellyfin
 
 # Resource monitoring
 kubectl top nodes
 kubectl top pods -n monitoring
+kubectl top pods -n jellyfin
 ```
 
 ### Application Deployment
