@@ -494,29 +494,84 @@
         kubeconfig: /root/.kube/config
 
     - name: Wait for Jellyfin deployment to be ready
-      kubernetes.core.k8s_info:
-        api_version: apps/v1
-        kind: Deployment
-        name: jellyfin
-        namespace: "{{ jellyfin_namespace }}"
-        wait: true
-        wait_condition:
-          type: Progressing
-          status: "True"
-          reason: NewReplicaSetAvailable
-        wait_timeout: 300
-        kubeconfig: /root/.kube/config
-      register: jellyfin_deployment
-
-    - name: Get Jellyfin pod status
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Pod
-        namespace: "{{ jellyfin_namespace }}"
-        label_selectors:
-          - app=jellyfin
-        kubeconfig: /root/.kube/config
-      register: jellyfin_pods
+      block:
+        - name: Wait for Jellyfin pods to be ready
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: "{{ jellyfin_namespace }}"
+            label_selectors:
+              - app=jellyfin
+              - component=media-server
+            wait: true
+            wait_condition:
+              type: Ready
+              status: "True"
+            wait_timeout: 600
+            kubeconfig: /root/.kube/config
+          register: jellyfin_pods_wait
+          
+        - name: Get Jellyfin deployment status
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: Deployment
+            name: jellyfin
+            namespace: "{{ jellyfin_namespace }}"
+            kubeconfig: /root/.kube/config
+          register: jellyfin_deployment
+          
+      rescue:
+        - name: Gather Jellyfin pods for debugging
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: "{{ jellyfin_namespace }}"
+            label_selectors:
+              - app=jellyfin
+            kubeconfig: /root/.kube/config
+          register: jellyfin_debug_pods
+          
+        - name: Gather Jellyfin events for debugging
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Event
+            namespace: "{{ jellyfin_namespace }}"
+            kubeconfig: /root/.kube/config
+          register: jellyfin_debug_events
+          
+        - name: Display debug information
+          debug:
+            msg: |
+              Jellyfin deployment failed to become ready within timeout.
+              
+              Pod Status:
+              {% for pod in jellyfin_debug_pods.resources %}
+              - {{ pod.metadata.name }}: {{ pod.status.phase }}
+                {% if pod.status.containerStatuses is defined %}
+                  Containers:
+                  {% for container in pod.status.containerStatuses %}
+                  - {{ container.name }}: ready={{ container.ready }}, restartCount={{ container.restartCount }}
+                    {% if container.state.waiting is defined %}
+                    Waiting: {{ container.state.waiting.reason }} - {{ container.state.waiting.message | default('') }}
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              {% endfor %}
+              
+              Recent Events:
+              {% for event in jellyfin_debug_events.resources[-5:] %}
+              - {{ event.firstTimestamp }}: {{ event.reason }} - {{ event.message }}
+              {% endfor %}
+              
+        - name: Fail with helpful error message
+          fail:
+            msg: |
+              Jellyfin deployment failed to become ready within 10 minutes.
+              Check the debug information above for details.
+              You can manually check status with:
+              - kubectl get pods -n jellyfin
+              - kubectl describe pods -n jellyfin
+              - kubectl logs -n jellyfin -l app=jellyfin
 
     - name: Display deployment status
       debug:
@@ -529,7 +584,7 @@
           Available: {{ jellyfin_deployment.resources[0].status.availableReplicas | default(0) }} replicas
           
           Pods:
-          {% for pod in jellyfin_pods.resources %}
+          {% for pod in jellyfin_pods_wait.resources %}
           - {{ pod.metadata.name }}: {{ pod.status.phase }}
           {% endfor %}
           
