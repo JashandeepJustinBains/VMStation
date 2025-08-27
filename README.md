@@ -74,8 +74,16 @@ kubectl get pods -n monitoring
 - **Node Exporter**: Host-level metrics collection
 - **cert-manager**: Automated TLS certificate management
 
+### Application Services
+- **Jellyfin HA**: High-availability media server with auto-scaling (1-3 pods)
+  - Hardware acceleration for 4K streaming (H.264, HEVC, VP9, AV1)
+  - Session affinity for uninterrupted streaming experience
+  - Auto-scaling based on CPU/memory usage (2.5GB RAM limit per pod)
+  - Preserves existing media structure at `/mnt/media`
+
 ### Key Features
 - **High Availability**: Automatic pod restart and health checks
+- **Auto-scaling**: Horizontal pod autoscaling for media streaming loads
 - **Scalability**: Horizontal pod autoscaling capabilities
 - **Security**: RBAC, network policies, and TLS certificates
 - **Storage**: Persistent volumes with backup capabilities
@@ -84,6 +92,14 @@ kubectl get pods -n monitoring
 
 ## Architecture Highlights
 
+### Media Streaming Platform
+- **Jellyfin High-Availability**: Enterprise-grade media server deployment
+  - Auto-scaling from 1-3 pods based on concurrent users
+  - Session affinity ensures uninterrupted streaming experience
+  - Hardware acceleration for efficient 4K transcoding
+  - Resource limits: 2-2.5GB RAM per pod (fits 8GB storage node)
+  - Load balancing with transparent failover
+
 ### Certificate Management
 - Self-signed CA for internal communications
 - Automated certificate lifecycle with cert-manager
@@ -91,13 +107,14 @@ kubectl get pods -n monitoring
 
 ### Storage Strategy
 - Persistent volumes for data retention
-- Configurable storage classes
+- Media storage: `/mnt/media` (100TB+ capacity)
+- Configuration persistence: `/mnt/jellyfin-config`
 - Backup and snapshot capabilities
 
 ### Network Design
 - Pod-to-pod communication via CNI
 - Service discovery through Kubernetes DNS
-- NodePort services for external access
+- NodePort services for external access (Jellyfin: 30096)
 - Ingress controllers for advanced routing
 
 ## Migration from Podman
@@ -106,17 +123,26 @@ VMStation has migrated from Podman containers to Kubernetes:
 
 ### What's New
 ✅ **Kubernetes cluster** with full orchestration  
+✅ **Jellyfin High-Availability** with auto-scaling media streaming  
 ✅ **Helm package management** for easy application deployment  
 ✅ **cert-manager** for automated TLS certificate management  
 ✅ **Enhanced monitoring** with ServiceMonitors and PodMonitors  
 ✅ **Persistent storage** with volume management  
 ✅ **Rolling updates** with zero-downtime deployments  
 
+### Media Server Features
+🎬 **Auto-scaling Jellyfin**: Scales 1-3 pods based on streaming load  
+🚀 **Hardware acceleration**: H.264, HEVC, VP9, AV1 codec support  
+💾 **Persistent media**: Preserves existing `/mnt/media` structure  
+🔄 **Session affinity**: Seamless streaming experience during scaling  
+📊 **Resource optimization**: 2-2.5GB RAM per pod constraint  
+
 ### Migration Path
 If you're upgrading from a Podman-based VMStation:
 1. Follow the [Migration Guide](./docs/MIGRATION_GUIDE.md)
-2. Use `./scripts/cleanup_podman_legacy.sh` after successful migration
-3. Update your firewall rules for NodePort services (30000-32767)
+2. Deploy Jellyfin HA: `./deploy_jellyfin.sh`
+3. Use `./scripts/cleanup_podman_legacy.sh` after successful migration
+4. Update your firewall rules for NodePort services (30000-32767)
 
 ## Advanced Usage
 
@@ -275,6 +301,9 @@ spec:
 - [x] Implement TLS certificate management
 - [x] Set up Helm-based application deployment
 - [x] Create comprehensive monitoring stack
+- [x] Deploy Jellyfin High-Availability with auto-scaling
+- [x] Hardware acceleration support for 4K streaming
+- [x] Session affinity and load balancing for media server
 - [ ] Implement ingress controllers for external access
 - [ ] Set up automated backups for persistent volumes
 - [ ] Add GitOps workflow with ArgoCD

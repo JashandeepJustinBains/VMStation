@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-service
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    component: media-server
+  annotations:
+    # Session affinity for load balancing
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  selector:
+    app: jellyfin
+    component: media-server
+  ports:
+  - name: http
+    port: 8096
+    targetPort: 8096
+    protocol: TCP
+    nodePort: 30096
+  - name: https
+    port: 8920
+    targetPort: 8920
+    protocol: TCP
+    nodePort: 30920
+  - name: discovery
+    port: 1900
+    targetPort: 1900
+    protocol: UDP
+    nodePort: 31900
+  - name: auto-discovery
+    port: 7359
+    targetPort: 7359
+    protocol: UDP
+    nodePort: 30735
+  type: NodePort
+  # Session affinity to ensure users stick to the same pod during streaming
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours timeout for long streaming sessions
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-headless
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    component: media-server
+    service-type: headless
+spec:
+  selector:
+    app: jellyfin
+    component: media-server
+  ports:
+  - name: http
+    port: 8096
+    targetPort: 8096
+    protocol: TCP
+  clusterIP: None  # Headless service for direct pod access if needed
