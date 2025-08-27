@@ -95,6 +95,26 @@
         (item.metadata.name | lower) in (storage_node_candidates | map('lower') | list)
         or ((item.status.addresses | map(attribute='address') | list | intersect(storage_node_candidates) | length) > 0)
 
+    - name: Fallback - use hardcoded mapping for known storage node
+      set_fact:
+        storage_node_k8s_name: "storagenodet3500"
+        storage_node_k8s_addresses: ["192.168.4.61"]
+      when: >-
+        storage_node_k8s_name is not defined and
+        groups['storage_nodes'][0] == '192.168.4.61'
+
+    - name: Debug fallback usage
+      debug:
+        msg: |
+          Using hardcoded fallback mapping for storage node:
+          - Inventory IP: {{ groups['storage_nodes'][0] }}
+          - Kubernetes hostname: {{ storage_node_k8s_name }}
+          This fallback is used when automatic node resolution fails due to DNS issues.
+      when: >-
+        storage_node_k8s_name is defined and
+        storage_node_k8s_name == 'storagenodet3500' and
+        groups['storage_nodes'][0] == '192.168.4.61'
+
     - name: Debug resolved storage node
       debug:
         msg: |
