@@ -20,7 +20,7 @@ RHEL 10 systems require special handling for Kubernetes installation due to:
 - **NEW**: SSL/TLS errors: "HTTPSConnection.__init__() got an unexpected keyword argument 'cert_file'"
 
 **Root Cause (SSL/TLS errors):**
-The error `HTTPSConnection.__init__() got an unexpected keyword argument 'cert_file'` occurs on RHEL 10+ systems due to compatibility issues between newer urllib3 library versions and Ansible's get_url module.
+The error `HTTPSConnection.__init__() got an unexpected keyword argument 'cert_file'` occurs on RHEL 10+ systems due to compatibility issues between newer urllib3 library versions (2.x) and Ansible's get_url module.
 
 **Solutions:**
 ```bash
@@ -33,9 +33,18 @@ ansible compute_nodes -i ansible/inventory.txt -m shell -a "ls -la /usr/bin/kube
 # Re-run RHEL 10 fixes playbook
 ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/rhel10_setup_fixes.yaml
 
-# For SSL/TLS errors, verify the fixed get_url parameters include:
-# validate_certs: false and use_proxy: false in setup_cluster.yaml
+# The setup_cluster.yaml now includes automatic shell fallbacks for urllib3 errors
+# If get_url fails with cert_file or urllib3 errors, it will automatically retry
+# using curl/wget commands instead
 ```
+
+**Enhanced Fix (Implemented):**
+The `setup_cluster.yaml` playbook now includes automatic fallback mechanisms:
+1. **Primary attempt**: Uses Ansible's `get_url` module with `validate_certs: false` and `use_proxy: false`
+2. **Automatic fallback**: If urllib3/cert_file errors occur, automatically switches to shell commands using curl or wget
+3. **Error detection**: Specifically detects 'cert_file' and 'urllib3' error messages
+4. **Verification**: Ensures binaries are downloaded and have correct permissions
+5. **Retry logic**: Both methods include retry attempts with delays
 
 ### 2. Container Runtime Issues
 **Symptoms:**

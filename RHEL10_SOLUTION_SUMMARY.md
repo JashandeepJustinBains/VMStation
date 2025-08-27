@@ -15,10 +15,10 @@ The original failure occurred because RHEL 10 systems require special handling d
 
 ## Comprehensive Solution Implemented
 
-### 1. Enhanced Binary Download System
-- **Before**: Unreliable shell commands with no error handling
-- **After**: Ansible `get_url` module with automatic retries (3 attempts, 5-second delays)
-- **Benefit**: Reliable downloads with proper validation and error recovery
+### 1. Enhanced Binary Download System with urllib3 Compatibility
+- **Before**: Unreliable shell commands with no error handling, urllib3 2.x compatibility issues
+- **After**: Dual-method approach - Ansible `get_url` with automatic shell fallback for urllib3 errors
+- **Benefit**: Reliable downloads with proper validation, error recovery, and urllib3 2.x compatibility
 
 ### 2. Robust Container Runtime Configuration
 - **Before**: Basic containerd installation with minimal configuration
@@ -49,6 +49,11 @@ The original failure occurred because RHEL 10 systems require special handling d
 - **Before**: Single join attempt with failure on any error
 - **After**: Multi-attempt process with progressive cleanup and retry logic
 - **Benefit**: Handles transient issues and network problems automatically
+
+### 8. urllib3 2.x Compatibility Fix
+- **Before**: get_url module failures with "HTTPSConnection.__init__() got an unexpected keyword argument 'cert_file'" on RHEL 10+
+- **After**: Automatic detection of urllib3 errors with fallback to shell-based downloads (curl/wget)
+- **Benefit**: Full compatibility with RHEL 10+ systems running urllib3 2.x while maintaining reliability
 
 ## Files Created/Modified
 
