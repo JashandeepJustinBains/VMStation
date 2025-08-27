@@ -1,6 +1,0 @@
-
-# Main playbook for Podman-based automation
-# - import_playbook: podman_main.yaml
-# - import_playbook: jellyfin_setup.yaml
-# - import_playbook: cluster_hardening.yaml
-- import_playbook: monitoring_stack.yaml
