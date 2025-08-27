@@ -1,0 +1,196 @@
+---
+- name: Deploy Jellyfin to Kubernetes
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    jellyfin_namespace: jellyfin
+    jellyfin_manifests_dir: "{{ ansible_env.PWD }}/k8s/jellyfin"
+  
+  tasks:
+    - name: Ensure k8s directory exists
+      file:
+        path: "{{ jellyfin_manifests_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy Jellyfin Kubernetes manifests
+      copy:
+        src: "{{ item }}"
+        dest: "{{ jellyfin_manifests_dir }}/"
+        mode: '0644'
+      with_fileglob:
+        - "{{ playbook_dir }}/../k8s/jellyfin/*.yaml"
+
+    - name: Create local-storage StorageClass if not exists
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: local-storage
+          provisioner: kubernetes.io/no-provisioner
+          volumeBindingMode: WaitForFirstConsumer
+          allowVolumeExpansion: true
+        state: present
+
+    - name: Apply Jellyfin namespace
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/namespace.yaml"
+        state: present
+        wait: true
+
+    - name: Apply Jellyfin persistent volumes
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/persistent-volumes.yaml"
+        state: present
+        wait: true
+        wait_timeout: 300
+
+    - name: Apply Jellyfin ConfigMap
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/configmap.yaml"
+        state: present
+
+    - name: Apply Jellyfin deployment
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/deployment.yaml"
+        state: present
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 600
+
+    - name: Apply Jellyfin service
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/service.yaml"
+        state: present
+
+    - name: Check if nginx ingress controller exists
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: ingress-nginx
+        name: ingress-nginx-controller
+      register: nginx_ingress_check
+      ignore_errors: true
+
+    - name: Apply Jellyfin ingress (if nginx controller exists)
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/ingress.yaml"
+        state: present
+      when: nginx_ingress_check.resources | length > 0
+
+    - name: Check if Prometheus operator is installed
+      kubernetes.core.k8s_info:
+        api_version: monitoring.coreos.com/v1
+        kind: ServiceMonitor
+        namespace: monitoring
+      register: prometheus_operator_check
+      ignore_errors: true
+
+    - name: Apply Jellyfin monitoring integration (if Prometheus operator exists)
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifests_dir }}/monitoring.yaml"
+        state: present
+      when: prometheus_operator_check.resources is defined
+
+    - name: Wait for Jellyfin pods to be ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ jellyfin_namespace }}"
+        label_selectors:
+          - app=jellyfin
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 600
+
+    - name: Get Jellyfin service information
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: "{{ jellyfin_namespace }}"
+        name: jellyfin-service
+      register: jellyfin_service
+
+    - name: Display Jellyfin access information
+      debug:
+        msg: |
+          Jellyfin has been successfully deployed to Kubernetes!
+          
+          Access URLs:
+          - NodePort: http://{{ ansible_default_ipv4.address }}:30096
+          - LoadBalancer: {{ jellyfin_service.resources[0].status.loadBalancer.ingress[0].ip | default('Pending') }}:8096
+          - Ingress: http://jellyfin.local (if ingress controller is installed)
+          
+          Configuration:
+          - Namespace: {{ jellyfin_namespace }}
+          - Replicas: 2 (High Availability)
+          - Media Path: /mnt/media
+          - Config Path: /mnt/media/jellyfin-config
+          - TV Shows: /mnt/media/TV Shows
+          - Movies: /mnt/media/Movies
+          
+          Resource Allocation:
+          - CPU: 1-4 cores per pod
+          - Memory: 2-8 GB per pod
+          - Storage: 500GB media + 10GB config
+
+- name: Migrate from Podman Jellyfin (if exists)
+  hosts: storage_nodes
+  become: true
+  vars:
+    backup_dir: "/tmp/jellyfin_migration_backup_{{ ansible_date_time.epoch }}"
+  
+  tasks:
+    - name: Check if Podman Jellyfin container exists
+      containers.podman.podman_container_info:
+        name: jellyfin
+      register: podman_jellyfin
+      ignore_errors: true
+
+    - name: Create backup directory
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+      when: podman_jellyfin.containers | length > 0
+
+    - name: Stop Podman Jellyfin container
+      containers.podman.podman_container:
+        name: jellyfin
+        state: stopped
+      when: podman_jellyfin.containers | length > 0
+
+    - name: Backup Podman Jellyfin configuration
+      archive:
+        path: /mnt/media/jellyfin-config
+        dest: "{{ backup_dir }}/jellyfin-config-backup.tar.gz"
+        mode: '0644'
+      when: podman_jellyfin.containers | length > 0
+
+    - name: Remove Podman Jellyfin container
+      containers.podman.podman_container:
+        name: jellyfin
+        state: absent
+      when: podman_jellyfin.containers | length > 0
+
+    - name: Display migration completion message
+      debug:
+        msg: |
+          Podman Jellyfin migration completed!
+          
+          Backup Location: {{ backup_dir }}
+          - Configuration backup: jellyfin-config-backup.tar.gz
+          
+          The Kubernetes Jellyfin deployment will use the same configuration directory.
+          Your media library and settings should be preserved.
+      when: podman_jellyfin.containers | length > 0
+
+    - name: No Podman Jellyfin found message
+      debug:
+        msg: "No Podman Jellyfin container found. Proceeding with fresh Kubernetes deployment."
+      when: podman_jellyfin.containers | length == 0

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-metrics
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    monitoring: "true"
+spec:
+  ports:
+  - port: 8096
+    targetPort: 8096
+    protocol: TCP
+    name: metrics
+  selector:
+    app: jellyfin
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jellyfin-metrics
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: jellyfin
+      monitoring: "true"
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+  namespaceSelector:
+    matchNames:
+    - jellyfin

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-service
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+spec:
+  type: NodePort
+  ports:
+  - port: 8096
+    targetPort: 8096
+    nodePort: 30096  # External access on all nodes
+    protocol: TCP
+    name: http
+  selector:
+    app: jellyfin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-loadbalancer
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8096
+    targetPort: 8096
+    protocol: TCP
+    name: http
+  selector:
+    app: jellyfin
+  # External traffic policy to preserve client IP for better analytics
+  externalTrafficPolicy: Local

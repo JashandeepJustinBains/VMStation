@@ -38,13 +38,31 @@ cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 ```
 
 ### 3. Access Services
-After deployment, access your monitoring services:
+After deployment, access your services:
+
+#### Monitoring Services
 - **Grafana**: http://192.168.4.63:30300 (admin/admin)
 - **Prometheus**: http://192.168.4.63:30090
 - **Loki**: http://192.168.4.63:31100
 - **AlertManager**: http://192.168.4.63:30903
 
-### 4. Validate Deployment
+#### Media Services (if deployed)
+- **Jellyfin**: http://192.168.4.61:30096
+  - High-availability 4K media streaming
+  - Multiple pod replicas for redundancy
+  - Optimized for containerd runtime
+
+### 4. Deploy Jellyfin Media Server (Optional)
+For high-availability 4K media streaming:
+```bash
+# Deploy Jellyfin with containerd runtime and 100% uptime design
+./deploy_jellyfin_k8s.sh
+
+# Validate Jellyfin deployment
+./scripts/validate_jellyfin_k8s.sh
+```
+
+### 5. Validate Deployment
 ```bash
 # Run comprehensive validation
 ./scripts/validate_k8s_monitoring.sh
@@ -81,6 +99,13 @@ kubectl get pods -n monitoring
 - **Storage**: Persistent volumes with backup capabilities
 - **Monitoring**: Comprehensive observability stack
 - **CI/CD Ready**: GitOps and automation-friendly
+- **Media Streaming**: 4K-capable Jellyfin deployment with redundancy
+
+### Supported Applications
+- **Monitoring Stack**: Prometheus, Grafana, Loki, AlertManager
+- **Media Server**: Jellyfin (high-availability, 4K streaming)
+- **Certificate Management**: cert-manager with self-signed CA
+- **Container Registry**: Local registry with pull-through cache
 
 ## Architecture Highlights
 
