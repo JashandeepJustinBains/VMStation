@@ -207,6 +207,22 @@ ssh 192.168.4.61 'ls -la /dev/dri/'
 kubectl exec -n jellyfin deployment/jellyfin -- ls -la /dev/dri/
 ```
 
+**Deployment timeout issues**:
+```bash
+# Check pod status and events
+kubectl get pods -n jellyfin
+kubectl describe pods -n jellyfin
+kubectl get events -n jellyfin --sort-by=.metadata.creationTimestamp
+
+# Check deployment status
+kubectl get deployment jellyfin -n jellyfin -o yaml
+
+# Check logs for startup issues
+kubectl logs -n jellyfin -l app=jellyfin
+```
+
+**Note**: The deployment wait timeout has been increased to 10 minutes to accommodate Jellyfin's startup time, especially during initial setup or when pulling large container images.
+
 ### Performance Optimization
 
 **For 4K streaming**:
