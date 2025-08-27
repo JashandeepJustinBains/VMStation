@@ -86,34 +86,56 @@
           Storage node candidates: {{ storage_node_candidates }}
           Target storage node from inventory: {{ groups['storage_nodes'][0] }}
 
-    - name: Find matching Kubernetes node for storage node (compare metadata.name and node addresses)
-      set_fact:
-        storage_node_k8s_name: "{{ item.metadata.name }}"
-        storage_node_k8s_addresses: "{{ item.status.addresses | map(attribute='address') | list }}"
-      loop: "{{ cluster_nodes.resources }}"
-      when: >-
-        (item.metadata.name | lower) in (storage_node_candidates | map('lower') | list)
-        or ((item.status.addresses | map(attribute='address') | list | intersect(storage_node_candidates) | length) > 0)
-
-    - name: Fallback - use hardcoded mapping for known storage node
+    - name: Force use of known correct hostname for storage node 192.168.4.61
       set_fact:
         storage_node_k8s_name: "storagenodet3500"
         storage_node_k8s_addresses: ["192.168.4.61"]
-      when: >-
-        storage_node_k8s_name is not defined and
-        groups['storage_nodes'][0] == '192.168.4.61'
+        use_forced_hostname: true
+      when: groups['storage_nodes'][0] == '192.168.4.61'
 
-    - name: Debug fallback usage
+    - name: Find matching Kubernetes node for storage node (for other IPs)
+      set_fact:
+        storage_node_k8s_name: "{{ item.metadata.name }}"
+        storage_node_k8s_addresses: "{{ item.status.addresses | map(attribute='address') | list }}"
+        use_forced_hostname: false
+      loop: "{{ cluster_nodes.resources }}"
+      when: >-
+        groups['storage_nodes'][0] != '192.168.4.61' and
+        ((item.metadata.name | lower) in (storage_node_candidates | map('lower') | list)
+        or ((item.status.addresses | map(attribute='address') | list | intersect(storage_node_candidates) | length) > 0))
+
+    - name: Debug hostname resolution method
       debug:
         msg: |
-          Using hardcoded fallback mapping for storage node:
+          Hostname resolution for storage node:
           - Inventory IP: {{ groups['storage_nodes'][0] }}
           - Kubernetes hostname: {{ storage_node_k8s_name }}
-          This fallback is used when automatic node resolution fails due to DNS issues.
-      when: >-
-        storage_node_k8s_name is defined and
-        storage_node_k8s_name == 'storagenodet3500' and
-        groups['storage_nodes'][0] == '192.168.4.61'
+          - Method used: {% if use_forced_hostname | default(false) %}FORCED (known mapping){% else %}AUTOMATIC (cluster discovery){% endif %}
+          - Node addresses: {{ storage_node_k8s_addresses | default([]) }}
+          
+          This ensures the nodeSelector and PV nodeAffinity use the exact same hostname.
+
+    - name: Validate resolved hostname exists in cluster
+      set_fact:
+        hostname_exists_in_cluster: true
+      loop: "{{ cluster_nodes.resources }}"
+      when: item.metadata.name == storage_node_k8s_name
+
+    - name: Fail if resolved hostname doesn't exist in cluster  
+      fail:
+        msg: |
+          ERROR: Resolved storage node hostname '{{ storage_node_k8s_name }}' does not exist in cluster!
+          
+          Available cluster nodes:
+          {% for node in cluster_nodes.resources %}
+          - {{ node.metadata.name }}: {{ node.status.addresses | map(attribute='address') | list }}
+          {% endfor %}
+          
+          Expected storage node: {{ groups['storage_nodes'][0] }}
+          
+          This is a critical issue that would cause pod scheduling failures.
+          Please check your cluster configuration or update the hostname mapping.
+      when: hostname_exists_in_cluster is not defined
 
     - name: Debug resolved storage node
       debug:
@@ -226,13 +248,78 @@
           - {{ result.item }}: {% if result.resources %}EXISTS ({{ result.resources[0].status.phase | default('Unknown') }}){% else %}NOT FOUND{% endif %}
           {% endfor %}
 
+    - name: Check if existing PVs have correct nodeAffinity
+      set_fact:
+        pv_nodeaffinity_issues: []
+      
+    - name: Validate existing PV nodeAffinity
+      set_fact:
+        pv_nodeaffinity_issues: "{{ pv_nodeaffinity_issues + [result.item] }}"
+      loop: "{{ existing_pvs.results }}"
+      when: 
+        - result.resources | length > 0
+        - result.resources[0].spec.nodeAffinity is defined
+        - result.resources[0].spec.nodeAffinity.required is defined
+        - result.resources[0].spec.nodeAffinity.required.nodeSelectorTerms is defined
+        - storage_node_k8s_name not in (result.resources[0].spec.nodeAffinity.required.nodeSelectorTerms | map('extract', 'matchExpressions') | flatten | selectattr('key', 'equalto', 'kubernetes.io/hostname') | map(attribute='values') | flatten | list)
+      loop_control:
+        loop_var: result
+
+    - name: Display PV nodeAffinity validation results
+      debug:
+        msg: |
+          PV nodeAffinity validation:
+          - Target hostname: {{ storage_node_k8s_name }}
+          - PVs with incorrect nodeAffinity: {{ pv_nodeaffinity_issues | default([]) }}
+          {% if pv_nodeaffinity_issues | length > 0 %}
+          
+          WARNING: Found PVs with incorrect nodeAffinity. These will cause scheduling conflicts.
+          The PVs need to be recreated with the correct hostname.
+          {% endif %}
+
+    - name: Remove PVs with incorrect nodeAffinity
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: PersistentVolume
+        name: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop: "{{ pv_nodeaffinity_issues }}"
+      when: pv_nodeaffinity_issues | length > 0
+
+    - name: Wait for PV deletion to complete
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: PersistentVolume
+        name: "{{ item }}"
+        kubeconfig: /root/.kube/config
+        wait: true
+        wait_condition:
+          type: Deleted
+        wait_timeout: 60
+      loop: "{{ pv_nodeaffinity_issues }}"
+      when: pv_nodeaffinity_issues | length > 0
+      failed_when: false
+
+    - name: Update existing PV list after deletions
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: PersistentVolume
+        name: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop:
+        - jellyfin-media-pv
+        - jellyfin-config-pv
+      register: updated_existing_pvs
+      failed_when: false
+
     - name: Skip PV creation (already exists)
       debug:
-        msg: "Skipping creation of {{ item.name }} - PersistentVolume already exists"
+        msg: "Skipping creation of {{ item.name }} - PersistentVolume already exists with correct nodeAffinity"
       loop:
         - name: jellyfin-media-pv
         - name: jellyfin-config-pv
-      when: (existing_pvs.results | selectattr('item', 'equalto', item.name) | first).resources
+      when: (updated_existing_pvs.results | selectattr('item', 'equalto', item.name) | first).resources
 
     - name: Deploy Persistent Volumes (only if they don't exist)
       kubernetes.core.k8s:
@@ -294,9 +381,9 @@
                       operator: In
                       values:
                       - "{{ storage_node_k8s_name }}"
-      when: not (existing_pvs.results | selectattr('item', 'equalto', item.name) | first).resources
+      when: not (updated_existing_pvs.results | selectattr('item', 'equalto', item.name) | first).resources
       vars:
-        existing_pv_check: "{{ existing_pvs.results | selectattr('item', 'equalto', item.name) | first }}"
+        existing_pv_check: "{{ updated_existing_pvs.results | selectattr('item', 'equalto', item.name) | first }}"
 
     - name: Deploy Persistent Volume Claims
       kubernetes.core.k8s:
