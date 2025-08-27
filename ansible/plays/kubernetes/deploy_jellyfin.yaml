@@ -18,14 +18,28 @@
         kubeconfig: /root/.kube/config
       register: cluster_nodes
       
-    - name: Build storage node matching candidates
+    - name: Initialize storage node candidate list
       set_fact:
-        storage_node_candidates: >-
-          {{ [ storage_node_hostname ]
-             + ( ([ hostvars[groups['storage_nodes'][0]].ansible_hostname ] ) if (groups['storage_nodes'] | length > 0 and hostvars[groups['storage_nodes'][0]] is defined and hostvars[groups['storage_nodes'][0]].ansible_hostname is defined) else [] )
-             + ( ([ hostvars[groups['storage_nodes'][0]].ansible_default_ipv4.address ] ) if (groups['storage_nodes'] | length > 0 and hostvars[groups['storage_nodes'][0]] is defined and hostvars[groups['storage_nodes'][0]].ansible_default_ipv4 is defined and hostvars[groups['storage_nodes'][0]].ansible_default_ipv4.address is defined) else [] )
-             + ( ([ groups['storage_nodes'][0] ] ) if (groups['storage_nodes'] | length > 0) else [] )
-          ] | unique }}
+        storage_node_candidates: "{{ [ storage_node_hostname ] }}"
+
+    - name: Add inventory host's ansible_hostname to candidates
+      set_fact:
+        storage_node_candidates: "{{ (storage_node_candidates | default([])) + [ hostvars[groups['storage_nodes'][0]].ansible_hostname ] }}"
+      when: groups['storage_nodes'] | length > 0 and hostvars[groups['storage_nodes'][0]] is defined and hostvars[groups['storage_nodes'][0]].ansible_hostname is defined
+
+    - name: Add inventory host's default IPv4 to candidates
+      set_fact:
+        storage_node_candidates: "{{ (storage_node_candidates | default([])) + [ hostvars[groups['storage_nodes'][0]].ansible_default_ipv4.address ] }}"
+      when: groups['storage_nodes'] | length > 0 and hostvars[groups['storage_nodes'][0]] is defined and hostvars[groups['storage_nodes'][0]].ansible_default_ipv4 is defined and hostvars[groups['storage_nodes'][0]].ansible_default_ipv4.address is defined
+
+    - name: Add raw group inventory entry to candidates
+      set_fact:
+        storage_node_candidates: "{{ (storage_node_candidates | default([])) + [ groups['storage_nodes'][0] ] }}"
+      when: groups['storage_nodes'] | length > 0
+
+    - name: Deduplicate storage node candidates
+      set_fact:
+        storage_node_candidates: "{{ storage_node_candidates | default([]) | map('string') | list | unique }}"
 
     - name: Find matching Kubernetes node for storage node (compare metadata.name and node addresses)
       set_fact:
