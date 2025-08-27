@@ -26,10 +26,11 @@ This implementation provides a comprehensive, highly-available Jellyfin media se
 - **Discovery protocols**: UDP ports for automatic client discovery
 
 ### Storage Integration
-- **Persistent volumes**: Preserves existing `/mnt/media` structure
+- **Persistent volumes**: Preserves existing media structure (configurable path)
 - **Configuration persistence**: Uses existing `/mnt/jellyfin-config`
 - **Read-only media**: Media directory mounted read-only for security
 - **Node affinity**: Storage volumes tied to storage node (192.168.4.61)
+- **Flexible media paths**: Supports `/srv/media` (default) or `/mnt/media` via configuration
 
 ### Monitoring Integration
 - **ServiceMonitor**: Prometheus metrics collection
@@ -46,7 +47,7 @@ This implementation provides a comprehensive, highly-available Jellyfin media se
 ├─ Pod 2 (2.5GB RAM) ─┼─ Session       │
 ├─ Pod 3 (2.5GB RAM) ─┘   Affinity     │
 │                                      │
-└─ Shared Storage (/mnt/media) ────────┘
+└─ Shared Storage (configurable) ──────┘
    └─ Config Storage (/mnt/jellyfin-config)
 ```
 
@@ -55,7 +56,10 @@ This implementation provides a comprehensive, highly-available Jellyfin media se
 ### Prerequisites
 
 1. **Kubernetes cluster** running (monitoring_nodes as control plane)
-2. **Storage node** with `/mnt/media` and `/mnt/jellyfin-config` directories
+2. **Storage node** with media directory and `/mnt/jellyfin-config` directories
+   - Default media path: `/srv/media` (legacy NFS export location)
+   - Alternative: `/mnt/media` (if using mounted storage)
+   - Configurable via `jellyfin_media_path` in `ansible/group_vars/all.yml`
 3. **Metrics server** installed for auto-scaling functionality
 4. **Hardware acceleration** devices available (`/dev/dri`)
 
@@ -78,6 +82,24 @@ ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/deploy_jellyf
 # Or deploy as part of full stack
 ./deploy_kubernetes.sh
 ```
+
+### Configuration Options
+
+To customize the media directory path, edit `ansible/group_vars/all.yml`:
+
+```yaml
+# === Jellyfin Media Configuration ===
+# Path to existing media directory on storage nodes
+jellyfin_media_path: /srv/media  # Default (legacy NFS export)
+# jellyfin_media_path: /mnt/media  # Alternative (mounted storage)
+```
+
+**Common scenarios:**
+- **Legacy setup**: Use `/srv/media` (default) - media served directly from storage node  
+- **Mounted storage**: Use `/mnt/media` - media mounted from external NFS/storage
+- **Custom path**: Any valid directory path on the storage node
+
+The deployment will validate that the specified directory exists before proceeding.
 
 ## Access Information
 
