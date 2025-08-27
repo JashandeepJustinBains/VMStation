@@ -1,0 +1,117 @@
+---
+# NodePort Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-nodeport
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: service
+    service-type: nodeport
+  annotations:
+    metallb.universe.tf/allow-shared-ip: jellyfin
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+  ports:
+  - name: http
+    port: 8096
+    targetPort: http
+    nodePort: {{ jellyfin_nodeport | default(30096) }}
+    protocol: TCP
+  - name: https
+    port: 8920
+    targetPort: https
+    nodePort: {{ jellyfin_nodeport_https | default(30920) }}
+    protocol: TCP
+  - name: upnp
+    port: 1900
+    targetPort: upnp
+    nodePort: {{ jellyfin_nodeport_upnp | default(31900) }}
+    protocol: UDP
+  - name: discovery
+    port: 7359
+    targetPort: discovery
+    nodePort: {{ jellyfin_nodeport_discovery | default(31359) }}
+    protocol: UDP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ jellyfin_session_timeout | default(10800) }}
+
+---
+# LoadBalancer Service for high availability
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-loadbalancer
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: service
+    service-type: loadbalancer
+  annotations:
+    metallb.universe.tf/allow-shared-ip: jellyfin
+    metallb.universe.tf/loadBalancerIPs: "{{ jellyfin_loadbalancer_ip | default('192.168.4.100') }}"
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+  ports:
+  - name: http
+    port: 8096
+    targetPort: http
+    protocol: TCP
+  - name: https
+    port: 8920
+    targetPort: https
+    protocol: TCP
+  - name: upnp
+    port: 1900
+    targetPort: upnp
+    protocol: UDP
+  - name: discovery
+    port: 7359
+    targetPort: discovery
+    protocol: UDP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ jellyfin_session_timeout | default(10800) }}
+
+---
+# ClusterIP Service for internal access
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: service
+    service-type: clusterip
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+  ports:
+  - name: http
+    port: 8096
+    targetPort: http
+    protocol: TCP
+  - name: https
+    port: 8920
+    targetPort: https
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ jellyfin_session_timeout | default(10800) }}

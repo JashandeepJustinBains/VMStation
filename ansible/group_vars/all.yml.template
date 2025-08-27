@@ -75,6 +75,19 @@ enable_quay_metrics: false
 # === Advanced Configuration ===
 # ansible_become_pass: "{{ vault_r430_sudo_password }}"  # Uses vaulted password
 
+# === Jellyfin Configuration ===
+jellyfin_version: "10.8.13"
+jellyfin_replicas: 2
+jellyfin_nodeport: 30096
+jellyfin_nodeport_https: 30920
+jellyfin_media_storage_size: 500Gi
+jellyfin_config_storage_size: 10Gi
+jellyfin_hostname: "jellyfin.vmstation.local"
+jellyfin_loadbalancer_ip: "192.168.4.100"
+jellyfin_session_timeout: 10800  # 3 hours
+jellyfin_max_body_size: "50g"
+enable_ingress: true
+
 # === Container Registry Configuration ===
 container_registries:
   - url: "quay.io"

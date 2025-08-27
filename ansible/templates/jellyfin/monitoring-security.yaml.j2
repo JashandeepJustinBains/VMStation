@@ -1,0 +1,103 @@
+---
+# ServiceMonitor for Prometheus monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jellyfin
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jellyfin
+      app.kubernetes.io/instance: jellyfin
+      service-type: clusterip
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
+    scrapeTimeout: 10s
+
+---
+# NetworkPolicy for enhanced security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jellyfin-network-policy
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jellyfin
+      app.kubernetes.io/instance: jellyfin
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8096
+    - protocol: TCP
+      port: 8920
+    - protocol: UDP
+      port: 1900
+    - protocol: UDP
+      port: 7359
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 2049  # NFS
+
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jellyfin-pdb
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: availability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jellyfin
+      app.kubernetes.io/instance: jellyfin
+  maxUnavailable: 1

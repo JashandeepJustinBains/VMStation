@@ -1,0 +1,86 @@
+---
+# PersistentVolume for Jellyfin media storage (ReadWriteMany for NFS)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-media-pv
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: storage
+    storage-type: media
+spec:
+  capacity:
+    storage: {{ jellyfin_media_storage_size | default('500Gi') }}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-media
+  nfs:
+    path: /srv/media
+    server: {{ nfs_server | default('192.168.4.61') }}
+  mountOptions:
+    - nfsvers=4.1
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+
+---
+# PersistentVolumeClaim for Jellyfin media storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-media-pvc
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: storage
+    storage-type: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: nfs-media
+  resources:
+    requests:
+      storage: {{ jellyfin_media_storage_size | default('500Gi') }}
+
+---
+# PersistentVolume for Jellyfin config storage (ReadWriteOnce for local storage)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-config-pv
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: storage
+    storage-type: config
+spec:
+  capacity:
+    storage: {{ jellyfin_config_storage_size | default('10Gi') }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-path
+  hostPath:
+    path: /mnt/media/jellyfin-config
+    type: DirectoryOrCreate
+
+---
+# PersistentVolumeClaim for Jellyfin config storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-config-pvc
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: storage
+    storage-type: config
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: {{ jellyfin_config_storage_size | default('10Gi') }}

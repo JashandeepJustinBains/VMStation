@@ -1,0 +1,56 @@
+---
+# Ingress for domain-based access with 4K streaming optimization
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jellyfin-ingress
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/instance: jellyfin
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Nginx ingress optimizations for 4K streaming
+    nginx.ingress.kubernetes.io/proxy-body-size: "{{ jellyfin_max_body_size | default('50g') }}"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "{{ jellyfin_read_timeout | default('300') }}"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "{{ jellyfin_send_timeout | default('300') }}"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "{{ jellyfin_connect_timeout | default('300') }}"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$http_x_forwarded_for"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "jellyfin-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "{{ jellyfin_session_timeout | default(10800) }}"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "{{ jellyfin_session_timeout | default(10800) }}"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+    # Additional headers for media streaming
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Accept-Ranges: bytes";
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # TLS configuration
+    cert-manager.io/cluster-issuer: "{{ cert_manager_issuer | default('vmstation-ca-issuer') }}"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - {{ jellyfin_hostname | default('jellyfin.vmstation.local') }}
+    secretName: jellyfin-tls
+  rules:
+  - host: {{ jellyfin_hostname | default('jellyfin.vmstation.local') }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jellyfin
+            port:
+              number: 8096

@@ -1,0 +1,262 @@
+---
+# Jellyfin Kubernetes Deployment Playbook
+# Deploys high-availability Jellyfin media server to Kubernetes cluster
+# Replaces Podman-based setup with enterprise-grade media streaming solution
+
+- name: Deploy Jellyfin Media Server to Kubernetes
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    # Jellyfin Configuration
+    jellyfin_namespace: jellyfin
+    jellyfin_version: "10.8.13"  # Use stable version for reliability
+    jellyfin_image: "jellyfin/jellyfin:{{ jellyfin_version }}"
+    jellyfin_replicas: 2
+    
+    # Resource Configuration for 4K Streaming
+    jellyfin_cpu_request: "1000m"     # 1 CPU core minimum
+    jellyfin_memory_request: "2Gi"    # 2GB RAM minimum
+    jellyfin_cpu_limit: "2000m"       # 2 CPU cores maximum
+    jellyfin_memory_limit: "4Gi"      # 4GB RAM maximum
+    jellyfin_cache_size: "10Gi"       # Local cache for transcoding
+    
+    # Storage Configuration
+    jellyfin_media_storage_size: "500Gi"
+    jellyfin_config_storage_size: "10Gi"
+    nfs_server: "192.168.4.61"        # Storage node
+    
+    # Network Configuration
+    jellyfin_nodeport: 30096
+    jellyfin_nodeport_https: 30920
+    jellyfin_nodeport_upnp: 31900
+    jellyfin_nodeport_discovery: 31359
+    jellyfin_external_url: "192.168.4.61:30096"
+    jellyfin_hostname: "jellyfin.vmstation.local"
+    jellyfin_loadbalancer_ip: "192.168.4.100"
+    
+    # 4K Streaming Optimization
+    jellyfin_max_body_size: "50g"      # Large file uploads
+    jellyfin_read_timeout: "600"       # 10 minute timeout
+    jellyfin_send_timeout: "600"       # 10 minute timeout  
+    jellyfin_connect_timeout: "300"    # 5 minute timeout
+    jellyfin_session_timeout: 10800    # 3 hour sessions
+    
+    # Certificate Configuration
+    cert_manager_issuer: "vmstation-ca-issuer"
+    
+  tasks:
+    - name: Verify Kubernetes cluster is ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: /root/.kube/config
+      register: cluster_nodes
+      
+    - name: Ensure cluster has sufficient nodes for high availability
+      assert:
+        that:
+          - cluster_nodes.resources | length >= 2
+        fail_msg: "Jellyfin high availability requires at least 2 Kubernetes nodes"
+        success_msg: "Cluster has {{ cluster_nodes.resources | length }} nodes - sufficient for HA"
+    
+    - name: Create Jellyfin namespace
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'jellyfin/namespace.yaml.j2') | from_yaml }}"
+        kubeconfig: /root/.kube/config
+    
+    - name: Ensure NFS storage directory exists on storage node
+      delegate_to: "{{ nfs_server }}"
+      file:
+        path: /srv/media
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    
+    - name: Ensure Jellyfin config directory exists on storage node
+      delegate_to: "{{ nfs_server }}"
+      file:
+        path: /mnt/media/jellyfin-config
+        state: directory
+        owner: 1000
+        group: 1000
+        mode: '0755'
+    
+    - name: Create Jellyfin storage resources
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop: "{{ lookup('template', 'jellyfin/storage.yaml.j2') | from_yaml_all | list }}"
+      
+    - name: Wait for persistent volumes to be available
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: PersistentVolume
+        name: "{{ item }}"
+        kubeconfig: /root/.kube/config
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 300
+      loop:
+        - jellyfin-media-pv
+        - jellyfin-config-pv
+      ignore_errors: true  # PVs might not have Ready condition
+    
+    - name: Deploy Jellyfin application
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'jellyfin/deployment.yaml.j2') | from_yaml }}"
+        kubeconfig: /root/.kube/config
+    
+    - name: Create Jellyfin services
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop: "{{ lookup('template', 'jellyfin/services.yaml.j2') | from_yaml_all | list }}"
+    
+    - name: Create Jellyfin ingress
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'jellyfin/ingress.yaml.j2') | from_yaml }}"
+        kubeconfig: /root/.kube/config
+      when: enable_ingress | default(true)
+    
+    - name: Deploy monitoring and security resources
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ item }}"
+        kubeconfig: /root/.kube/config
+      loop: "{{ lookup('template', 'jellyfin/monitoring-security.yaml.j2') | from_yaml_all | list }}"
+    
+    - name: Wait for Jellyfin deployment to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: jellyfin
+        namespace: "{{ jellyfin_namespace }}"
+        kubeconfig: /root/.kube/config
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 600
+      register: jellyfin_deployment
+    
+    - name: Verify Jellyfin pods are running
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ jellyfin_namespace }}"
+        label_selectors:
+          - app.kubernetes.io/name=jellyfin
+        kubeconfig: /root/.kube/config
+      register: jellyfin_pods
+    
+    - name: Display Jellyfin deployment status
+      debug:
+        msg: |
+          Jellyfin Deployment Status:
+          - Namespace: {{ jellyfin_namespace }}
+          - Replicas: {{ jellyfin_deployment.resources[0].status.replicas | default(0) }}
+          - Ready Replicas: {{ jellyfin_deployment.resources[0].status.readyReplicas | default(0) }}
+          - Pods Running: {{ jellyfin_pods.resources | length }}
+          
+          Access URLs:
+          - NodePort: http://{{ ansible_default_ipv4.address }}:{{ jellyfin_nodeport }}
+          - LoadBalancer: http://{{ jellyfin_loadbalancer_ip }}:8096
+          - Ingress: https://{{ jellyfin_hostname }}
+          
+          Storage:
+          - Media: {{ jellyfin_media_storage_size }} (NFS: {{ nfs_server }}:/srv/media)
+          - Config: {{ jellyfin_config_storage_size }} (Local: /mnt/media/jellyfin-config)
+          
+          High Availability Features:
+          - Zero-downtime rolling updates
+          - Pod anti-affinity across nodes
+          - Session persistence with sticky sessions
+          - Automatic failover and health checks
+    
+    - name: Create firewall rules for Jellyfin access
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: "{{ 'tcp' if item in [jellyfin_nodeport, jellyfin_nodeport_https] else 'udp' }}"
+        comment: "Jellyfin {{ 'HTTP' if item == jellyfin_nodeport else 'HTTPS' if item == jellyfin_nodeport_https else 'UPNP' if item == jellyfin_nodeport_upnp else 'Discovery' }}"
+      loop:
+        - "{{ jellyfin_nodeport }}"
+        - "{{ jellyfin_nodeport_https }}"
+        - "{{ jellyfin_nodeport_upnp }}"
+        - "{{ jellyfin_nodeport_discovery }}"
+      when: ansible_facts['os_family'] == 'Debian'
+      ignore_errors: true
+    
+    - name: Store Jellyfin configuration for future reference
+      copy:
+        content: |
+          # Jellyfin Kubernetes Deployment Configuration
+          # Generated: {{ ansible_date_time.iso8601 }}
+          
+          Jellyfin Media Server - High Availability Configuration
+          ====================================================
+          
+          Deployment Details:
+          - Version: {{ jellyfin_version }}
+          - Replicas: {{ jellyfin_replicas }}
+          - Namespace: {{ jellyfin_namespace }}
+          
+          Resource Allocation (per pod):
+          - CPU Request: {{ jellyfin_cpu_request }}
+          - Memory Request: {{ jellyfin_memory_request }}
+          - CPU Limit: {{ jellyfin_cpu_limit }}
+          - Memory Limit: {{ jellyfin_memory_limit }}
+          
+          Storage Configuration:
+          - Media Storage: {{ jellyfin_media_storage_size }} (ReadWriteMany NFS)
+          - Config Storage: {{ jellyfin_config_storage_size }} (ReadWriteOnce Local)
+          - Cache Storage: {{ jellyfin_cache_size }} (EmptyDir)
+          
+          Network Access:
+          - NodePort HTTP: {{ jellyfin_nodeport }}
+          - NodePort HTTPS: {{ jellyfin_nodeport_https }}
+          - LoadBalancer IP: {{ jellyfin_loadbalancer_ip }}
+          - Ingress Hostname: {{ jellyfin_hostname }}
+          
+          High Availability Features:
+          - Rolling updates with maxUnavailable: 0
+          - Pod anti-affinity rules
+          - Health checks (liveness, readiness, startup)
+          - Session persistence ({{ jellyfin_session_timeout }}s timeout)
+          - Pod disruption budget (maxUnavailable: 1)
+          
+          4K Streaming Optimizations:
+          - Large request body size: {{ jellyfin_max_body_size }}
+          - Extended timeouts: {{ jellyfin_read_timeout }}s read/send
+          - Hardware acceleration support enabled
+          - Optimized resource allocation
+          
+          Migration Notes:
+          - Migrated from Podman container setup
+          - Preserves existing /mnt/media structure
+          - Uses existing /mnt/media/jellyfin-config
+          - Maintains compatibility with current media libraries
+        dest: /root/jellyfin-k8s-config.txt
+        mode: '0600'
+    
+  handlers:
+    - name: restart jellyfin
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: jellyfin
+            namespace: "{{ jellyfin_namespace }}"
+            annotations:
+              deployment.kubernetes.io/revision: "{{ ansible_date_time.epoch }}"
+        kubeconfig: /root/.kube/config
