@@ -1,10 +1,8 @@
 # Jellyfin Deployment
 
 ## Quick Start
-Deploy Jellyfin with monitoring stack:
-```bash
-./update_and_deploy.sh
-```
+1. Copy configuration template: `cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml`
+2. Deploy Jellyfin with monitoring stack: `./update_and_deploy.sh`
 
 ## Manual Deployment
 ```bash
