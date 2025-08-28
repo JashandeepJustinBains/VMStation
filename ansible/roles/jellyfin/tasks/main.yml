@@ -1,0 +1,125 @@
+---
+# Jellyfin Deployment Role - Main Tasks
+# Deploys minimal Jellyfin pod using kubernetes.core collection
+
+- name: "Check if Jellyfin is enabled"
+  ansible.builtin.debug:
+    msg: "Jellyfin deployment is {{ 'enabled' if jellyfin_enabled else 'disabled' }}"
+  tags: [deploy, jellyfin, validate]
+
+- name: "Block: Deploy Jellyfin when enabled"
+  when: jellyfin_enabled | default(true)
+  tags: [deploy, jellyfin]
+  block:
+    - name: "Ensure jellyfin namespace exists"
+      kubernetes.core.k8s:
+        name: jellyfin
+        api_version: v1
+        kind: Namespace
+        state: present
+        definition:
+          metadata:
+            name: jellyfin
+            labels:
+              name: jellyfin
+              app: jellyfin
+
+    - name: "Check if Prometheus Operator ServiceMonitor CRD exists"
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: servicemonitors.monitoring.coreos.com
+      register: servicemonitor_crd
+      ignore_errors: true
+      tags: [deploy, jellyfin]
+
+    - name: "Deploy Jellyfin manifest"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ jellyfin_manifest_path }}"
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: "{{ jellyfin_readiness_timeout | default(300) }}"
+      register: jellyfin_deployment
+      tags: [deploy, jellyfin]
+
+    - name: "Remove ServiceMonitor if Prometheus Operator is not available"
+      kubernetes.core.k8s:
+        api_version: monitoring.coreos.com/v1
+        kind: ServiceMonitor
+        name: jellyfin-metrics
+        namespace: jellyfin
+        state: absent
+      when: servicemonitor_crd.resources | length == 0
+      ignore_errors: true
+      tags: [deploy, jellyfin]
+
+    - name: "Log ServiceMonitor status"
+      ansible.builtin.debug:
+        msg: >-
+          {% if servicemonitor_crd.resources | length > 0 %}
+          ServiceMonitor will be created - Prometheus Operator CRD found
+          {% else %}
+          ServiceMonitor skipped - Prometheus Operator CRD not found
+          {% endif %}
+      tags: [deploy, jellyfin]
+
+- name: "Block: Validate Jellyfin deployment"
+  when: jellyfin_enabled | default(true)
+  tags: [validate, jellyfin]
+  block:
+    - name: "Wait for Jellyfin pod to be ready"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        name: jellyfin
+        namespace: jellyfin
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: "{{ jellyfin_readiness_timeout | default(300) }}"
+      register: jellyfin_pod_status
+      retries: 5
+      delay: 10
+      until: jellyfin_pod_status.resources | length > 0 and jellyfin_pod_status.resources[0].status.phase == "Running"
+      ignore_errors: true
+
+    - name: "Get Jellyfin service information"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        name: jellyfin-service
+        namespace: jellyfin
+      register: jellyfin_service_info
+      ignore_errors: true
+
+    - name: "Check ServiceMonitor existence"
+      kubernetes.core.k8s_info:
+        api_version: monitoring.coreos.com/v1
+        kind: ServiceMonitor
+        name: jellyfin-metrics
+        namespace: jellyfin
+      register: jellyfin_servicemonitor_info
+      ignore_errors: true
+
+    - name: "Set Jellyfin validation facts"
+      ansible.builtin.set_fact:
+        jellyfin_pod_ready: "{{ (jellyfin_pod_status.resources | length > 0) and (jellyfin_pod_status.resources[0].status.phase == 'Running') and (jellyfin_pod_status.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length > 0) }}"
+        jellyfin_service_nodeport: "{{ jellyfin_service_info.resources[0].spec.ports[0].nodePort if jellyfin_service_info.resources | length > 0 else null }}"
+        servicemonitor_present: >-
+          {% if servicemonitor_crd.resources | length == 0 %}skip{% else %}{{ jellyfin_servicemonitor_info.resources | length > 0 }}{% endif %}
+        prometheus_target_found: >-
+          {% if servicemonitor_crd.resources | length == 0 %}skip{% else %}false{% endif %}
+      tags: [validate, jellyfin]
+
+- name: "Skip Jellyfin validation when disabled"
+  when: not (jellyfin_enabled | default(true))
+  ansible.builtin.set_fact:
+    jellyfin_pod_ready: false
+    jellyfin_service_nodeport: null
+    servicemonitor_present: "skip"
+    prometheus_target_found: "skip"
+  tags: [validate, jellyfin]

@@ -11,7 +11,7 @@ echo ""
 
 # Configuration
 ANSIBLE_INVENTORY="ansible/inventory.txt"
-KUBERNETES_PLAYBOOK="ansible/plays/kubernetes_stack.yaml"
+KUBERNETES_PLAYBOOK="ansible/site.yaml"
 
 # Color codes
 GREEN='\033[0;32m'

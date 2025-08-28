@@ -44,14 +44,31 @@ grafana_storage_size: 5Gi
 loki_storage_size: 10Gi
 alertmanager_storage_size: 2Gi
 
+# === Jellyfin Configuration ===
+# Enable/disable Jellyfin deployment
+jellyfin_enabled: true
+
+# Target node for Jellyfin scheduling
+jellyfin_node_name: storagenodet3500
+
+# Use persistent volumes (PV/PVC) for Jellyfin storage
+# Set to false for minimal deployment using direct hostPath volumes
+jellyfin_use_persistent_volumes: false
+
+# Path to the Jellyfin manifest file
+jellyfin_manifest_path: ansible/plays/kubernetes/jellyfin-minimal.yml
+
+# Timeout for Jellyfin pod readiness check (seconds)
+jellyfin_readiness_timeout: 300
+
 # === Jellyfin Media Configuration ===
 # Path to existing media directory on storage nodes
-# Default: /srv/media (matches legacy NFS export)
-# Alternative: /mnt/media (if media is mounted from external source)
+# Default: /srv/media (legacy NFS export location)
+# Alternative: /mnt/media (if using mounted storage)
 jellyfin_media_path: /srv/media
 
 # Skip mount verification for media directory (useful if directory is guaranteed to exist)
-# Set to true to bypass pre-deployment mount checks that could cause deployment failures
+# Set to true to bypass pre-deployment checks that could cause deployment failures
 jellyfin_skip_mount_verification: false
 
 # === Jellyfin Storage Configuration ===

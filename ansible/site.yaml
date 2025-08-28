@@ -1,0 +1,50 @@
+---
+# VMStation Site Playbook
+# Main entry point for Ansible-driven deployment
+# Integrates existing Kubernetes stack with optional Jellyfin deployment
+
+# Import existing Kubernetes stack playbook
+- import_playbook: plays/kubernetes_stack.yaml
+
+# Deploy Jellyfin conditionally
+- import_playbook: plays/jellyfin.yml
+  when: jellyfin_enabled | default(true)
+
+# Validation and summary
+- name: "VMStation Deployment Validation"
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    ansible_connection: local
+  tags: [validate]
+  tasks:
+    - name: "Validate Jellyfin deployment if enabled"
+      include_role:
+        name: ../roles/jellyfin
+        tasks_from: main
+      when: jellyfin_enabled | default(true)
+      tags: [jellyfin, validate]
+
+    - name: "Generate deployment summary"
+      ansible.builtin.debug:
+        msg:
+          - "=== VMStation Deployment Summary ==="
+          - "Jellyfin Pod Ready: {{ jellyfin_pod_ready | default('N/A') }}"
+          - "Jellyfin Service NodePort: {{ jellyfin_service_nodeport | default('N/A') }}"
+          - "ServiceMonitor Present: {{ servicemonitor_present | default('N/A') }}"
+          - "Prometheus Target Found: {{ prometheus_target_found | default('N/A') }}"
+          - ""
+          - "{% if jellyfin_enabled | default(true) %}Access Jellyfin at: http://{{ jellyfin_node_name | default('storagenodet3500') }}:{{ jellyfin_service_nodeport | default('30096') }}{% else %}Jellyfin deployment is disabled{% endif %}"
+          - ""
+          - "{% if servicemonitor_present == true %}To check Prometheus targets: kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090{% endif %}"
+          - "{% if servicemonitor_present == 'skip' %}ServiceMonitor creation skipped - Prometheus Operator not detected{% endif %}"
+      tags: [validate]
+
+    - name: "Fail deployment if Jellyfin pod is not ready"
+      ansible.builtin.fail:
+        msg: "Jellyfin deployment failed - pod not ready within timeout"
+      when: 
+        - jellyfin_enabled | default(true)
+        - not (jellyfin_pod_ready | default(false))
+      tags: [validate]
