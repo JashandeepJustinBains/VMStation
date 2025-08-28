@@ -92,6 +92,9 @@ To customize the media directory path, edit `ansible/group_vars/all.yml`:
 # Path to existing media directory on storage nodes
 jellyfin_media_path: /srv/media  # Default (legacy NFS export)
 # jellyfin_media_path: /mnt/media  # Alternative (mounted storage)
+
+# Skip mount verification for media directory (useful if directory is guaranteed to exist)
+jellyfin_skip_mount_verification: false  # Set to true to bypass pre-deployment checks
 ```
 
 **Common scenarios:**
@@ -99,7 +102,10 @@ jellyfin_media_path: /srv/media  # Default (legacy NFS export)
 - **Mounted storage**: Use `/mnt/media` - media mounted from external NFS/storage
 - **Custom path**: Any valid directory path on the storage node
 
-The deployment will validate that the specified directory exists before proceeding.
+**Mount verification options:**
+- **Default behavior**: The deployment validates that the media directory exists before proceeding
+- **Skip verification**: Set `jellyfin_skip_mount_verification: true` to bypass mount checks
+- **When to skip**: Use when the media directory is guaranteed to exist (e.g., in automated deployments)
 
 ## Access Information
 

@@ -50,6 +50,10 @@ alertmanager_storage_size: 2Gi
 # Alternative: /mnt/media (if media is mounted from external source)
 jellyfin_media_path: /srv/media
 
+# Skip mount verification for media directory (useful if directory is guaranteed to exist)
+# Set to true to bypass pre-deployment mount checks that could cause deployment failures
+jellyfin_skip_mount_verification: false
+
 # === Node-Specific Storage Paths ===
 # Storage paths for different node types during Kubernetes migration
 storage_paths:
