@@ -1,0 +1,13 @@
+---
+# Jellyfin deployment play
+# Conditionally deploys Jellyfin when jellyfin_enabled is true
+
+- name: "Deploy Jellyfin"
+  hosts: all
+  gather_facts: false
+  become: false
+  vars:
+    ansible_connection: local
+  tags: [jellyfin]
+  roles:
+    - role: ../roles/jellyfin
