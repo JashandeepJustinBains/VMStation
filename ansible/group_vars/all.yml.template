@@ -55,8 +55,8 @@ jellyfin_node_name: storagenodet3500
 # Set to false for minimal deployment using direct hostPath volumes
 jellyfin_use_persistent_volumes: false
 
-# Path to the Jellyfin manifest file
-jellyfin_manifest_path: ansible/plays/kubernetes/jellyfin-minimal.yml
+# Path to the Jellyfin manifest file (relative to playbook directory)
+jellyfin_manifest_path: kubernetes/jellyfin-minimal.yml
 
 # Timeout for Jellyfin pod readiness check (seconds)
 jellyfin_readiness_timeout: 300
@@ -72,12 +72,6 @@ jellyfin_media_path: /srv/media
 jellyfin_skip_mount_verification: false
 
 # === Jellyfin Storage Configuration ===
-# Use persistent volumes (PV/PVC) for Jellyfin storage
-# Set to false for minimal deployment using direct hostPath volumes
-# Benefits of false: simpler deployment, avoids PV/PVC complexity and conflicts
-# Benefits of true: better storage management, portability, and dynamic provisioning
-jellyfin_use_persistent_volumes: false
-
 # Path for Jellyfin configuration storage on storage nodes
 jellyfin_config_path: /var/lib/jellyfin
 
