@@ -11,53 +11,61 @@
   when: jellyfin_enabled | default(true)
   tags: [deploy, jellyfin]
   block:
-    - name: "Resolve Jellyfin manifest path"
+    - name: "Set jellyfin_manifest_path_var (effective setting)"
+      ansible.builtin.set_fact:
+        jellyfin_manifest_path_var: "{{ jellyfin_manifest_path | default('kubernetes/jellyfin-minimal.yml') }}"
+
+    - name: "Build candidate manifest paths to check"
+      ansible.builtin.set_fact:
+        jellyfin_manifest_candidates: >-
+          {{ [
+            (jellyfin_manifest_path_var),
+            (playbook_dir | default('.') ) ~ '/' ~ (jellyfin_manifest_path_var),
+            (playbook_dir | default('.') ) ~ '/roles/jellyfin/files/ansible/plays/' ~ (jellyfin_manifest_path_var),
+            (playbook_dir | default('.') ) ~ '/../roles/jellyfin/files/ansible/plays/' ~ (jellyfin_manifest_path_var)
+          ] | unique }}
+
+    - name: "Check candidate manifest paths"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop: "{{ jellyfin_manifest_candidates }}"
+      register: jellyfin_manifest_check
+      tags: [deploy, jellyfin]
+
+    - name: "Select first existing manifest path"
       ansible.builtin.set_fact:
         jellyfin_manifest_resolved: >-
-          {{
-            (jellyfin_manifest_path | default(''))
-            if (jellyfin_manifest_path is defined and jellyfin_manifest_path | length > 0)
-            else (
-              (playbook_dir ~ '/kubernetes/jellyfin-minimal.yml') if (playbook_dir is defined) else 'ansible/plays/kubernetes/jellyfin-minimal.yml'
-            )
-          }}
-
-    - name: "Check if jellyfin manifest file exists"
-      ansible.builtin.stat:
-        path: "{{ jellyfin_manifest_resolved }}"
-      register: jellyfin_manifest_stat
-      tags: [deploy, jellyfin]
+          {{ (jellyfin_manifest_check.results | selectattr('stat.exists') | map(attribute='item') | list)[0] | default('') }}
 
     - name: "Debug resolved jellyfin manifest path"
       ansible.builtin.debug:
-        msg: 
-          - "Using jellyfin manifest at: {{ jellyfin_manifest_resolved }}"
-          - "File exists: {{ jellyfin_manifest_stat.stat.exists }}"
-          - "Current playbook_dir: {{ playbook_dir | default('undefined') }}"
+        msg:
+          - "Using jellyfin manifest at: {{ jellyfin_manifest_resolved | default('none') }}"
+          - "Candidates checked: {{ jellyfin_manifest_candidates }}"
+          - "Playbook_dir: {{ playbook_dir | default('undefined') }}"
       tags: [deploy, jellyfin]
-    
+
     - name: "Provide helpful error message if manifest not found"
       ansible.builtin.fail:
         msg: |
-          Jellyfin manifest file not found at: {{ jellyfin_manifest_resolved }}
-          
-          This usually happens when jellyfin_manifest_path is incorrectly configured.
-          
+          Jellyfin manifest file not found. Candidates checked:
+          {{ jellyfin_manifest_candidates | join('\n') }}
+
           Current setting: {{ jellyfin_manifest_path | default('not set') }}
           Playbook directory: {{ playbook_dir | default('undefined') }}
-          
+
           SOLUTIONS:
           1. Use the default path (recommended):
              jellyfin_manifest_path: kubernetes/jellyfin-minimal.yml
-          
-          2. Use absolute path with correct playbook_dir:
+
+          2. Use absolute path with correct playbook_dir (example when running from ansible/plays/):
              jellyfin_manifest_path: "{{ '{{' }} playbook_dir {{ '}}' }}/../roles/jellyfin/files/ansible/plays/kubernetes/jellyfin-minimal.yml"
-          
-          3. Verify the file exists at the expected location.
-          
-          Common mistake: Using "{{ '{{' }} playbook_dir {{ '}}' }}/roles/jellyfin/..." 
-          This fails because jellyfin.yml runs from plays/ directory, not ansible/ directory.
-      when: not jellyfin_manifest_stat.stat.exists
+
+          3. Or set the variable to point directly at the role-local copy (advanced):
+             jellyfin_manifest_path: "{{ playbook_dir | default('.') }}/roles/jellyfin/files/ansible/plays/kubernetes/jellyfin-minimal.yml"
+
+          Verify one of the candidate paths exists on the Ansible Controller.
+      when: jellyfin_manifest_resolved == ''
       tags: [deploy, jellyfin]
     - name: "Ensure jellyfin namespace exists"
       kubernetes.core.k8s:
