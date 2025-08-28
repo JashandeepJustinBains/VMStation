@@ -54,6 +54,16 @@ jellyfin_media_path: /srv/media
 # Set to true to bypass pre-deployment mount checks that could cause deployment failures
 jellyfin_skip_mount_verification: false
 
+# === Jellyfin Storage Configuration ===
+# Use persistent volumes (PV/PVC) for Jellyfin storage
+# Set to false for minimal deployment using direct hostPath volumes
+# Benefits of false: simpler deployment, avoids PV/PVC complexity and conflicts
+# Benefits of true: better storage management, portability, and dynamic provisioning
+jellyfin_use_persistent_volumes: false
+
+# Path for Jellyfin configuration storage on storage nodes
+jellyfin_config_path: /var/lib/jellyfin
+
 # === Node-Specific Storage Paths ===
 # Storage paths for different node types during Kubernetes migration
 storage_paths:
