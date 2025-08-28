@@ -576,6 +576,61 @@
         msg: "Skipping Persistent Volume Claims creation - using direct hostPath volumes for minimal deployment"
       when: not (jellyfin_use_persistent_volumes | default(false))
 
+    - name: Build volume mounts list for jellyfin container
+      set_fact:
+        jellyfin_volume_mounts:
+          - name: media
+            mountPath: /media
+            readOnly: true
+          - name: config
+            mountPath: /config
+          - name: jellyfin-config-files
+            mountPath: /config/config
+            readOnly: true
+
+    - name: Add dev-dri volume mount if available and enabled
+      set_fact:
+        jellyfin_volume_mounts: "{{ jellyfin_volume_mounts + [{'name': 'dev-dri', 'mountPath': '/dev/dri', 'readOnly': false}] }}"
+      when: jellyfin_enable_dev_dri | bool and storage_has_dev_dri | bool
+
+    - name: Build volumes list for jellyfin pod (persistent volumes)
+      set_fact:
+        jellyfin_volumes_pv:
+          - name: media
+            persistentVolumeClaim:
+              claimName: jellyfin-media-pvc
+          - name: config
+            persistentVolumeClaim:
+              claimName: jellyfin-config-pvc
+          - name: jellyfin-config-files
+            configMap:
+              name: jellyfin-config
+
+    - name: Build volumes list for jellyfin pod (hostPath volumes)
+      set_fact:
+        jellyfin_volumes_hostpath:
+          - name: media
+            hostPath:
+              path: "{{ jellyfin_media_path | default('/srv/media') }}"
+              type: Directory
+          - name: config
+            hostPath:
+              path: "{{ jellyfin_config_path | default('/var/lib/jellyfin') }}"
+              type: DirectoryOrCreate
+          - name: jellyfin-config-files
+            configMap:
+              name: jellyfin-config
+
+    - name: Add dev-dri volume to persistent volumes list if available and enabled
+      set_fact:
+        jellyfin_volumes_pv: "{{ jellyfin_volumes_pv + [{'name': 'dev-dri', 'hostPath': {'path': '/dev/dri', 'type': 'Directory'}}] }}"
+      when: jellyfin_enable_dev_dri | bool and storage_has_dev_dri | bool
+
+    - name: Add dev-dri volume to hostpath volumes list if available and enabled
+      set_fact:
+        jellyfin_volumes_hostpath: "{{ jellyfin_volumes_hostpath + [{'name': 'dev-dri', 'hostPath': {'path': '/dev/dri', 'type': 'Directory'}}] }}"
+      when: jellyfin_enable_dev_dri | bool and storage_has_dev_dri | bool
+
     - name: Deploy Jellyfin ConfigMap
       kubernetes.core.k8s:
         state: present
@@ -686,18 +741,7 @@
                     limits:
                       memory: "2.5Gi"
                       cpu: "2000m"
-                  volumeMounts:
-                  - name: media
-                    mountPath: /media
-                    readOnly: true
-                  - name: config
-                    mountPath: /config
-                  - name: dev-dri
-                    mountPath: /dev/dri
-                    readOnly: false
-                  - name: jellyfin-config-files
-                    mountPath: /config/config
-                    readOnly: true
+                  volumeMounts: "{{ jellyfin_volume_mounts }}"
                   livenessProbe:
                     httpGet:
                       path: /health
@@ -731,20 +775,7 @@
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 30
-                volumes:
-                - name: media
-                  persistentVolumeClaim:
-                    claimName: jellyfin-media-pvc
-                - name: config
-                  persistentVolumeClaim:
-                    claimName: jellyfin-config-pvc
-                - name: dev-dri
-                  hostPath:
-                    path: /dev/dri
-                    type: Directory
-                - name: jellyfin-config-files
-                  configMap:
-                    name: jellyfin-config
+                volumes: "{{ jellyfin_volumes_pv }}"
                 restartPolicy: Always
                 dnsPolicy: ClusterFirst
         kubeconfig: /root/.kube/config
@@ -816,18 +847,7 @@
                     limits:
                       memory: "2.5Gi"
                       cpu: "2000m"
-                  volumeMounts:
-                  - name: media
-                    mountPath: /media
-                    readOnly: true
-                  - name: config
-                    mountPath: /config
-                  - name: dev-dri
-                    mountPath: /dev/dri
-                    readOnly: false
-                  - name: jellyfin-config-files
-                    mountPath: /config/config
-                    readOnly: true
+                  volumeMounts: "{{ jellyfin_volume_mounts }}"
                   livenessProbe:
                     httpGet:
                       path: /health
@@ -861,22 +881,7 @@
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 30
-                volumes:
-                - name: media
-                  hostPath:
-                    path: "{{ jellyfin_media_path | default('/srv/media') }}"
-                    type: Directory
-                - name: config
-                  hostPath:
-                    path: "{{ jellyfin_config_path | default('/var/lib/jellyfin') }}"
-                    type: DirectoryOrCreate
-                - name: dev-dri
-                  hostPath:
-                    path: /dev/dri
-                    type: Directory
-                - name: jellyfin-config-files
-                  configMap:
-                    name: jellyfin-config
+                volumes: "{{ jellyfin_volumes_hostpath }}"
                 restartPolicy: Always
                 dnsPolicy: ClusterFirst
         kubeconfig: /root/.kube/config
