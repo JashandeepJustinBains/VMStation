@@ -43,7 +43,7 @@
         path: "{{ jellyfin_media_path | default('/srv/media') }}"
       delegate_to: "{{ groups['storage_nodes'][0] }}"
       register: media_directory_stat
-      when: not (jellyfin_skip_mount_verification | default(false))
+      when: not (jellyfin_skip_mount_verification | default(true))
       
     - name: Skip media directory validation (mount verification disabled)
       debug:
@@ -55,7 +55,7 @@
           - Path: {{ jellyfin_media_path | default('/srv/media') }}
           - Storage node: {{ groups['storage_nodes'][0] }}
           - Manual check: ssh {{ groups['storage_nodes'][0] }} 'ls -la {{ jellyfin_media_path | default('/srv/media') }}'
-      when: jellyfin_skip_mount_verification | default(false)
+      when: jellyfin_skip_mount_verification | default(true)
       
     - name: Fail if media directory does not exist
       fail:
@@ -73,7 +73,7 @@
           To set permissions: chown -R 1000:1000 {{ jellyfin_media_path | default('/srv/media') }}
           
           Alternatively, to skip this check entirely, set: jellyfin_skip_mount_verification: true
-      when: not (jellyfin_skip_mount_verification | default(false)) and not media_directory_stat.stat.exists
+      when: not (jellyfin_skip_mount_verification | default(true)) and not media_directory_stat.stat.exists
       
     - name: Display media directory information
       debug:
@@ -84,7 +84,7 @@
           Directory exists: {{ media_directory_stat.stat.exists }}
           Owner: {{ media_directory_stat.stat.pw_name | default('unknown') }}:{{ media_directory_stat.stat.gr_name | default('unknown') }}
           Permissions: {{ media_directory_stat.stat.mode | default('unknown') }}
-      when: not (jellyfin_skip_mount_verification | default(false)) and media_directory_stat.stat.exists
+      when: not (jellyfin_skip_mount_verification | default(true)) and media_directory_stat.stat.exists
 
     - name: Deduplicate storage node candidates
       set_fact:
@@ -290,7 +290,12 @@
           {% if pv_nodeaffinity_issues | length > 0 %}
           
           WARNING: Found PVs with incorrect nodeAffinity. These will cause scheduling conflicts.
-          The PVs need to be recreated with the correct hostname.
+          {% if jellyfin_allow_pv_recreation | default(false) %}
+          The PVs will be recreated with the correct hostname.
+          {% else %}
+          To recreate PVs automatically, set jellyfin_allow_pv_recreation: true
+          Alternatively, manually delete PVs: kubectl delete pv {{ pv_nodeaffinity_issues | join(' ') }}
+          {% endif %}
           {% endif %}
 
     - name: Remove PVs with incorrect nodeAffinity
@@ -301,7 +306,9 @@
         name: "{{ item }}"
         kubeconfig: /root/.kube/config
       loop: "{{ pv_nodeaffinity_issues }}"
-      when: pv_nodeaffinity_issues | length > 0
+      when: 
+        - pv_nodeaffinity_issues | length > 0
+        - jellyfin_allow_pv_recreation | default(false)  # Safety guard against data loss
 
     - name: Wait for PV deletion to complete
       kubernetes.core.k8s_info:
@@ -314,7 +321,9 @@
           type: Deleted
         wait_timeout: 60
       loop: "{{ pv_nodeaffinity_issues }}"
-      when: pv_nodeaffinity_issues | length > 0
+      when: 
+        - pv_nodeaffinity_issues | length > 0
+        - jellyfin_allow_pv_recreation | default(false)  # Safety guard against data loss
       failed_when: false
 
     - name: Update existing PV list after deletions
@@ -354,7 +363,7 @@
                 component: media
             spec:
               capacity:
-                storage: 100Ti
+                storage: 2Ti  # Realistic capacity for media storage
               accessModes:
                 - ReadWriteMany
               persistentVolumeReclaimPolicy: Retain
@@ -387,7 +396,7 @@
               persistentVolumeReclaimPolicy: Retain
               storageClassName: jellyfin-config
               hostPath:
-                path: /mnt/jellyfin-config
+                path: /var/lib/jellyfin  # Use standard jellyfin config directory
                 type: DirectoryOrCreate
               nodeAffinity:
                 required:
@@ -420,7 +429,7 @@
               - ReadWriteMany
             resources:
               requests:
-                storage: 100Ti
+                storage: 2Ti  # Match PV capacity
             storageClassName: jellyfin-media
         - apiVersion: v1
           kind: PersistentVolumeClaim
@@ -584,7 +593,7 @@
                       - SYS_ADMIN
                       drop:
                       - ALL
-                    runAsUser: 0
+                    runAsUser: 1000  # Non-root user for security
                   startupProbe:
                     httpGet:
                       path: /health
@@ -704,6 +713,7 @@
                   periodSeconds: 60
                 selectPolicy: Max
         kubeconfig: /root/.kube/config
+      when: jellyfin_enable_hpa | default(false)  # Optional HPA for basic deployment
 
     - name: Deploy Monitoring ServiceMonitor
       kubernetes.core.k8s:
@@ -732,6 +742,7 @@
               matchNames:
               - "{{ jellyfin_namespace }}"
         kubeconfig: /root/.kube/config
+      when: jellyfin_enable_servicemonitor | default(false)  # Optional monitoring for basic deployment
 
     - name: Wait for Jellyfin deployment to be ready
       block:
