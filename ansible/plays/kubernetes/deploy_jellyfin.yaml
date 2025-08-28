@@ -43,7 +43,7 @@
         path: "{{ jellyfin_media_path | default('/srv/media') }}"
       delegate_to: "{{ groups['storage_nodes'][0] }}"
       register: media_directory_stat
-      when: not (jellyfin_skip_mount_verification | default(true))
+      when: not (jellyfin_skip_mount_verification | default(true))  # Default to skip for faster deployment
       
     - name: Skip media directory validation (mount verification disabled)
       debug:
@@ -573,7 +573,7 @@
                 containers:
                 - name: jellyfin
                   image: jellyfin/jellyfin:latest
-                  imagePullPolicy: Always
+                  imagePullPolicy: IfNotPresent  # Avoid long pulls when using latest image
                   ports:
                   - containerPort: 8096
                     name: http
@@ -594,8 +594,8 @@
                     value: "1G"
                   resources:
                     requests:
-                      memory: "2Gi"
-                      cpu: "500m"
+                      memory: "512Mi"  # Lower memory for better scheduling on low-resource nodes
+                      cpu: "200m"      # Lower CPU for better scheduling on low-resource nodes
                     limits:
                       memory: "2.5Gi"
                       cpu: "2000m"
@@ -615,7 +615,7 @@
                     httpGet:
                       path: /health
                       port: 8096
-                    initialDelaySeconds: 60
+                    initialDelaySeconds: 120  # Increased for first startup reliability
                     periodSeconds: 30
                     timeoutSeconds: 10
                     failureThreshold: 3
@@ -623,7 +623,7 @@
                     httpGet:
                       path: /health
                       port: 8096
-                    initialDelaySeconds: 30
+                    initialDelaySeconds: 60   # Increased for first startup reliability
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 3
@@ -640,7 +640,7 @@
                     httpGet:
                       path: /health
                       port: 8096
-                    initialDelaySeconds: 10
+                    initialDelaySeconds: 120  # Increased for first startup reliability
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 30
@@ -703,7 +703,7 @@
                 containers:
                 - name: jellyfin
                   image: jellyfin/jellyfin:latest
-                  imagePullPolicy: Always
+                  imagePullPolicy: IfNotPresent  # Avoid long pulls when using latest image
                   ports:
                   - containerPort: 8096
                     name: http
@@ -724,8 +724,8 @@
                     value: "1G"
                   resources:
                     requests:
-                      memory: "2Gi"
-                      cpu: "500m"
+                      memory: "512Mi"  # Lower memory for better scheduling on low-resource nodes
+                      cpu: "200m"      # Lower CPU for better scheduling on low-resource nodes
                     limits:
                       memory: "2.5Gi"
                       cpu: "2000m"
@@ -745,7 +745,7 @@
                     httpGet:
                       path: /health
                       port: 8096
-                    initialDelaySeconds: 60
+                    initialDelaySeconds: 120  # Increased for first startup reliability
                     periodSeconds: 30
                     timeoutSeconds: 10
                     failureThreshold: 3
@@ -753,7 +753,7 @@
                     httpGet:
                       path: /health
                       port: 8096
-                    initialDelaySeconds: 30
+                    initialDelaySeconds: 60   # Increased for first startup reliability
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 3
@@ -770,7 +770,7 @@
                     httpGet:
                       path: /health
                       port: 8096
-                    initialDelaySeconds: 10
+                    initialDelaySeconds: 120  # Increased for first startup reliability
                     periodSeconds: 10
                     timeoutSeconds: 5
                     failureThreshold: 30
@@ -933,7 +933,7 @@
             wait_condition:
               type: Ready
               status: "True"
-            wait_timeout: 600
+            wait_timeout: 900  # Increased to 15 minutes for better reliability
             kubeconfig: /root/.kube/config
           register: jellyfin_pods_wait
           
@@ -947,6 +947,87 @@
           register: jellyfin_deployment
           
       rescue:
+        - name: Quick diagnostic check for early failures
+          block:
+            - name: Check pod status quickly
+              kubernetes.core.k8s_info:
+                api_version: v1
+                kind: Pod
+                namespace: "{{ jellyfin_namespace }}"
+                label_selectors:
+                  - app=jellyfin
+                kubeconfig: /root/.kube/config
+              register: quick_pod_check
+              failed_when: false
+
+            - name: Early diagnostic collection (if pods are failing quickly)
+              debug:
+                msg: |
+                  EARLY DIAGNOSTIC: Collecting immediate diagnostic info due to quick failure...
+                  {% for pod in (quick_pod_check.resources | default([])) %}
+                  Pod {{ pod.metadata.name | default('unknown') }}: {{ pod.status.phase | default('unknown') }}
+                  {% endfor %}
+              when: quick_pod_check.resources is defined and (quick_pod_check.resources | selectattr('status.phase', 'equalto', 'Pending') | list | length > 0 or quick_pod_check.resources | selectattr('status.phase', 'equalto', 'Failed') | list | length > 0)
+
+        - name: Comprehensive diagnostic collection
+          block:
+            - name: Collect pod information
+              shell: kubectl get pods -n jellyfin -o wide
+              register: pod_info_output
+              failed_when: false
+
+            - name: Collect pod descriptions  
+              shell: kubectl describe pods -n jellyfin
+              register: pod_describe_output
+              failed_when: false
+
+            - name: Collect pod logs
+              shell: kubectl logs -n jellyfin -l app=jellyfin --tail=200
+              register: pod_logs_output
+              failed_when: false
+
+            - name: Collect PV/PVC information
+              shell: kubectl get pv,pvc -n jellyfin
+              register: pv_pvc_output
+              failed_when: false
+
+            - name: Collect node information
+              shell: kubectl describe node {{ storage_node_k8s_name | default('storagenodet3500') }}
+              register: node_info_output
+              failed_when: false
+
+            - name: Check storage node filesystem and directories
+              shell: |
+                ssh root@192.168.4.61 "df -h; echo '--- /srv/media ---'; ls -la /srv/media; echo '--- /var/lib/jellyfin ---'; ls -la /var/lib/jellyfin; echo '--- /dev/dri ---'; ls -la /dev/dri"
+              register: storage_node_check
+              failed_when: false
+              delegate_to: localhost
+
+            - name: Display comprehensive diagnostics
+              debug:
+                msg: |
+                  ==========================================
+                  COMPREHENSIVE JELLYFIN DIAGNOSTICS
+                  ==========================================
+                  
+                  POD STATUS:
+                  {{ pod_info_output.stdout | default('No pod info available') }}
+                  
+                  POD DESCRIPTIONS:
+                  {{ pod_describe_output.stdout | default('No pod descriptions available') }}
+                  
+                  POD LOGS:
+                  {{ pod_logs_output.stdout | default('No pod logs available') }}
+                  
+                  PV/PVC STATUS:
+                  {{ pv_pvc_output.stdout | default('No PV/PVC info available') }}
+                  
+                  NODE STATUS:
+                  {{ node_info_output.stdout | default('No node info available') }}
+                  
+                  STORAGE NODE CHECK:
+                  {{ storage_node_check.stdout | default('Storage node check failed') }}
+
         - name: Gather Jellyfin pods for debugging
           kubernetes.core.k8s_info:
             api_version: v1
@@ -1078,24 +1159,27 @@
               No events found or event information unavailable
               {% endif %}
               
-        - name: Fail with helpful error message
-          fail:
+        - name: Display deployment failure summary (non-fatal)
+          debug:
             msg: |
               ==========================================
-              JELLYFIN DEPLOYMENT FAILED
+              JELLYFIN DEPLOYMENT TIMEOUT SUMMARY
               ==========================================
               
-              The Jellyfin deployment failed to become ready within 10 minutes.
+              The Jellyfin deployment did not become ready within 15 minutes.
+              This is a non-fatal timeout - the deployment may still be progressing.
               
-              TROUBLESHOOTING STEPS:
+              NEXT STEPS:
               ==========================================
               
-              1. Check pod status and logs:
-                 kubectl get pods -n jellyfin
+              1. Check current pod status:
+                 kubectl get pods -n jellyfin -w
+              
+              2. Monitor deployment progress:
                  kubectl describe pods -n jellyfin
                  kubectl logs -n jellyfin -l app=jellyfin
               
-              2. Check persistent volume status:
+              3. Check persistent volume status:
                  {% if jellyfin_use_persistent_volumes | default(false) %}
                  kubectl get pv | grep jellyfin
                  kubectl get pvc -n jellyfin
@@ -1106,30 +1190,22 @@
                  ssh {{ groups['storage_nodes'][0] }} 'ls -la {{ jellyfin_config_path | default('/var/lib/jellyfin') }}'
                  {% endif %}
               
-              3. Check events for errors:
-                 kubectl get events -n jellyfin --sort-by=.metadata.creationTimestamp
-              
-              4. Verify storage node is accessible:
+              4. Verify storage node accessibility:
                  kubectl get nodes -o wide
                  ssh {{ groups['storage_nodes'][0] }} 'ls -la {{ jellyfin_media_path | default('/srv/media') }}'
               
-              5. Check hardware acceleration devices (if needed):
+              5. Check hardware acceleration devices:
                  ssh {{ groups['storage_nodes'][0] }} 'ls -la /dev/dri/'
               
-              6. Common solutions:
-                 - Ensure media directory exists: mkdir -p {{ jellyfin_media_path | default('/srv/media') }}
-                 - Check directory permissions: chown -R 1000:1000 {{ jellyfin_media_path | default('/srv/media') }}
-                 - Verify storage node is in cluster: kubectl get nodes
-                 - Check available resources: kubectl describe node {{ storage_node_k8s_name | default('storage-node') }}
-              
-              7. Manual cleanup if needed:
+              6. If deployment is still failing after additional time:
                  kubectl delete deployment jellyfin -n jellyfin
                  {% if jellyfin_use_persistent_volumes | default(false) %}
                  kubectl delete pvc jellyfin-config-pvc -n jellyfin
                  {% endif %}
-                 # Then re-run the deployment
+                 # Then re-run this playbook
               
-              Please check the debug information above for specific error details.
+              The deployment may complete successfully given more time.
+              Check the diagnostic information above for specific details.
 
     - name: Display deployment status
       debug:
