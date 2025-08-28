@@ -27,9 +27,9 @@ This document provides the minimal fixes applied to `ansible/plays/kubernetes/de
 - **Rationale**: Prevents probe-related kills during initial Jellyfin startup
 
 ### 5. Wait Timeout Extension
-- **Before**: `wait_timeout: 600` (10 minutes)
-- **After**: `wait_timeout: 900` (15 minutes)
-- **Rationale**: Provides more time for deployment to become ready
+- **Before**: `wait_timeout: 900` (15 minutes)
+- **After**: `wait_timeout: 120` (2 minutes)
+- **Rationale**: Quickly identifies configuration issues instead of waiting extended periods
 
 ### 6. Enhanced Diagnostic Collection
 - **Added**: Early diagnostic check within 120s for Pending/CrashLoopBackOff pods
@@ -83,7 +83,7 @@ curl -I http://192.168.4.61:30096
 
 ## Success Criteria
 
-1. **Pod Ready within 15 minutes**: Single-replica Jellyfin pod reaches Ready status
+1. **Pod Ready within 2 minutes**: Single-replica Jellyfin pod reaches Ready status
 2. **Correct Volume Mounts**: 
    - `/media` mount is hostPath `/srv/media` (read-only) inside container
    - `/config` mount is hostPath `/var/lib/jellyfin` (writable) inside container

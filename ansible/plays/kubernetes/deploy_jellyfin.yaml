@@ -933,7 +933,7 @@
             wait_condition:
               type: Ready
               status: "True"
-            wait_timeout: 900  # Increased to 15 minutes for better reliability
+            wait_timeout: 120  # 2 minutes to quickly identify configuration issues
             kubeconfig: /root/.kube/config
           register: jellyfin_pods_wait
           
@@ -1075,7 +1075,7 @@
               JELLYFIN DEPLOYMENT FAILURE DEBUG INFO
               ==========================================
               
-              Timeout: Jellyfin deployment failed to become ready within 10 minutes.
+              Timeout: Jellyfin deployment failed to become ready within 2 minutes.
               Namespace: {{ jellyfin_namespace }}
               Storage Node: {{ storage_node_k8s_name | default('UNKNOWN') }}
               
@@ -1166,7 +1166,7 @@
               JELLYFIN DEPLOYMENT TIMEOUT SUMMARY
               ==========================================
               
-              The Jellyfin deployment did not become ready within 15 minutes.
+              The Jellyfin deployment did not become ready within 2 minutes.
               This is a non-fatal timeout - the deployment may still be progressing.
               
               NEXT STEPS:

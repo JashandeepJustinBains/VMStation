@@ -51,10 +51,10 @@ else
 fi
 
 # Check wait timeout
-if grep -q "wait_timeout: 900" ansible/plays/kubernetes/deploy_jellyfin.yaml; then
-    echo "  ✅ Wait timeout increased to 15 minutes"
+if grep -q "wait_timeout: 120" ansible/plays/kubernetes/deploy_jellyfin.yaml; then
+    echo "  ✅ Wait timeout reduced to 2 minutes"
 else
-    echo "  ❌ Wait timeout not updated"
+    echo "  ❌ Wait timeout not updated to 2 minutes"
     exit 1
 fi
 
@@ -100,6 +100,6 @@ echo "Expected improvements:"
 echo "- Faster pod scheduling (IfNotPresent image pull policy)"
 echo "- Better resource allocation (lower requests for scheduling)"
 echo "- More reliable startup (increased probe delays)"
-echo "- Extended deployment time (15 minutes vs 10 minutes)"
+echo "- Faster timeout for quicker issue identification (2 minutes vs 15 minutes)"
 echo "- Better diagnostics if issues occur"
 echo "- Non-fatal timeout handling"

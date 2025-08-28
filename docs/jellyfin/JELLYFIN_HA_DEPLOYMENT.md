@@ -269,7 +269,7 @@ kubectl delete deployment jellyfin -n jellyfin
 kubectl get pods -n jellyfin -o wide
 ```
 
-**Note**: The deployment wait timeout has been increased to 10 minutes to accommodate Jellyfin's startup time, especially during initial setup or when pulling large container images.
+**Note**: The deployment wait timeout is set to 2 minutes to quickly identify configuration issues, such as missing storage directories or hardware acceleration devices.
 
 ### Performance Optimization
 
