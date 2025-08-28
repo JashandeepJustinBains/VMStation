@@ -261,7 +261,7 @@
         - result.resources[0].spec.nodeAffinity is defined
         - result.resources[0].spec.nodeAffinity.required is defined
         - result.resources[0].spec.nodeAffinity.required.nodeSelectorTerms is defined
-        - storage_node_k8s_name not in (result.resources[0].spec.nodeAffinity.required.nodeSelectorTerms | map('extract', 'matchExpressions') | flatten | selectattr('key', 'equalto', 'kubernetes.io/hostname') | map(attribute='values') | flatten | list)
+        - storage_node_k8s_name not in (result.resources[0].spec.nodeAffinity.required.nodeSelectorTerms | map(attribute='matchExpressions') | flatten | selectattr('key', 'equalto', 'kubernetes.io/hostname') | map(attribute='values') | flatten | list)
       loop_control:
         loop_var: result
 
