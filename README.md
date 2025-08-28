@@ -49,6 +49,35 @@ After deployment, access your monitoring services:
 # Run comprehensive validation
 ./scripts/validate_k8s_monitoring.sh
 
+# If Loki stack has CrashLoopBackOff issues, use the fix:
+./deploy_loki_fix.sh
+```
+
+## 🩹 Quick Fixes
+
+### Loki Stack CrashLoopBackOff Fix
+If you encounter CrashLoopBackOff issues with loki-stack-0 or promtail pods:
+
+```bash
+# Quick deployment of Loki stack fix
+./deploy_loki_fix.sh
+
+# Or apply specific fix script
+./fix_loki_stack_crashloop.sh
+
+# Verify the fix
+./verify_loki_stack_fix.sh
+```
+
+📖 **Documentation**: See [LOKI_STACK_CRASHLOOP_FIX.md](./LOKI_STACK_CRASHLOOP_FIX.md) for detailed information.
+
+**Key Features of this fix**:
+- ✅ Preserves working pods (Jellyfin, etc.) - no restarts
+- ✅ No drive unmounting/remounting 
+- ✅ Targeted fix for logging components only
+- ✅ Resource optimization to prevent OOM kills
+- ✅ Stable Loki 2.9.2 configuration
+
 # Check cluster status
 kubectl get nodes -o wide
 kubectl get pods -n monitoring

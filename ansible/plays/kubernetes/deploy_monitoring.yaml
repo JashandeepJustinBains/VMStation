@@ -115,17 +115,49 @@
         values:
           loki:
             enabled: true
+            image:
+              tag: "2.9.2"  # Use stable version to prevent crashloop
+              
+            # Resource limits to prevent OOM kills and crashloops
+            resources:
+              limits:
+                cpu: 1000m
+                memory: 1Gi
+              requests:
+                cpu: 200m
+                memory: 256Mi
+                
             persistence:
               enabled: true
               storageClassName: local-path
               size: 10Gi
+              accessModes:
+                - ReadWriteOnce
+                
             # Ensure Loki runs on monitoring nodes
             nodeSelector:
               kubernetes.io/hostname: "{{ ansible_hostname }}"
+              
+            # Security context for proper permissions
+            securityContext:
+              fsGroup: 10001
+              runAsGroup: 10001
+              runAsNonRoot: true
+              runAsUser: 10001
+              
             config:
               auth_enabled: false
               server:
                 http_listen_port: 3100
+                grpc_listen_port: 9095
+                
+              # Distributor configuration
+              distributor:
+                ring:
+                  kvstore:
+                    store: inmemory
+                    
+              # Optimized ingester configuration to prevent crashes
               ingester:
                 lifecycler:
                   address: 127.0.0.1
@@ -134,8 +166,12 @@
                       store: inmemory
                     replication_factor: 1
                   final_sleep: 0s
-                chunk_idle_period: 5m
+                chunk_idle_period: 1h
+                max_chunk_age: 1h
+                chunk_target_size: 1048576
                 chunk_retain_period: 30s
+                max_transfer_retries: 0
+                
               schema_config:
                 configs:
                 - from: 2020-10-24
@@ -144,26 +180,141 @@
                   schema: v11
                   index:
                     prefix: index_
+                    period: 24h
+                    
+              # Storage configuration with safer paths
               storage_config:
                 boltdb_shipper:
-                  active_index_directory: /loki/index
+                  active_index_directory: /loki/boltdb-shipper-active
+                  cache_location: /loki/boltdb-shipper-cache
                   shared_store: filesystem
                 filesystem:
                   directory: /loki/chunks
+                  
+              # Limits configuration to prevent crashes
               limits_config:
                 enforce_metric_name: false
                 reject_old_samples: true
                 reject_old_samples_max_age: 168h
+                ingestion_rate_mb: 16
+                ingestion_burst_size_mb: 32
+                max_streams_per_user: 10000
+                max_line_size: 256000
+                
+              # Table manager configuration
+              table_manager:
+                retention_deletes_enabled: false
+                retention_period: 0s
+                
+              # Query configuration
+              querier:
+                max_concurrent: 16
+                
+              query_range:
+                split_queries_by_interval: 15m
+                max_retries: 5
+                
+              # Compactor configuration
+              compactor:
+                working_directory: /loki/boltdb-shipper-compactor
+                shared_store: filesystem
+                
             service:
               type: NodePort
               nodePort: 31100
               
           promtail:
             enabled: true
+            image:
+              tag: "2.9.2"  # Match Loki version
+              
+            # Resource limits for promtail to prevent container creation issues
+            resources:
+              limits:
+                cpu: 500m
+                memory: 256Mi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+                
+            # Security context for log access
+            securityContext:
+              readOnlyRootFilesystem: true
+              runAsGroup: 0
+              runAsUser: 0
+              
             config:
-              serverPort: 3101
+              server:
+                http_listen_port: 3101
+                grpc_listen_port: 0
+                
+              positions:
+                filename: /tmp/positions.yaml
+                
               clients:
-                - url: http://loki:3100/loki/api/v1/push
+                - url: http://loki-stack:3100/loki/api/v1/push
+                  timeout: 60s
+                  backoff_config:
+                    min_period: 500ms
+                    max_period: 5m
+                    max_retries: 10
+                    
+              scrape_configs:
+                - job_name: kubernetes-pods
+                  kubernetes_sd_configs:
+                    - role: pod
+                  relabel_configs:
+                    - source_labels:
+                        - __meta_kubernetes_pod_controller_name
+                      regex: ([0-9a-z-.]+?)(-[0-9a-f]{8,10})?
+                      action: replace
+                      target_label: __tmp_controller_name
+                    - source_labels:
+                        - __meta_kubernetes_pod_label_app_kubernetes_io_name
+                        - __meta_kubernetes_pod_label_app
+                        - __tmp_controller_name
+                        - __meta_kubernetes_pod_name
+                      regex: ^;*([^;]+)(;.*)?$
+                      action: replace
+                      target_label: app
+                    - source_labels:
+                        - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+                        - __meta_kubernetes_pod_label_release
+                      regex: ^;*([^;]+)(;.*)?$
+                      action: replace
+                      target_label: instance
+                    - action: replace
+                      source_labels:
+                      - __meta_kubernetes_pod_node_name
+                      target_label: node_name
+                    - action: replace
+                      source_labels:
+                      - __meta_kubernetes_namespace
+                      target_label: namespace
+                    - action: replace
+                      replacement: /var/log/pods/*$1/*.log
+                      separator: /
+                      source_labels:
+                      - __meta_kubernetes_pod_uid
+                      - __meta_kubernetes_pod_container_name
+                      target_label: __path__
+                      
+            # Volume mounts for proper log access
+            volumeMounts:
+              - name: varlog
+                mountPath: /var/log
+                readOnly: true
+              - name: varlibdockercontainers
+                mountPath: /var/lib/docker/containers
+                readOnly: true
+                
+            volumes:
+              - name: varlog
+                hostPath:
+                  path: /var/log
+              - name: varlibdockercontainers
+                hostPath:
+                  path: /var/lib/docker/containers
                   
           grafana:
             enabled: false  # We already have Grafana from kube-prometheus-stack
