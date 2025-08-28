@@ -11,6 +11,21 @@
   when: jellyfin_enabled | default(true)
   tags: [deploy, jellyfin]
   block:
+    - name: "Resolve Jellyfin manifest path"
+      ansible.builtin.set_fact:
+        jellyfin_manifest_resolved: >-
+          {{
+            (jellyfin_manifest_path | default(''))
+            if (jellyfin_manifest_path is defined and jellyfin_manifest_path | length > 0)
+            else (
+              (playbook_dir ~ '/kubernetes/jellyfin-minimal.yml') if (playbook_dir is defined) else 'ansible/plays/kubernetes/jellyfin-minimal.yml'
+            )
+          }}
+
+    - name: "Debug resolved jellyfin manifest path"
+      ansible.builtin.debug:
+        msg: "Using jellyfin manifest at {{ jellyfin_manifest_resolved }}"
+      tags: [deploy, jellyfin]
     - name: "Ensure jellyfin namespace exists"
       kubernetes.core.k8s:
         name: jellyfin
@@ -36,8 +51,7 @@
     - name: "Deploy Jellyfin manifest"
       kubernetes.core.k8s:
         state: present
-        # Use correct path: if jellyfin_manifest_path is not provided, use relative path from playbook_dir
-        src: "{{ jellyfin_manifest_path | default(playbook_dir ~ '/kubernetes/jellyfin-minimal.yml') }}"
+        src: "{{ jellyfin_manifest_resolved }}"
         wait: true
         wait_condition:
           type: Ready
