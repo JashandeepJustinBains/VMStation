@@ -9,6 +9,11 @@
     jellyfin_hostname: "jellyfin.local"
     jellyfin_published_url: "http://192.168.4.61:30096"
     storage_node_hostname: "{{ groups['storage_nodes'][0] }}"
+    # New timeout and safety variables for faster failure detection
+    jellyfin_pod_ready_timeout: 120
+    jellyfin_fail_fast_threshold_seconds: 10
+    jellyfin_enable_dev_dri: false
+    jellyfin_skip_mount_verification: true
   # jellyfin_media_path may be set in group_vars/all.yml; if not present we use '/srv/media' via defaults in tasks
     
   pre_tasks:
@@ -37,6 +42,30 @@
       set_fact:
         storage_node_candidates: "{{ (storage_node_candidates | default([])) + [ groups['storage_nodes'][0] ] }}"
       when: groups['storage_nodes'] | length > 0
+
+    - name: Check /dev/dri availability on storage node
+      stat:
+        path: /dev/dri
+      delegate_to: "{{ groups['storage_nodes'][0] }}"
+      register: storage_node_dev_dri_stat
+      failed_when: false
+      
+    - name: Set dev-dri availability fact
+      set_fact:
+        storage_has_dev_dri: "{{ storage_node_dev_dri_stat.stat.exists | default(false) and storage_node_dev_dri_stat.stat.isdir | default(false) }}"
+        
+    - name: Display dev-dri availability
+      debug:
+        msg: |
+          Hardware acceleration device availability:
+          - /dev/dri exists on storage node: {{ storage_has_dev_dri }}
+          - jellyfin_enable_dev_dri setting: {{ jellyfin_enable_dev_dri }}
+          - Will mount /dev/dri: {{ jellyfin_enable_dev_dri | bool and storage_has_dev_dri | bool }}
+          
+          {% if not storage_has_dev_dri %}
+          WARNING: /dev/dri not available on storage node {{ groups['storage_nodes'][0] }}
+          Hardware acceleration will be disabled to avoid mount failures.
+          {% endif %}
 
     - name: Validate media directory exists on storage node
       stat:
@@ -281,6 +310,64 @@
           {% else %}
           Persistent volumes disabled - using direct hostPath volumes
           {% endif %}
+
+    - name: Check for PVs stuck in Terminating state
+      set_fact:
+        terminating_pvs: []
+      when: jellyfin_use_persistent_volumes | default(false)
+      
+    - name: Identify PVs in Terminating state
+      set_fact:
+        terminating_pvs: "{{ terminating_pvs + [result.item] }}"
+      loop: "{{ existing_pvs.results }}"
+      when: 
+        - jellyfin_use_persistent_volumes | default(false)
+        - result.resources | length > 0
+        - result.resources[0].metadata.deletionTimestamp is defined
+      loop_control:
+        loop_var: result
+        
+    - name: Display Terminating PV remediation steps (if found)
+      debug:
+        msg: |
+          ⚠️  CRITICAL: Found PVs stuck in Terminating state: {{ terminating_pvs }}
+          
+          DO NOT proceed with automated deployment until this is resolved!
+          PVs in Terminating state can cause data loss if handled incorrectly.
+          
+          SAFE MANUAL REMEDIATION STEPS:
+          =====================================
+          
+          1. Check PV finalizers and confirm what's blocking deletion:
+             {% for pv in terminating_pvs %}
+             kubectl get pv {{ pv }} -o json | jq '.metadata.finalizers'
+             kubectl get pv {{ pv }} -o yaml
+             {% endfor %}
+          
+          2. Check associated PVCs:
+             kubectl get pvc -n jellyfin -o yaml
+          
+          3. ONLY if you confirm no important data will be lost, remove finalizers:
+             {% for pv in terminating_pvs %}
+             kubectl patch pv {{ pv }} -p '{"metadata":{"finalizers":[]}}' --type=merge
+             {% endfor %}
+          
+          ⚠️  WARNING: Removing finalizers can cause immediate data deletion!
+          Ensure you have backups of any important data before proceeding.
+          
+          After resolution, re-run this playbook.
+      when: 
+        - jellyfin_use_persistent_volumes | default(false)
+        - terminating_pvs | length > 0
+        
+    - name: Fail deployment if Terminating PVs found
+      fail:
+        msg: |
+          Deployment halted due to PVs in Terminating state.
+          See remediation steps above. Re-run playbook after resolution.
+      when: 
+        - jellyfin_use_persistent_volumes | default(false)
+        - terminating_pvs | length > 0
 
     - name: Check if existing PVs have correct nodeAffinity
       set_fact:
@@ -933,7 +1020,7 @@
             wait_condition:
               type: Ready
               status: "True"
-            wait_timeout: 900  # Increased to 15 minutes for better reliability
+            wait_timeout: "{{ jellyfin_pod_ready_timeout }}"  # Use configurable timeout (default 120s)
             kubeconfig: /root/.kube/config
           register: jellyfin_pods_wait
           
@@ -963,10 +1050,18 @@
             - name: Early diagnostic collection (if pods are failing quickly)
               debug:
                 msg: |
-                  EARLY DIAGNOSTIC: Collecting immediate diagnostic info due to quick failure...
+                  EARLY DIAGNOSTIC: Pod status within {{ jellyfin_pod_ready_timeout }}s timeout...
                   {% for pod in (quick_pod_check.resources | default([])) %}
                   Pod {{ pod.metadata.name | default('unknown') }}: {{ pod.status.phase | default('unknown') }}
+                  {% if pod.status.containerStatuses is defined %}
+                  {% for container in pod.status.containerStatuses %}
+                  - Container {{ container.name }}: {{ container.state | default({}) | to_json }}
                   {% endfor %}
+                  {% endif %}
+                  {% endfor %}
+                  
+                  ⚠️  FAST FAILURE DETECTED: Pods not ready within timeout
+                  This suggests configuration issues rather than slow startup.
               when: quick_pod_check.resources is defined and (quick_pod_check.resources | selectattr('status.phase', 'equalto', 'Pending') | list | length > 0 or quick_pod_check.resources | selectattr('status.phase', 'equalto', 'Failed') | list | length > 0)
 
         - name: Comprehensive diagnostic collection
@@ -1214,14 +1309,18 @@
           ================================================
           
           Namespace: {{ jellyfin_namespace }}
-          Deployment: {{ jellyfin_deployment.resources[0].status.replicas | default(0) }} replicas
-          Available: {{ jellyfin_deployment.resources[0].status.availableReplicas | default(0) }} replicas
+          Deployment: {{ jellyfin_deployment.resources[0].status.replicas | default(0) if jellyfin_deployment.resources is defined and jellyfin_deployment.resources | length > 0 else 0 }} replicas
+          Available: {{ jellyfin_deployment.resources[0].status.availableReplicas | default(0) if jellyfin_deployment.resources is defined and jellyfin_deployment.resources | length > 0 else 0 }} replicas
           Scheduled on: {{ storage_node_k8s_name }} ({{ groups['storage_nodes'][0] }})
           
           Pods:
+          {% if jellyfin_pods_wait.resources is defined %}
           {% for pod in jellyfin_pods_wait.resources %}
           - {{ pod.metadata.name }}: {{ pod.status.phase }} (Node: {{ pod.spec.nodeName | default('Pending') }})
           {% endfor %}
+          {% else %}
+          No pod information available
+          {% endif %}
           
           Access URLs:
           - Primary HTTP: http://{{ groups['storage_nodes'][0] }}:30096 (via storage node)
@@ -1231,7 +1330,11 @@
           Features Enabled:
           ✓ Auto-scaling (1-3 pods based on load)
           ✓ Session affinity for uninterrupted streaming
-          ✓ Hardware acceleration support
+          {% if jellyfin_enable_dev_dri | bool and storage_has_dev_dri | bool %}
+          ✓ Hardware acceleration support (/dev/dri available)
+          {% else %}
+          ⚠ Hardware acceleration disabled (dev-dri: {{ jellyfin_enable_dev_dri }}, available: {{ storage_has_dev_dri | default(false) }})
+          {% endif %}
           ✓ Large file upload support (50GB)
           ✓ Monitoring integration
           ✓ Resource constraints (2-2.5GB RAM per pod)
