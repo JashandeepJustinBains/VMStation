@@ -55,7 +55,11 @@ jellyfin_node_name: storagenodet3500
 # Set to false for minimal deployment using direct hostPath volumes
 jellyfin_use_persistent_volumes: false
 
-# Path to the Jellyfin manifest file (relative to playbook directory)
+# Path to the Jellyfin manifest file
+# Default: kubernetes/jellyfin-minimal.yml (relative to ansible/plays/ directory)
+# Advanced: Use absolute path if you need to reference a different location
+# WARNING: When using {{ playbook_dir }}, remember that jellyfin.yml runs from plays/ directory
+#          so use "{{ playbook_dir }}/../roles/jellyfin/files/ansible/plays/kubernetes/jellyfin-minimal.yml"
 jellyfin_manifest_path: kubernetes/jellyfin-minimal.yml
 
 # Timeout for Jellyfin pod readiness check (seconds)
