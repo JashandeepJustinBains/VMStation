@@ -22,9 +22,42 @@
             )
           }}
 
+    - name: "Check if jellyfin manifest file exists"
+      ansible.builtin.stat:
+        path: "{{ jellyfin_manifest_resolved }}"
+      register: jellyfin_manifest_stat
+      tags: [deploy, jellyfin]
+
     - name: "Debug resolved jellyfin manifest path"
       ansible.builtin.debug:
-        msg: "Using jellyfin manifest at {{ jellyfin_manifest_resolved }}"
+        msg: 
+          - "Using jellyfin manifest at: {{ jellyfin_manifest_resolved }}"
+          - "File exists: {{ jellyfin_manifest_stat.stat.exists }}"
+          - "Current playbook_dir: {{ playbook_dir | default('undefined') }}"
+      tags: [deploy, jellyfin]
+    
+    - name: "Provide helpful error message if manifest not found"
+      ansible.builtin.fail:
+        msg: |
+          Jellyfin manifest file not found at: {{ jellyfin_manifest_resolved }}
+          
+          This usually happens when jellyfin_manifest_path is incorrectly configured.
+          
+          Current setting: {{ jellyfin_manifest_path | default('not set') }}
+          Playbook directory: {{ playbook_dir | default('undefined') }}
+          
+          SOLUTIONS:
+          1. Use the default path (recommended):
+             jellyfin_manifest_path: kubernetes/jellyfin-minimal.yml
+          
+          2. Use absolute path with correct playbook_dir:
+             jellyfin_manifest_path: "{{ '{{' }} playbook_dir {{ '}}' }}/../roles/jellyfin/files/ansible/plays/kubernetes/jellyfin-minimal.yml"
+          
+          3. Verify the file exists at the expected location.
+          
+          Common mistake: Using "{{ '{{' }} playbook_dir {{ '}}' }}/roles/jellyfin/..." 
+          This fails because jellyfin.yml runs from plays/ directory, not ansible/ directory.
+      when: not jellyfin_manifest_stat.stat.exists
       tags: [deploy, jellyfin]
     - name: "Ensure jellyfin namespace exists"
       kubernetes.core.k8s:
