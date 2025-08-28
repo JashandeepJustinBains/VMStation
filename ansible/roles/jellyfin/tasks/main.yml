@@ -36,7 +36,7 @@
     - name: "Deploy Jellyfin manifest"
       kubernetes.core.k8s:
         state: present
-        src: "{{ jellyfin_manifest_path }}"
+        src: "{{ jellyfin_manifest_path | default('ansible/plays/kubernetes/jellyfin-minimal.yml') }}"
         wait: true
         wait_condition:
           type: Ready
