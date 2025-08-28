@@ -1214,13 +1214,13 @@
           ================================================
           
           Namespace: {{ jellyfin_namespace }}
-          Deployment: {{ jellyfin_deployment.resources[0].status.replicas | default(0) }} replicas
-          Available: {{ jellyfin_deployment.resources[0].status.availableReplicas | default(0) }} replicas
+          Deployment: {{ (jellyfin_deployment.resources[0].status.replicas) if (jellyfin_deployment is defined and jellyfin_deployment.resources is defined and (jellyfin_deployment.resources | length) > 0 and jellyfin_deployment.resources[0].status is defined) else 0 }} replicas
+          Available: {{ (jellyfin_deployment.resources[0].status.availableReplicas) if (jellyfin_deployment is defined and jellyfin_deployment.resources is defined and (jellyfin_deployment.resources | length) > 0 and jellyfin_deployment.resources[0].status is defined and jellyfin_deployment.resources[0].status.availableReplicas is defined) else 0 }} replicas
           Scheduled on: {{ storage_node_k8s_name }} ({{ groups['storage_nodes'][0] }})
           
           Pods:
-          {% for pod in jellyfin_pods_wait.resources %}
-          - {{ pod.metadata.name }}: {{ pod.status.phase }} (Node: {{ pod.spec.nodeName | default('Pending') }})
+          {% for pod in (jellyfin_pods_wait.resources | default([])) %}
+          - {{ pod.metadata.name }}: {{ pod.status.phase | default('Unknown') }} (Node: {{ pod.spec.nodeName | default('Pending') }})
           {% endfor %}
           
           Access URLs:
