@@ -28,7 +28,7 @@ fi
 
 # Check 3: Verify when condition exists
 echo "✓ Checking when condition logic..."
-if grep -q "when: not (existing_pvs.results" ansible/plays/kubernetes/deploy_jellyfin.yaml; then
+if grep -q "when: not (existing_pvs.results\|when.*jellyfin_use_persistent_volumes.*false" ansible/plays/kubernetes/deploy_jellyfin.yaml; then
     echo "  ✅ When condition found"
 else
     echo "  ❌ When condition missing"
