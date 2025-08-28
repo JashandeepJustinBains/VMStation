@@ -5,4 +5,3 @@ metadata:
   labels:
     name: jellyfin
     app: jellyfin
-    monitoring: enabled
