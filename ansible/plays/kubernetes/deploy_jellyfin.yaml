@@ -43,6 +43,19 @@
         path: "{{ jellyfin_media_path | default('/srv/media') }}"
       delegate_to: "{{ groups['storage_nodes'][0] }}"
       register: media_directory_stat
+      when: not (jellyfin_skip_mount_verification | default(false))
+      
+    - name: Skip media directory validation (mount verification disabled)
+      debug:
+        msg: |
+          Mount verification is disabled (jellyfin_skip_mount_verification=true).
+          Skipping validation of media directory: {{ jellyfin_media_path | default('/srv/media') }}
+          
+          WARNING: Ensure the media directory exists on the storage node before deployment:
+          - Path: {{ jellyfin_media_path | default('/srv/media') }}
+          - Storage node: {{ groups['storage_nodes'][0] }}
+          - Manual check: ssh {{ groups['storage_nodes'][0] }} 'ls -la {{ jellyfin_media_path | default('/srv/media') }}'
+      when: jellyfin_skip_mount_verification | default(false)
       
     - name: Fail if media directory does not exist
       fail:
@@ -58,7 +71,9 @@
           
           To create the directory: mkdir -p {{ jellyfin_media_path | default('/srv/media') }}
           To set permissions: chown -R 1000:1000 {{ jellyfin_media_path | default('/srv/media') }}
-      when: not media_directory_stat.stat.exists
+          
+          Alternatively, to skip this check entirely, set: jellyfin_skip_mount_verification: true
+      when: not (jellyfin_skip_mount_verification | default(false)) and not media_directory_stat.stat.exists
       
     - name: Display media directory information
       debug:
@@ -69,6 +84,7 @@
           Directory exists: {{ media_directory_stat.stat.exists }}
           Owner: {{ media_directory_stat.stat.pw_name | default('unknown') }}:{{ media_directory_stat.stat.gr_name | default('unknown') }}
           Permissions: {{ media_directory_stat.stat.mode | default('unknown') }}
+      when: not (jellyfin_skip_mount_verification | default(false)) and media_directory_stat.stat.exists
 
     - name: Deduplicate storage node candidates
       set_fact:
