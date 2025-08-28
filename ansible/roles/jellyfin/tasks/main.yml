@@ -36,8 +36,8 @@
     - name: "Deploy Jellyfin manifest"
       kubernetes.core.k8s:
         state: present
-        # Use an absolute path based on the playbook directory if the var is not provided
-        src: "{{ jellyfin_manifest_path | default(playbook_dir ~ '/plays/kubernetes/jellyfin-minimal.yml') }}"
+        # Use correct path: if jellyfin_manifest_path is not provided, use relative path from playbook_dir
+        src: "{{ jellyfin_manifest_path | default(playbook_dir ~ '/kubernetes/jellyfin-minimal.yml') }}"
         wait: true
         wait_condition:
           type: Ready
