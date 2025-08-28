@@ -48,15 +48,35 @@
       ignore_errors: true
       tags: [deploy, jellyfin]
 
+    - name: "Ensure jellyfin namespace is present and active"
+      vars:
+        ns_check_retries: 6
+        ns_check_delay: 5
+      block:
+        - name: "Get jellyfin namespace status"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Namespace
+            name: jellyfin
+          register: jellyfin_ns_info
+          failed_when: false
+
+        - name: "Wait for namespace to be Active"
+          ansible.builtin.wait_for:
+            timeout: 10
+          when: jellyfin_ns_info.resources | length == 0 or jellyfin_ns_info.resources[0].status.phase != 'Active'
+          register: _wait_dummy
+          retries: "{{ ns_check_retries }}"
+          delay: "{{ ns_check_delay }}"
+          until: jellyfin_ns_info.resources | length > 0 and jellyfin_ns_info.resources[0].status.phase == 'Active'
+      tags: [deploy, jellyfin]
+
     - name: "Deploy Jellyfin manifest"
       kubernetes.core.k8s:
         state: present
         src: "{{ jellyfin_manifest_resolved }}"
-        wait: true
-        wait_condition:
-          type: Ready
-          status: "True"
-        wait_timeout: "{{ jellyfin_readiness_timeout | default(300) }}"
+        # Do not wait here because manifest contains Namespace (which has no Ready condition)
+        wait: false
       register: jellyfin_deployment
       tags: [deploy, jellyfin]
 
