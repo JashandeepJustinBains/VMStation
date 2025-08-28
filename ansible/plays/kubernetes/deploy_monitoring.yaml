@@ -210,8 +210,8 @@
               querier:
                 max_concurrent: 16
                 
-              query_range:
-                split_queries_by_interval: 15m
+              limits_config:
+                split_queries_by_interval: 30s
                 max_retries: 5
                 
               # Compactor configuration

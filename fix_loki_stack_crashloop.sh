@@ -195,7 +195,7 @@ loki:
     querier:
       max_concurrent: 16
       
-    query_range:
+    limits_config:
       split_queries_by_interval: 15m
       max_retries: 5
       

@@ -243,7 +243,7 @@
           "legendFormat": "Query Rate"
         },
         {
-          "expr": "rate(prometheus_http_requests_total{handler=\"/api/v1/query_range\"}[5m])",
+          "expr": "rate(prometheus_http_requests_total{handler=\"/api/v1/limits_config\"}[30s])",
           "refId": "B",
           "legendFormat": "Range Query Rate"
         }
