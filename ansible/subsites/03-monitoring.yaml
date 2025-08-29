@@ -6,7 +6,6 @@
   gather_facts: false
   connection: local
   vars:
-    monitoring_namespace: "{{ monitoring_namespace | default('monitoring') }}"
     monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
     storage_paths: "{{ storage_paths | default({}) }}"
   tasks:
@@ -37,25 +36,25 @@
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Namespace
-        name: "{{ monitoring_namespace }}"
+        name: "{{ monitoring_namespace | default('monitoring') }}"
       register: ns_info
       failed_when: false
 
     - name: Explain how to create monitoring namespace if missing
       ansible.builtin.debug:
         msg: |
-          Monitoring namespace '{{ monitoring_namespace }}' not found. To create it, run:
+          Monitoring namespace '{{ monitoring_namespace | default('monitoring') }}' not found. To create it, run:
           
-          kubectl create namespace {{ monitoring_namespace }}
+          kubectl create namespace {{ monitoring_namespace | default('monitoring') }}
           
           Or apply this manifest:
           ---
           apiVersion: v1
           kind: Namespace
           metadata:
-            name: {{ monitoring_namespace }}
+            name: {{ monitoring_namespace | default('monitoring') }}
             labels:
-              name: {{ monitoring_namespace }}
+              name: {{ monitoring_namespace | default('monitoring') }}
       when: ns_info.resources | length == 0
 
     - name: Check for Prometheus Operator CRDs (ServiceMonitor)
@@ -91,7 +90,7 @@
           
           # Install kube-prometheus-stack (includes Prometheus, Grafana, AlertManager)
           helm install kube-prom-stack prometheus-community/kube-prometheus-stack \
-            -n {{ monitoring_namespace }} --create-namespace \
+            -n {{ monitoring_namespace | default('monitoring') }} --create-namespace \
             --set prometheus.service.type=NodePort \
             --set prometheus.service.nodePort=30090 \
             --set grafana.service.type=NodePort \
@@ -101,7 +100,7 @@
           
           # Install Loki stack separately
           helm install loki-stack grafana/loki-stack \
-            -n {{ monitoring_namespace }} \
+            -n {{ monitoring_namespace | default('monitoring') }} \
             --set loki.service.type=NodePort \
             --set loki.service.nodePort=31100
       when: servicemonitor_crd.resources | length == 0
@@ -127,7 +126,6 @@
 - hosts: all
   gather_facts: true
   vars:
-    monitoring_namespace: "{{ monitoring_namespace | default('monitoring') }}"
     monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
     storage_paths: "{{ storage_paths | default({}) }}"
   tasks:
@@ -251,8 +249,6 @@
 - hosts: localhost
   gather_facts: false
   connection: local
-  vars:
-    monitoring_namespace: "{{ monitoring_namespace | default('monitoring') }}"
   tasks:
     - name: Final monitoring stack deployment summary
       ansible.builtin.debug:
@@ -265,9 +261,9 @@
           Helm Available: {{ 'YES' if helm_check.rc == 0 else 'NO' }}
           
           Next steps:
-          1. Create namespace: kubectl create namespace {{ monitoring_namespace }}
+          1. Create namespace: kubectl create namespace {{ monitoring_namespace | default('monitoring') }}
           2. Install monitoring stack using Helm commands shown above
-          3. Verify installation: kubectl get pods -n {{ monitoring_namespace }}
+          3. Verify installation: kubectl get pods -n {{ monitoring_namespace | default('monitoring') }}
           4. Access services via NodePort (see documentation)
           
           This playbook follows non-destructive principles and provides CLI commands
