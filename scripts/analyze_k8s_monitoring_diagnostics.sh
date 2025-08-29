@@ -243,6 +243,10 @@ perform_analysis() {
     # Final instruction as specified
     echo ""
     echo "Run the read-only commands above and paste the grafana init-chown logs and the loki yaml snippet around 'max_retries' (8–12 lines) and I will produce the exact one-line remediation commands (chown + pod-delete or helm override + dry-run)."
+    echo ""
+    echo "💡 For comprehensive troubleshooting beyond Grafana/Loki specific issues, use:"
+    echo "   ./scripts/get_copilot_prompt.sh --show"
+    echo "   This provides a premium Copilot agent prompt for full monitoring stack diagnostics."
 }
 
 # Main function to prompt for input and analyze

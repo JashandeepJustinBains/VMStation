@@ -130,6 +130,12 @@ This analyzer complements the existing VMStation monitoring diagnostic tools:
 - `diagnose_monitoring_permissions.sh` - File permission and SELinux analysis
 - `validate_k8s_monitoring.sh` - Comprehensive monitoring stack validation
 - `fix_monitoring_permissions.sh` - Automated permission fixes
+- `get_copilot_prompt.sh` - Premium Copilot agent prompt for comprehensive troubleshooting
+
+For complex multi-component issues requiring broader analysis, use the premium Copilot prompt:
+```bash
+./scripts/get_copilot_prompt.sh --show
+```
 
 ## Rules and Constraints
 

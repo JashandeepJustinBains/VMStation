@@ -189,6 +189,8 @@ The modular architecture identifies these monitoring-related components:
 - `scripts/fix_monitoring_permissions.sh` - Automated permission fixes
 - `scripts/validate_monitoring.sh` - Deployment validation
 - `scripts/validate_k8s_monitoring.sh` - Kubernetes-specific validation
+- `scripts/analyze_k8s_monitoring_diagnostics.sh` - Focused Grafana/Loki issue analysis
+- `scripts/get_copilot_prompt.sh` - Premium Copilot agent prompt for comprehensive troubleshooting
 
 ### Embedded Configuration
 The monitoring stack uses embedded Helm values in `deploy_monitoring.yaml` for:
@@ -241,6 +243,21 @@ Why this is needed: Persistent volumes and monitoring services need this directo
 - **Templating recursion detected**: Remove self-references and use `when: not (var | default(true))` in skip tasks
 - **kubectl missing or too-old**: Use distro-appropriate install commands, never attempt automated installation
 - **Target host patterns missing**: Run playbooks from masternode with `-i localhost,` or provide inventory file
+
+### Monitoring Stack Troubleshooting
+
+For monitoring pods stuck in CrashLoopBackOff or other complex issues:
+
+1. **Quick focused analysis**: Use `./scripts/analyze_k8s_monitoring_diagnostics.sh` for specific Grafana/Loki issues
+2. **Comprehensive troubleshooting**: Use `./scripts/get_copilot_prompt.sh --show` to get a premium Copilot agent prompt
+3. **Basic diagnostics**: Run `./scripts/get_copilot_prompt.sh --gather` to collect cluster information
+
+The premium Copilot prompt provides:
+- Safe, CLI-first triage checklist
+- Per-pod diagnostic recipes with exact commands
+- RBAC, storage, and configuration checks
+- Node-specific remediation for VMStation hostnames
+- Step-by-step verification procedures
 
 ## Jellyfin Scheduling
 
