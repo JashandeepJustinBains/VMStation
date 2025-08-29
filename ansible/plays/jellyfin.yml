@@ -14,11 +14,27 @@
 
     - name: Check if kubectl is available
       ansible.builtin.command:
-        cmd: kubectl version --client
+        cmd: command -v kubectl
       register: kubectl_check
       failed_when: false
       changed_when: false
       check_mode: false
+
+    - name: Show kubectl path and client version when present
+      ansible.builtin.block:
+        - name: Display kubectl path
+          ansible.builtin.debug:
+            msg: "kubectl found at: {{ kubectl_check.stdout | default('') }}"
+
+        - name: Show kubectl client version
+          ansible.builtin.command:
+            cmd: "{{ kubectl_check.stdout }} version --client"
+          register: kubectl_version
+          failed_when: false
+          changed_when: false
+        - ansible.builtin.debug:
+            var: kubectl_version.stdout_lines
+      when: kubectl_check.rc == 0
 
     - name: Fail with remediation if kubectl not available
       ansible.builtin.fail:
