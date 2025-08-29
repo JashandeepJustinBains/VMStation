@@ -1,27 +1,52 @@
-# Kubernetes Monitoring Diagnostics Analyzer
+# Kubernetes Monitoring Operations Assistant
 
 ## Overview
-The `analyze_k8s_monitoring_diagnostics.sh` script analyzes Kubernetes monitoring stack diagnostics and provides safe CLI commands to fix common issues. This tool follows strict non-destructive principles and only provides analysis and remediation commands - it never executes commands directly.
+The `analyze_k8s_monitoring_diagnostics.sh` script is a Kubernetes operations assistant that analyzes monitoring cluster diagnostics and provides safe CLI remediation commands for specific Grafana and Loki issues. This tool follows strict operational rules and never executes commands directly - only provides CLI command output.
+
+## Hard Rules
+- **Never executes commands** - only outputs CLI remediation lines for human operators
+- **Requires AUTO_APPROVE=yes** for destructive commands, otherwise only read-only inspection commands
+- **Prefers safe, reversible actions** - shows dry-run helm commands before upgrades and suggests single-pod deletes
 
 ## Usage
 
 ```bash
+# Safe mode (read-only commands only)
 ./scripts/analyze_k8s_monitoring_diagnostics.sh
+
+# Include destructive commands (requires explicit confirmation)
+./scripts/analyze_k8s_monitoring_diagnostics.sh AUTO_APPROVE=yes
 ```
 
 Then paste your diagnostic output when prompted. Type `END` on a new line or press Ctrl+D when finished.
 
-## Supported Diagnostic Inputs
+## Target Issues
 
-The analyzer accepts the following types of diagnostic output:
+The script specifically handles:
 
-1. **Node Status**: `kubectl get nodes -o wide`
-2. **Pod Status**: `kubectl -n monitoring get pods -o wide`
-3. **Pending Pods**: `kubectl -n monitoring get pods --field-selector=status.phase=Pending -o wide`
-4. **Events**: `kubectl -n monitoring get events --sort-by=.metadata.creationTimestamp`
-5. **Secrets/ConfigMaps**: `kubectl -n monitoring get secret,configmap --show-labels`
-6. **Helm Status**: `helm -n monitoring ls --all` and `helm -n monitoring status <release>`
-7. **Operator Logs**: `kubectl -n monitoring logs <operator-pod> --tail=300`
+### Grafana Init Container Chown Issues
+- Detects `chown: /var/lib/grafana/png: Permission denied` errors
+- Provides exact `chown` command for operators to run on the host node
+- Suggests safe pod recreation with proper selectors
+- Handles hostPath PVC permission mismatches for Grafana UID 472:472
+
+### Loki Configuration Parse Errors  
+- Detects `field max_retries not found` config parse errors
+- Creates minimal Helm values override files to fix invalid configuration
+- Shows dry-run commands before any destructive operations
+- Provides rollback options as safe fallbacks
+
+## Expected Diagnostic Inputs
+
+The operations assistant expects the following diagnostic outputs:
+
+1. **Pod Status**: `kubectl -n monitoring get pods -o wide`
+2. **Grafana Pod Details**: `kubectl -n monitoring describe pod <grafana_pod>`
+3. **Grafana Init Container Logs**: `kubectl -n monitoring logs <grafana_pod> -c init-chown-data --tail=200`
+4. **PVC Details**: `kubectl -n monitoring get pvc kube-prometheus-stack-grafana -o jsonpath='{.spec.volumeName}'`
+5. **PV Configuration**: `kubectl get pv <PV_NAME> -o yaml`
+6. **Loki Configuration**: `kubectl -n monitoring get secret loki-stack -o jsonpath='{.data.loki\.yaml}' | base64 -d`
+7. **Helm Values**: `helm -n monitoring get values loki-stack --all`
 
 ## Analysis Capabilities
 
@@ -57,35 +82,45 @@ The analyzer provides:
 ## Example Output
 
 ```
-1) Missing secrets/configmaps causing volume mount failures and init container crashes
+1) Read-only verification commands (run these first):
 
-2) Additional diagnostics needed:
-```bash
-kubectl -n monitoring logs -l app.kubernetes.io/name=prometheus-operator --tail=50
-```
+   kubectl -n monitoring get pods -o wide
+   kubectl -n monitoring describe pod <grafana_pod> -n monitoring
+   kubectl -n monitoring logs <grafana_pod> -c init-chown-data --tail=200 || true
+   kubectl -n monitoring get pvc kube-prometheus-stack-grafana -o jsonpath='{.spec.volumeName}{"\n"}'
+   kubectl get pv <PV_NAME> -o yaml
+   kubectl -n monitoring get secret loki-stack -o jsonpath='{.data.loki\.yaml}' | base64 -d | nl -ba | sed -n '1,240p'
+   helm -n monitoring get values loki-stack --all
 
-3) Safe remediation commands:
+Concise diagnosis:
+- Grafana init container failing due to hostPath permission mismatch (chown denied for UID 472:472)
+- Loki CrashLoopBackOff due to config parse error (invalid max_retries field on line 33)
 
-1. Intent: Check missing secrets and configmaps
-```bash
-kubectl -n monitoring get secret,configmap --show-labels
-# intent: Check missing secrets and configmaps; safe, read-only
-```
+2) Grafana hostPath ownership mismatch remediation:
 
-Verification:
-```bash
-kubectl -n monitoring describe pods | grep -A5 -B5 'FailedMount'
-```
+OPERATOR-RUN: sudo chown -R 472:472 /var/lib/kubernetes/local-path-provisioner/pvc-480b2659-d6de-4256-941b-45c8c07559ce_monitoring_kube-prometheus-stack-grafana
+(Operator must run this as root on the node that hosts the PV)
 
-4) Destructive actions (requires explicit CONFIRM or AUTO_APPROVE=true):
+For destructive pod recreation commands, re-run with AUTO_APPROVE=yes
 
-Intent: Copy kube-root-ca.crt configmap to monitoring namespace
-Safety check: This command modifies cluster state
+3) Loki config parse error remediation:
 
-```bash
-# SAFETY: Verify impact before running - requires CONFIRM
-kubectl get configmap kube-root-ca.crt -n kube-system -o yaml > /tmp/kube-root-ca.yaml && sed -i 's/namespace: kube-system/namespace: monitoring/' /tmp/kube-root-ca.yaml && kubectl apply -f /tmp/kube-root-ca.yaml
-```
+Option Fix (preferred): Create minimal values override file that removes invalid max_retries key:
+
+First, create loki-fix-values.yaml:
+cat > loki-fix-values.yaml << 'EOF'
+loki:
+  config:
+    table_manager:
+      # Remove max_retries field - not valid in this context
+      retention_deletes_enabled: true
+      retention_period: 168h
+EOF
+
+Then show dry-run first:
+   helm -n monitoring upgrade --reuse-values loki-stack grafana/loki-stack -f loki-fix-values.yaml --dry-run
+
+For destructive helm upgrade commands, re-run with AUTO_APPROVE=yes
 ```
 
 ## Integration with VMStation
