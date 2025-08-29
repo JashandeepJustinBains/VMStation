@@ -14,6 +14,11 @@ This directory contains operational scripts for VMStation infrastructure managem
 - **`podman_metrics_diagnostic.sh`** - Diagnoses Podman metrics problems
 - **`cleanup_podman_legacy.sh`** - Removes legacy Podman infrastructure
 
+### Permission Management
+- **`quick_permission_guide.sh`** - Quick reference for monitoring permission fixes
+- **`diagnose_monitoring_permissions.sh`** - Comprehensive permission diagnostic tool
+- **`fix_monitoring_permissions.sh`** - Automated permission fix script
+
 ### Container Management (Legacy)
 - **`fix_container_restarts.sh`** - Fixes container restart issues in Podman
 - **`validate_container_fixes.sh`** - Validates container restart fixes
@@ -64,13 +69,20 @@ This directory contains operational scripts for VMStation infrastructure managem
 ### Diagnostic Scripts
 | Script | Purpose | Infrastructure |
 |--------|---------|----------------|
+| `diagnose_monitoring_permissions.sh` | Monitoring permission analysis | Both |
 | `podman_metrics_diagnostic.sh` | Podman metrics diagnostics | Podman (Legacy) |
 
 ### Fix Scripts
 | Script | Purpose | Infrastructure |
 |--------|---------|----------------|
+| `fix_monitoring_permissions.sh` | Fix monitoring permission issues | Both |
 | `fix_podman_metrics.sh` | Fix Podman metrics issues | Podman (Legacy) |
 | `fix_container_restarts.sh` | Fix container restart issues | Podman (Legacy) |
+
+### Quick Reference
+| Script | Purpose | Infrastructure |
+|--------|---------|----------------|
+| `quick_permission_guide.sh` | Permission fix guidance | Both |
 
 ### Migration Scripts
 | Script | Purpose | Infrastructure |
@@ -100,6 +112,25 @@ This directory contains operational scripts for VMStation infrastructure managem
    ```
 
 ## Troubleshooting
+
+### Permission Issues (Common)
+If monitoring pods are stuck in Pending/Unknown status:
+```bash
+# Quick guidance
+./scripts/quick_permission_guide.sh
+
+# Detailed diagnosis
+./scripts/diagnose_monitoring_permissions.sh
+
+# Automated fix (requires sudo)
+sudo ./scripts/fix_monitoring_permissions.sh
+```
+
+Critical directories that need read/write access:
+- `/srv/monitoring_data` - Main monitoring storage
+- `/var/log` - Log files for promtail collection  
+- `/var/promtail` - Promtail working directory
+- `/opt/promtail` - Promtail configuration
 
 ### Kubernetes Issues
 ```bash
