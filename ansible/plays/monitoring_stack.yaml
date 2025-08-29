@@ -1,9 +1,0 @@
----
-# Monitoring stack site: imports modular plays that deploy the stack.
-# No credentials are stored in these plays.
-- import_playbook: monitoring/cleanup.yaml
-- import_playbook: monitoring/fix_selinux_contexts.yaml
-- import_playbook: monitoring/install_node.yaml
-- import_playbook: monitoring/deploy_promtail.yaml
-- import_playbook: monitoring/publish_local_registry.yml
-- import_playbook: monitoring/install_exporters.yaml

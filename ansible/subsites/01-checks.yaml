@@ -1,0 +1,45 @@
+---
+# Subsite 01: Preflight checks
+# - verifies SSH connectivity, Ansible connection, become/root access, and firewall rules
+ - hosts: all
+  gather_facts: false
+  vars:
+    required_ports:
+      - 22
+  tasks:
+    - name: Check SSH connectivity (ping via raw)
+      raw: echo ok
+      register: ssh_ping
+      failed_when: ssh_ping.rc != 0
+      changed_when: false
+
+    - name: Verify Ansible become/root access (check id)
+      ansible.builtin.command:
+        cmd: id -u
+      register: become_check
+      failed_when: become_check.rc != 0
+      changed_when: false
+
+    - name: Check firewall rules for required ports
+      ansible.builtin.shell: |
+        if command -v ufw >/dev/null 2>&1; then
+          ufw status numbered || true
+        elif command -v iptables >/dev/null 2>&1; then
+          iptables -L -n || true
+        else
+          echo "no-firewall-tool"
+        fi
+      register: firewall_check
+      changed_when: false
+
+    - name: Fail with remediation if become not available
+      ansible.builtin.fail:
+        msg: |
+          Ansible become (root) check failed. To enable root/privilege escalation, run on each host as appropriate:
+          # For sudo-enabled account (example): sudo usermod -aG sudo <username>
+          # Or ensure ansible.cfg / inventory has correct ansible_user and ansible_become settings.
+      when: become_check is failed
+
+    - name: Output firewall check result for operator (no changes performed)
+      ansible.builtin.debug:
+        var: firewall_check.stdout_lines
