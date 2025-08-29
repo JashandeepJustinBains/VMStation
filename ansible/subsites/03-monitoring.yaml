@@ -6,7 +6,6 @@
   gather_facts: false
   connection: local
   vars:
-    monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
     storage_paths: "{{ storage_paths | default({}) }}"
   tasks:
     - name: Check if kubectl is available
@@ -126,34 +125,33 @@
 - hosts: all
   gather_facts: true
   vars:
-    monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
     storage_paths: "{{ storage_paths | default({}) }}"
   tasks:
     - name: Check if monitoring data directory exists
       ansible.builtin.stat:
-        path: "{{ monit_root }}"
+        path: "{{ monit_root | default('/srv/monitoring_data') }}"
       register: monit_dir_check
       become: true
 
     - name: Provide remediation for missing monitoring data directory
       ansible.builtin.debug:
         msg: |
-          Monitoring data directory {{ monit_root }} does not exist. To create it, run on each host:
+          Monitoring data directory {{ monit_root | default('/srv/monitoring_data') }} does not exist. To create it, run on each host:
           
-          sudo mkdir -p {{ monit_root }}
-          sudo chown root:root {{ monit_root }}
-          sudo chmod 755 {{ monit_root }}
+          sudo mkdir -p {{ monit_root | default('/srv/monitoring_data') }}
+          sudo chown root:root {{ monit_root | default('/srv/monitoring_data') }}
+          sudo chmod 755 {{ monit_root | default('/srv/monitoring_data') }}
           
           For monitoring nodes, you may also need subdirectories:
-          sudo mkdir -p {{ monit_root }}/grafana {{ monit_root }}/prometheus {{ monit_root }}/loki
-          sudo chmod 755 {{ monit_root }}/grafana {{ monit_root }}/prometheus {{ monit_root }}/loki
+          sudo mkdir -p {{ monit_root | default('/srv/monitoring_data') }}/grafana {{ monit_root | default('/srv/monitoring_data') }}/prometheus {{ monit_root | default('/srv/monitoring_data') }}/loki
+          sudo chmod 755 {{ monit_root | default('/srv/monitoring_data') }}/grafana {{ monit_root | default('/srv/monitoring_data') }}/prometheus {{ monit_root | default('/srv/monitoring_data') }}/loki
           
           Why this is needed: Persistent volumes and monitoring services need this directory for data storage.
       when: not monit_dir_check.stat.exists
 
     - name: Check monitoring data directory permissions
       ansible.builtin.stat:
-        path: "{{ monit_root }}"
+        path: "{{ monit_root | default('/srv/monitoring_data') }}"
       register: monit_perms_check
       become: true
       when: monit_dir_check.stat.exists
@@ -162,14 +160,14 @@
       ansible.builtin.debug:
         msg: |
           Monitoring directory permissions:
-          Path: {{ monit_root }}
+          Path: {{ monit_root | default('/srv/monitoring_data') }}
           Owner: {{ monit_perms_check.stat.pw_name | default('unknown') }}:{{ monit_perms_check.stat.gr_name | default('unknown') }}
           Mode: {{ monit_perms_check.stat.mode | default('unknown') }}
           
           If containers fail to write, you may need to adjust permissions:
-          sudo chown -R 65534:65534 {{ monit_root }}/prometheus  # nobody user for Prometheus
-          sudo chown -R 472:472 {{ monit_root }}/grafana         # grafana user
-          sudo chmod -R 755 {{ monit_root }}
+          sudo chown -R 65534:65534 {{ monit_root | default('/srv/monitoring_data') }}/prometheus  # nobody user for Prometheus
+          sudo chown -R 472:472 {{ monit_root | default('/srv/monitoring_data') }}/grafana         # grafana user
+          sudo chmod -R 755 {{ monit_root | default('/srv/monitoring_data') }}
       when: monit_dir_check.stat.exists
 
     - name: Check node exporter port availability
@@ -219,7 +217,7 @@
 
     - name: Check SELinux contexts for monitoring directories
       ansible.builtin.command:
-        cmd: ls -Zd {{ monit_root }}
+        cmd: ls -Zd {{ monit_root | default('/srv/monitoring_data') }}
       register: selinux_context_check
       failed_when: false
       changed_when: false
@@ -229,13 +227,13 @@
     - name: Provide SELinux remediation if needed
       ansible.builtin.debug:
         msg: |
-          Current SELinux context for {{ monit_root }}: {{ selinux_context_check.stdout | default('N/A') }}
+          Current SELinux context for {{ monit_root | default('/srv/monitoring_data') }}: {{ selinux_context_check.stdout | default('N/A') }}
           
           If containers fail due to SELinux denials, set appropriate contexts:
           
           sudo setsebool -P container_manage_cgroup on
-          sudo semanage fcontext -a -t container_file_t "{{ monit_root }}(/.*)?"
-          sudo restorecon -Rv {{ monit_root }}
+          sudo semanage fcontext -a -t container_file_t "{{ monit_root | default('/srv/monitoring_data') }}(/.*)?"
+          sudo restorecon -Rv {{ monit_root | default('/srv/monitoring_data') }}
           
           Or set permissive mode for containers:
           sudo setsebool -P container_use_cephfs on
