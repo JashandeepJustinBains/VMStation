@@ -43,7 +43,8 @@ chmod +x ./deploy_kubernetes.sh 2>/dev/null || true
 # 1. 01-checks.yaml    - Verify SSH, become access, firewall, ports
 # 2. 02-certs.yaml     - Generate and distribute TLS certificates  
 # 3. 03-monitoring.yaml - Deploy monitoring stack (Prometheus, Grafana, Loki)
-# 4. site.yaml         - Full site orchestrator (includes kubernetes_stack.yaml)
+# 4. 04-jellyfin.yaml  - Jellyfin deployment pre-checks and storage validation
+# 5. site.yaml         - Full site orchestrator (includes kubernetes_stack.yaml)
 #
 # You can also run individual deployment playbooks:
 # - ansible/plays/kubernetes_stack.yaml (main Kubernetes stack)
@@ -54,6 +55,7 @@ PLAYBOOKS=(
     # "ansible/subsites/01-checks.yaml"        # SSH connectivity, become access, firewall checks
     # "ansible/subsites/02-certs.yaml"         # TLS certificate generation & distribution
     # "ansible/subsites/03-monitoring.yaml"    # Monitoring stack pre-checks and deployment
+    # "ansible/subsites/04-jellyfin.yaml"      # Jellyfin deployment pre-checks and storage validation
 
     # === Full Deployment ===
     "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
@@ -77,6 +79,7 @@ if [ ${#PLAYBOOKS[@]} -eq 0 ]; then
     echo "  - ansible/subsites/01-checks.yaml (preflight checks)"
     echo "  - ansible/subsites/02-certs.yaml (certificate management)"  
     echo "  - ansible/subsites/03-monitoring.yaml (monitoring stack)"
+    echo "  - ansible/subsites/04-jellyfin.yaml (jellyfin pre-checks)"
     echo "  - ansible/site.yaml (complete deployment)"
     echo ""
     echo "Example: Uncomment '# \"ansible/subsites/01-checks.yaml\"' to enable checks."
