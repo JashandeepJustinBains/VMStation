@@ -21,7 +21,7 @@
       check_mode: false
 
     - name: Show kubectl path and client version when present
-      ansible.builtin.block:
+      block:
         - name: Display kubectl path
           ansible.builtin.debug:
             msg: "kubectl found at: {{ kubectl_check.stdout | default('') }}"
