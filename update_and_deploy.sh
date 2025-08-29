@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # VMStation Update and Deploy Script
-# Fetches latest changes and deploys infrastructure
+# Fetches latest changes and deploys infrastructure using selectable modular playbooks
 
 set -e
 
@@ -35,30 +35,106 @@ git pull --ff-only
 chmod +x ./ansible/deploy.sh
 chmod +x ./deploy_kubernetes.sh 2>/dev/null || true
 
-# Check for infrastructure mode
-# Selectable playbooks mechanism
-# Edit the PLAYBOOKS array below and uncomment the entries you want to run.
+# === MODULAR PLAYBOOKS CONFIGURATION ===
+# Edit the PLAYBOOKS array below to select which playbooks to run.
+# Uncomment entries you want to execute. By default, all entries are commented out for safety.
+#
+# Recommended order:
+# 1. 01-checks.yaml    - Verify SSH, become access, firewall, ports
+# 2. 02-certs.yaml     - Generate and distribute TLS certificates  
+# 3. 03-monitoring.yaml - Deploy monitoring stack (Prometheus, Grafana, Loki)
+# 4. site.yaml         - Full site orchestrator (includes kubernetes_stack.yaml)
+#
+# You can also run individual deployment playbooks:
+# - ansible/plays/kubernetes_stack.yaml (main Kubernetes stack)
+# - ansible/plays/jellyfin.yml (Jellyfin media server)
+
 PLAYBOOKS=(
-    # "ansible/site.yaml"                       # run the full site orchestrator
-    # "ansible/subsites/01-checks.yaml"        # preflight checks
-    # "ansible/subsites/02-certs.yaml"         # cert generation & distribution
-    # "ansible/subsites/03-monitoring.yaml"    # monitoring stack deploy
-    # "ansible/plays/kubernetes/deploy_monitoring.yaml" # older deploy path
+    # === Modular Subsites (Recommended) ===
+    # "ansible/subsites/01-checks.yaml"        # SSH connectivity, become access, firewall checks
+    # "ansible/subsites/02-certs.yaml"         # TLS certificate generation & distribution
+    # "ansible/subsites/03-monitoring.yaml"    # Monitoring stack pre-checks and deployment
+    
+    # === Full Deployment ===
+    # "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
+    
+    # === Individual Components ===  
+    # "ansible/plays/kubernetes_stack.yaml"    # Core Kubernetes infrastructure only
+    # "ansible/plays/jellyfin.yml"             # Jellyfin media server deployment
+    # "ansible/plays/kubernetes/deploy_monitoring.yaml"  # Legacy monitoring deployment
 )
 
+# Check if any playbooks are selected
 if [ ${#PLAYBOOKS[@]} -eq 0 ]; then
-    echo "No playbooks selected in PLAYBOOKS array. Edit update_and_deploy.sh to enable entries. Exiting."
+    echo "ERROR: No playbooks selected in PLAYBOOKS array."
+    echo ""
+    echo "To run deployments:"
+    echo "1. Edit this script: $0"
+    echo "2. Uncomment desired entries in the PLAYBOOKS array"
+    echo "3. Run this script again"
+    echo ""
+    echo "Available options:"
+    echo "  - ansible/subsites/01-checks.yaml (preflight checks)"
+    echo "  - ansible/subsites/02-certs.yaml (certificate management)"  
+    echo "  - ansible/subsites/03-monitoring.yaml (monitoring stack)"
+    echo "  - ansible/site.yaml (complete deployment)"
+    echo ""
+    echo "Example: Uncomment '# \"ansible/subsites/01-checks.yaml\"' to enable checks."
     exit 0
 fi
+
+# Run selected playbooks with syntax checking first
+FAILED_PLAYBOOKS=()
+INVENTORY_ARG="-i ansible/inventory.txt"
 
 for pb in "${PLAYBOOKS[@]}"; do
     if [ -z "$pb" ]; then
         continue
     fi
+    
     if [ ! -f "$pb" ]; then
-        echo "Playbook $pb not found, skipping"
+        echo "ERROR: Playbook $pb not found, skipping"
+        FAILED_PLAYBOOKS+=("$pb (not found)")
         continue
     fi
-    echo "Running playbook: $pb"
-    ansible-playbook -i ansible/inventory.txt "$pb"
+    
+    echo ""
+    echo "=== Syntax Check: $pb ==="
+    if ! ansible-playbook $INVENTORY_ARG "$pb" --syntax-check; then
+        echo "ERROR: Syntax check failed for $pb"
+        FAILED_PLAYBOOKS+=("$pb (syntax error)")
+        continue
+    fi
+    
+    echo ""
+    echo "=== Running: $pb ==="
+    if ! ansible-playbook $INVENTORY_ARG "$pb"; then
+        echo "ERROR: Playbook execution failed for $pb"
+        FAILED_PLAYBOOKS+=("$pb (execution failed)")
+        continue
+    fi
+    
+    echo "SUCCESS: $pb completed"
 done
+
+# Report results
+echo ""
+echo "=== Deployment Summary ==="
+if [ ${#FAILED_PLAYBOOKS[@]} -eq 0 ]; then
+    echo "✅ All selected playbooks completed successfully"
+else
+    echo "❌ Some playbooks failed:"
+    for failed in "${FAILED_PLAYBOOKS[@]}"; do
+        echo "   - $failed"
+    done
+    echo ""
+    echo "To troubleshoot:"
+    echo "- Check syntax: ansible-playbook --syntax-check <playbook>"
+    echo "- Run in check mode: ansible-playbook --check <playbook>"
+    echo "- Increase verbosity: ansible-playbook -vv <playbook>"
+    exit 1
+fi
+
+echo ""
+echo "🎉 VMStation deployment completed successfully!"
+echo "Check service status with: kubectl get pods --all-namespaces"

@@ -3,24 +3,162 @@
 # This playbook does not change file permissions. It will create local cert manifests
 # and attempt to copy them to nodes; if copy requires elevated privileges, it will
 # print CLI remediation steps instead of changing permissions.
-- hosts: masternode
-  gather_facts: no
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    cert_output_dir: "./ansible/certs"
+    ca_common_name: "{{ ca_common_name | default('VMStation Root CA') }}"
+    enable_tls: "{{ enable_tls | default(true) }}"
   tasks:
-    - name: Ensure local cert output directory exists (local action)
-      local_action: file path=./ansible/certs state=directory mode=0755
+    - name: Check if TLS is enabled
+      ansible.builtin.debug:
+        msg: "TLS is disabled (enable_tls: false). Skipping certificate operations."
+      when: not enable_tls
 
-    - name: Generate self-signed CA and node certs (scaffold)
-      local_action: command /bin/true
+    - name: End play if TLS is disabled
+      ansible.builtin.meta: end_play
+      when: not enable_tls
+
+    - name: Ensure local cert output directory exists
+      ansible.builtin.file:
+        path: "{{ cert_output_dir }}"
+        state: directory
+        mode: '0755'
+      check_mode: false
+
+    - name: Check if OpenSSL is available
+      ansible.builtin.command:
+        cmd: openssl version
+      register: openssl_check
+      failed_when: false
       changed_when: false
-      # Replace /bin/true with a certificate generation command or template task
+      check_mode: false
 
-    - name: Show next steps for distributing certs
+    - name: Fail with remediation if OpenSSL not available
+      ansible.builtin.fail:
+        msg: |
+          OpenSSL is required for certificate generation. Install it with:
+          
+          For Ubuntu/Debian:
+          sudo apt-get update && sudo apt-get install -y openssl
+          
+          For RHEL/CentOS/Fedora:
+          sudo dnf install -y openssl
+          
+          For Alpine:
+          sudo apk add openssl
+      when: openssl_check.rc != 0
+
+    - name: Check if CA certificate already exists
+      ansible.builtin.stat:
+        path: "{{ cert_output_dir }}/ca.crt"
+      register: ca_cert_check
+
+    - name: Generate CA private key
+      ansible.builtin.command:
+        cmd: openssl genrsa -out {{ cert_output_dir }}/ca.key 4096
+        creates: "{{ cert_output_dir }}/ca.key"
+      when: not ca_cert_check.stat.exists
+
+    - name: Generate CA certificate
+      ansible.builtin.command:
+        cmd: >
+          openssl req -new -x509 -days 365 -key {{ cert_output_dir }}/ca.key
+          -out {{ cert_output_dir }}/ca.crt
+          -subj "/CN={{ ca_common_name }}/O=VMStation/C=US"
+        creates: "{{ cert_output_dir }}/ca.crt"
+      when: not ca_cert_check.stat.exists
+
+    - name: Generate node certificate template
+      ansible.builtin.template:
+        src: node-cert-config.cnf.j2
+        dest: "{{ cert_output_dir }}/node-cert-config.cnf"
+      vars:
+        node_ips: "{{ groups['all'] | map('extract', hostvars, 'ansible_default_ipv4') | map(attribute='address') | list | default([]) }}"
+
+    - name: Check if cert-manager namespace exists (Kubernetes check)
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: cert-manager
+      register: cert_manager_ns
+      failed_when: false
+      check_mode: false
+      when: enable_tls
+
+    - name: Show next steps for certificate distribution
       ansible.builtin.debug:
         msg: |
-          This playbook scaffolds cert creation. If distribution to remote nodes requires elevated
-          privileges, please run the following on the masternode as root (example):
+          === Certificate Generation Summary ===
+          
+          Local certificates created in: {{ cert_output_dir }}/
+          
+          For manual distribution to nodes, run these commands as appropriate:
+          
+          1. Copy CA certificate to all nodes:
+          {% for host in groups['all'] | default([]) %}
+          scp {{ cert_output_dir }}/ca.crt {{ hostvars[host]['ansible_user'] | default('root') }}@{{ host }}:/tmp/
+          ssh {{ hostvars[host]['ansible_user'] | default('root') }}@{{ host }} "sudo cp /tmp/ca.crt /etc/ssl/certs/ && sudo chmod 644 /etc/ssl/certs/ca.crt"
+          {% endfor %}
+          
+          2. For Kubernetes with cert-manager, install cert-manager first:
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+          
+          3. Create ClusterIssuer using the generated CA:
+          kubectl create secret tls ca-key-pair --cert={{ cert_output_dir }}/ca.crt --key={{ cert_output_dir }}/ca.key -n cert-manager
+          
+          4. Apply ClusterIssuer manifest (create from template in next step)
+          
+          IMPORTANT: This playbook does NOT modify remote file permissions or copy files automatically.
+          Run the above commands manually with appropriate credentials.
 
-          sudo scp ./ansible/certs/*.crt root@<node>:/etc/ssl/certs/
-          sudo scp ./ansible/certs/*.key root@<node>:/etc/ssl/private/
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    cert_output_dir: "./ansible/certs"
+    enable_tls: "{{ enable_tls | default(true) }}"
+  tasks:
+    - name: Skip certificate tasks if TLS disabled
+      ansible.builtin.meta: end_play
+      when: not enable_tls
 
-          If cert-manager is used on Kubernetes, install cert-manager and create ClusterIssuer manifests.
+    - name: Create ClusterIssuer template for cert-manager
+      ansible.builtin.template:
+        src: cluster-issuer.yaml.j2
+        dest: "{{ cert_output_dir }}/cluster-issuer.yaml"
+      vars:
+        issuer_name: "vmstation-ca-issuer"
+
+    - name: Create certificate request template
+      ansible.builtin.template:
+        src: certificate.yaml.j2
+        dest: "{{ cert_output_dir }}/certificate-template.yaml"
+      vars:
+        cert_name: "vmstation-tls"
+        dns_names:
+          - "{{ ansible_fqdn | default('vmstation.local') }}"
+          - "*.{{ ansible_domain | default('vmstation.local') }}"
+
+    - name: Final certificate management instructions
+      ansible.builtin.debug:
+        msg: |
+          === Next Steps for TLS Setup ===
+          
+          Generated files:
+          - {{ cert_output_dir }}/ca.crt (Root CA certificate)
+          - {{ cert_output_dir }}/ca.key (Root CA private key - KEEP SECURE)
+          - {{ cert_output_dir }}/cluster-issuer.yaml (cert-manager ClusterIssuer)
+          - {{ cert_output_dir }}/certificate-template.yaml (Certificate request template)
+          
+          To complete cert-manager setup:
+          1. kubectl apply -f {{ cert_output_dir }}/cluster-issuer.yaml
+          2. kubectl apply -f {{ cert_output_dir }}/certificate-template.yaml
+          
+          To verify cert-manager is working:
+          kubectl get certificates -A
+          kubectl describe certificate vmstation-tls
+          
+          Note: This playbook follows the non-destructive principle and provides
+          CLI commands instead of modifying remote systems directly.

@@ -3,7 +3,178 @@
 
 Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalable, reliable self-hosted services.
 
+## Modular Deployment Architecture (New)
+
+VMStation now uses a **modular deployment approach** with selectable sub-playbooks for safer, more controlled operations. This refactoring prioritizes safety, transparency, and operator control.
+
+### Key Principles
+
+This repository follows strict **non-destructive deployment principles**:
+
+- ✅ **Never change file ownership or permissions** on remote hosts
+- ✅ **Always perform checks only** - provide CLI remediation commands instead of making changes
+- ✅ **Support --syntax-check and --check modes** for all playbooks
+- ✅ **Fail gracefully** with precise remediation steps for missing dependencies
+- ✅ **User-selectable operations** through commented PLAYBOOKS array
+- ✅ **Idempotent and safe** scaffolding that won't break existing systems
+
+### Modular Sub-Playbooks
+
+#### 1. Preflight Checks (`ansible/subsites/01-checks.yaml`)
+**Purpose**: Verify SSH connectivity, become/root access, firewall configuration, and port accessibility.
+
+```bash
+# Run preflight checks
+ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
+
+# Check syntax first
+ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml --syntax-check
+
+# Dry run mode
+ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml --check
+```
+
+**What it checks**:
+- SSH connectivity to all hosts
+- Ansible become (sudo/root) access
+- Firewall rules and required port accessibility (SSH, Kubernetes API, monitoring ports)
+- SELinux status and recommendations
+
+**Safe behavior**: Only performs read-only checks. Provides exact CLI commands for any missing configuration.
+
+#### 2. Certificate Management (`ansible/subsites/02-certs.yaml`)
+**Purpose**: Generate TLS certificates locally and provide distribution instructions.
+
+```bash
+# Generate certificates (local only)
+ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml
+
+# Check what would be generated
+ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml --check
+```
+
+**What it does**:
+- Creates local certificate directory (`./ansible/certs/`)
+- Generates CA certificate and private key
+- Creates cert-manager ClusterIssuer and Certificate templates
+- Provides manual distribution commands via scp/ssh
+
+**Safe behavior**: Only creates local files. Never copies files to remote hosts or changes permissions. Provides exact scp/ssh commands for manual distribution.
+
+#### 3. Monitoring Stack (`ansible/subsites/03-monitoring.yaml`)
+**Purpose**: Pre-check monitoring requirements and provide deployment instructions.
+
+```bash
+# Check monitoring prerequisites
+ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
+
+# Verify syntax
+ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml --syntax-check
+```
+
+**What it checks**:
+- Kubernetes connectivity (kubectl availability)
+- Monitoring namespace existence
+- Prometheus Operator CRDs (ServiceMonitor, etc.)
+- Monitoring data directories and permissions
+- Node exporter availability
+- SELinux contexts for container directories
+
+**Safe behavior**: Only performs checks and reports. Provides Helm installation commands and precise directory creation steps with recommended permissions.
+
+### Usage Examples
+
+#### Individual Playbook Execution (Recommended)
+```bash
+# 1. First, run preflight checks
+ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
+
+# 2. Generate certificates if TLS is enabled
+ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml
+
+# 3. Check monitoring prerequisites
+ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
+
+# 4. Deploy core infrastructure (existing playbook)
+ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes_stack.yaml
+
+# 5. Deploy applications
+ansible-playbook -i ansible/inventory.txt ansible/plays/jellyfin.yml
+```
+
+#### Using the Selectable Deployment Script
+Edit `update_and_deploy.sh` to uncomment desired playbooks:
+
+```bash
+# Edit the script
+nano update_and_deploy.sh
+
+# Uncomment desired entries in PLAYBOOKS array:
+PLAYBOOKS=(
+    "ansible/subsites/01-checks.yaml"        # Enable preflight checks
+    # "ansible/subsites/02-certs.yaml"       # Enable certificate generation
+    # "ansible/subsites/03-monitoring.yaml"  # Enable monitoring checks
+    # "ansible/site.yaml"                    # Enable full deployment
+)
+
+# Run selected playbooks
+./update_and_deploy.sh
+```
+
+#### Full Site Orchestration
+```bash
+# Run all subsites plus core deployment
+ansible-playbook -i ansible/inventory.txt ansible/site.yaml
+
+# Check what would be executed
+ansible-playbook -i ansible/inventory.txt ansible/site.yaml --check --diff
+```
+
+### Validation and Safety
+
+All playbooks support Ansible's safety modes:
+
+```bash
+# Syntax validation
+ansible-playbook --syntax-check <playbook>
+
+# Check mode (dry run)
+ansible-playbook --check <playbook>
+
+# Check mode with diff output
+ansible-playbook --check --diff <playbook>
+
+# Verbose output for troubleshooting
+ansible-playbook -vv <playbook>
+```
+
+### Agent Rules and Constraints
+
+This repository was refactored following strict guidelines for automated agents:
+
+#### Required Rules
+1. **Never change file ownership or permissions** on remote hosts
+2. **Always perform checks only** and provide CLI remediation commands
+3. **Support --syntax-check and --check modes** for all playbooks  
+4. **Fail with precise remediation steps** for missing dependencies (CRDs, namespaces, directories, ports, SELinux contexts)
+5. **Use user-editable PLAYBOOKS array** with entries commented out by default
+6. **Keep idempotent and non-destructive** scaffolding
+
+#### Example Remediation Output
+When checks fail, playbooks provide precise commands:
+
+```
+Missing monitoring directory. To create it, run on each host:
+
+sudo mkdir -p /srv/monitoring_data
+sudo chown root:root /srv/monitoring_data  
+sudo chmod 755 /srv/monitoring_data
+
+Why this is needed: Persistent volumes and monitoring services need this directory for data storage.
+```
+
 ## Where to Find Things
+
 - See [docs/README.md](./docs/README.md) for the new documentation index.
 - Device-specific guides, stack setup, security, monitoring, and troubleshooting are now in the `docs/` folder.
 - **Migration Guide**: See [docs/MIGRATION_GUIDE.md](./docs/MIGRATION_GUIDE.md) for Podman to Kubernetes migration
@@ -23,7 +194,7 @@ If you have RHEL 10 compute nodes, run the compatibility checker first:
 ./scripts/check_rhel10_compatibility.sh
 ```
 
-### 2. Deploy Kubernetes Infrastructure
+### 2. Modular Deployment (Recommended)
 ```bash
 # Clone the repository
 git clone https://github.com/JashandeepJustinBains/VMStation.git
@@ -33,18 +204,33 @@ cd VMStation
 cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
 # Edit all.yml with your specific settings
 
-# Deploy complete Kubernetes stack (with RHEL 10 support)
+# Run modular deployment
+ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
+ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml  
+ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
+
+# Deploy core infrastructure
 ./deploy_kubernetes.sh
 ```
 
-### 3. Access Services
+### 3. Alternative: Selectable Script Deployment
+```bash
+# Edit deployment script to select components
+nano update_and_deploy.sh
+
+# Uncomment desired playbooks in PLAYBOOKS array
+# Run selected components
+./update_and_deploy.sh
+```
+
+### 4. Access Services
 After deployment, access your monitoring services:
 - **Grafana**: http://192.168.4.63:30300 (admin/admin)
 - **Prometheus**: http://192.168.4.63:30090
 - **Loki**: http://192.168.4.63:31100
 - **AlertManager**: http://192.168.4.63:30903
 
-### 4. Validate Deployment
+### 5. Validate Deployment
 ```bash
 # Run comprehensive validation
 ./scripts/validate_k8s_monitoring.sh
@@ -330,10 +516,12 @@ spec:
 - [x] Deploy Jellyfin High-Availability with auto-scaling
 - [x] Hardware acceleration support for 4K streaming
 - [x] Session affinity and load balancing for media server
+- [x] **Refactor into modular sub-playbooks with safety checks**
+- [x] **Implement selectable deployment with user-editable PLAYBOOKS array**
+- [x] **Add non-destructive deployment principles**
 - [ ] Implement ingress controllers for external access
 - [ ] Set up automated backups for persistent volumes
 - [ ] Add GitOps workflow with ArgoCD
 - [ ] Implement network policies for security
 - [ ] Set up log retention policies
-- [ ] Add custom application deployments
 - [ ] Add custom application deployments
