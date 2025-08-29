@@ -406,9 +406,27 @@ kubectl apply --dry-run=client -f k8s/
 - **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
 - **RHEL 10 fixes validation**: `./scripts/validate_rhel10_fixes.sh`
 - **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
+- **Monitoring diagnostics**: `./scripts/analyze_k8s_monitoring_diagnostics.sh`
+- **Premium Copilot troubleshooting**: `./scripts/get_copilot_prompt.sh --show`
 - **Pod debugging**: `kubectl logs -n monitoring <pod-name>`
 - **Service debugging**: `kubectl describe svc -n monitoring <service-name>`
 - **Network debugging**: `kubectl exec -it <pod-name> -- /bin/bash`
+
+#### Monitoring Stack Issues (CrashLoopBackOff, etc.)
+For monitoring pods stuck in CrashLoopBackOff or complex Kubernetes issues:
+
+```bash
+# Quick focused analysis for Grafana/Loki specific issues
+./scripts/analyze_k8s_monitoring_diagnostics.sh
+
+# Get premium Copilot agent prompt for comprehensive troubleshooting
+./scripts/get_copilot_prompt.sh --show
+
+# Gather basic cluster diagnostics for external analysis
+./scripts/get_copilot_prompt.sh --gather
+```
+
+The premium Copilot prompt provides expert-level troubleshooting guidance for VMStation's monitoring stack with proper hostname awareness for masternode (192.168.4.63), storagenodet3500 (192.168.4.61), and localhost.localdomain (192.168.4.62).
 
 ### Common Issues & Solutions
 
