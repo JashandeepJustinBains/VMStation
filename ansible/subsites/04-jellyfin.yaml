@@ -5,9 +5,6 @@
 - hosts: localhost
   gather_facts: false
   connection: local
-  vars:
-    jellyfin_namespace: "{{ jellyfin_namespace | default('jellyfin') }}"
-    storage_node: "{{ storage_node | default('storagenodet3500') }}"
   tasks:
 
     - name: Check if kubectl is available
@@ -37,25 +34,25 @@
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Namespace
-        name: "{{ jellyfin_namespace }}"
+        name: "{{ jellyfin_namespace | default('jellyfin') }}"
       register: jellyfin_ns_info
       failed_when: false
 
     - name: Explain how to create Jellyfin namespace if missing
       ansible.builtin.debug:
         msg: |
-          Jellyfin namespace '{{ jellyfin_namespace }}' not found. To create it, run:
+          Jellyfin namespace '{{ jellyfin_namespace | default('jellyfin') }}' not found. To create it, run:
           
-          kubectl create namespace {{ jellyfin_namespace }}
+          kubectl create namespace {{ jellyfin_namespace | default('jellyfin') }}
           
           Or apply this manifest:
           ---
           apiVersion: v1
           kind: Namespace
           metadata:
-            name: {{ jellyfin_namespace }}
+            name: {{ jellyfin_namespace | default('jellyfin') }}
             labels:
-              name: {{ jellyfin_namespace }}
+              name: {{ jellyfin_namespace | default('jellyfin') }}
       when: jellyfin_ns_info.resources | length == 0
 
     - name: Check if Prometheus Operator is available for ServiceMonitor
@@ -84,7 +81,6 @@
   vars:
     jellyfin_config_path: "{{ jellyfin_config_path | default('/mnt/jellyfin-config') }}"
     jellyfin_media_path: "{{ jellyfin_media_path | default('/srv/media') }}"
-    storage_node: "{{ storage_node | default('storagenodet3500') }}"
   tasks:
 
     - name: Check if Jellyfin config directory exists on storage node
@@ -144,7 +140,7 @@
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Node
-        name: "{{ storage_node }}"
+        name: "{{ storage_node | default('storagenodet3500') }}"
       register: storage_node_info
       failed_when: false
       delegate_to: localhost
@@ -154,20 +150,20 @@
     - name: Report on storage node scheduling configuration
       ansible.builtin.debug:
         msg: |
-          Storage node '{{ storage_node }}' status: {{ 'Found' if storage_node_info.resources | length > 0 else 'Not Found' }}
+          Storage node '{{ storage_node | default('storagenodet3500') }}' status: {{ 'Found' if storage_node_info.resources | length > 0 else 'Not Found' }}
           
           {% if storage_node_info.resources | length > 0 %}
           Node labels: {{ storage_node_info.resources[0].metadata.labels | default({}) }}
           
-          Jellyfin will be scheduled on this node using nodeName: {{ storage_node }}
+          Jellyfin will be scheduled on this node using nodeName: {{ storage_node | default('storagenodet3500') }}
           This ensures data locality with storage volumes.
           {% else %}
           Warning: Storage node not found in Kubernetes cluster.
           
           To fix this:
           1. Ensure the node is joined to the cluster: kubectl get nodes
-          2. Verify node name matches '{{ storage_node }}'
-          3. Check node readiness: kubectl describe node {{ storage_node }}
+          2. Verify node name matches '{{ storage_node | default('storagenodet3500') }}'
+          3. Check node readiness: kubectl describe node {{ storage_node | default('storagenodet3500') }}
           {% endif %}
       delegate_to: localhost
       run_once: true
@@ -178,9 +174,6 @@
 - hosts: localhost
   gather_facts: false
   connection: local
-  vars:
-    jellyfin_namespace: "{{ jellyfin_namespace | default('jellyfin') }}"
-    storage_node: "{{ storage_node | default('storagenodet3500') }}"
   tasks:
 
     - name: Jellyfin deployment pre-check summary
@@ -189,17 +182,17 @@
           === Jellyfin Deployment Pre-Check Summary ===
           
           Jellyfin Enabled: {{ jellyfin_enabled | default(true) }}
-          Target Namespace: {{ jellyfin_namespace }}
-          Storage Node: {{ storage_node }}
+          Target Namespace: {{ jellyfin_namespace | default('jellyfin') }}
+          Storage Node: {{ storage_node | default('storagenodet3500') }}
           kubectl Available: {{ 'YES' if kubectl_check.rc == 0 else 'NO' }}
           Namespace Exists: {{ 'YES' if jellyfin_ns_info.resources | length > 0 else 'NO' }}
           ServiceMonitor Support: {{ 'YES' if servicemonitor_crd_check.resources | length > 0 else 'NO' }}
           
           Next steps for Jellyfin deployment:
-          1. Ensure namespace exists: kubectl create namespace {{ jellyfin_namespace }}
-          2. Verify storage paths on storage node ({{ storage_node }})
+          1. Ensure namespace exists: kubectl create namespace {{ jellyfin_namespace | default('jellyfin') }}
+          2. Verify storage paths on storage node ({{ storage_node | default('storagenodet3500') }})
           3. Deploy Jellyfin: ansible-playbook -i ansible/inventory.txt ansible/plays/jellyfin.yml
-          4. Access via NodePort: http://{{ storage_node }}:30096
+          4. Access via NodePort: http://{{ storage_node | default('storagenodet3500') }}:30096
           
           This playbook follows non-destructive principles and provides CLI commands
           instead of making system changes automatically.
