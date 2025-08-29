@@ -5,12 +5,11 @@
   gather_facts: false
   connection: local
   vars:
-    jellyfin_enabled: "{{ jellyfin_enabled | default(true) }}"
     jellyfin_manifest_path: "kubernetes/jellyfin-minimal.yml"
   tasks:
     - name: Skip Jellyfin deployment if disabled
       ansible.builtin.meta: end_play
-      when: not jellyfin_enabled
+      when: not (jellyfin_enabled | default(true) | bool)
 
     - name: Check if kubectl is available
       ansible.builtin.command:
