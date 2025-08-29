@@ -54,10 +54,10 @@ PLAYBOOKS=(
     # "ansible/subsites/01-checks.yaml"        # SSH connectivity, become access, firewall checks
     # "ansible/subsites/02-certs.yaml"         # TLS certificate generation & distribution
     # "ansible/subsites/03-monitoring.yaml"    # Monitoring stack pre-checks and deployment
-    
-    === Full Deployment ===
+
+    # === Full Deployment ===
     "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
-    
+
     # === Individual Components ===  
     # "ansible/plays/kubernetes_stack.yaml"    # Core Kubernetes infrastructure only
     # "ansible/plays/jellyfin.yml"             # Jellyfin media server deployment
