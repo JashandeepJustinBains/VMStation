@@ -340,7 +340,7 @@
       when: true
 
           
-          Why this is needed: SELinux may block container access to host directories.
+          Why this is needed; SELinux may block container access to host directories.
       when: 
         - selinux_context_check.rc == 0
         - ansible_selinux is defined 
