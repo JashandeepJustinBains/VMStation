@@ -200,6 +200,8 @@
                 ingestion_burst_size_mb: 32
                 max_streams_per_user: 10000
                 max_line_size: 256000
+                split_queries_by_interval: 30s
+                max_retries: 5
                 
               # Table manager configuration
               table_manager:
@@ -209,10 +211,6 @@
               # Query configuration
               querier:
                 max_concurrent: 16
-                
-              limits_config:
-                split_queries_by_interval: 30s
-                max_retries: 5
                 
               # Compactor configuration
               compactor:

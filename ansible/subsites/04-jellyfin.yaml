@@ -1,0 +1,205 @@
+---
+# Subsite 04: Jellyfin deployment checks and setup
+# This playbook performs pre-checks for Jellyfin deployment requirements
+# and provides remediation instructions. It follows non-destructive principles.
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    jellyfin_namespace: "{{ jellyfin_namespace | default('jellyfin') }}"
+    storage_node: "{{ storage_node | default('storagenodet3500') }}"
+  tasks:
+
+    - name: Check if kubectl is available
+      ansible.builtin.command:
+        cmd: kubectl version --client --short
+      register: kubectl_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Fail with remediation if kubectl not available
+      ansible.builtin.fail:
+        msg: |
+          kubectl is required for Jellyfin deployment. Install it with:
+          
+          For Ubuntu/Debian:
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          For RHEL/CentOS/Fedora:
+          sudo dnf install -y kubectl
+          
+          Or download from: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+      when: kubectl_check.rc != 0
+
+    - name: Check for Jellyfin namespace
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ jellyfin_namespace }}"
+      register: jellyfin_ns_info
+      failed_when: false
+
+    - name: Explain how to create Jellyfin namespace if missing
+      ansible.builtin.debug:
+        msg: |
+          Jellyfin namespace '{{ jellyfin_namespace }}' not found. To create it, run:
+          
+          kubectl create namespace {{ jellyfin_namespace }}
+          
+          Or apply this manifest:
+          ---
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: {{ jellyfin_namespace }}
+            labels:
+              name: {{ jellyfin_namespace }}
+      when: jellyfin_ns_info.resources | length == 0
+
+    - name: Check if Prometheus Operator is available for ServiceMonitor
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: servicemonitors.monitoring.coreos.com
+      register: servicemonitor_crd_check
+      failed_when: false
+
+    - name: Report ServiceMonitor availability
+      ansible.builtin.debug:
+        msg: |
+          ServiceMonitor CRD status: {{ 'Available' if servicemonitor_crd_check.resources | length > 0 else 'Not Available' }}
+          
+          {% if servicemonitor_crd_check.resources | length == 0 %}
+          ServiceMonitor will not be created. To enable Prometheus monitoring:
+          1. Install kube-prometheus-stack via Helm
+          2. Ensure Prometheus Operator is running
+          {% else %}
+          ServiceMonitor will be created for Jellyfin monitoring integration.
+          {% endif %}
+
+- hosts: all
+  gather_facts: true
+  vars:
+    jellyfin_config_path: "{{ jellyfin_config_path | default('/mnt/jellyfin-config') }}"
+    jellyfin_media_path: "{{ jellyfin_media_path | default('/srv/media') }}"
+    storage_node: "{{ storage_node | default('storagenodet3500') }}"
+  tasks:
+
+    - name: Check if Jellyfin config directory exists on storage node
+      ansible.builtin.stat:
+        path: "{{ jellyfin_config_path }}"
+      register: jellyfin_config_check
+      become: true
+      when: inventory_hostname == storage_node or 'storage' in group_names
+
+    - name: Provide remediation for missing Jellyfin config directory
+      ansible.builtin.debug:
+        msg: |
+          Jellyfin config directory {{ jellyfin_config_path }} does not exist on {{ inventory_hostname }}.
+          To create it, run on the storage node:
+          
+          sudo mkdir -p {{ jellyfin_config_path }}
+          sudo chown root:root {{ jellyfin_config_path }}
+          sudo chmod 755 {{ jellyfin_config_path }}
+          
+          Why this is needed: Jellyfin stores its configuration, database, and metadata here.
+      when: 
+        - inventory_hostname == storage_node or 'storage' in group_names
+        - jellyfin_config_check is defined
+        - not jellyfin_config_check.stat.exists
+
+    - name: Check if media directory exists on storage node
+      ansible.builtin.stat:
+        path: "{{ jellyfin_media_path }}"
+      register: jellyfin_media_check
+      become: true
+      when: inventory_hostname == storage_node or 'storage' in group_names
+
+    - name: Provide remediation for missing media directory
+      ansible.builtin.debug:
+        msg: |
+          Media directory {{ jellyfin_media_path }} does not exist on {{ inventory_hostname }}.
+          To create it, run on the storage node:
+          
+          sudo mkdir -p {{ jellyfin_media_path }}
+          sudo chown root:root {{ jellyfin_media_path }}
+          sudo chmod 755 {{ jellyfin_media_path }}
+          
+          Then mount your media storage:
+          # For NFS mount example:
+          sudo mount -t nfs <nfs-server>:<path> {{ jellyfin_media_path }}
+          
+          # Add to /etc/fstab for persistence:
+          echo "<nfs-server>:<path> {{ jellyfin_media_path }} nfs defaults 0 0" | sudo tee -a /etc/fstab
+          
+          Why this is needed: Jellyfin needs access to your media files for streaming.
+      when: 
+        - inventory_hostname == storage_node or 'storage' in group_names
+        - jellyfin_media_check is defined
+        - not jellyfin_media_check.stat.exists
+
+    - name: Check storage node labeling for Jellyfin scheduling
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        name: "{{ storage_node }}"
+      register: storage_node_info
+      failed_when: false
+      delegate_to: localhost
+      run_once: true
+      when: jellyfin_enabled | default(true)
+
+    - name: Report on storage node scheduling configuration
+      ansible.builtin.debug:
+        msg: |
+          Storage node '{{ storage_node }}' status: {{ 'Found' if storage_node_info.resources | length > 0 else 'Not Found' }}
+          
+          {% if storage_node_info.resources | length > 0 %}
+          Node labels: {{ storage_node_info.resources[0].metadata.labels | default({}) }}
+          
+          Jellyfin will be scheduled on this node using nodeName: {{ storage_node }}
+          This ensures data locality with storage volumes.
+          {% else %}
+          Warning: Storage node not found in Kubernetes cluster.
+          
+          To fix this:
+          1. Ensure the node is joined to the cluster: kubectl get nodes
+          2. Verify node name matches '{{ storage_node }}'
+          3. Check node readiness: kubectl describe node {{ storage_node }}
+          {% endif %}
+      delegate_to: localhost
+      run_once: true
+      when: 
+        - jellyfin_enabled | default(true)
+        - storage_node_info is defined
+
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    jellyfin_namespace: "{{ jellyfin_namespace | default('jellyfin') }}"
+    storage_node: "{{ storage_node | default('storagenodet3500') }}"
+  tasks:
+
+    - name: Jellyfin deployment pre-check summary
+      ansible.builtin.debug:
+        msg: |
+          === Jellyfin Deployment Pre-Check Summary ===
+          
+          Jellyfin Enabled: {{ jellyfin_enabled | default(true) }}
+          Target Namespace: {{ jellyfin_namespace }}
+          Storage Node: {{ storage_node }}
+          kubectl Available: {{ 'YES' if kubectl_check.rc == 0 else 'NO' }}
+          Namespace Exists: {{ 'YES' if jellyfin_ns_info.resources | length > 0 else 'NO' }}
+          ServiceMonitor Support: {{ 'YES' if servicemonitor_crd_check.resources | length > 0 else 'NO' }}
+          
+          Next steps for Jellyfin deployment:
+          1. Ensure namespace exists: kubectl create namespace {{ jellyfin_namespace }}
+          2. Verify storage paths on storage node ({{ storage_node }})
+          3. Deploy Jellyfin: ansible-playbook -i ansible/inventory.txt ansible/plays/jellyfin.yml
+          4. Access via NodePort: http://{{ storage_node }}:30096
+          
+          This playbook follows non-destructive principles and provides CLI commands
+          instead of making system changes automatically.

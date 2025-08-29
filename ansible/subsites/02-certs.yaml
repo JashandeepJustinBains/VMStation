@@ -12,11 +12,11 @@
     - name: Check if TLS is enabled
       ansible.builtin.debug:
         msg: "TLS is disabled (enable_tls: false). Skipping certificate operations."
-      when: not enable_tls
+      when: not (enable_tls | default(false))
 
     - name: End play if TLS is disabled
       ansible.builtin.meta: end_play
-      when: not enable_tls
+      when: not (enable_tls | default(false))
 
     - name: Ensure local cert output directory exists
       ansible.builtin.file:
@@ -120,7 +120,7 @@
   tasks:
     - name: Skip certificate tasks if TLS disabled
       ansible.builtin.meta: end_play
-      when: not enable_tls
+      when: not (enable_tls | default(false))
 
     - name: Create ClusterIssuer template for cert-manager
       ansible.builtin.template:
