@@ -88,7 +88,7 @@
         path: "{{ jellyfin_config_path }}"
       register: jellyfin_config_check
       become: true
-      when: inventory_hostname == storage_node or 'storage' in group_names
+      when: inventory_hostname == (storage_node | default('storagenodet3500')) or 'storage' in group_names
 
     - name: Provide remediation for missing Jellyfin config directory
       ansible.builtin.debug:
@@ -102,7 +102,7 @@
           
           Why this is needed: Jellyfin stores its configuration, database, and metadata here.
       when: 
-        - inventory_hostname == storage_node or 'storage' in group_names
+        - inventory_hostname == (storage_node | default('storagenodet3500')) or 'storage' in group_names
         - jellyfin_config_check is defined
         - not jellyfin_config_check.stat.exists
 
@@ -111,7 +111,7 @@
         path: "{{ jellyfin_media_path }}"
       register: jellyfin_media_check
       become: true
-      when: inventory_hostname == storage_node or 'storage' in group_names
+      when: inventory_hostname == (storage_node | default('storagenodet3500')) or 'storage' in group_names
 
     - name: Provide remediation for missing media directory
       ansible.builtin.debug:
@@ -132,7 +132,7 @@
           
           Why this is needed: Jellyfin needs access to your media files for streaming.
       when: 
-        - inventory_hostname == storage_node or 'storage' in group_names
+        - inventory_hostname == (storage_node | default('storagenodet3500')) or 'storage' in group_names
         - jellyfin_media_check is defined
         - not jellyfin_media_check.stat.exists
 
