@@ -8,8 +8,7 @@
   connection: local
   vars:
     cert_output_dir: "./ansible/certs"
-    ca_common_name: "{{ ca_common_name | default('VMStation Root CA') }}"
-    enable_tls: "{{ enable_tls | default(true) }}"
+  ca_common_name: "{{ ca_common_name | default('VMStation Root CA') }}"
   tasks:
     - name: Check if TLS is enabled
       ansible.builtin.debug:
@@ -118,7 +117,7 @@
   connection: local
   vars:
     cert_output_dir: "./ansible/certs"
-    enable_tls: "{{ enable_tls | default(true) }}"
+  # enable_tls controlled from inventory/group_vars/all.yml (use enable_tls: false to disable)
   tasks:
     - name: Skip certificate tasks if TLS disabled
       ansible.builtin.meta: end_play
