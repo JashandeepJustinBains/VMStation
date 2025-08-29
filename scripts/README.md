@@ -6,6 +6,7 @@ This directory contains operational scripts for VMStation infrastructure managem
 
 ### Kubernetes (Primary)
 - **`validate_k8s_monitoring.sh`** - Validates Kubernetes monitoring stack health
+- **`analyze_k8s_monitoring_diagnostics.sh`** - Analyzes diagnostic output and provides CLI remediation commands
 - **`validate_infrastructure.sh`** - Auto-detects and validates current infrastructure mode
 
 ### Legacy Podman (Deprecated)
@@ -69,6 +70,7 @@ This directory contains operational scripts for VMStation infrastructure managem
 ### Diagnostic Scripts
 | Script | Purpose | Infrastructure |
 |--------|---------|----------------|
+| `analyze_k8s_monitoring_diagnostics.sh` | K8s monitoring issue analysis and CLI remediation | Kubernetes |
 | `diagnose_monitoring_permissions.sh` | Monitoring permission analysis | Both |
 | `podman_metrics_diagnostic.sh` | Podman metrics diagnostics | Podman (Legacy) |
 
@@ -143,6 +145,9 @@ kubectl get svc -n monitoring
 
 # View pod logs
 kubectl logs -n monitoring deployment/grafana
+
+# Analyze diagnostic output for issues
+./scripts/analyze_k8s_monitoring_diagnostics.sh
 ```
 
 ### Legacy Podman Issues
