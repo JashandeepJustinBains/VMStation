@@ -1,22 +1,28 @@
 ---
-# Top-level orchestrator that imports modular subsites.
-# Prefer running subsites individually. This file may be used to run all in sequence.
-- import_playbook: subsites/01-checks.yaml
-- import_playbook: subsites/02-certs.yaml
-- import_playbook: subsites/03-monitoring.yaml
----
-# VMStation Site Playbook
-# Main entry point for Ansible-driven deployment
-# Integrates existing Kubernetes stack with optional Jellyfin deployment
+# VMStation Site Playbook - Main orchestrator
+# This imports modular subsites in recommended order, but operators should prefer
+# running subsites individually for safer, more controlled deployments.
+#
+# Recommended individual execution order:
+# 1. ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
+# 2. ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml  
+# 3. ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
+# 4. ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes_stack.yaml
+# 5. ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/jellyfin-minimal.yml
 
-# Import existing Kubernetes stack playbook
+# === Modular Subsites (Safe, Check-Only Operations) ===
+- import_playbook: subsites/01-checks.yaml
+- import_playbook: subsites/02-certs.yaml  
+- import_playbook: subsites/03-monitoring.yaml
+
+# === Core Infrastructure Deployment ===
 - import_playbook: plays/kubernetes_stack.yaml
 
-# Deploy Jellyfin conditionally
+# === Application Services ===
 - import_playbook: plays/jellyfin.yml
   when: jellyfin_enabled | default(true)
 
-# Validation and summary
+# === Final Validation ===
 - name: "VMStation Deployment Validation"
   hosts: all
   gather_facts: false

@@ -2,13 +2,40 @@
 # Subsite 03: Monitoring stack deploy (scaffold)
 # This playbook should deploy Prometheus, Grafana, Loki, Promtail and exporters.
 # It performs pre-checks and prints remediation steps if resources/permissions are missing.
-- hosts: masternode
-  gather_facts: no
+- hosts: localhost
+  gather_facts: false
+  connection: local
   vars:
-    monitoring_namespace: monitoring
+    monitoring_namespace: "{{ monitoring_namespace | default('monitoring') }}"
+    monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
+    storage_paths: "{{ storage_paths | default({}) }}"
   tasks:
+    - name: Check if kubectl is available
+      ansible.builtin.command:
+        cmd: kubectl version --client --short
+      register: kubectl_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Fail with remediation if kubectl not available
+      ansible.builtin.fail:
+        msg: |
+          kubectl is required for Kubernetes operations. Install it with:
+          
+          For Ubuntu/Debian:
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          For RHEL/CentOS/Fedora:
+          sudo dnf install -y kubectl
+          
+          Or download from: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+      when: kubectl_check.rc != 0
+
     - name: Check for monitoring namespace
-      community.kubernetes.k8s_info:
+      kubernetes.core.k8s_info:
+        api_version: v1
         kind: Namespace
         name: "{{ monitoring_namespace }}"
       register: ns_info
@@ -16,28 +43,232 @@
 
     - name: Explain how to create monitoring namespace if missing
       ansible.builtin.debug:
-        msg: "Monitoring namespace '{{ monitoring_namespace }}' not found. To create: kubectl create namespace {{ monitoring_namespace }}"
+        msg: |
+          Monitoring namespace '{{ monitoring_namespace }}' not found. To create it, run:
+          
+          kubectl create namespace {{ monitoring_namespace }}
+          
+          Or apply this manifest:
+          ---
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: {{ monitoring_namespace }}
+            labels:
+              name: {{ monitoring_namespace }}
       when: ns_info.resources | length == 0
 
     - name: Check for Prometheus Operator CRDs (ServiceMonitor)
-      community.kubernetes.k8s_info:
-        api_version: monitoring.coreos.com/v1
-        kind: ServiceMonitor
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: servicemonitors.monitoring.coreos.com
       register: servicemonitor_crd
       failed_when: false
 
-    - name: Print install instructions for Prometheus operator if CRD missing
+    - name: Check for other Prometheus Operator CRDs
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
+      register: prometheus_crds
+      failed_when: false
+      loop:
+        - prometheuses.monitoring.coreos.com
+        - prometheusrules.monitoring.coreos.com
+        - alertmanagers.monitoring.coreos.com
+        - podmonitors.monitoring.coreos.com
+
+    - name: Print install instructions for Prometheus operator if CRDs missing
       ansible.builtin.debug:
         msg: |
           Prometheus Operator CRDs not detected. To install using Helm:
+          
+          # Add Helm repositories
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
           helm repo update
-          helm install kube-prom-stack prometheus-community/kube-prometheus-stack -n {{ monitoring_namespace }} --create-namespace
+          
+          # Install kube-prometheus-stack (includes Prometheus, Grafana, AlertManager)
+          helm install kube-prom-stack prometheus-community/kube-prometheus-stack \
+            -n {{ monitoring_namespace }} --create-namespace \
+            --set prometheus.service.type=NodePort \
+            --set prometheus.service.nodePort=30090 \
+            --set grafana.service.type=NodePort \
+            --set grafana.service.nodePort=30300 \
+            --set alertmanager.service.type=NodePort \
+            --set alertmanager.service.nodePort=30903
+          
+          # Install Loki stack separately
+          helm install loki-stack grafana/loki-stack \
+            -n {{ monitoring_namespace }} \
+            --set loki.service.type=NodePort \
+            --set loki.service.nodePort=31100
       when: servicemonitor_crd.resources | length == 0
 
-    - name: Suggest Helm install for loki-stack-values.yaml if present
+    - name: Check if Helm is available
+      ansible.builtin.command:
+        cmd: helm version --short
+      register: helm_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Suggest Helm installation if not available
       ansible.builtin.debug:
         msg: |
-          If you have a loki-stack-values.yaml, apply with:
-          helm upgrade --install loki-stack grafana/loki-stack -n {{ monitoring_namespace }} -f loki-stack-values.yaml
+          Helm is recommended for managing monitoring stack. Install it with:
+          
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          
+          Or download from: https://github.com/helm/helm/releases
+      when: helm_check.rc != 0
+
+- hosts: all
+  gather_facts: true
+  vars:
+    monitoring_namespace: "{{ monitoring_namespace | default('monitoring') }}"
+    monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
+    storage_paths: "{{ storage_paths | default({}) }}"
+  tasks:
+    - name: Check if monitoring data directory exists
+      ansible.builtin.stat:
+        path: "{{ monit_root }}"
+      register: monit_dir_check
+      become: true
+
+    - name: Provide remediation for missing monitoring data directory
+      ansible.builtin.debug:
+        msg: |
+          Monitoring data directory {{ monit_root }} does not exist. To create it, run on each host:
+          
+          sudo mkdir -p {{ monit_root }}
+          sudo chown root:root {{ monit_root }}
+          sudo chmod 755 {{ monit_root }}
+          
+          For monitoring nodes, you may also need subdirectories:
+          sudo mkdir -p {{ monit_root }}/grafana {{ monit_root }}/prometheus {{ monit_root }}/loki
+          sudo chmod 755 {{ monit_root }}/grafana {{ monit_root }}/prometheus {{ monit_root }}/loki
+          
+          Why this is needed: Persistent volumes and monitoring services need this directory for data storage.
+      when: not monit_dir_check.stat.exists
+
+    - name: Check monitoring data directory permissions
+      ansible.builtin.stat:
+        path: "{{ monit_root }}"
+      register: monit_perms_check
+      become: true
+      when: monit_dir_check.stat.exists
+
+    - name: Report on monitoring directory permissions
+      ansible.builtin.debug:
+        msg: |
+          Monitoring directory permissions:
+          Path: {{ monit_root }}
+          Owner: {{ monit_perms_check.stat.pw_name | default('unknown') }}:{{ monit_perms_check.stat.gr_name | default('unknown') }}
+          Mode: {{ monit_perms_check.stat.mode | default('unknown') }}
+          
+          If containers fail to write, you may need to adjust permissions:
+          sudo chown -R 65534:65534 {{ monit_root }}/prometheus  # nobody user for Prometheus
+          sudo chown -R 472:472 {{ monit_root }}/grafana         # grafana user
+          sudo chmod -R 755 {{ monit_root }}
+      when: monit_dir_check.stat.exists
+
+    - name: Check node exporter port availability
+      ansible.builtin.wait_for:
+        port: 9100
+        host: "{{ ansible_default_ipv4.address }}"
+        timeout: 3
+        state: started
+      register: node_exporter_check
+      failed_when: false
       changed_when: false
+
+    - name: Provide node exporter installation instructions if not running
+      ansible.builtin.debug:
+        msg: |
+          Node Exporter is not running on port 9100. To install it:
+          
+          # Manual installation
+          wget https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz
+          tar xvfz node_exporter-1.6.1.linux-amd64.tar.gz
+          sudo cp node_exporter-1.6.1.linux-amd64/node_exporter /usr/local/bin/
+          sudo chmod +x /usr/local/bin/node_exporter
+          
+          # Create systemd service
+          sudo tee /etc/systemd/system/node_exporter.service > /dev/null <<EOF
+          [Unit]
+          Description=Node Exporter
+          After=network.target
+          
+          [Service]
+          User=nobody
+          Group=nobody
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          # Enable and start
+          sudo systemctl daemon-reload
+          sudo systemctl enable node_exporter
+          sudo systemctl start node_exporter
+          
+          Why this is needed: Node Exporter provides host-level metrics for Prometheus.
+      when: node_exporter_check.failed | default(false)
+
+    - name: Check SELinux contexts for monitoring directories
+      ansible.builtin.command:
+        cmd: ls -Zd {{ monit_root }}
+      register: selinux_context_check
+      failed_when: false
+      changed_when: false
+      become: true
+      when: monit_dir_check.stat.exists
+
+    - name: Provide SELinux remediation if needed
+      ansible.builtin.debug:
+        msg: |
+          Current SELinux context for {{ monit_root }}: {{ selinux_context_check.stdout | default('N/A') }}
+          
+          If containers fail due to SELinux denials, set appropriate contexts:
+          
+          sudo setsebool -P container_manage_cgroup on
+          sudo semanage fcontext -a -t container_file_t "{{ monit_root }}(/.*)?"
+          sudo restorecon -Rv {{ monit_root }}
+          
+          Or set permissive mode for containers:
+          sudo setsebool -P container_use_cephfs on
+          
+          Why this is needed: SELinux may block container access to host directories.
+      when: 
+        - selinux_context_check.rc == 0
+        - ansible_selinux is defined 
+        - ansible_selinux.status == "enabled"
+
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    monitoring_namespace: "{{ monitoring_namespace | default('monitoring') }}"
+  tasks:
+    - name: Final monitoring stack deployment summary
+      ansible.builtin.debug:
+        msg: |
+          === Monitoring Stack Pre-Check Summary ===
+          
+          Namespace Check: {{ 'READY' if ns_info.resources | length > 0 else 'NEEDS CREATION' }}
+          Prometheus Operator CRDs: {{ 'INSTALLED' if servicemonitor_crd.resources | length > 0 else 'MISSING' }}
+          kubectl Available: {{ 'YES' if kubectl_check.rc == 0 else 'NO' }}
+          Helm Available: {{ 'YES' if helm_check.rc == 0 else 'NO' }}
+          
+          Next steps:
+          1. Create namespace: kubectl create namespace {{ monitoring_namespace }}
+          2. Install monitoring stack using Helm commands shown above
+          3. Verify installation: kubectl get pods -n {{ monitoring_namespace }}
+          4. Access services via NodePort (see documentation)
+          
+          This playbook follows non-destructive principles and provides CLI commands
+          instead of making system changes automatically.

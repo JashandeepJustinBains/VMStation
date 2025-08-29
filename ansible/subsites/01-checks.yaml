@@ -1,45 +1,136 @@
 ---
 # Subsite 01: Preflight checks
 # - verifies SSH connectivity, Ansible connection, become/root access, and firewall rules
- - hosts: all
+- hosts: all
   gather_facts: false
   vars:
     required_ports:
-      - 22
+      - 22    # SSH
+      - 6443  # Kubernetes API server
+      - 10250 # Kubelet API
+      - 30090 # Prometheus NodePort
+      - 30300 # Grafana NodePort
+      - 31100 # Loki NodePort
   tasks:
     - name: Check SSH connectivity (ping via raw)
       raw: echo ok
       register: ssh_ping
       failed_when: ssh_ping.rc != 0
       changed_when: false
+      check_mode: false
 
     - name: Verify Ansible become/root access (check id)
       ansible.builtin.command:
         cmd: id -u
       register: become_check
-      failed_when: become_check.rc != 0
+      failed_when: false
       changed_when: false
+      become: true
+      check_mode: false
+
+    - name: Check if we have become privileges
+      ansible.builtin.fail:
+        msg: |
+          Ansible become (root) check failed. To enable root/privilege escalation, run on each host:
+          
+          For sudo-enabled account:
+          sudo usermod -aG sudo {{ ansible_user | default(ansible_user_id) }}
+          
+          Or add to /etc/sudoers:
+          {{ ansible_user | default(ansible_user_id) }} ALL=(ALL) NOPASSWD:ALL
+          
+          Or ensure ansible.cfg / inventory has correct ansible_user and ansible_become settings.
+      when: become_check.rc != 0 or become_check.stdout != "0"
 
     - name: Check firewall rules for required ports
       ansible.builtin.shell: |
-        if command -v ufw >/dev/null 2>&1; then
+        if command -v firewall-cmd >/dev/null 2>&1; then
+          echo "=== firewalld status ==="
+          firewall-cmd --state || echo "firewalld not running"
+          echo "=== active zones ==="
+          firewall-cmd --get-active-zones || true
+          echo "=== default zone ports ==="
+          firewall-cmd --list-ports || true
+        elif command -v ufw >/dev/null 2>&1; then
+          echo "=== ufw status ==="
           ufw status numbered || true
         elif command -v iptables >/dev/null 2>&1; then
+          echo "=== iptables rules ==="
           iptables -L -n || true
         else
           echo "no-firewall-tool"
         fi
       register: firewall_check
       changed_when: false
+      become: true
+      check_mode: false
 
-    - name: Fail with remediation if become not available
-      ansible.builtin.fail:
+    - name: Check port accessibility for required services
+      ansible.builtin.wait_for:
+        port: "{{ item }}"
+        host: "{{ ansible_default_ipv4.address | default('127.0.0.1') }}"
+        timeout: 3
+        state: started
+      register: port_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+      loop: "{{ required_ports }}"
+
+    - name: Report port accessibility issues with remediation
+      ansible.builtin.debug:
         msg: |
-          Ansible become (root) check failed. To enable root/privilege escalation, run on each host as appropriate:
-          # For sudo-enabled account (example): sudo usermod -aG sudo <username>
-          # Or ensure ansible.cfg / inventory has correct ansible_user and ansible_become settings.
-      when: become_check is failed
+          Port {{ item.item }} is not accessible. If this port should be open, run:
+          
+          For firewalld:
+          sudo firewall-cmd --permanent --add-port={{ item.item }}/tcp
+          sudo firewall-cmd --reload
+          
+          For ufw:
+          sudo ufw allow {{ item.item }}/tcp
+          
+          For iptables:
+          sudo iptables -A INPUT -p tcp --dport {{ item.item }} -j ACCEPT
+          sudo iptables-save > /etc/iptables/rules.v4
+      when: item.failed | default(false)
+      loop: "{{ port_check.results }}"
 
     - name: Output firewall check result for operator (no changes performed)
       ansible.builtin.debug:
         var: firewall_check.stdout_lines
+
+    - name: Check SELinux status if available
+      ansible.builtin.command:
+        cmd: getenforce
+      register: selinux_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Report SELinux remediation if enforcing
+      ansible.builtin.debug:
+        msg: |
+          SELinux is enforcing. If Kubernetes/containers fail, you may need to set permissive mode:
+          
+          sudo setenforce 0
+          sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+          
+          Or configure proper SELinux contexts for container_file_t.
+      when: 
+        - selinux_check.rc == 0
+        - selinux_check.stdout == "Enforcing"
+
+    - name: Summary of preflight check results
+      ansible.builtin.debug:
+        msg: |
+          === Preflight Check Summary ===
+          SSH Connectivity: {{ 'OK' if ssh_ping.rc == 0 else 'FAILED' }}
+          Become/Root Access: {{ 'OK' if become_check.rc == 0 and become_check.stdout == '0' else 'FAILED' }}
+          SELinux Status: {{ selinux_check.stdout | default('N/A') }}
+          
+          {% set accessible_ports = port_check.results | selectattr('failed', 'equalto', false) | map(attribute='item') | list %}
+          {% set failed_ports = port_check.results | selectattr('failed', 'equalto', true) | map(attribute='item') | list %}
+          Accessible Ports: {{ accessible_ports | join(', ') if accessible_ports else 'None' }}
+          Blocked Ports: {{ failed_ports | join(', ') if failed_ports else 'None' }}
+          
+          Review firewall output above for detailed configuration.

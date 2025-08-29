@@ -1,0 +1,81 @@
+---
+# Jellyfin Deployment Playbook
+# Deploys Jellyfin using the minimal Kubernetes manifest
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    jellyfin_enabled: "{{ jellyfin_enabled | default(true) }}"
+    jellyfin_manifest_path: "kubernetes/jellyfin-minimal.yml"
+  tasks:
+    - name: Skip Jellyfin deployment if disabled
+      ansible.builtin.meta: end_play
+      when: not jellyfin_enabled
+
+    - name: Check if kubectl is available
+      ansible.builtin.command:
+        cmd: kubectl version --client --short
+      register: kubectl_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Fail with remediation if kubectl not available
+      ansible.builtin.fail:
+        msg: |
+          kubectl is required for Jellyfin deployment. Install it with:
+          
+          For Ubuntu/Debian:
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          For RHEL/CentOS/Fedora:
+          sudo dnf install -y kubectl
+      when: kubectl_check.rc != 0
+
+    - name: Deploy Jellyfin using manifest
+      kubernetes.core.k8s:
+        src: "{{ jellyfin_manifest_path }}"
+        state: present
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 300
+      register: jellyfin_deployment
+
+    - name: Get Jellyfin pod status
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        name: jellyfin
+        namespace: jellyfin
+      register: jellyfin_pod_info
+
+    - name: Get Jellyfin service info
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        name: jellyfin
+        namespace: jellyfin
+      register: jellyfin_service_info
+
+    - name: Report Jellyfin deployment status
+      ansible.builtin.debug:
+        msg: |
+          === Jellyfin Deployment Status ===
+          Pod Status: {{ jellyfin_pod_info.resources[0].status.phase | default('Unknown') }}
+          Service Port: {{ jellyfin_service_info.resources[0].spec.ports[0].nodePort | default('N/A') }}
+          
+          {% if jellyfin_pod_info.resources[0].status.phase == 'Running' %}
+          ✅ Jellyfin is ready!
+          Access at: http://{{ jellyfin_node_name | default('YOUR_NODE_IP') }}:{{ jellyfin_service_info.resources[0].spec.ports[0].nodePort | default('30096') }}
+          {% else %}
+          ❌ Jellyfin deployment may have issues. Check pod logs:
+          kubectl logs -n jellyfin jellyfin
+          {% endif %}
+
+    - name: Set facts for site.yaml validation
+      ansible.builtin.set_fact:
+        jellyfin_pod_ready: "{{ jellyfin_pod_info.resources[0].status.phase == 'Running' }}"
+        jellyfin_service_nodeport: "{{ jellyfin_service_info.resources[0].spec.ports[0].nodePort | default('30096') }}"
