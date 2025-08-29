@@ -48,15 +48,11 @@
           sudo dnf install -y kubectl
       when: kubectl_check.rc != 0
 
-    - name: Deploy Jellyfin using manifest
+    - name: Deploy Jellyfin using manifest (do not wait on Namespace objects)
       kubernetes.core.k8s:
         src: "{{ jellyfin_manifest_path }}"
         state: present
-        wait: true
-        wait_condition:
-          type: Ready
-          status: "True"
-        wait_timeout: 300
+        wait: false
       register: jellyfin_deployment
 
     - name: Get Jellyfin pod status
