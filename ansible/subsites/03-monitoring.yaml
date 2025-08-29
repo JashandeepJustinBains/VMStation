@@ -238,6 +238,108 @@
           Or set permissive mode for containers:
           sudo setsebool -P container_use_cephfs on
           
+    - name: Optional; gather PV hostPath info and prepare safe remediation commands
+      block:
+        - name: Set defaults for remediation flags
+          ansible.builtin.set_fact:
+            monitoring_apply_fixes: "{{ monitoring_apply_fixes | default(false) }}"
+            monitoring_allow_fs_change: "{{ monitoring_allow_fs_change | default(false) }}"
+            monitoring_allow_helm_upgrade: "{{ monitoring_allow_helm_upgrade | default(false) }}"
+
+        - name: Get grafana PVC bound PV name (read-only)
+          ansible.builtin.command:
+            cmd: kubectl -n monitoring get pvc kube-prometheus-stack-grafana -o jsonpath='{.spec.volumeName}'
+          register: grafana_pvname
+          failed_when: false
+          changed_when: false
+
+        - name: Get loki PVC bound PV name (read-only)
+          ansible.builtin.command:
+            cmd: kubectl -n monitoring get pvc storage-loki-stack-0 -o jsonpath='{.spec.volumeName}'
+          register: loki_pvname
+          failed_when: false
+          changed_when: false
+
+        - name: Fetch PV hostPath for grafana (read-only)
+          ansible.builtin.command:
+            cmd: |
+              if [ -n "${grafana_pvname.stdout}" ]; then
+                kubectl get pv ${grafana_pvname.stdout} -o jsonpath='{.spec.local.path}{.spec.hostPath.path}{"\n"}' || true
+              else
+                echo ""
+              fi
+          register: grafana_hostpath
+          failed_when: false
+          changed_when: false
+
+        - name: Fetch PV hostPath for loki (read-only)
+          ansible.builtin.command:
+            cmd: |
+              if [ -n "${loki_pvname.stdout}" ]; then
+                kubectl get pv ${loki_pvname.stdout} -o jsonpath='{.spec.local.path}{.spec.hostPath.path}{"\n"}' || true
+              else
+                echo ""
+              fi
+          register: loki_hostpath
+          failed_when: false
+          changed_when: false
+
+        - name: Show operator-only filesystem remediation commands (do NOT run automatically)
+          ansible.builtin.debug:
+            msg: |
+              Grafana PV -> {{ grafana_pvname.stdout | default('') }}
+              Grafana hostPath -> {{ grafana_hostpath.stdout | default('') }}
+              Suggested operator-only chown (run on the node hosting the PV):
+              operator-only: modifies node filesystem
+              sudo chown -R 472:472 {{ grafana_hostpath.stdout | default('<hostPath-from-pv>') }} && sudo chmod -R 0755 {{ grafana_hostpath.stdout | default('<hostPath-from-pv>') }}
+
+              Loki PV -> {{ loki_pvname.stdout | default('') }}
+              Loki hostPath -> {{ loki_hostpath.stdout | default('') }}
+              Suggested operator-only chown (identify loki UID from logs before running):
+              operator-only: modifies node filesystem
+              sudo chown -R <loki-uid>:<loki-uid> {{ loki_hostpath.stdout | default('<hostPath-from-pv>') }} && sudo chmod -R 0755 {{ loki_hostpath.stdout | default('<hostPath-from-pv>') }}
+
+        - name: Show helm dry-run suggestion for Loki fix (read-only)
+          ansible.builtin.debug:
+            msg: |
+              To test removing an invalid 'max_retries' key from Loki values do:
+              cat > loki-fix-values.yaml <<'EOF'
+              loki:
+                config:
+                  table_manager:
+                    retention_deletes_enabled: true
+                    retention_period: 168h
+              EOF
+              Then run a dry-run upgrade:
+              helm -n monitoring upgrade --reuse-values loki-stack grafana/loki-stack -f loki-fix-values.yaml --dry-run
+
+        - name: Run helm dry-run for Loki (conditional)
+          ansible.builtin.command:
+            cmd: helm -n monitoring upgrade --reuse-values loki-stack grafana/loki-stack -f loki-fix-values.yaml --dry-run
+          register: loki_helm_dryrun
+          failed_when: false
+          changed_when: false
+          when: monitoring_allow_helm_upgrade | bool
+
+        - name: Optionally perform helm upgrade for Loki (operator must enable)
+          ansible.builtin.command:
+            cmd: helm -n monitoring upgrade --reuse-values loki-stack grafana/loki-stack -f loki-fix-values.yaml
+          register: loki_helm_upgrade
+          failed_when: false
+          changed_when: false
+          when: monitoring_apply_fixes | bool and monitoring_allow_helm_upgrade | bool
+
+        - name: Restart grafana pods to re-run init-chown (conditional)
+          ansible.builtin.command:
+            cmd: kubectl -n monitoring delete pod -l app.kubernetes.io/name=grafana,app.kubernetes.io/instance=kube-prometheus-stack
+          register: grafana_restart
+          failed_when: false
+          changed_when: false
+          when: monitoring_apply_fixes | bool
+
+      when: true
+
+          
           Why this is needed: SELinux may block container access to host directories.
       when: 
         - selinux_context_check.rc == 0
