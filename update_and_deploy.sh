@@ -36,18 +36,29 @@ chmod +x ./ansible/deploy.sh
 chmod +x ./deploy_kubernetes.sh 2>/dev/null || true
 
 # Check for infrastructure mode
-if [ -f "ansible/group_vars/all.yml" ]; then
-    if grep -q "infrastructure_mode:.*kubernetes" ansible/group_vars/all.yml; then
-        echo "Using Kubernetes deployment mode..."
-        ./deploy_kubernetes.sh
-    elif grep -q "infrastructure_mode:.*podman" ansible/group_vars/all.yml; then
-        echo "Using legacy Podman deployment mode..."
-        ./ansible/deploy.sh
-    else
-        echo "Infrastructure mode not specified, using Kubernetes..."
-        ./deploy_kubernetes.sh
-    fi
-else
-    echo "No configuration found, using Kubernetes deployment..."
-    ./deploy_kubernetes.sh
+# Selectable playbooks mechanism
+# Edit the PLAYBOOKS array below and uncomment the entries you want to run.
+PLAYBOOKS=(
+    # "ansible/site.yaml"                       # run the full site orchestrator
+    # "ansible/subsites/01-checks.yaml"        # preflight checks
+    # "ansible/subsites/02-certs.yaml"         # cert generation & distribution
+    # "ansible/subsites/03-monitoring.yaml"    # monitoring stack deploy
+    # "ansible/plays/kubernetes/deploy_monitoring.yaml" # older deploy path
+)
+
+if [ ${#PLAYBOOKS[@]} -eq 0 ]; then
+    echo "No playbooks selected in PLAYBOOKS array. Edit update_and_deploy.sh to enable entries. Exiting."
+    exit 0
 fi
+
+for pb in "${PLAYBOOKS[@]}"; do
+    if [ -z "$pb" ]; then
+        continue
+    fi
+    if [ ! -f "$pb" ]; then
+        echo "Playbook $pb not found, skipping"
+        continue
+    fi
+    echo "Running playbook: $pb"
+    ansible-playbook -i ansible/inventory.txt "$pb"
+done

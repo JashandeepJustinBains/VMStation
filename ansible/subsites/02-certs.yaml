@@ -1,0 +1,26 @@
+---
+# Subsite 02: TLS certificate generation & distribution (scaffold)
+# This playbook does not change file permissions. It will create local cert manifests
+# and attempt to copy them to nodes; if copy requires elevated privileges, it will
+# print CLI remediation steps instead of changing permissions.
+- hosts: masternode
+  gather_facts: no
+  tasks:
+    - name: Ensure local cert output directory exists (local action)
+      local_action: file path=./ansible/certs state=directory mode=0755
+
+    - name: Generate self-signed CA and node certs (scaffold)
+      local_action: command /bin/true
+      changed_when: false
+      # Replace /bin/true with a certificate generation command or template task
+
+    - name: Show next steps for distributing certs
+      ansible.builtin.debug:
+        msg: |
+          This playbook scaffolds cert creation. If distribution to remote nodes requires elevated
+          privileges, please run the following on the masternode as root (example):
+
+          sudo scp ./ansible/certs/*.crt root@<node>:/etc/ssl/certs/
+          sudo scp ./ansible/certs/*.key root@<node>:/etc/ssl/private/
+
+          If cert-manager is used on Kubernetes, install cert-manager and create ClusterIssuer manifests.

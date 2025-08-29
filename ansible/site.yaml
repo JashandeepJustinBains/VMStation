@@ -1,4 +1,10 @@
 ---
+# Top-level orchestrator that imports modular subsites.
+# Prefer running subsites individually. This file may be used to run all in sequence.
+- import_playbook: subsites/01-checks.yaml
+- import_playbook: subsites/02-certs.yaml
+- import_playbook: subsites/03-monitoring.yaml
+---
 # VMStation Site Playbook
 # Main entry point for Ansible-driven deployment
 # Integrates existing Kubernetes stack with optional Jellyfin deployment

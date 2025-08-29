@@ -1,0 +1,43 @@
+---
+# Subsite 03: Monitoring stack deploy (scaffold)
+# This playbook should deploy Prometheus, Grafana, Loki, Promtail and exporters.
+# It performs pre-checks and prints remediation steps if resources/permissions are missing.
+- hosts: masternode
+  gather_facts: no
+  vars:
+    monitoring_namespace: monitoring
+  tasks:
+    - name: Check for monitoring namespace
+      community.kubernetes.k8s_info:
+        kind: Namespace
+        name: "{{ monitoring_namespace }}"
+      register: ns_info
+      failed_when: false
+
+    - name: Explain how to create monitoring namespace if missing
+      ansible.builtin.debug:
+        msg: "Monitoring namespace '{{ monitoring_namespace }}' not found. To create: kubectl create namespace {{ monitoring_namespace }}"
+      when: ns_info.resources | length == 0
+
+    - name: Check for Prometheus Operator CRDs (ServiceMonitor)
+      community.kubernetes.k8s_info:
+        api_version: monitoring.coreos.com/v1
+        kind: ServiceMonitor
+      register: servicemonitor_crd
+      failed_when: false
+
+    - name: Print install instructions for Prometheus operator if CRD missing
+      ansible.builtin.debug:
+        msg: |
+          Prometheus Operator CRDs not detected. To install using Helm:
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          helm install kube-prom-stack prometheus-community/kube-prometheus-stack -n {{ monitoring_namespace }} --create-namespace
+      when: servicemonitor_crd.resources | length == 0
+
+    - name: Suggest Helm install for loki-stack-values.yaml if present
+      ansible.builtin.debug:
+        msg: |
+          If you have a loki-stack-values.yaml, apply with:
+          helm upgrade --install loki-stack grafana/loki-stack -n {{ monitoring_namespace }} -f loki-stack-values.yaml
+      changed_when: false

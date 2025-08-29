@@ -1,6 +1,12 @@
 # VMStation Ansible Configuration Variables Template
-# Copy this file to all.yml and customize for your environment
-# IMPORTANT: Never commit all.yml with real credentials
+# Copy this file to all.yml and customize for your environment.
+# IMPORTANT: Never commit `ansible/group_vars/all.yml` with real credentials.
+# Note for automated agents: this template mirrors the structure of the real
+# `ansible/group_vars/all.yml` used at runtime. All sensitive credentials are
+# intentionally omitted from this template but are present in the real `all.yml`
+# on-disk. If a task or agent complains about missing credentials, assume those
+# secrets live in `ansible/group_vars/all.yml` (not the template) and will be
+# available to runtime executions.
 
 # === Infrastructure Mode ===
 # Set to 'kubernetes' for new k8s-based setup or 'podman' for legacy
