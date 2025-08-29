@@ -5,9 +5,14 @@
 This implementation addresses all requirements from the problem statement:
 
 ### ✅ Provide a ready-to-use prompt for the premium Copilot agent
-- **File**: `docs/premium_copilot_k8s_monitoring_prompt.md`
-- **Access**: `./scripts/get_copilot_prompt.sh --show`
+- **Template File**: `docs/premium_copilot_k8s_monitoring_prompt.md`
+- **Complete File**: `docs/premium_copilot_k8s_monitoring_complete_prompt.md`
+- **Access**: `./scripts/get_copilot_prompt.sh --show` (template) or `--complete` (ready-to-use)
 - **Status**: Complete and ready for copy-paste
+
+The implementation now provides two options:
+1. **Template prompt** - Requires separate diagnostic gathering
+2. **Complete prompt** - Includes embedded diagnostic output for immediate use
 
 ### ✅ Instruct agent to not change file permissions or create directories itself
 - **Implementation**: Clear constraints section in prompt
@@ -26,6 +31,11 @@ This implementation addresses all requirements from the problem statement:
   - localhost.localdomain — 192.168.4.62
 - **Enforcement**: "use these hostnames/IPs exactly when referencing nodes"
 
+### ✅ Include gathered diagnostics in the prompt
+- **Implementation**: Complete prompt file with embedded cluster snapshot
+- **File**: `docs/premium_copilot_k8s_monitoring_complete_prompt.md`
+- **Access**: `./scripts/get_copilot_prompt.sh --complete`
+- **Diagnostics included**: Node status, pod states, events, PVCs from actual cluster
 ### ✅ Prioritize likely root causes and give verification commands
 - **Root causes covered**:
   - Init-container chown issues
@@ -73,12 +83,19 @@ The prompt requests 10 specific diagnostic areas:
 
 ## Usage Workflow
 
-1. **Access the prompt**: `./scripts/get_copilot_prompt.sh --show`
+### Template Prompt (Traditional)
+1. **Access the template**: `./scripts/get_copilot_prompt.sh --show`
 2. **Copy to premium Copilot agent**
 3. **Gather diagnostics**: `./scripts/get_copilot_prompt.sh --gather`
 4. **Provide cluster output to agent**
 5. **Follow agent's step-by-step remediation plan**
 6. **Verify each fix with provided commands**
+
+### Complete Prompt (Ready-to-Use)
+1. **Access the complete prompt**: `./scripts/get_copilot_prompt.sh --complete`
+2. **Copy directly to premium Copilot agent** (no additional diagnostics needed)
+3. **Follow agent's step-by-step remediation plan**
+4. **Verify each fix with provided commands**
 
 ## Integration Points
 

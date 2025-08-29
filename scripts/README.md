@@ -7,6 +7,7 @@ This directory contains operational scripts for VMStation infrastructure managem
 ### Kubernetes (Primary)
 - **`validate_k8s_monitoring.sh`** - Validates Kubernetes monitoring stack health
 - **`analyze_k8s_monitoring_diagnostics.sh`** - Analyzes diagnostic output and provides CLI remediation commands
+- **`get_copilot_prompt.sh`** - Provides premium GitHub Copilot troubleshooting prompts for monitoring issues
 - **`validate_infrastructure.sh`** - Auto-detects and validates current infrastructure mode
 
 ### Legacy Podman (Deprecated)
@@ -20,6 +21,27 @@ This directory contains operational scripts for VMStation infrastructure managem
 - **`diagnose_monitoring_permissions.sh`** - Comprehensive permission diagnostic tool
 - **`fix_monitoring_permissions.sh`** - Automated permission fix script
 
+### Premium GitHub Copilot Integration
+- **`get_copilot_prompt.sh`** - Provides premium GitHub Copilot troubleshooting prompts for monitoring issues
+  - `--show` - Template prompt (requires separate diagnostic gathering)
+  - `--complete` - Ready-to-use prompt with embedded diagnostic data
+  - `--copy` / `--copy-complete` - Copy prompts to clipboard
+  - `--gather` - Collect basic cluster diagnostics
+
+## Troubleshooting Workflow Options
+
+### Option 1: Template Prompt (Traditional)
+1. Get template prompt: `./scripts/get_copilot_prompt.sh --show`
+2. Copy to premium GitHub Copilot agent
+3. Gather diagnostics: `./scripts/get_copilot_prompt.sh --gather`
+4. Provide diagnostic output to agent
+5. Follow agent's recommendations
+
+### Option 2: Complete Prompt (Ready-to-Use)
+1. Get complete prompt: `./scripts/get_copilot_prompt.sh --complete`
+2. Copy directly to premium GitHub Copilot agent (includes diagnostics)
+3. Follow agent's recommendations
+
 ### Container Management (Legacy)
 - **`fix_container_restarts.sh`** - Fixes container restart issues in Podman
 - **`validate_container_fixes.sh`** - Validates container restart fixes
@@ -32,6 +54,15 @@ This directory contains operational scripts for VMStation infrastructure managem
 ```bash
 # Validate monitoring stack
 ./scripts/validate_k8s_monitoring.sh
+
+# Get premium Copilot troubleshooting prompt (template)
+./scripts/get_copilot_prompt.sh --show
+
+# Get complete prompt with embedded diagnostics
+./scripts/get_copilot_prompt.sh --complete
+
+# Gather diagnostic data for manual troubleshooting
+./scripts/get_copilot_prompt.sh --gather
 
 # Auto-detect and validate
 ./scripts/validate_infrastructure.sh
