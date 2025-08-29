@@ -411,13 +411,21 @@
           loop: "{{ monitoring_pods.resources }}"
           when: item.status.conditions is defined and (item.status.conditions | selectattr('type','equalto','Ready') | selectattr('status','equalto','False') | list) | length > 0
 
+        - name: Build safe pod_describes output list
+          ansible.builtin.set_fact:
+            pod_describes_out: "{{ [ item.stdout if (item is defined and item.stdout is defined) else '' for item in (pod_describes.results | default([])) ] }}"
+
+        - name: Build safe pod_logs output list
+          ansible.builtin.set_fact:
+            pod_logs_out: "{{ [ item.stdout if (item is defined and item.stdout is defined) else '' for item in (pod_logs.results | default([])) ] }}"
+
         - name: Show monitoring diagnostics summary
           debug:
             msg:
               pods: "{{ (monitoring_pods.resources | default([])) | map(attribute='metadata.name') | list }}"
               events_count: "{{ (monitoring_events.resources | default([])) | length }}"
-              pod_describes: "{{ (pod_describes.results | default([])) | map(attribute='stdout') | list }}"
-              pod_logs: "{{ (pod_logs.results | default([])) | map(attribute='stdout') | list }}"
+              pod_describes: "{{ pod_describes_out | default([]) }}"
+              pod_logs: "{{ pod_logs_out | default([]) }}"
 
     - name: Get monitoring service endpoints
       kubernetes.core.k8s_info:
