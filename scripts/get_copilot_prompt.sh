@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROMPT_FILE="$REPO_ROOT/docs/premium_copilot_k8s_monitoring_prompt.md"
+COMPLETE_PROMPT_FILE="$REPO_ROOT/docs/premium_copilot_k8s_monitoring_complete_prompt.md"
 
 # Color codes
 GREEN='\033[0;32m'
@@ -21,8 +22,10 @@ show_usage() {
     echo "Usage: $0 [option]"
     echo ""
     echo "Options:"
-    echo "  --show     Display the prompt for manual copy (default)"
-    echo "  --copy     Copy prompt to clipboard (requires xclip/pbcopy)"
+    echo "  --show     Display the template prompt for manual copy (default)"
+    echo "  --complete Display the complete prompt with embedded diagnostics"
+    echo "  --copy     Copy template prompt to clipboard (requires xclip/pbcopy)"
+    echo "  --copy-complete Copy complete prompt to clipboard"
     echo "  --gather   Gather basic cluster diagnostic info"
     echo "  --help     Show this help message"
     echo ""
@@ -30,11 +33,20 @@ show_usage() {
     echo "  - masternode — 192.168.4.63"
     echo "  - storagenodet3500 — 192.168.4.61" 
     echo "  - localhost.localdomain — 192.168.4.62"
+    echo ""
+    echo "Template vs Complete prompt:"
+    echo "  --show/--copy: Template prompt (requires separate diagnostic gathering)"
+    echo "  --complete/--copy-complete: Ready-to-use prompt with embedded diagnostics"
 }
 
 extract_prompt() {
     # Extract just the prompt text between the markers
     sed -n '/^You are an expert Kubernetes troubleshooting assistant/,/^I will paste current pod output when running this prompt/p' "$PROMPT_FILE"
+}
+
+extract_complete_prompt() {
+    # Extract the complete prompt text from the complete prompt file
+    sed -n '/^You are an expert Kubernetes troubleshooting assistant/,/^Priority: produce the diagnostic recipes and command sets first/p' "$COMPLETE_PROMPT_FILE"
 }
 
 copy_to_clipboard() {
@@ -43,20 +55,38 @@ copy_to_clipboard() {
     
     if command -v pbcopy >/dev/null 2>&1; then
         echo "$prompt_text" | pbcopy
-        echo -e "${GREEN}✓${NC} Prompt copied to clipboard using pbcopy"
+        echo -e "${GREEN}✓${NC} Template prompt copied to clipboard using pbcopy"
     elif command -v xclip >/dev/null 2>&1; then
         echo "$prompt_text" | xclip -selection clipboard
-        echo -e "${GREEN}✓${NC} Prompt copied to clipboard using xclip"
+        echo -e "${GREEN}✓${NC} Template prompt copied to clipboard using xclip"
     else
         echo -e "${YELLOW}⚠${NC} Clipboard tool not found (install xclip or pbcopy)"
-        echo -e "${BLUE}💡${NC} Showing prompt for manual copy instead:"
+        echo -e "${BLUE}💡${NC} Showing template prompt for manual copy instead:"
         echo ""
         show_prompt
     fi
 }
 
+copy_complete_to_clipboard() {
+    local prompt_text
+    prompt_text=$(extract_complete_prompt)
+    
+    if command -v pbcopy >/dev/null 2>&1; then
+        echo "$prompt_text" | pbcopy
+        echo -e "${GREEN}✓${NC} Complete prompt copied to clipboard using pbcopy"
+    elif command -v xclip >/dev/null 2>&1; then
+        echo "$prompt_text" | xclip -selection clipboard
+        echo -e "${GREEN}✓${NC} Complete prompt copied to clipboard using xclip"
+    else
+        echo -e "${YELLOW}⚠${NC} Clipboard tool not found (install xclip or pbcopy)"
+        echo -e "${BLUE}💡${NC} Showing complete prompt for manual copy instead:"
+        echo ""
+        show_complete_prompt
+    fi
+}
+
 show_prompt() {
-    echo -e "${BLUE}=== Premium Copilot K8s Monitoring Troubleshooting Prompt ===${NC}"
+    echo -e "${BLUE}=== Premium Copilot K8s Monitoring Template Prompt ===${NC}"
     echo ""
     echo -e "${YELLOW}Copy the text below and paste it to premium GitHub Copilot agent:${NC}"
     echo ""
@@ -65,10 +95,28 @@ show_prompt() {
     echo "────────────────────────────────────────────────────────────────"
     echo ""
     echo -e "${BLUE}Next steps:${NC}"
-    echo "1. Copy the prompt above"
+    echo "1. Copy the template prompt above"
     echo "2. Paste it to premium GitHub Copilot agent"
     echo "3. Gather cluster diagnostics with: $0 --gather"
     echo "4. Paste the diagnostic output to the agent"
+    echo ""
+    echo -e "${YELLOW}Alternative: Use --complete for a ready-to-use prompt with embedded diagnostics${NC}"
+}
+
+show_complete_prompt() {
+    echo -e "${BLUE}=== Premium Copilot K8s Complete Prompt with Embedded Diagnostics ===${NC}"
+    echo ""
+    echo -e "${YELLOW}Copy the text below and paste it to premium GitHub Copilot agent:${NC}"
+    echo -e "${GREEN}(No additional diagnostic gathering needed - diagnostics are embedded)${NC}"
+    echo ""
+    echo "────────────────────────────────────────────────────────────────"
+    extract_complete_prompt
+    echo "────────────────────────────────────────────────────────────────"
+    echo ""
+    echo -e "${BLUE}Next steps:${NC}"
+    echo "1. Copy the complete prompt above"
+    echo "2. Paste it directly to premium GitHub Copilot agent"
+    echo "3. Follow the resulting action plan step-by-step"
 }
 
 gather_diagnostics() {
@@ -127,7 +175,13 @@ main() {
     local action="${1:-show}"
     
     if [[ ! -f "$PROMPT_FILE" ]]; then
-        echo -e "${YELLOW}⚠${NC} Prompt file not found: $PROMPT_FILE"
+        echo -e "${YELLOW}⚠${NC} Template prompt file not found: $PROMPT_FILE"
+        echo "Make sure you're running this from the VMStation repository root."
+        exit 1
+    fi
+    
+    if [[ ! -f "$COMPLETE_PROMPT_FILE" ]]; then
+        echo -e "${YELLOW}⚠${NC} Complete prompt file not found: $COMPLETE_PROMPT_FILE"
         echo "Make sure you're running this from the VMStation repository root."
         exit 1
     fi
@@ -136,8 +190,14 @@ main() {
         --show|show)
             show_prompt
             ;;
+        --complete|complete)
+            show_complete_prompt
+            ;;
         --copy|copy)
             copy_to_clipboard
+            ;;
+        --copy-complete|copy-complete)
+            copy_complete_to_clipboard
             ;;
         --gather|gather)
             gather_diagnostics
