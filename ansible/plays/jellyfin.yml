@@ -12,7 +12,7 @@
       when: not (jellyfin_enabled | default(true) | bool)
 
     - name: Check if kubectl is available
-      ansible.builtin.command:
+      ansible.builtin.shell:
         cmd: command -v kubectl
       register: kubectl_check
       failed_when: false
