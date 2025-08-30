@@ -79,11 +79,8 @@
       ansible.builtin.debug:
         msg: >-
           {{ apps_to_check[loop.index0].name }}: pods={{ pod_checks.results[loop.index0].resources | length }}
-          ready={{ (pod_checks.results[loop.index0].resources
-                    | selectattr('status.conditions','defined')
-                    | select(lambda p: (p.status.conditions | selectattr('type','equalto','Ready')
-                      | selectattr('status','equalto','True') | list | length) > 0)
-                    | list | length) }} svc={{ (svc_checks.results[loop.index0].resources | length) > 0 }}
+          ready={{ (pod_checks.results[loop.index0].resources | json_query("[?status.conditions[?(@.type=='Ready' && @.status=='True')]]") | length) }}
+          svc={{ (svc_checks.results[loop.index0].resources | length) > 0 }}
           nodePort={{ (svc_checks.results[loop.index0].resources[0].spec.ports[0].nodePort if (svc_checks.results[loop.index0].resources | length > 0) else 'N/A') }}
       loop: "{{ apps_to_check }}"
 
