@@ -1,0 +1,523 @@
+---
+# Subsite 05: Extra Apps - Kubernetes Dashboard, Drone, MongoDB
+# This playbook deploys additional applications to the Kubernetes cluster
+# following VMStation non-destructive principles and idempotent operations.
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars:
+    # === Node Scheduling Configuration ===
+    dashboard_node: masternode
+    apps_node: localhost.localdomain
+    
+    # === NodePort Configuration ===
+    dashboard_nodeport: 32000
+    drone_nodeport: 32001
+    mongodb_nodeport: 32002
+    
+    # === Storage Configuration ===
+    storage_hostpath: /mnt/storage
+
+  tasks:
+    # === Preflight Checks ===
+    - name: Check kubectl availability
+      ansible.builtin.command:
+        cmd: kubectl version --client
+      register: kubectl_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Fail with remediation if kubectl not available
+      ansible.builtin.fail:
+        msg: |
+          kubectl is required for Kubernetes operations. Install it with:
+          
+          For Ubuntu/Debian:
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          For RHEL/CentOS/Fedora:
+          sudo dnf install -y kubectl
+          
+          Or download from: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+      when: kubectl_check.rc != 0
+
+    - name: Check Kubernetes cluster connectivity
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_check
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if cluster not accessible
+      ansible.builtin.fail:
+        msg: |
+          Cannot connect to Kubernetes cluster. Please verify:
+          1. Cluster is running
+          2. kubectl is properly configured
+          3. Current context points to correct cluster
+          
+          Check with: kubectl cluster-info
+      when: cluster_check.failed | default(false)
+
+    # === Existing Resources Detection ===
+    - name: Check for existing kubernetes-dashboard deployment
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: kubernetes-dashboard
+        name: kubernetes-dashboard
+      register: dashboard_deployment_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing kubernetes-dashboard service
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: kubernetes-dashboard
+        name: kubernetes-dashboard
+      register: dashboard_service_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing drone deployment
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: drone
+        name: drone
+      register: drone_deployment_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing drone service
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: drone
+        name: drone
+      register: drone_service_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing mongodb deployment
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: mongodb
+        name: mongodb
+      register: mongodb_deployment_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing mongodb service
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: mongodb
+        name: mongodb
+      register: mongodb_service_check
+      failed_when: false
+      changed_when: false
+
+    # === Check Mode Behavior ===
+    - name: Show what would be created in check mode
+      ansible.builtin.debug:
+        msg: |
+          === CHECK MODE: What would be created ===
+          
+          Kubernetes Dashboard:
+          - Namespace: kubernetes-dashboard {{ '(exists)' if (dashboard_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Deployment: kubernetes-dashboard {{ '(exists)' if (dashboard_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Service: NodePort on {{ dashboard_nodeport }} {{ '(exists)' if (dashboard_service_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Scheduled on: {{ dashboard_node }}
+          
+          Drone CI:
+          - Namespace: drone {{ '(exists)' if (drone_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Deployment: drone {{ '(exists)' if (drone_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Service: NodePort on {{ drone_nodeport }} {{ '(exists)' if (drone_service_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Storage: {{ storage_hostpath }}/drone (hostPath, DirectoryOrCreate)
+          - Scheduled on: {{ apps_node }}
+          
+          MongoDB:
+          - Namespace: mongodb {{ '(exists)' if (mongodb_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Deployment: mongodb {{ '(exists)' if (mongodb_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Service: NodePort on {{ mongodb_nodeport }} {{ '(exists)' if (mongodb_service_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Storage: {{ storage_hostpath }}/mongodb (hostPath, DirectoryOrCreate)
+          - Scheduled on: {{ apps_node }}
+          
+          Run without --check to apply these changes.
+      when: ansible_check_mode
+
+    # === Namespace Creation ===
+    - name: Create kubernetes-dashboard namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: kubernetes-dashboard
+            labels:
+              name: kubernetes-dashboard
+      register: dashboard_namespace_result
+      failed_when: false
+      changed_when: dashboard_namespace_result.changed | default(false)
+      when: not ansible_check_mode
+
+    - name: Create drone namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: drone
+            labels:
+              name: drone
+      register: drone_namespace_result
+      failed_when: false
+      changed_when: drone_namespace_result.changed | default(false)
+      when: not ansible_check_mode
+
+    - name: Create mongodb namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: mongodb
+            labels:
+              name: mongodb
+      register: mongodb_namespace_result
+      failed_when: false
+      changed_when: mongodb_namespace_result.changed | default(false)
+      when: not ansible_check_mode
+
+    # === Kubernetes Dashboard ===
+    - name: Create kubernetes-dashboard deployment
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kubernetes-dashboard
+            namespace: kubernetes-dashboard
+            labels:
+              app: kubernetes-dashboard
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: kubernetes-dashboard
+            template:
+              metadata:
+                labels:
+                  app: kubernetes-dashboard
+              spec:
+                nodeName: "{{ dashboard_node }}"
+                securityContext:
+                  runAsNonRoot: true
+                containers:
+                  - name: kubernetes-dashboard
+                    image: kubernetesui/dashboard:v2.7.0
+                    ports:
+                      - containerPort: 8443
+                        protocol: TCP
+                    args:
+                      - --auto-generate-certificates
+                      - --namespace=kubernetes-dashboard
+                    securityContext:
+                      runAsUser: 1001
+                      runAsNonRoot: true
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                    livenessProbe:
+                      httpGet:
+                        scheme: HTTPS
+                        path: /
+                        port: 8443
+                      initialDelaySeconds: 30
+                      timeoutSeconds: 30
+      register: dashboard_deployment_result
+      failed_when: false
+      changed_when: dashboard_deployment_result.changed | default(false)
+      when: 
+        - not ansible_check_mode
+        - (dashboard_deployment_check.resources | default([])) | length == 0
+
+    - name: Create kubernetes-dashboard service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: kubernetes-dashboard
+            namespace: kubernetes-dashboard
+            labels:
+              app: kubernetes-dashboard
+          spec:
+            type: NodePort
+            selector:
+              app: kubernetes-dashboard
+            ports:
+              - protocol: TCP
+                port: 443
+                targetPort: 8443
+                nodePort: "{{ dashboard_nodeport }}"
+      register: dashboard_service_result
+      failed_when: false
+      changed_when: dashboard_service_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (dashboard_service_check.resources | default([])) | length == 0
+
+    # === Drone CI ===
+    - name: Create drone deployment
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: drone
+            namespace: drone
+            labels:
+              app: drone
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: drone
+            template:
+              metadata:
+                labels:
+                  app: drone
+              spec:
+                nodeName: "{{ apps_node }}"
+                containers:
+                  - name: drone
+                    image: drone/drone:2
+                    ports:
+                      - containerPort: 80
+                        protocol: TCP
+                    env:
+                      - name: DRONE_DATABASE_DRIVER
+                        value: "sqlite3"
+                      - name: DRONE_DATABASE_DATASOURCE
+                        value: "/var/lib/drone/drone.sqlite"
+                      - name: DRONE_RPC_SECRET
+                        value: "changeme"  # Note: Use proper secret management in production
+                    securityContext:
+                      runAsUser: 1000
+                      runAsNonRoot: true
+                      allowPrivilegeEscalation: false
+                    resources:
+                      limits:
+                        cpu: 1000m
+                        memory: 1Gi
+                      requests:
+                        cpu: 100m
+                        memory: 256Mi
+                    volumeMounts:
+                      - name: drone-data
+                        mountPath: /var/lib/drone
+                volumes:
+                  - name: drone-data
+                    hostPath:
+                      path: "{{ storage_hostpath }}/drone"
+                      type: DirectoryOrCreate
+      register: drone_deployment_result
+      failed_when: false
+      changed_when: drone_deployment_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (drone_deployment_check.resources | default([])) | length == 0
+
+    - name: Create drone service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: drone
+            namespace: drone
+            labels:
+              app: drone
+          spec:
+            type: NodePort
+            selector:
+              app: drone
+            ports:
+              - protocol: TCP
+                port: 80
+                targetPort: 80
+                nodePort: "{{ drone_nodeport }}"
+      register: drone_service_result
+      failed_when: false
+      changed_when: drone_service_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (drone_service_check.resources | default([])) | length == 0
+
+    # === MongoDB ===
+    - name: Create mongodb deployment
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: mongodb
+            namespace: mongodb
+            labels:
+              app: mongodb
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: mongodb
+            template:
+              metadata:
+                labels:
+                  app: mongodb
+              spec:
+                nodeName: "{{ apps_node }}"
+                containers:
+                  - name: mongodb
+                    image: mongo:5
+                    ports:
+                      - containerPort: 27017
+                        protocol: TCP
+                    env:
+                      - name: MONGO_INITDB_ROOT_USERNAME
+                        value: "admin"
+                      - name: MONGO_INITDB_ROOT_PASSWORD
+                        value: "changeme"  # Note: Use proper secret management in production
+                    securityContext:
+                      runAsUser: 999
+                      runAsNonRoot: true
+                      allowPrivilegeEscalation: false
+                    resources:
+                      limits:
+                        cpu: 1000m
+                        memory: 1Gi
+                      requests:
+                        cpu: 100m
+                        memory: 256Mi
+                    volumeMounts:
+                      - name: mongo-data
+                        mountPath: /data/db
+                volumes:
+                  - name: mongo-data
+                    hostPath:
+                      path: "{{ storage_hostpath }}/mongodb"
+                      type: DirectoryOrCreate
+      register: mongodb_deployment_result
+      failed_when: false
+      changed_when: mongodb_deployment_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (mongodb_deployment_check.resources | default([])) | length == 0
+
+    - name: Create mongodb service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: mongodb
+            namespace: mongodb
+            labels:
+              app: mongodb
+          spec:
+            type: NodePort
+            selector:
+              app: mongodb
+            ports:
+              - protocol: TCP
+                port: 27017
+                targetPort: 27017
+                nodePort: "{{ mongodb_nodeport }}"
+      register: mongodb_service_result
+      failed_when: false
+      changed_when: mongodb_service_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (mongodb_service_check.resources | default([])) | length == 0
+
+    # === Summary and Validation ===
+    - name: Summarize deployment results
+      ansible.builtin.debug:
+        msg: |
+          === Extra Apps Deployment Summary ===
+          
+          Kubernetes Dashboard:
+          - Deployment: {{ 'EXISTS' if (dashboard_deployment_check.resources | default([])) | length > 0 else ('CREATED' if (dashboard_deployment_result.changed | default(false)) else 'NO CHANGE') }}
+          - Service: {{ 'EXISTS' if (dashboard_service_check.resources | default([])) | length > 0 else ('CREATED' if (dashboard_service_result.changed | default(false)) else 'NO CHANGE') }}
+          - Access: https://{{ dashboard_node }}:{{ dashboard_nodeport }}
+          
+          Drone CI:
+          - Deployment: {{ 'EXISTS' if (drone_deployment_check.resources | default([])) | length > 0 else ('CREATED' if (drone_deployment_result.changed | default(false)) else 'NO CHANGE') }}
+          - Service: {{ 'EXISTS' if (drone_service_check.resources | default([])) | length > 0 else ('CREATED' if (drone_service_result.changed | default(false)) else 'NO CHANGE') }}
+          - Storage: {{ storage_hostpath }}/drone
+          - Access: http://{{ apps_node }}:{{ drone_nodeport }}
+          
+          MongoDB:
+          - Deployment: {{ 'EXISTS' if (mongodb_deployment_check.resources | default([])) | length > 0 else ('CREATED' if (mongodb_deployment_result.changed | default(false)) else 'NO CHANGE') }}
+          - Service: {{ 'EXISTS' if (mongodb_service_check.resources | default([])) | length > 0 else ('CREATED' if (mongodb_service_result.changed | default(false)) else 'NO CHANGE') }}
+          - Storage: {{ storage_hostpath }}/mongodb
+          - Access: {{ apps_node }}:{{ mongodb_nodeport }}
+          
+          === Validation Commands ===
+          
+          Syntax Check:
+          ansible-playbook --syntax-check ansible/subsites/05-extra_apps.yaml
+          
+          Dry Run:
+          ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml --check
+          
+          Full Deployment:
+          ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml
+          
+          Verify Deployments:
+          kubectl get pods -n kubernetes-dashboard
+          kubectl get pods -n drone  
+          kubectl get pods -n mongodb
+          
+          Verify Services:
+          kubectl get svc -n kubernetes-dashboard
+          kubectl get svc -n drone
+          kubectl get svc -n mongodb
+          
+          === Security Notes ===
+          
+          WARNING: This playbook uses default credentials for demonstration.
+          For production deployments:
+          1. Use Kubernetes Secrets for database credentials
+          2. Configure proper RBAC for dashboard access
+          3. Set up proper authentication for Drone CI
+          4. Use TLS certificates for secure communication
+          
+          See ansible/group_vars/secrets.yml.example for vault-encrypted credentials.
+          
+          === Next Steps ===
+          
+          Run via update_and_deploy.sh by adding to PLAYBOOKS array:
+          "ansible/subsites/05-extra_apps.yaml"
+      when: not ansible_check_mode
