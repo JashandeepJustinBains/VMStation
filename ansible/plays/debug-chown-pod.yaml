@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-chown
+  namespace: monitoring
+spec:
+  restartPolicy: Never
+  containers:
+  - name: debug
+    image: busybox:1.31.1
+    command: ["sh","-c","sleep 3600"]
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+    - name: hostdata
+      mountPath: /mnt/hostdata
+  volumes:
+  - name: hostdata
+    hostPath:
+      path: /var/lib/kubernetes/local-path-provisioner/pvc-480b2659-d6de-4256-941b-45c8c07559ce_monitoring_kube-prometheus-stack-grafana
+      type: Directory
