@@ -78,11 +78,13 @@
     - name: "Print concise status for each extra app"
       ansible.builtin.debug:
         msg: >-
-          {{ apps_to_check[loop.index0].name }}: pods={{ pod_checks.results[loop.index0].resources | length }}
-          ready={{ (pod_checks.results[loop.index0].resources | json_query("[?status.conditions[?(@.type=='Ready' && @.status=='True')]]") | length) }}
-          svc={{ (svc_checks.results[loop.index0].resources | length) > 0 }}
-          nodePort={{ (svc_checks.results[loop.index0].resources[0].spec.ports[0].nodePort if (svc_checks.results[loop.index0].resources | length > 0) else 'N/A') }}
-      loop: "{{ apps_to_check }}"
+          {{ apps_to_check[idx].name }}: pods={{ (item.resources | default([]) | length) }}
+          ready={{ (item.resources | default([]) | json_query("[?status.conditions[?(@.type=='Ready' && @.status=='True')]]") | length) }}
+          svc={{ (svc_checks.results[idx].resources | length > 0) if (svc_checks is defined and svc_checks.results is defined and (svc_checks.results | length) > idx) else false }}
+          nodePort={{ (svc_checks.results[idx].resources[0].spec.ports[0].nodePort) if (svc_checks is defined and svc_checks.results is defined and (svc_checks.results | length) > idx and (svc_checks.results[idx].resources | length) > 0) else 'N/A' }}
+      loop: "{{ pod_checks.results }}"
+      loop_control:
+        index_var: idx
 
     - name: "Fail if any extra app has no ready pods"
       ansible.builtin.fail:
