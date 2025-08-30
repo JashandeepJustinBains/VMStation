@@ -1,0 +1,107 @@
+---
+# WIP: Ensure kubelet management port is reachable from the control host
+# - discovers the firewalld zone for the kube interface (defaults to eno1)
+# - adds temporary and permanent port accept for kubelet (10250/tcp)
+# - reloads firewalld and verifies TCP connectivity from the control host
+# Idempotent and safe: will only add port rules if missing and reports status.
+
+- name: wip_fix_kubelet_firewall - open kubelet port and verify on node
+  hosts: localhost.localdomain
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Ensure firewalld is installed and running
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Discover firewalld zone for the kube interface (eno1)
+      ansible.builtin.command:
+        cmd: firewall-cmd --get-zone-of-interface=eno1
+      register: zone_result
+      changed_when: false
+      failed_when: false
+
+    - name: Set kube_zone fact (fallback to 'public')
+      ansible.builtin.set_fact:
+        kube_zone: "{{ zone_result.stdout | default('public') }}"
+
+    - name: List ports currently allowed in zone
+      ansible.builtin.command:
+        cmd: firewall-cmd --zone={{ kube_zone }} --list-ports
+      register: zone_ports
+      changed_when: false
+      failed_when: false
+
+    - name: Add temporary accept for kubelet port if missing
+      ansible.builtin.command:
+        cmd: firewall-cmd --zone={{ kube_zone }} --add-port=10250/tcp
+      when: "'10250/tcp' not in (zone_ports.stdout | default(''))"
+      register: add_temp
+      failed_when: false
+
+    - name: Add permanent accept for kubelet port if missing
+      ansible.builtin.command:
+        cmd: firewall-cmd --zone={{ kube_zone }} --add-port=10250/tcp --permanent
+      when: "'10250/tcp' not in (zone_ports.stdout | default(''))"
+      register: add_perm
+      failed_when: false
+
+    - name: Ensure management CIDR rich-rule exists (permanent)
+      ansible.builtin.shell: |
+        firewall-cmd --permanent --zone={{ kube_zone }} --list-rich-rules | grep -F "source address=192.168.4.0/24" || \
+        firewall-cmd --permanent --zone={{ kube_zone }} --add-rich-rule='rule family=ipv4 source address=192.168.4.0/24 port protocol=tcp port=10250 accept'
+      args:
+        warn: false
+      register: rich_rule
+      failed_when: false
+      changed_when: "'added' in (rich_rule.stdout + rich_rule.stderr)"
+
+    - name: Reload firewalld if we made permanent changes
+      ansible.builtin.command:
+        cmd: firewall-cmd --reload
+      when: (add_perm is defined and add_perm.rc == 0) or (rich_rule is defined and rich_rule.rc == 0)
+      failed_when: false
+
+    - name: Verify kubelet is listening locally (ss/netstat)
+      ansible.builtin.shell: ss -ltnp | grep -E ":10250\b" || netstat -ltnp | grep -E ":10250\b"
+      register: listen_check
+      failed_when: false
+      changed_when: false
+
+    - name: Show local listen check
+      ansible.builtin.debug:
+        msg: "kubelet_listen={{ listen_check.stdout | default('') }}"
+
+- name: Verify kubelet TCP connectivity from control host (masternode)
+  hosts: masternode
+  gather_facts: false
+  become: false
+  tasks:
+    - name: TCP quick test to kubelet (nc)
+      ansible.builtin.command:
+        cmd: nc -vz 192.168.4.62 10250
+      register: nc_check
+      failed_when: nc_check.rc not in [0,1]
+      changed_when: false
+      ignore_errors: true
+
+    - name: HTTPS health check (curl -k) if nc returned non-zero
+      ansible.builtin.command:
+        cmd: curl -k --connect-timeout 5 https://192.168.4.62:10250/healthz
+      register: curl_check
+      failed_when: false
+      changed_when: false
+      when: nc_check is defined and nc_check.rc != 0
+
+    - name: Show verification results
+      ansible.builtin.debug:
+        msg: |
+          nc_check={{ nc_check.stdout | default('') }} rc={{ nc_check.rc | default('') }}
+          curl_check={{ curl_check.stdout | default('') }} rc={{ curl_check.rc | default('') }}
+
+    - name: Fail if kubelet TCP test failed from control host
+      ansible.builtin.fail:
+        msg: "kubelet TCP connectivity to 192.168.4.62:10250 failed from masternode; check node firewall/route"
+      when: nc_check is defined and nc_check.rc != 0 and (curl_check is not defined or curl_check.rc != 0)
