@@ -16,6 +16,7 @@
 - import_playbook: subsites/02-certs.yaml  
 - import_playbook: subsites/03-monitoring.yaml
 - import_playbook: subsites/04-jellyfin.yaml
+- import_playbook: subsites/05-extra_apps.yaml
 
 # === Core Infrastructure Deployment ===
 - import_playbook: plays/kubernetes_stack.yaml
