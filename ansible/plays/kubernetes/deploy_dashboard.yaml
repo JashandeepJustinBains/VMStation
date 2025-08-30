@@ -1,0 +1,191 @@
+---
+# Deploy Kubernetes Dashboard with secure access
+- name: Deploy Kubernetes Dashboard
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    dashboard_namespace: "{{ dashboard_namespace | default('kubernetes-dashboard') }}"
+    dashboard_nodeport: "{{ dashboard_nodeport | default(30443) }}"
+    
+  tasks:
+    - name: Ensure kubernetes Python package is available
+      apt:
+        name: python3-kubernetes
+        state: present
+        update_cache: yes
+      when: ansible_facts['pkg_mgr'] == 'apt' or ansible_pkg_mgr is defined and ansible_pkg_mgr == 'apt'
+
+    - name: Fallback - install kubernetes Python library via pip
+      pip:
+        name: kubernetes
+        state: present
+        executable: pip3
+      become: true
+      when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
+
+    - name: Create kubernetes-dashboard namespace
+      kubernetes.core.k8s:
+        name: "{{ dashboard_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: /root/.kube/config
+
+    - name: Deploy Kubernetes Dashboard
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            labels:
+              k8s-app: kubernetes-dashboard
+            name: kubernetes-dashboard-settings
+            namespace: "{{ dashboard_namespace }}"
+        kubeconfig: /root/.kube/config
+
+    - name: Apply Kubernetes Dashboard manifests
+      kubernetes.core.k8s:
+        state: present
+        src: https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+        kubeconfig: /root/.kube/config
+
+    - name: Patch dashboard service to use NodePort
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            labels:
+              k8s-app: kubernetes-dashboard
+            name: kubernetes-dashboard
+            namespace: "{{ dashboard_namespace }}"
+          spec:
+            type: NodePort
+            ports:
+              - port: 443
+                targetPort: 8443
+                nodePort: "{{ dashboard_nodeport }}"
+                protocol: TCP
+            selector:
+              k8s-app: kubernetes-dashboard
+        kubeconfig: /root/.kube/config
+
+    - name: Create admin user for dashboard
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: admin-user
+            namespace: "{{ dashboard_namespace }}"
+        kubeconfig: /root/.kube/config
+
+    - name: Create admin user cluster role binding
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: admin-user
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: cluster-admin
+          subjects:
+          - kind: ServiceAccount
+            name: admin-user
+            namespace: "{{ dashboard_namespace }}"
+        kubeconfig: /root/.kube/config
+
+    - name: Create secret for admin user token
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: admin-user
+            namespace: "{{ dashboard_namespace }}"
+            annotations:
+              kubernetes.io/service-account.name: "admin-user"
+          type: kubernetes.io/service-account-token
+        kubeconfig: /root/.kube/config
+
+    - name: Wait for dashboard pod to be ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ dashboard_namespace }}"
+        label_selectors:
+          - k8s-app=kubernetes-dashboard
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 300
+        kubeconfig: /root/.kube/config
+
+    - name: Get admin user token
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        name: admin-user
+        namespace: "{{ dashboard_namespace }}"
+        kubeconfig: /root/.kube/config
+      register: admin_secret
+
+    - name: Set admin token fact
+      set_fact:
+        admin_token: "{{ admin_secret.resources[0].data.token | b64decode }}"
+      when: admin_secret.resources | length > 0
+
+    - name: Display dashboard access information
+      debug:
+        msg: |
+          Kubernetes Dashboard deployed successfully!
+          
+          Access Information:
+          - Dashboard URL: https://{{ ansible_default_ipv4.address }}:{{ dashboard_nodeport }}
+          - Admin Token: {{ admin_token | default('Token not available yet - check secret manually') }}
+          
+          Browser Access:
+          1. Open: https://{{ ansible_default_ipv4.address }}:{{ dashboard_nodeport }}
+          2. Accept the self-signed certificate warning
+          3. Select "Token" authentication method
+          4. Enter the admin token above
+          
+          CLI Access (alternative):
+          kubectl proxy --port=8001 --address={{ ansible_default_ipv4.address }} --accept-hosts='^.*'
+          Then open: http://{{ ansible_default_ipv4.address }}:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+          
+          Get token manually:
+          kubectl -n {{ dashboard_namespace }} get secret admin-user -o jsonpath="{.data.token}" | base64 -d
+
+    - name: Create ServiceMonitor for dashboard metrics
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: monitoring.coreos.com/v1
+          kind: ServiceMonitor
+          metadata:
+            name: kubernetes-dashboard
+            namespace: "{{ monitoring_namespace | default('monitoring') }}"
+            labels:
+              app: kubernetes-dashboard
+          spec:
+            selector:
+              matchLabels:
+                k8s-app: kubernetes-dashboard-metrics-scraper
+            namespaceSelector:
+              matchNames:
+                - "{{ dashboard_namespace }}"
+            endpoints:
+            - port: http
+              interval: 30s
+              path: /metrics
+        kubeconfig: /root/.kube/config
+      when: monitoring_namespace is defined
