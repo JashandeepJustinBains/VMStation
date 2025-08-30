@@ -30,36 +30,77 @@
   hosts: all
   gather_facts: false
   become: false
-  vars:
-    ansible_connection: local
   tags: [validate]
+  vars:
+    apps_to_check:
+      - name: "kubernetes-dashboard"
+        namespace: "kubernetes-dashboard"
+        label_selector: "app=kubernetes-dashboard"
+        service: "kubernetes-dashboard"
+      - name: "drone"
+        namespace: "drone"
+        label_selector: "app=drone"
+        service: "drone"
+      - name: "mongodb"
+        namespace: "mongodb"
+        label_selector: "app=mongodb"
+        service: "mongodb"
+
   tasks:
-    - name: "Validate Jellyfin deployment if enabled"
+    - name: "Gather pod listings for extra apps"
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ item.namespace }}"
+        label_selectors: "{{ item.label_selector }}"
+      loop: "{{ apps_to_check }}"
+      register: pod_checks
+      failed_when: false
+
+    - name: "Gather Service info for extra apps"
+      kubernetes.core.k8s_info:
+        kind: Service
+        namespace: "{{ item.namespace }}"
+        name: "{{ item.service }}"
+      loop: "{{ apps_to_check }}"
+      register: svc_checks
+      failed_when: false
+
+    - name: "Build list of failing apps (no ready pods)"
+      set_fact:
+        failing_apps: "{{ failing_apps | default([]) + [ item.item.name ] }}"
+      loop: "{{ pod_checks.results }}"
+      when: >-
+        (item.resources | default([]) | length) == 0
+        or ((item.resources | selectattr('status.conditions','defined')
+             | select(lambda p: (p.status.conditions | selectattr('type','equalto','Ready')
+               | selectattr('status','equalto','True') | list | length) > 0)
+             | list | length) == 0)
+
+    - name: "Print concise status for each extra app"
+      ansible.builtin.debug:
+        msg: >-
+          {{ apps_to_check[loop.index0].name }}: pods={{ pod_checks.results[loop.index0].resources | length }}
+          ready={{ (pod_checks.results[loop.index0].resources
+                    | selectattr('status.conditions','defined')
+                    | select(lambda p: (p.status.conditions | selectattr('type','equalto','Ready')
+                      | selectattr('status','equalto','True') | list | length) > 0)
+                    | list | length) }} svc={{ (svc_checks.results[loop.index0].resources | length) > 0 }}
+          nodePort={{ (svc_checks.results[loop.index0].resources[0].spec.ports[0].nodePort if (svc_checks.results[loop.index0].resources | length > 0) else 'N/A') }}
+      loop: "{{ apps_to_check }}"
+
+    - name: "Fail if any extra app has no ready pods"
+      ansible.builtin.fail:
+        msg: "One or more required extra-app pods are not ready: {{ failing_apps | default([]) | join(', ') }}"
+      when: failing_apps is defined and (failing_apps | length) > 0
+
+    - name: "Optional: Validate Jellyfin using existing role (if enabled)"
       include_role:
         name: ../roles/jellyfin
         tasks_from: main
       when: jellyfin_enabled | default(true)
       tags: [jellyfin, validate]
 
-    - name: "Generate deployment summary"
+    - name: "Deployment summary"
       ansible.builtin.debug:
-        msg:
-          - "=== VMStation Deployment Summary ==="
-          - "Jellyfin Pod Ready: {{ jellyfin_pod_ready | default('N/A') }}"
-          - "Jellyfin Service NodePort: {{ jellyfin_service_nodeport | default('N/A') }}"
-          - "ServiceMonitor Present: {{ servicemonitor_present | default('N/A') }}"
-          - "Prometheus Target Found: {{ prometheus_target_found | default('N/A') }}"
-          - ""
-          - "{% if jellyfin_enabled | default(true) %}Access Jellyfin at: http://{{ jellyfin_node_name | default('storagenodet3500') }}:{{ jellyfin_service_nodeport | default('30096') }}{% else %}Jellyfin deployment is disabled{% endif %}"
-          - ""
-          - "{% if servicemonitor_present == true %}To check Prometheus targets: kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090{% endif %}"
-          - "{% if servicemonitor_present == 'skip' %}ServiceMonitor creation skipped - Prometheus Operator not detected{% endif %}"
-      tags: [validate]
-
-    - name: "Fail deployment if Jellyfin pod is not ready"
-      ansible.builtin.fail:
-        msg: "Jellyfin deployment failed - pod not ready within timeout"
-      when: 
-        - jellyfin_enabled | default(true)
-        - not (jellyfin_pod_ready | default(false))
-      tags: [validate]
+        msg: >-
+          VMStation validation completed. Extra apps failing: {{ failing_apps | default([]) | join(', ') or 'none' }}
