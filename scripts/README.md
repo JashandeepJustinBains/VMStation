@@ -6,6 +6,7 @@ This directory contains operational scripts for VMStation infrastructure managem
 
 ### Kubernetes (Primary)
 - **`validate_k8s_monitoring.sh`** - Validates Kubernetes monitoring stack health
+- **`fix_k8s_monitoring_pods.sh`** - **NEW!** Fixes CrashLoopBackOff pod issues with targeted remediation
 - **`analyze_k8s_monitoring_diagnostics.sh`** - Analyzes diagnostic output and provides CLI remediation commands
 - **`get_copilot_prompt.sh`** - Provides premium GitHub Copilot troubleshooting prompts for monitoring issues
 - **`validate_infrastructure.sh`** - Auto-detects and validates current infrastructure mode
@@ -52,6 +53,9 @@ This directory contains operational scripts for VMStation infrastructure managem
 
 ### For Kubernetes Infrastructure
 ```bash
+# Fix monitoring pod CrashLoopBackOff issues (NEW!)
+./scripts/fix_k8s_monitoring_pods.sh
+
 # Validate monitoring stack
 ./scripts/validate_k8s_monitoring.sh
 
@@ -108,6 +112,7 @@ This directory contains operational scripts for VMStation infrastructure managem
 ### Fix Scripts
 | Script | Purpose | Infrastructure |
 |--------|---------|----------------|
+| `fix_k8s_monitoring_pods.sh` | Fix Kubernetes pod CrashLoopBackOff issues | Kubernetes |
 | `fix_monitoring_permissions.sh` | Fix monitoring permission issues | Both |
 | `fix_podman_metrics.sh` | Fix Podman metrics issues | Podman (Legacy) |
 | `fix_container_restarts.sh` | Fix container restart issues | Podman (Legacy) |
@@ -167,6 +172,9 @@ Critical directories that need read/write access:
 
 ### Kubernetes Issues
 ```bash
+# Quick fix for CrashLoopBackOff pods (NEW!)
+./scripts/fix_k8s_monitoring_pods.sh
+
 # Check cluster status
 kubectl get nodes
 kubectl get pods -n monitoring

@@ -406,6 +406,7 @@ kubectl apply --dry-run=client -f k8s/
 - **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
 - **RHEL 10 fixes validation**: `./scripts/validate_rhel10_fixes.sh`
 - **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
+- **Monitoring pod fixes**: `./scripts/fix_k8s_monitoring_pods.sh` - **NEW!** Fixes CrashLoopBackOff issues
 - **Monitoring diagnostics**: `./scripts/analyze_k8s_monitoring_diagnostics.sh`
 - **Premium Copilot troubleshooting**: `./scripts/get_copilot_prompt.sh --show`
 - **Pod debugging**: `kubectl logs -n monitoring <pod-name>`
@@ -413,7 +414,27 @@ kubectl apply --dry-run=client -f k8s/
 - **Network debugging**: `kubectl exec -it <pod-name> -- /bin/bash`
 
 #### Monitoring Stack Issues (CrashLoopBackOff, etc.)
-For monitoring pods stuck in CrashLoopBackOff or complex Kubernetes issues:
+
+##### Quick Fix for Common Pod Failures ⚡ **NEW!**
+For immediate fixes to monitoring pods stuck in CrashLoopBackOff:
+
+```bash
+# Automated diagnosis and fix recommendations
+./scripts/fix_k8s_monitoring_pods.sh
+
+# Include destructive commands (pod recreation, helm upgrades)
+./scripts/fix_k8s_monitoring_pods.sh --auto-approve
+```
+
+**Handles these specific issues:**
+- ✅ **Grafana Init:CrashLoopBackOff** - Permission fixes for UID 472:472
+- ✅ **Loki CrashLoopBackOff** - Configuration fixes for max_retries errors
+- ✅ **Step-by-step remediation** - Exact commands for config/manifest/permission fixes
+
+📖 **Documentation**: See [docs/k8s_monitoring_pod_fixes.md](./docs/k8s_monitoring_pod_fixes.md) for detailed fix information.
+
+##### Advanced Troubleshooting
+For complex Kubernetes issues or detailed analysis:
 
 ```bash
 # Quick focused analysis for Grafana/Loki specific issues
