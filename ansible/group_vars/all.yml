@@ -1,0 +1,35 @@
+# VMStation Ansible Configuration Variables
+# This file contains non-secret configuration variables for all hosts
+
+# === Node Configuration ===
+monitoring_node: "192.168.4.63"
+storage_node: "192.168.4.61" 
+compute_node: "192.168.4.62"
+
+# === Service Ports ===
+grafana_port: 3000
+prometheus_port: 9090
+loki_port: 3100
+
+# === Authentication ===
+# Reference to vaulted password (defined in secrets.yml)
+ansible_become_pass: "{{ vault_r430_sudo_password }}"
+
+# === Monitoring Configuration ===
+prometheus_scrape_interval: "15s"
+prometheus_scrape_timeout: "10s"
+enable_podman_exporters: true
+enable_quay_metrics: false
+podman_system_metrics_host_port: 9537
+
+# === Storage Configuration ===
+storage_hostpath: "/mnt/storage"
+
+# === Security Settings ===
+# Enable monitoring daemon
+monit_root: true
+
+# === Application Ports ===
+dashboard_nodeport: 32000
+drone_nodeport: 32001
+mongodb_nodeport: 32002
