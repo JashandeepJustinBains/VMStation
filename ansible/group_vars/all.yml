@@ -13,7 +13,8 @@ loki_port: 3100
 
 # === Authentication ===
 # Reference to vaulted password (defined in secrets.yml)
-ansible_become_pass: "{{ vault_r430_sudo_password }}"
+# Comment out the line below if secrets.yml doesn't exist yet
+# ansible_become_pass: "{{ vault_r430_sudo_password }}"
 
 # === Monitoring Configuration ===
 prometheus_scrape_interval: "15s"
