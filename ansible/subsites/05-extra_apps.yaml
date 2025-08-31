@@ -5,6 +5,8 @@
 - hosts: localhost
   gather_facts: false
   connection: local
+  vars_files:
+    - ../group_vars/secrets.yml
   vars:
     # === Node Scheduling Configuration ===
     dashboard_node: masternode
