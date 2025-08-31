@@ -2,6 +2,75 @@
 
 This directory contains operational scripts for VMStation infrastructure management.
 
+## CrashLoopBackOff Fix Scripts (NEW!)
+
+### `fix_k8s_dashboard_permissions.sh`
+Fixes Kubernetes Dashboard CrashLoopBackOff issues related to directory permissions and certificate generation.
+
+**Usage:**
+```bash
+# Diagnose dashboard permission issues
+./scripts/fix_k8s_dashboard_permissions.sh
+
+# Apply fixes automatically
+./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
+```
+
+### `validate_drone_config.sh`
+Validates Drone CI configuration and tests GitHub integration setup.
+
+**Usage:**
+```bash
+# Validate drone configuration
+./scripts/validate_drone_config.sh
+```
+
+### `test_crashloop_fixes.sh`
+Integration test script that validates and applies both drone and dashboard fixes.
+
+**Usage:**
+```bash
+# Dry run test (recommended first)
+./scripts/test_crashloop_fixes.sh
+
+# Apply fixes
+./scripts/test_crashloop_fixes.sh --apply
+```
+
+## Quick Start for CrashLoopBackOff Issues
+
+1. **Identify the problem:**
+   ```bash
+   kubectl get pods -A | grep CrashLoopBackOff
+   ```
+
+2. **Run diagnostics:**
+   ```bash
+   ./scripts/diagnose_monitoring_permissions.sh
+   ```
+
+3. **For Drone issues:**
+   ```bash
+   # Check configuration
+   ./scripts/validate_drone_config.sh
+   
+   # Fix by updating secrets and redeploying
+   ansible-vault edit ansible/group_vars/secrets.yml
+   ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml --ask-vault-pass
+   ```
+
+4. **For Dashboard issues:**
+   ```bash
+   # Fix permissions
+   ./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
+   ```
+
+5. **Integration test:**
+   ```bash
+   # Test all fixes together
+   ./scripts/test_crashloop_fixes.sh --apply
+   ```
+
 ## Infrastructure Scripts
 
 ### Kubernetes (Primary)
