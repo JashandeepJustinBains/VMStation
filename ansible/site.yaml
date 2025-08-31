@@ -28,24 +28,29 @@
 
 # === Final Validation ===
 - name: "VMStation Deployment Validation"
-  hosts: all
+  hosts: localhost
   gather_facts: false
   become: false
+  connection: local
   tags: [validate]
   vars:
+    # Expected node assignments for each app
     apps_to_check:
       - name: "kubernetes-dashboard"
         namespace: "kubernetes-dashboard"
         label_selector: "app=kubernetes-dashboard"
         service: "kubernetes-dashboard"
+        expected_node: "masternode"
       - name: "drone"
         namespace: "drone"
         label_selector: "app=drone"
         service: "drone"
+        expected_node: "localhost.localdomain"
       - name: "mongodb"
         namespace: "mongodb"
         label_selector: "app=mongodb"
         service: "mongodb"
+        expected_node: "localhost.localdomain"
 
   tasks:
     - name: "Gather pod listings for extra apps"
@@ -66,7 +71,7 @@
       register: svc_checks
       failed_when: false
 
-    - name: "Build list of failing apps (no ready pods)"
+    - name: "Build list of failing apps (no ready pods or wrong node)"
       set_fact:
         failing_apps: "{{ failing_apps | default([]) + [ apps_to_check[item_index].name ] }}"
       loop: "{{ pod_checks.results }}"
@@ -76,11 +81,24 @@
         (item.resources | default([]) | length) == 0
         or ((item.resources | default([]) | json_query("[?status.conditions[?(@.type=='Ready' && @.status=='True')]]") | length) == 0)
 
-    - name: "Print concise status for each extra app"
+    - name: "Build list of apps scheduled on wrong nodes"
+      set_fact:
+        misscheduled_apps: "{{ misscheduled_apps | default([]) + [ {'app': apps_to_check[item_index].name, 'expected': apps_to_check[item_index].expected_node, 'actual': item.resources[0].spec.nodeName} ] }}"
+      loop: "{{ pod_checks.results }}"
+      loop_control:
+        index_var: item_index
+      when: >-
+        (item.resources | default([]) | length) > 0
+        and item.resources[0].spec.nodeName != apps_to_check[item_index].expected_node
+
+    - name: "Print detailed status for each extra app"
       ansible.builtin.debug:
         msg: >-
-          {{ apps_to_check[idx].name }}: pods={{ (item.resources | default([]) | length) }}
+          {{ apps_to_check[idx].name }}: 
+          pods={{ (item.resources | default([]) | length) }}
           ready={{ (item.resources | default([]) | json_query("[?status.conditions[?(@.type=='Ready' && @.status=='True')]]") | length) }}
+          scheduled_node={{ (item.resources[0].spec.nodeName) if (item.resources | default([]) | length) > 0 else 'N/A' }}
+          expected_node={{ apps_to_check[idx].expected_node }}
           svc={{ (svc_checks.results[idx].resources | default([]) | length > 0) if (svc_checks is defined and svc_checks.results is defined and (svc_checks.results | length) > idx) else false }}
           nodePort={{ (svc_checks.results[idx].resources[0].spec.ports[0].nodePort) if (svc_checks is defined and svc_checks.results is defined and (svc_checks.results | length) > idx and (svc_checks.results[idx].resources | default([]) | length) > 0) else 'N/A' }}
       loop: "{{ pod_checks.results }}"
@@ -91,6 +109,14 @@
       ansible.builtin.fail:
         msg: "One or more required extra-app pods are not ready: {{ failing_apps | default([]) | join(', ') }}"
       when: failing_apps is defined and (failing_apps | length) > 0
+
+    - name: "Warn about misscheduled apps"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: {{ item.app }} is scheduled on {{ item.actual }} but expected on {{ item.expected }}.
+          This may be intentional or indicate a scheduling configuration issue.
+      loop: "{{ misscheduled_apps | default([]) }}"
+      when: misscheduled_apps is defined and (misscheduled_apps | length) > 0
 
     - name: "Optional: Validate Jellyfin using existing role (if enabled)"
       include_role:
