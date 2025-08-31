@@ -112,7 +112,7 @@ provide_dashboard_fixes() {
     echo ""
     
     echo -e "${BLUE}   Fix - Update dashboard with proper security context:${NC}"
-    echo "   kubectl -n kubernetes-dashboard patch deployment kubernetes-dashboard -p '"'{"spec":{"template":{"spec":{"securityContext":{"fsGroup":65534}}}}}''"'"
+        echo "   kubectl -n kubernetes-dashboard patch deployment kubernetes-dashboard -p '{\"spec\":{\"template\":{\"spec\":{\"securityContext\":{\"fsGroup\":65534}}}}}'"
     echo ""
     
     echo -e "${YELLOW}2. Directory Permission Fix (Node-level operation):${NC}"
