@@ -89,13 +89,23 @@ check_drone_secrets() {
         echo "$secret_keys" | sed 's/^/  - /'
     fi
     
-    # Check for required keys
+    # Check for required keys and placeholder values
     local required_keys=("rpc-secret" "github-client-id" "github-client-secret" "server-host")
     local missing_keys=()
+    local placeholder_keys=()
     
     for key in "${required_keys[@]}"; do
         if kubectl get secret drone-secrets -n drone -o jsonpath="{.data.$key}" >/dev/null 2>&1; then
-            echo -e "${GREEN}✓ $key present${NC}"
+            # Decode and check for placeholder values (safely, showing only first few chars)
+            local decoded_value=$(kubectl get secret drone-secrets -n drone -o jsonpath="{.data.$key}" | base64 -d 2>/dev/null || echo "")
+            local first_chars="${decoded_value:0:10}"
+            
+            if [[ "$decoded_value" =~ ^REPLACE_WITH_ ]] || [[ "$decoded_value" == "changeme"* ]] || [[ "$decoded_value" == "your_"* ]]; then
+                echo -e "${YELLOW}⚠ $key present but appears to be placeholder: ${first_chars}...${NC}"
+                placeholder_keys+=("$key")
+            else
+                echo -e "${GREEN}✓ $key present and configured${NC}"
+            fi
         else
             echo -e "${RED}✗ $key missing${NC}"
             missing_keys+=("$key")
@@ -105,6 +115,13 @@ check_drone_secrets() {
     if [[ ${#missing_keys[@]} -gt 0 ]]; then
         echo ""
         echo "Missing keys: ${missing_keys[*]}"
+        return 1
+    fi
+    
+    if [[ ${#placeholder_keys[@]} -gt 0 ]]; then
+        echo ""
+        echo -e "${YELLOW}⚠ Placeholder values detected in: ${placeholder_keys[*]}${NC}"
+        echo "These may cause runtime errors. Please configure with real values."
         return 1
     fi
     
