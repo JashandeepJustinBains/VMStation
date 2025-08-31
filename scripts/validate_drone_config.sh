@@ -136,6 +136,14 @@ check_drone_logs() {
     # Check for common issues
     echo -e "${BLUE}Log Analysis:${NC}"
     
+    # Check for the specific SCM configuration error
+    if echo "$logs" | grep -q "source code management system not configured"; then
+        echo -e "${RED}✗ CRITICAL: Source code management system not configured${NC}"
+        echo "  This means Drone cannot find GitHub integration credentials."
+        echo "  This is the most common cause of Drone startup failures."
+        return 1
+    fi
+    
     if echo "$logs" | grep -q "github.*client.*id"; then
         echo -e "${GREEN}✓ GitHub client ID configuration detected${NC}"
     else
@@ -148,9 +156,10 @@ check_drone_logs() {
         echo -e "${YELLOW}⚠ No database configuration found${NC}"
     fi
     
-    if echo "$logs" | grep -qi "error\|fail\|crash"; then
-        echo -e "${RED}✗ Errors found in logs:${NC}"
-        echo "$logs" | grep -i "error\|fail\|crash" | head -5 | sed 's/^/  /'
+    # Check for other errors but prioritize SCM error
+    if echo "$logs" | grep -qi "error\|fail\|crash" | grep -v "source code management"; then
+        echo -e "${RED}✗ Other errors found in logs:${NC}"
+        echo "$logs" | grep -i "error\|fail\|crash" | grep -v "source code management" | head -5 | sed 's/^/  /'
         return 1
     else
         echo -e "${GREEN}✓ No obvious errors in recent logs${NC}"
@@ -195,6 +204,9 @@ test_drone_service() {
 provide_recommendations() {
     echo -e "${BOLD}=== Configuration Recommendations ===${NC}"
     echo ""
+    echo -e "${RED}IMPORTANT: Drone CI requires GitHub integration to function properly.${NC}"
+    echo -e "${RED}The error 'source code management system not configured' means GitHub credentials are missing.${NC}"
+    echo ""
     
     echo -e "${BLUE}1. GitHub OAuth Application Setup:${NC}"
     echo "   Visit: https://github.com/settings/applications/new"
@@ -203,17 +215,17 @@ provide_recommendations() {
     echo "   - Authorization callback URL: http://your-node-ip:32001/login"
     echo ""
     
-    echo -e "${BLUE}2. Update secrets with real values:${NC}"
+    echo -e "${BLUE}2. Create/Edit secrets file with REQUIRED values:${NC}"
     echo "   ansible-vault edit ansible/group_vars/secrets.yml"
-    echo "   # Add your GitHub OAuth client ID and secret"
+    echo ""
+    echo "   Add these REQUIRED variables:"
+    echo "   drone_github_client_id: \"your_github_oauth_client_id\""
+    echo "   drone_github_client_secret: \"your_github_oauth_client_secret\""
+    echo "   drone_rpc_secret: \"$(openssl rand -hex 16)\""
+    echo "   drone_server_host: \"your_node_ip:32001\""
     echo ""
     
-    echo -e "${BLUE}3. Generate RPC secret:${NC}"
-    echo "   openssl rand -hex 16"
-    echo "   # Add to secrets.yml as drone_rpc_secret"
-    echo ""
-    
-    echo -e "${BLUE}4. Redeploy with updated secrets:${NC}"
+    echo -e "${BLUE}3. Redeploy with updated secrets:${NC}"
     echo "   ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml --ask-vault-pass"
     echo ""
     
