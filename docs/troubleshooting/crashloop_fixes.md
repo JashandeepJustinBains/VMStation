@@ -55,24 +55,45 @@ The drone pod crashes because it lacks proper GitHub integration configuration a
 3. Note down the **Client ID** and **Client Secret**
 
 #### Step 2: Configure Secrets
+
+**Quick Setup (Recommended):**
+Use the interactive setup script:
+```bash
+./scripts/setup_drone_secrets.sh
+```
+
+**Manual Setup:**
 ```bash
 # Create or edit the vault secrets file
+# Option 1: If you want to use ansible-vault encryption (recommended for production)
 ansible-vault edit ansible/group_vars/secrets.yml
 
+# Option 2: If you want to edit as plain text (for testing/development)
+nano ansible/group_vars/secrets.yml
+
 # Add these REQUIRED variables (all must be set for Drone to work):
-drone_github_client_id: "your_github_oauth_client_id"
-drone_github_client_secret: "your_github_oauth_client_secret"
-drone_rpc_secret: "$(openssl rand -hex 16)"
-drone_server_host: "192.168.4.62:32001"  # Your actual node IP and port
+drone_github_client_id: "your_actual_github_oauth_client_id"
+drone_github_client_secret: "your_actual_github_oauth_client_secret"
+drone_rpc_secret: "$(openssl rand -hex 16)"  # Generate a random secret
+drone_server_host: "192.168.4.62:32001"     # Your actual node IP and port
 
 # IMPORTANT: All four values above are required. The deployment will fail 
-# with validation errors if any are missing or set to default values.
+# with validation errors if any are missing or set to default/placeholder values.
+# Do NOT use values starting with "REPLACE_WITH_" or "changeme" or "your_"
+```
+
+**Generate RPC Secret:**
+```bash
+openssl rand -hex 16
 ```
 
 **GitHub OAuth Application Setup:**
 1. Go to https://github.com/settings/applications/new
 2. Set these values:
    - Application name: `VMStation Drone CI`
+   - Homepage URL: `http://192.168.4.62:32001` (replace with your actual node IP)
+   - Authorization callback URL: `http://192.168.4.62:32001/login`
+3. Copy the **Client ID** and **Client Secret** to your secrets.yml file
    - Homepage URL: `http://your_node_ip:32001`
    - Authorization callback URL: `http://your_node_ip:32001/login`
 3. Copy the Client ID and Client Secret to your secrets.yml file

@@ -293,27 +293,42 @@
       ansible.builtin.fail:
         msg: |
           Drone CI requires GitHub integration to function as a source code management system.
-          Missing required secret variables. Please configure the following in ansible/group_vars/secrets.yml:
+          {{ 'Missing required secret variables' if (drone_github_client_id is not defined or drone_github_client_secret is not defined or drone_rpc_secret is not defined or drone_server_host is not defined) else 'Found placeholder values in secret variables' }}.
+          
+          Please configure the following in ansible/group_vars/secrets.yml:
           
           Required variables:
-          - drone_github_client_id: "your_github_oauth_client_id"
-          - drone_github_client_secret: "your_github_oauth_client_secret"
+          - drone_github_client_id: "your_actual_github_oauth_client_id"
+          - drone_github_client_secret: "your_actual_github_oauth_client_secret"  
           - drone_rpc_secret: "$(openssl rand -hex 16)"
-          - drone_server_host: "your_server_host:32001"
+          - drone_server_host: "your_actual_server_host:32001"
           
-          To create/edit secrets file:
-          ansible-vault edit ansible/group_vars/secrets.yml
+          Current values (showing first 10 chars for security):
+          - drone_github_client_id: "{{ (drone_github_client_id | default('UNDEFINED'))[:10] }}..."
+          - drone_github_client_secret: "{{ (drone_github_client_secret | default('UNDEFINED'))[:10] }}..."
+          - drone_rpc_secret: "{{ (drone_rpc_secret | default('UNDEFINED'))[:10] }}..."
+          - drone_server_host: "{{ drone_server_host | default('UNDEFINED') }}"
           
-          To create a GitHub OAuth app:
-          1. Go to https://github.com/settings/applications/new
-          2. Set Homepage URL: http://your_server_host:32001
-          3. Set Authorization callback URL: http://your_server_host:32001/login
+          Steps to fix:
+          1. Create GitHub OAuth app at: https://github.com/settings/applications/new
+             - Application name: VMStation Drone CI
+             - Homepage URL: http://192.168.4.62:32001 (replace with your node IP)
+             - Authorization callback URL: http://192.168.4.62:32001/login
+          
+          2. Edit secrets file: ansible-vault edit ansible/group_vars/secrets.yml
+             (Or edit directly if not encrypted: nano ansible/group_vars/secrets.yml)
+          
+          3. Replace placeholder values with real credentials from GitHub OAuth app
+          
+          4. Run validation: ./scripts/validate_drone_config.sh
+          
+          5. Redeploy: ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml
       when: 
         - not ansible_check_mode
-        - (drone_github_client_id is not defined or drone_github_client_id == '' or
-           drone_github_client_secret is not defined or drone_github_client_secret == '' or
-           drone_rpc_secret is not defined or drone_rpc_secret == '' or drone_rpc_secret == 'changeme' or
-           drone_server_host is not defined or drone_server_host == '')
+        - (drone_github_client_id is not defined or drone_github_client_id == '' or drone_github_client_id.startswith('REPLACE_WITH_') or
+           drone_github_client_secret is not defined or drone_github_client_secret == '' or drone_github_client_secret.startswith('REPLACE_WITH_') or
+           drone_rpc_secret is not defined or drone_rpc_secret == '' or drone_rpc_secret == 'changeme' or drone_rpc_secret.startswith('REPLACE_WITH_') or
+           drone_server_host is not defined or drone_server_host == '' or drone_server_host.startswith('REPLACE_WITH_'))
 
     # Create drone secrets from vault variables (if available)
     - name: Create drone secrets from vault variables
