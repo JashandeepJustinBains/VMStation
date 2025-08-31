@@ -286,6 +286,61 @@
         - (dashboard_service_check.resources | default([])) | length == 0
 
     # === Drone CI ===
+    # Ensure hostPath exists and has correct owner for Drone before creating deployment
+    - name: Create temporary init pod to prepare drone hostPath on the node
+      when:
+        - not ansible_check_mode
+        - (drone_deployment_check.resources | default([])) | length == 0
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: drone-hostpath-init
+            namespace: drone
+          spec:
+            nodeName: "{{ apps_node }}"
+            restartPolicy: Never
+            containers:
+              - name: init
+                image: busybox:1.35
+                command: ["sh","-c","mkdir -p /host/drone && chown -R 1000:1000 /host/drone && chmod -R 750 /host/drone && touch /host/drone/.drone_ready && echo done"]
+                volumeMounts:
+                  - name: hostdrone
+                    mountPath: /host/drone
+            volumes:
+              - name: hostdrone
+                hostPath:
+                  path: "{{ storage_hostpath }}/drone"
+                  type: DirectoryOrCreate
+
+    - name: Wait for drone-hostpath-init pod to complete
+      when:
+        - not ansible_check_mode
+        - (drone_deployment_check.resources | default([])) | length == 0
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: drone
+        name: drone-hostpath-init
+      register: init_pod_info
+      until: init_pod_info.resources[0].status.phase in ['Succeeded','Failed']
+      retries: 30
+      delay: 2
+
+    - name: Delete drone-hostpath-init pod
+      when:
+        - not ansible_check_mode
+        - (drone_deployment_check.resources | default([])) | length == 0
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Pod
+        namespace: drone
+        name: drone-hostpath-init
+      ignore_errors: yes
+
     - name: Create drone deployment
       kubernetes.core.k8s:
         state: present

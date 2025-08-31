@@ -8,14 +8,15 @@
 # 2. ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml  
 # 3. ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
 # 4. ansible-playbook -i ansible/inventory.txt ansible/subsites/04-jellyfin.yaml
+# 4. ansible-playbook -i ansible/inventory.txt ansible/subsites/05-extra_apps.yaml
 # 5. ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes_stack.yaml
 # 6. ansible-playbook -i ansible/inventory.txt ansible/plays/jellyfin.yml
 
 # === Modular Subsites (Safe, Check-Only Operations) ===
 - import_playbook: subsites/01-checks.yaml
-- import_playbook: subsites/02-certs.yaml  
-- import_playbook: subsites/03-monitoring.yaml
-- import_playbook: subsites/04-jellyfin.yaml
+# - import_playbook: subsites/02-certs.yaml  
+# - import_playbook: subsites/03-monitoring.yaml
+# - import_playbook: subsites/04-jellyfin.yaml
 - import_playbook: subsites/05-extra_apps.yaml
 
 # === Core Infrastructure Deployment ===
