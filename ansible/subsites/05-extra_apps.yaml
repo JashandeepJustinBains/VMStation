@@ -286,6 +286,33 @@
         - (dashboard_service_check.resources | default([])) | length == 0
 
     # === Drone CI ===
+    # Validate required drone secrets before deployment
+    - name: Check if drone secrets are properly configured
+      ansible.builtin.fail:
+        msg: |
+          Drone CI requires GitHub integration to function as a source code management system.
+          Missing required secret variables. Please configure the following in ansible/group_vars/secrets.yml:
+          
+          Required variables:
+          - drone_github_client_id: "your_github_oauth_client_id"
+          - drone_github_client_secret: "your_github_oauth_client_secret"
+          - drone_rpc_secret: "$(openssl rand -hex 16)"
+          - drone_server_host: "your_server_host:32001"
+          
+          To create/edit secrets file:
+          ansible-vault edit ansible/group_vars/secrets.yml
+          
+          To create a GitHub OAuth app:
+          1. Go to https://github.com/settings/applications/new
+          2. Set Homepage URL: http://your_server_host:32001
+          3. Set Authorization callback URL: http://your_server_host:32001/login
+      when: 
+        - not ansible_check_mode
+        - (drone_github_client_id is not defined or drone_github_client_id == '' or
+           drone_github_client_secret is not defined or drone_github_client_secret == '' or
+           drone_rpc_secret is not defined or drone_rpc_secret == '' or drone_rpc_secret == 'changeme' or
+           drone_server_host is not defined or drone_server_host == '')
+
     # Create drone secrets from vault variables (if available)
     - name: Create drone secrets from vault variables
       kubernetes.core.k8s:
@@ -298,10 +325,10 @@
             namespace: drone
           type: Opaque
           stringData:
-            rpc-secret: "{{ drone_rpc_secret | default('changeme') }}"
-            github-client-id: "{{ drone_github_client_id | default('') }}"
-            github-client-secret: "{{ drone_github_client_secret | default('') }}"
-            server-host: "{{ drone_server_host | default(apps_node + ':' + drone_nodeport|string) }}"
+            rpc-secret: "{{ drone_rpc_secret }}"
+            github-client-id: "{{ drone_github_client_id }}"
+            github-client-secret: "{{ drone_github_client_secret }}"
+            server-host: "{{ drone_server_host }}"
       register: drone_secrets_result
       failed_when: false
       changed_when: drone_secrets_result.changed | default(false)
@@ -403,21 +430,18 @@
                           secretKeyRef:
                             name: drone-secrets
                             key: rpc-secret
-                            optional: true
                       
-                      # GitHub integration
+                      # GitHub integration (required for SCM functionality)
                       - name: DRONE_GITHUB_CLIENT_ID
                         valueFrom:
                           secretKeyRef:
                             name: drone-secrets
                             key: github-client-id
-                            optional: true
                       - name: DRONE_GITHUB_CLIENT_SECRET
                         valueFrom:
                           secretKeyRef:
                             name: drone-secrets
                             key: github-client-secret
-                            optional: true
                       
                       # Server configuration
                       - name: DRONE_SERVER_HOST
@@ -425,17 +449,12 @@
                           secretKeyRef:
                             name: drone-secrets
                             key: server-host
-                            optional: true
                       - name: DRONE_SERVER_PROTO
                         value: "http"
                       
                       # User and admin configuration
                       - name: DRONE_USER_CREATE
                         value: "username:admin,admin:true"
-                      
-                      # Default values when secrets are not provided
-                      - name: DRONE_RPC_SECRET_FALLBACK
-                        value: "changeme"  # Fallback when secret not configured
                       
                       # Debug logging (can be disabled in production)
                       - name: DRONE_LOGS_DEBUG

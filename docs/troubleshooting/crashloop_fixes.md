@@ -15,6 +15,16 @@ kubernetes-dashboard-fd69857ff-9hd75                        0/1     CrashLoopBac
 ### Root Cause
 The drone pod crashes because it lacks proper GitHub integration configuration and secrets.
 
+**Common Error Messages:**
+- `"main: source code management system not configured"` - This is the most common error, indicating missing GitHub OAuth credentials
+- Pod status: `CrashLoopBackOff` or `Error`
+- Deployment fails validation due to missing required secrets
+
+**Why This Happens:**
+- GitHub OAuth credentials are required for Drone CI to function as a source code management system
+- Without these credentials, Drone cannot start properly and will fail with the SCM error
+- The deployment now validates that all required secrets exist before starting the pod
+
 ### Solution Steps
 
 #### Step 1: Create GitHub OAuth Application
@@ -30,12 +40,23 @@ The drone pod crashes because it lacks proper GitHub integration configuration a
 # Create or edit the vault secrets file
 ansible-vault edit ansible/group_vars/secrets.yml
 
-# Add these variables:
+# Add these REQUIRED variables (all must be set for Drone to work):
 drone_github_client_id: "your_github_oauth_client_id"
 drone_github_client_secret: "your_github_oauth_client_secret"
 drone_rpc_secret: "$(openssl rand -hex 16)"
 drone_server_host: "192.168.4.62:32001"  # Your actual node IP and port
+
+# IMPORTANT: All four values above are required. The deployment will fail 
+# with validation errors if any are missing or set to default values.
 ```
+
+**GitHub OAuth Application Setup:**
+1. Go to https://github.com/settings/applications/new
+2. Set these values:
+   - Application name: `VMStation Drone CI`
+   - Homepage URL: `http://your_node_ip:32001`
+   - Authorization callback URL: `http://your_node_ip:32001/login`
+3. Copy the Client ID and Client Secret to your secrets.yml file
 
 #### Step 3: Deploy Updated Configuration
 ```bash
@@ -48,15 +69,24 @@ ansible-playbook -i ansible/inventory.txt ansible/subsites/05-extra_apps.yaml --
 
 #### Step 4: Verify Fix
 ```bash
-# Run the drone validation script
+# Run the enhanced drone validation script (now detects SCM configuration errors)
 ./scripts/validate_drone_config.sh
 
-# Check pod status
+# Check pod status - should be Running, not CrashLoopBackOff
 kubectl get pods -n drone
 
-# Check logs
+# Check logs for successful startup
 kubectl logs -n drone -l app=drone
+
+# Test web interface accessibility  
+curl -I http://your_node_ip:32001
 ```
+
+**Expected Results:**
+- Pod status: `Running` (not `CrashLoopBackOff`)
+- Validation script shows: `✓ Drone configuration validation passed`
+- No "source code management system not configured" errors in logs
+- Web interface responds on port 32001
 
 ## 2. Kubernetes Dashboard CrashLoopBackOff Fix
 
