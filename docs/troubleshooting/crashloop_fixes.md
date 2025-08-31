@@ -2,6 +2,25 @@
 
 This document provides step-by-step solutions for common CrashLoopBackOff issues in the VMStation Kubernetes cluster.
 
+## Validation Fix (Updated)
+
+**Issue**: The VMStation deployment validation was incorrectly checking for kubernetes-dashboard, drone, and mongodb on ALL hosts, causing validation failures and python library errors.
+
+**Solution**: As of the latest update, the validation now runs only from the masternode and properly validates that services are deployed on their intended nodes:
+- kubernetes-dashboard → masternode (192.168.4.63)
+- drone → localhost.localdomain (192.168.4.62) 
+- mongodb → localhost.localdomain (192.168.4.62)
+
+**How to Validate**: Use the new validation script:
+```bash
+./scripts/validate_app_deployment.sh
+```
+
+Or run just the validation from the main playbook:
+```bash
+ansible-playbook -i ansible/inventory.txt ansible/site.yaml --tags validate
+```
+
 ## Problem Summary
 
 From the pod status output:
