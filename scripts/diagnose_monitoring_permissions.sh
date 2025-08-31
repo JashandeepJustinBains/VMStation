@@ -113,6 +113,10 @@ if command -v kubectl >/dev/null 2>&1; then
     kubectl get pods -n monitoring 2>/dev/null || echo "No monitoring namespace or pods found"
     echo ""
     
+    echo "Checking kubernetes-dashboard pods..."
+    kubectl get pods -n kubernetes-dashboard 2>/dev/null || echo "No kubernetes-dashboard namespace or pods found"
+    echo ""
+    
     echo "Checking for pending pods..."
     pending_pods=$(kubectl get pods -A --field-selector=status.phase=Pending 2>/dev/null | wc -l)
     if [ "$pending_pods" -gt 1 ]; then
@@ -120,6 +124,16 @@ if command -v kubectl >/dev/null 2>&1; then
         kubectl get pods -A --field-selector=status.phase=Pending 2>/dev/null | tail -n +2
     else
         echo "No pending pods found"
+    fi
+    
+    echo ""
+    echo "Checking for CrashLoopBackOff pods..."
+    crashloop_pods=$(kubectl get pods -A --no-headers 2>/dev/null | grep -E "(CrashLoopBackOff|Init:CrashLoopBackOff)" | wc -l || echo "0")
+    if [ "$crashloop_pods" -gt 0 ]; then
+        echo -e "${YELLOW}Found $crashloop_pods CrashLoopBackOff pods:${NC}"
+        kubectl get pods -A --no-headers 2>/dev/null | grep -E "(CrashLoopBackOff|Init:CrashLoopBackOff)" || true
+    else
+        echo "No CrashLoopBackOff pods found"
     fi
 else
     echo "kubectl not available - cannot check pod status"
@@ -172,7 +186,8 @@ if [ $permission_issues -gt 0 ]; then
     echo -e "${RED}ISSUES DETECTED${NC}"
     echo "Recommendations:"
     echo "1. Run the permission fix script: ./scripts/fix_monitoring_permissions.sh"
-    echo "2. For manual fixes, ensure these directories have proper permissions:"
+    echo "2. For kubernetes-dashboard issues: ./scripts/fix_k8s_dashboard_permissions.sh"
+    echo "3. For manual fixes, ensure these directories have proper permissions:"
     
     for dir in "${CRITICAL_DIRS[@]}"; do
         echo "   - $dir (read/write access for containers)"
