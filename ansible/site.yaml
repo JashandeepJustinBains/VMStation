@@ -53,22 +53,18 @@
         kind: Pod
         namespace: "{{ item.namespace }}"
         label_selectors: "{{ item.label_selector }}"
-  loop: "{{ apps_to_check }}"
-  register: pod_checks
-  failed_when: false
-  delegate_to: localhost
-  run_once: true
+      loop: "{{ apps_to_check }}"
+      register: pod_checks
+      failed_when: false
 
     - name: "Gather Service info for extra apps"
       kubernetes.core.k8s_info:
         kind: Service
         namespace: "{{ item.namespace }}"
         name: "{{ item.service }}"
-  loop: "{{ apps_to_check }}"
-  register: svc_checks
-  failed_when: false
-  delegate_to: localhost
-  run_once: true
+      loop: "{{ apps_to_check }}"
+      register: svc_checks
+      failed_when: false
 
     - name: "Build list of failing apps (no ready pods)"
       set_fact:
