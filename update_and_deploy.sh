@@ -56,12 +56,14 @@ PLAYBOOKS=(
     # "ansible/subsites/02-certs.yaml"         # TLS certificate generation & distribution
     # "ansible/subsites/03-monitoring.yaml"    # Monitoring stack pre-checks and deployment
     # "ansible/subsites/04-jellyfin.yaml"      # Jellyfin deployment pre-checks and storage validation
-    "apply_drone_secrets.yml"
-    "ansible/subsites/05-extra_apps.yaml"   # Extra Apps: Kubernetes Dashboard, Drone, MongoDB
+    # "apply_drone_secrets.yml"
+    # "ansible/subsites/05-extra_apps.yaml"   # Extra Apps: Kubernetes Dashboard, Drone, MongoDB
+    
     # Work-in-progress subsites (wip_*) - exercise caution; these are flagged for review
 
+
     # === Full Deployment ===
-    # "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
+    "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
 
     # === Individual Components ===  
     # "ansible/plays/kubernetes_stack.yaml"    # Core Kubernetes infrastructure only
