@@ -6,19 +6,22 @@
   become: true
   gather_facts: true
   vars:
-    monit_root: "{{ monit_root | default('/srv/monitoring_data') }}"
+    # A fixed default root for monitoring data. Users may still override
+    # `monit_root` via inventory or extra-vars; we will use the default filter
+    # at each use site to avoid self-referential templating.
+    monitoring_default_root: '/srv/monitoring_data'
     monitoring_subdirs:
-      - "{{ monit_root }}/grafana"
-      - "{{ monit_root }}/grafana/dashboards"
-      - "{{ monit_root }}/grafana/datasources"
-      - "{{ monit_root }}/grafana/data"
-      - "{{ monit_root }}/prometheus"
-      - "{{ monit_root }}/prometheus/data"
-      - "{{ monit_root }}/loki"
-      - "{{ monit_root }}/loki/chunks"
-      - "{{ monit_root }}/loki/index"
-      - "{{ monit_root }}/promtail"
-      - "{{ monit_root }}/promtail/data"
+      - "{{ monit_root | default(monitoring_default_root) }}/grafana"
+      - "{{ monit_root | default(monitoring_default_root) }}/grafana/dashboards"
+      - "{{ monit_root | default(monitoring_default_root) }}/grafana/datasources"
+      - "{{ monit_root | default(monitoring_default_root) }}/grafana/data"
+      - "{{ monit_root | default(monitoring_default_root) }}/prometheus"
+      - "{{ monit_root | default(monitoring_default_root) }}/prometheus/data"
+      - "{{ monit_root | default(monitoring_default_root) }}/loki"
+      - "{{ monit_root | default(monitoring_default_root) }}/loki/chunks"
+      - "{{ monit_root | default(monitoring_default_root) }}/loki/index"
+      - "{{ monit_root | default(monitoring_default_root) }}/promtail"
+      - "{{ monit_root | default(monitoring_default_root) }}/promtail/data"
       - "/var/log"
       - "/var/promtail"
       - "/opt/promtail"
@@ -28,12 +31,12 @@
       debug:
         msg: |
           Setting up monitoring prerequisites...
-          Monitoring root: {{ monit_root }}
+          Monitoring root: {{ monit_root | default(monitoring_default_root) }}
           Target node: {{ inventory_hostname }}
 
     - name: Create monitoring root directory
       file:
-        path: "{{ monit_root }}"
+  path: "{{ monit_root | default(monitoring_default_root) }}"
         state: directory
         mode: '0755'
         owner: root
@@ -51,8 +54,8 @@
 
     - name: Set SELinux contexts for monitoring directories (if SELinux enabled)
       command: |
-        semanage fcontext -a -t container_file_t "{{ monit_root }}(/.*)?" || true
-        restorecon -Rv "{{ monit_root }}" || true
+  semanage fcontext -a -t container_file_t "{{ monit_root | default(monitoring_default_root) }}(/.*)?" || true
+  restorecon -Rv "{{ monit_root | default(monitoring_default_root) }}" || true
       ignore_errors: true
       when: ansible_selinux is defined and ansible_selinux.status == "enabled"
 
@@ -69,7 +72,7 @@
 
     - name: Check monitoring directory permissions
       stat:
-        path: "{{ monit_root }}"
+  path: "{{ monit_root | default(monitoring_default_root) }}"
       register: monit_dir_stat
 
     - name: Display monitoring setup results
