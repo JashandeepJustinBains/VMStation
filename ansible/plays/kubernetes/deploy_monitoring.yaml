@@ -375,7 +375,7 @@
             labels:
               grafana_datasource: "1"
           data:
-            prometheus-datasource.yaml: "{{ lookup('file', 'ansible/files/grafana_datasources/prometheus-datasource.yaml') }}"
+            prometheus-datasource.yaml: "{{ lookup('file', playbook_dir + '/ansible/files/grafana_datasources/prometheus-datasource.yaml') }}"
         kubeconfig: /root/.kube/config
 
     - name: Provision Grafana dashboards as ConfigMaps
@@ -390,9 +390,9 @@
             labels:
               grafana_dashboard: "1"
           data:
-            prometheus-dashboard.json: "{{ lookup('file', 'ansible/files/grafana_dashboards/prometheus-dashboard.json') }}"
-            loki-dashboard.json: "{{ lookup('file', 'ansible/files/grafana_dashboards/loki-dashboard.json') }}"
-            node-dashboard.json: "{{ lookup('file', 'ansible/files/grafana_dashboards/node-dashboard.json') }}"
+            prometheus-dashboard.json: "{{ lookup('file', playbook_dir + '/ansible/files/grafana_dashboards/prometheus-dashboard.json') }}"
+            loki-dashboard.json: "{{ lookup('file', playbook_dir + '/ansible/files/grafana_dashboards/loki-dashboard.json') }}"
+            node-dashboard.json: "{{ lookup('file', playbook_dir + '/ansible/files/grafana_dashboards/node-dashboard.json') }}"
         kubeconfig: /root/.kube/config
 
     - block:
