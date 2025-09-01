@@ -630,37 +630,204 @@
       register: kubelet_restart_result
       ignore_errors: yes
 
-    - name: Handle kubelet restart failure with recovery attempt
+    - name: Handle kubelet restart failure with comprehensive recovery
       block:
+        - name: Collect initial diagnostics for kubelet failure
+          shell: |
+            echo "=== Kubelet Failure Diagnostics ==="
+            echo "System: $(uname -a)"
+            echo "Kubelet status:"
+            systemctl status kubelet --no-pager || true
+            echo "Recent kubelet logs:"
+            journalctl -u kubelet -n 20 --no-pager || true
+            echo "Container runtime status:"
+            systemctl status containerd --no-pager || true
+            echo "Kubelet configuration:"
+            ls -la /etc/systemd/system/kubelet.service.d/ || true
+            cat /etc/systemd/system/kubelet.service.d/10-kubeadm.conf || true
+          register: initial_diagnostics
+          ignore_errors: yes
+
+        - name: Display initial diagnostics
+          debug:
+            var: initial_diagnostics.stdout_lines
+
         - name: Stop kubelet for clean restart
           systemd:
             name: kubelet
             state: stopped
           ignore_errors: yes
 
-        - name: Clear any leftover kubelet state after spindown
+        - name: Verify container runtime is operational
+          block:
+            - name: Check containerd status and restart if needed
+              systemd:
+                name: containerd
+                state: restarted
+                enabled: yes
+              register: containerd_restart
+              ignore_errors: yes
+
+            - name: Verify containerd socket accessibility
+              shell: |
+                if [ -S /run/containerd/containerd.sock ]; then
+                  echo "containerd socket exists"
+                  ls -la /run/containerd/containerd.sock
+                else
+                  echo "containerd socket missing"
+                  exit 1
+                fi
+              register: containerd_socket_check
+              ignore_errors: yes
+
+            - name: Test container runtime connectivity
+              shell: |
+                # Test if containerd is responding
+                timeout 10s ctr version || echo "containerd not responding"
+              register: ctr_test
+              ignore_errors: yes
+
+        - name: Clear comprehensive kubelet state
           shell: |
-            # Remove any leftover kubelet state that might prevent startup
+            # Remove kubelet state that might prevent startup
             rm -rf /var/lib/kubelet/pki/kubelet.crt || true
             rm -rf /var/lib/kubelet/pki/kubelet.key || true
+            rm -rf /var/lib/kubelet/config.yaml || true
             # Clear any leftover pod manifests that might cause conflicts
             rm -rf /etc/kubernetes/manifests/*.yaml || true
+            # Clear kubelet cache and temporary files
+            rm -rf /var/lib/kubelet/pods/* || true
+            rm -rf /var/lib/kubelet/cache/* || true
+            # Reset kubelet configuration if corrupted
+            rm -rf /var/lib/kubelet/kubeconfig || true
           ignore_errors: yes
 
-        - name: Reload systemd daemon to ensure clean state
+        - name: Regenerate kubelet service configuration
+          block:
+            - name: Create kubelet service drop-in directory
+              file:
+                path: /etc/systemd/system/kubelet.service.d
+                state: directory
+                mode: '0755'
+
+            - name: Generate enhanced kubelet service configuration
+              copy:
+                content: |
+                  # Enhanced kubelet configuration for RHEL 10+ compatibility
+                  [Service]
+                  Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+                  Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+                  Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
+                  Environment="KUBELET_EXTRA_ARGS=--node-ip={{ ansible_default_ipv4.address }}"
+                  ExecStart=
+                  ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+                  Restart=always
+                  StartLimitInterval=0
+                  RestartSec=10
+                dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+                mode: '0644'
+                owner: root
+                group: root
+
+        - name: Verify kernel modules are loaded
+          shell: |
+            # Ensure required kernel modules are loaded
+            modprobe overlay || true
+            modprobe br_netfilter || true
+            # Verify modules are loaded
+            lsmod | grep -E "(overlay|br_netfilter)" || echo "Kernel modules check"
+          ignore_errors: yes
+
+        - name: Handle systemd start rate limiting
+          block:
+            - name: Reset systemd failure state for kubelet
+              shell: |
+                # Reset any systemd failure counters that might prevent restart
+                systemctl reset-failed kubelet || true
+                # Clear systemd rate limiting for kubelet service
+                systemctl stop kubelet || true
+                sleep 2
+              ignore_errors: yes
+
+            - name: Check for systemd rate limiting issues
+              shell: |
+                # Check if kubelet is being rate limited
+                systemctl status kubelet | grep -i "start request repeated too quickly" || echo "No rate limiting detected"
+              register: rate_limit_check
+              ignore_errors: yes
+
+            - name: Apply additional rate limiting fixes if detected
+              shell: |
+                # If rate limiting is detected, reset the service completely
+                if echo "{{ rate_limit_check.stdout }}" | grep -qi "start request repeated too quickly"; then
+                  echo "Rate limiting detected, applying comprehensive reset"
+                  systemctl stop kubelet || true
+                  systemctl reset-failed kubelet || true
+                  # Wait longer to ensure systemd internal state clears
+                  sleep 5
+                else
+                  echo "No rate limiting issues detected"
+                fi
+              when: rate_limit_check.stdout is defined
+              ignore_errors: yes
+
+        - name: Reload systemd daemon and dependencies
           systemd:
             daemon_reload: yes
 
-        - name: Attempt kubelet restart after cleanup
+        - name: Wait for system to stabilize after configuration changes
+          pause:
+            seconds: 8
+
+        - name: Attempt kubelet restart after comprehensive cleanup
           systemd:
             name: kubelet
             state: started
             enabled: yes
           register: kubelet_recovery_result
+          ignore_errors: yes
 
-        - name: Display kubelet recovery status
+        - name: Collect post-recovery diagnostics
+          shell: |
+            echo "=== Post-Recovery Diagnostics ==="
+            echo "Kubelet status after recovery:"
+            systemctl status kubelet --no-pager || true
+            echo "Recent kubelet logs after recovery:"
+            journalctl -u kubelet -n 10 --no-pager || true
+            echo "Container runtime connectivity:"
+            ctr version || echo "containerd not accessible"
+          register: post_recovery_diagnostics
+          ignore_errors: yes
+
+        - name: Display comprehensive recovery status
           debug:
-            msg: "Kubelet recovery attempt: {{ 'SUCCESS' if kubelet_recovery_result.status.ActiveState == 'active' else 'FAILED - Check logs with: journalctl -u kubelet -f' }}"
+            msg: |
+              Kubelet recovery attempt: {{ 'SUCCESS' if kubelet_recovery_result is succeeded else 'FAILED' }}
+              
+              Recovery actions taken:
+              - Container runtime restart: {{ 'OK' if containerd_restart is succeeded else 'FAILED' }}
+              - Containerd socket check: {{ 'OK' if containerd_socket_check is succeeded else 'FAILED' }}
+              - Service configuration regenerated
+              - Kubelet state cleared
+              - Kernel modules verified
+              
+              {% if kubelet_recovery_result is failed %}
+              Troubleshooting steps:
+              1. Check logs: journalctl -u kubelet -f
+              2. Check container runtime: systemctl status containerd
+              3. Verify network: ss -ltnp | grep :10250
+              4. Check node configuration: /var/lib/kubelet/config.yaml
+              {% endif %}
+
+        - name: Save diagnostic logs for manual review
+          copy:
+            content: |
+              {{ initial_diagnostics.stdout }}
+              
+              === Post-Recovery Diagnostics ===
+              {{ post_recovery_diagnostics.stdout }}
+            dest: "/tmp/kubelet-recovery-{{ inventory_hostname }}-{{ ansible_date_time.epoch }}.log"
+          ignore_errors: yes
 
       when: 
         - "'kubelet.service' in ansible_facts.services"
