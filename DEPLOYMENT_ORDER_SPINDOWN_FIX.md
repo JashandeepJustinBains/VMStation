@@ -4,6 +4,8 @@
 The issue was causing hanging/timeout requests to the Kubernetes API server due to:
 1. **Incorrect 00-spindown.yaml playbook** not properly closing down the API server and etcd
 2. **Wrong deployment order** in update_and_deploy/site.yaml where applications were being deployed before Kubernetes infrastructure was properly initialized
+3. **Shell compatibility issues** with `set -o pipefail` causing "/bin/sh: 1: set: Illegal option -o pipefail" errors
+4. **Kubelet restart failures** after spindown operations
 
 ## Root Cause Analysis
 
@@ -46,6 +48,20 @@ Reordered the playbook imports to follow proper sequence:
 - import_playbook: subsites/05-extra_apps.yaml         # Apps after K8s
 - import_playbook: plays/jellyfin.yml
 ```
+
+### 3. Fixed Shell Compatibility Issues
+Resolved bash-specific feature usage in shell tasks:
+- **Problem**: `set -o pipefail` not supported in `/bin/sh` (dash)
+- **Solution**: Added `args: executable: /bin/bash` to shell tasks using pipefail
+- **Files Fixed**: 
+  - `ansible/plays/kubernetes/setup_cluster.yaml` (2 occurrences)
+  - `ansible/plays/kubernetes/deploy_monitoring.yaml` (1 occurrence)
+
+### 4. Enhanced Kubelet Recovery Logic
+Added robust kubelet restart handling after spindown operations:
+- **Detection**: Monitor kubelet restart failures
+- **Recovery**: Clean leftover state and attempt restart
+- **Cleanup**: Remove stale certificates and pod manifests that prevent startup
 
 ### 3. Updated Documentation
 - Fixed recommended execution order comments in site.yaml

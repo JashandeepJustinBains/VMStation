@@ -159,7 +159,7 @@ PLAYBOOKS=(
     # "ansible/plays/kubernetes_stack.yaml"    # Core Kubernetes infrastructure only
 
     # === Full Deployment ===
-    "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
+#    "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
 
     # === Individual Components ===  
     # "ansible/plays/kubernetes_stack.yaml"    # Core Kubernetes infrastructure only
@@ -202,7 +202,7 @@ INVENTORY_ARG="-i ansible/inventory.txt"
 
 # List of playbooks that require Kubernetes connectivity
 K8S_DEPENDENT_PLAYBOOKS=(
-    "ansible/site.yaml"
+#    "ansible/site.yaml"
     "ansible/plays/kubernetes_stack.yaml"
     "ansible/plays/kubernetes/deploy_monitoring.yaml"
     "ansible/subsites/05-extra_apps.yaml"
