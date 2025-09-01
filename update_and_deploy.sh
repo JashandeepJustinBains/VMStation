@@ -68,6 +68,68 @@ else
     echo "WARNING: Monitoring permission script not found at scripts/fix_monitoring_permissions.sh"
 fi
 
+# === KUBERNETES CONNECTIVITY CHECK ===
+# Check if kubectl can connect to cluster before running Kubernetes-dependent playbooks
+echo ""
+echo "=== Kubernetes Connectivity Check ==="
+
+# Set kubectl timeout environment variables to prevent hanging
+export KUBECTL_TIMEOUT=10s
+export KUBECONFIG=${KUBECONFIG:-$HOME/.kube/config}
+
+KUBECTL_AVAILABLE=false
+CLUSTER_ACCESSIBLE=false
+
+# Check if kubectl is available
+if command -v kubectl >/dev/null 2>&1; then
+    echo "✓ kubectl command found"
+    KUBECTL_AVAILABLE=true
+    
+    # Test cluster connectivity with timeout
+    echo "Testing Kubernetes cluster connectivity..."
+    if timeout 15s kubectl cluster-info >/dev/null 2>&1; then
+        echo "✓ Kubernetes cluster is accessible"
+        CLUSTER_ACCESSIBLE=true
+        
+        # Show basic cluster info
+        echo "Cluster context: $(kubectl config current-context 2>/dev/null || echo 'unknown')"
+        echo "Server version: $(kubectl version --short --client=false 2>/dev/null | grep 'Server Version' || echo 'unavailable')"
+    else
+        echo "⚠ Kubernetes cluster is not accessible or timed out"
+        echo "  This may be due to:"
+        echo "  - Cluster not running on the expected node (192.168.4.63:6443)"
+        echo "  - Network connectivity issues"
+        echo "  - Incorrect kubeconfig configuration"
+        echo "  - Firewall blocking access to API server"
+    fi
+else
+    echo "⚠ kubectl command not found"
+    echo "  Kubernetes-dependent operations will be skipped"
+fi
+
+# Skip Kubernetes-dependent playbooks if cluster is not accessible
+SKIP_K8S_PLAYBOOKS=false
+if [ "$CLUSTER_ACCESSIBLE" = false ]; then
+    echo ""
+    echo "WARNING: Kubernetes cluster is not accessible!"
+    echo "The following playbooks will be filtered to avoid hanging:"
+    echo "  - ansible/site.yaml (contains Kubernetes operations)"
+    echo "  - ansible/plays/kubernetes_stack.yaml"
+    echo "  - Any playbooks that use kubernetes.core modules"
+    echo ""
+    echo "To fix this:"
+    echo "  1. Ensure Kubernetes cluster is running: systemctl status kubelet"
+    echo "  2. Check kubeconfig: kubectl config view"
+    echo "  3. Test connectivity: kubectl cluster-info"
+    echo "  4. Check firewall: firewall-cmd --list-ports"
+    echo ""
+    echo "Set FORCE_K8S_DEPLOYMENT=true to override this check (not recommended)"
+    
+    if [ "${FORCE_K8S_DEPLOYMENT:-false}" != "true" ]; then
+        SKIP_K8S_PLAYBOOKS=true
+    fi
+fi
+
 # === MODULAR PLAYBOOKS CONFIGURATION ===
 # Edit the PLAYBOOKS array below to select which playbooks to run.
 # Uncomment entries you want to execute. By default, all entries are commented out for safety.
@@ -134,7 +196,16 @@ fi
 
 # Run selected playbooks with syntax checking first
 FAILED_PLAYBOOKS=()
+SKIPPED_PLAYBOOKS=()
 INVENTORY_ARG="-i ansible/inventory.txt"
+
+# List of playbooks that require Kubernetes connectivity
+K8S_DEPENDENT_PLAYBOOKS=(
+    "ansible/site.yaml"
+    "ansible/plays/kubernetes_stack.yaml"
+    "ansible/plays/kubernetes/deploy_monitoring.yaml"
+    "ansible/subsites/05-extra_apps.yaml"
+)
 
 for pb in "${PLAYBOOKS[@]}"; do
     if [ -z "$pb" ]; then
@@ -144,6 +215,24 @@ for pb in "${PLAYBOOKS[@]}"; do
     if [ ! -f "$pb" ]; then
         echo "ERROR: Playbook $pb not found, skipping"
         FAILED_PLAYBOOKS+=("$pb (not found)")
+        continue
+    fi
+    
+    # Check if this playbook requires Kubernetes and if cluster is accessible
+    REQUIRES_K8S=false
+    for k8s_pb in "${K8S_DEPENDENT_PLAYBOOKS[@]}"; do
+        if [[ "$pb" == "$k8s_pb" ]]; then
+            REQUIRES_K8S=true
+            break
+        fi
+    done
+    
+    if [ "$REQUIRES_K8S" = true ] && [ "$SKIP_K8S_PLAYBOOKS" = true ]; then
+        echo ""
+        echo "=== SKIPPING: $pb ==="
+        echo "⚠ Skipping Kubernetes-dependent playbook (cluster not accessible)"
+        echo "  To force execution: FORCE_K8S_DEPLOYMENT=true ./update_and_deploy.sh"
+        SKIPPED_PLAYBOOKS+=("$pb (cluster not accessible)")
         continue
     fi
     
@@ -157,7 +246,15 @@ for pb in "${PLAYBOOKS[@]}"; do
     
     echo ""
     echo "=== Running: $pb ==="
-    if ! ansible-playbook $INVENTORY_ARG "$pb"; then
+    
+    # Set timeouts for Kubernetes operations
+    if [ "$REQUIRES_K8S" = true ]; then
+        echo "Setting Kubernetes operation timeouts..."
+        export K8S_WAIT_TIMEOUT=30
+        export ANSIBLE_TIMEOUT=45
+    fi
+    
+    if ! timeout 1800 ansible-playbook $INVENTORY_ARG "$pb"; then
         echo "ERROR: Playbook execution failed for $pb"
         FAILED_PLAYBOOKS+=("$pb (execution failed)")
         continue
@@ -169,8 +266,24 @@ done
 # Report results
 echo ""
 echo "=== Deployment Summary ==="
+
+# Report skipped playbooks
+if [ ${#SKIPPED_PLAYBOOKS[@]} -gt 0 ]; then
+    echo "⚠ Playbooks skipped due to Kubernetes connectivity issues:"
+    for skipped in "${SKIPPED_PLAYBOOKS[@]}"; do
+        echo "   - $skipped"
+    done
+    echo ""
+fi
+
+# Report failed playbooks
 if [ ${#FAILED_PLAYBOOKS[@]} -eq 0 ]; then
-    echo "✅ All selected playbooks completed successfully"
+    if [ ${#SKIPPED_PLAYBOOKS[@]} -eq 0 ]; then
+        echo "✅ All selected playbooks completed successfully"
+    else
+        echo "✅ All executable playbooks completed successfully"
+        echo "⚠ Some playbooks were skipped due to missing Kubernetes connectivity"
+    fi
 else
     echo "❌ Some playbooks failed:"
     for failed in "${FAILED_PLAYBOOKS[@]}"; do
@@ -181,9 +294,26 @@ else
     echo "- Check syntax: ansible-playbook --syntax-check <playbook>"
     echo "- Run in check mode: ansible-playbook --check <playbook>"
     echo "- Increase verbosity: ansible-playbook -vv <playbook>"
+    
+    if [ ${#SKIPPED_PLAYBOOKS[@]} -gt 0 ]; then
+        echo ""
+        echo "For Kubernetes connectivity issues:"
+        echo "- Check cluster status: systemctl status kubelet"
+        echo "- Test connectivity: kubectl cluster-info"
+        echo "- Verify kubeconfig: kubectl config view"
+        echo "- Check API server: netstat -tlnp | grep :6443"
+    fi
     exit 1
 fi
 
 echo ""
-echo "🎉 VMStation deployment completed successfully!"
-echo "Check service status with: kubectl get pods --all-namespaces"
+if [ "$CLUSTER_ACCESSIBLE" = true ]; then
+    echo "🎉 VMStation deployment completed successfully!"
+    echo "Check service status with: kubectl get pods --all-namespaces"
+else
+    echo "🎉 VMStation deployment completed (non-Kubernetes components)!"
+    echo "To complete Kubernetes deployment:"
+    echo "1. Fix Kubernetes cluster connectivity"
+    echo "2. Re-run with: FORCE_K8S_DEPLOYMENT=true ./update_and_deploy.sh"
+    echo "3. Or run individual playbooks: ansible-playbook -i ansible/inventory.txt ansible/site.yaml"
+fi
