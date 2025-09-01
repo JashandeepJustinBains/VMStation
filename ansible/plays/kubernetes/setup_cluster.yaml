@@ -771,10 +771,11 @@
           register: kubeadm_binary
           failed_when: not kubeadm_binary.stat.exists or not kubeadm_binary.stat.executable
           
-        - name: Test kubeadm preflight checks
-          command: kubeadm join phase preflight --dry-run
+        - name: Test kubeadm preflight checks (non-fatal; requires bootstrap token on control plane)
+          command: kubeadm join phase preflight --dry-run || true
           register: preflight_check
           changed_when: false
+          failed_when: false
           ignore_errors: yes
           
         - name: Display preflight results
