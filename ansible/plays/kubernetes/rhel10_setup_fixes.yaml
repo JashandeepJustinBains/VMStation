@@ -251,7 +251,7 @@
         - name: Display containerd version
           debug:
             msg: "Containerd version: {{ containerd_version.stdout }}"
-          when: containerd_version is defined and containerd_version.rc == 0
+          when: containerd_version is defined and (containerd_version.rc is defined and containerd_version.rc == 0)
           
     - name: Create kubernetes directories with proper permissions
       file:

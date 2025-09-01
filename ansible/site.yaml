@@ -19,10 +19,10 @@
 # NOTE: 00-spindown.yaml is intentionally excluded from automatic deployment
 #       It should only be run manually with explicit confirmation for destructive cleanup
 # - import_playbook: subsites/00-spindown.yaml  # Run manually only!
-- import_playbook: subsites/01-checks.yaml
-- import_playbook: subsites/02-certs.yaml  
-- import_playbook: subsites/03-monitoring.yaml
-- import_playbook: subsites/04-jellyfin.yaml
+# - import_playbook: subsites/01-checks.yaml
+# - import_playbook: subsites/02-certs.yaml  
+# - import_playbook: subsites/03-monitoring.yaml
+# - import_playbook: subsites/04-jellyfin.yaml
 - import_playbook: plays/apply_drone_secrets.yml
 
 # Add delay to prevent Kubernetes API rate limiting between drone secrets and extra apps
