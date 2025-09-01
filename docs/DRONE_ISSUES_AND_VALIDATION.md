@@ -136,6 +136,7 @@ Post-validation next steps
 -------------------------
 - If the validation script flags placeholder values or missing keys, re-edit `ansible/group_vars/secrets.yml` and re-run the secrets play.
 - If Drone logs still show SCM errors after secrets are present, re-check the GitHub OAuth app settings (Homepage URL and Authorization callback URL must match your Drone host and port) and confirm the client ID/secret are correct.
+- **NEW**: As of recent updates, the deployment playbook `ansible/subsites/05-extra_apps.yaml` is now more intelligent about existing Kubernetes secrets. It will only fail if both Ansible variables are incomplete AND no Kubernetes secrets exist. This prevents false positives when secrets are manually created or deployed through other means.
 
 Appendix: Quick commands reference
 ---------------------------------
