@@ -55,12 +55,12 @@
         namespace: "drone"
         label_selector: "app=drone"
         service: "drone"
-        expected_node: "localhost.localdomain"
+        expected_node: "homelab"
       - name: "mongodb"
         namespace: "mongodb"
         label_selector: "app=mongodb"
         service: "mongodb"
-        expected_node: "localhost.localdomain"
+        expected_node: "homelab"
 
   tasks:
     - name: "Gather pod listings for extra apps"

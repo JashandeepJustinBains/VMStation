@@ -32,7 +32,7 @@ show_usage() {
     echo "VMStation cluster hostnames:"
     echo "  - masternode — 192.168.4.63"
     echo "  - storagenodet3500 — 192.168.4.61" 
-    echo "  - localhost.localdomain — 192.168.4.62"
+    echo "  - homelab — 192.168.4.62"
     echo ""
     echo "Template vs Complete prompt:"
     echo "  --show/--copy: Template prompt (requires separate diagnostic gathering)"

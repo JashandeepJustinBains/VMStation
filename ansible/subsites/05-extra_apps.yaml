@@ -10,7 +10,7 @@
   vars:
     # === Node Scheduling Configuration ===
     dashboard_node: masternode
-    apps_node: localhost.localdomain
+    apps_node: homelab
     
     # === NodePort Configuration ===
     dashboard_nodeport: 32000

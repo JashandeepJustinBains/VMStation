@@ -126,7 +126,7 @@ The 05-extra_apps.yaml playbook:
 - Creates exactly 1 drone replica (not multiple)
 - Validates that all required secrets exist before deployment
 - Uses proper GitHub OAuth integration for source code management
-- Schedules drone pod on localhost.localdomain node
+- Schedules drone pod on homelab node
 - Creates hostPath storage at /mnt/storage/drone
 
 This ensures a single, properly configured drone pod instead of multiple crashing pods.

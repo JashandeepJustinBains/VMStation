@@ -6,7 +6,7 @@
 # Idempotent and safe: will only add port rules if missing and reports status.
 
 - name: wip_fix_kubelet_firewall - open kubelet port and verify on node
-  hosts: localhost.localdomain
+  hosts: homelab
   gather_facts: false
   become: true
   tasks:

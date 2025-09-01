@@ -447,7 +447,7 @@ For complex Kubernetes issues or detailed analysis:
 ./scripts/get_copilot_prompt.sh --gather
 ```
 
-The premium Copilot prompt provides expert-level troubleshooting guidance for VMStation's monitoring stack with proper hostname awareness for masternode (192.168.4.63), storagenodet3500 (192.168.4.61), and localhost.localdomain (192.168.4.62).
+The premium Copilot prompt provides expert-level troubleshooting guidance for VMStation's monitoring stack with proper hostname awareness for masternode (192.168.4.63), storagenodet3500 (192.168.4.61), and homelab (192.168.4.62).
 
 ### Common Issues & Solutions
 

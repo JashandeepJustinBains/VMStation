@@ -13,7 +13,7 @@
 
     # Node scheduling and ports
     dashboard_node: "masternode"
-    apps_node: "localhost.localdomain"
+    apps_node: "homelab"
     dashboard_nodeport: 32000
     drone_nodeport: 32001
     mongodb_nodeport: 32002

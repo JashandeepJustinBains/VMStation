@@ -20,8 +20,8 @@ echo ""
 # Expected node assignments based on deployment configuration
 declare -A EXPECTED_NODES
 EXPECTED_NODES["kubernetes-dashboard"]="masternode"
-EXPECTED_NODES["drone"]="localhost.localdomain"
-EXPECTED_NODES["mongodb"]="localhost.localdomain"
+EXPECTED_NODES["drone"]="homelab"
+EXPECTED_NODES["mongodb"]="homelab"
 
 declare -A APP_NAMESPACES
 APP_NAMESPACES["kubernetes-dashboard"]="kubernetes-dashboard"
@@ -136,8 +136,8 @@ main() {
         echo ""
         echo -e "${BLUE}Access URLs:${NC}"
         echo "  - Kubernetes Dashboard: https://masternode:32000"
-        echo "  - Drone CI: http://localhost.localdomain:32001"
-        echo "  - MongoDB: localhost.localdomain:32002"
+        echo "  - Drone CI: http://homelab:32001"
+        echo "  - MongoDB: homelab:32002"
     else
         echo -e "${RED}✗ Found $issues deployment issues${NC}"
         echo ""

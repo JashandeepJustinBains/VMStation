@@ -42,7 +42,7 @@ Exact commands used / recommended fixes
 
 1) Ensure hostPath exists and is owned by Drone's UID (1000)
 ```bash
-# Run on the node that hosts the pod (example: localhost.localdomain)
+# Run on the node that hosts the pod (example: homelab)
 sudo mkdir -p /mnt/storage/drone
 sudo chown -R 1000:1000 /mnt/storage/drone
 sudo chmod -R 750 /mnt/storage/drone

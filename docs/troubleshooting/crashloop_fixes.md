@@ -8,8 +8,8 @@ This document provides step-by-step solutions for common CrashLoopBackOff issues
 
 **Solution**: As of the latest update, the validation now runs only from the masternode and properly validates that services are deployed on their intended nodes:
 - kubernetes-dashboard → masternode (192.168.4.63)
-- drone → localhost.localdomain (192.168.4.62) 
-- mongodb → localhost.localdomain (192.168.4.62)
+- drone → homelab (192.168.4.62) 
+- mongodb → homelab (192.168.4.62)
 
 **How to Validate**: Use the new validation script:
 ```bash
