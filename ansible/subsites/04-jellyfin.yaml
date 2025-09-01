@@ -38,7 +38,7 @@
       register: jellyfin_ns_info
       failed_when: false
 
-  - name: Explain how to create Jellyfin namespace if missing
+    - name: Explain how to create Jellyfin namespace if missing
       ansible.builtin.debug:
         msg: |
           Jellyfin namespace '{{ jellyfin_namespace | default('jellyfin') }}' not found. To create it, run:
