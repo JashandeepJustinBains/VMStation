@@ -363,6 +363,38 @@
                     maxLines: 1000
         kubeconfig: /root/.kube/config
 
+    - name: Create Prometheus datasource for Grafana (provisioning)
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: prometheus-datasource
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              grafana_datasource: "1"
+          data:
+            prometheus-datasource.yaml: "{{ lookup('file', 'ansible/files/grafana_datasources/prometheus-datasource.yaml') }}"
+        kubeconfig: /root/.kube/config
+
+    - name: Provision Grafana dashboards as ConfigMaps
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: grafana-dashboards
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              grafana_dashboard: "1"
+          data:
+            prometheus-dashboard.json: "{{ lookup('file', 'ansible/files/grafana_dashboards/prometheus-dashboard.json') }}"
+            loki-dashboard.json: "{{ lookup('file', 'ansible/files/grafana_dashboards/loki-dashboard.json') }}"
+            node-dashboard.json: "{{ lookup('file', 'ansible/files/grafana_dashboards/node-dashboard.json') }}"
+        kubeconfig: /root/.kube/config
+
     - block:
         - name: Wait for monitoring stack to be ready
           kubernetes.core.k8s_info:
