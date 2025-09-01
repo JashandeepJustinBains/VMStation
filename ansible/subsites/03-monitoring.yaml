@@ -54,7 +54,7 @@
             name: {{ monitoring_namespace | default('monitoring') }}
             labels:
               name: {{ monitoring_namespace | default('monitoring') }}
-      when: ns_info.resources | length == 0
+      when: ns_info.resources is defined and (ns_info.resources | length == 0)
 
     - name: Check for Prometheus Operator CRDs (ServiceMonitor)
       kubernetes.core.k8s_info:
@@ -102,7 +102,7 @@
             -n {{ monitoring_namespace | default('monitoring') }} \
             --set loki.service.type=NodePort \
             --set loki.service.nodePort=31100
-      when: servicemonitor_crd.resources | length == 0
+      when: servicemonitor_crd.resources is defined and (servicemonitor_crd.resources | length == 0)
 
     - name: Check if Helm is available
       ansible.builtin.command:
@@ -337,10 +337,6 @@
           changed_when: false
           when: monitoring_apply_fixes | bool
 
-      when: true
-
-          
-          Why this is needed; SELinux may block container access to host directories.
       when: 
         - selinux_context_check.rc == 0
         - ansible_selinux is defined 
@@ -355,8 +351,8 @@
         msg: |
           === Monitoring Stack Pre-Check Summary ===
           
-          Namespace Check: {{ 'READY' if ns_info.resources | length > 0 else 'NEEDS CREATION' }}
-          Prometheus Operator CRDs: {{ 'INSTALLED' if servicemonitor_crd.resources | length > 0 else 'MISSING' }}
+          Namespace Check: {{ 'READY' if (ns_info.resources is defined and ns_info.resources | length > 0) else 'NEEDS CREATION' }}
+          Prometheus Operator CRDs: {{ 'INSTALLED' if (servicemonitor_crd.resources is defined and servicemonitor_crd.resources | length > 0) else 'MISSING' }}
           kubectl Available: {{ 'YES' if kubectl_check.rc == 0 else 'NO' }}
           Helm Available: {{ 'YES' if helm_check.rc == 0 else 'NO' }}
           
