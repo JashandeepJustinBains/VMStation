@@ -110,6 +110,26 @@
         msg: "confirm_spindown not set to true; aborting destructive cleanup. To proceed re-run with -e confirm_spindown=true"
       when: not (confirm_spindown | default(false))
 
+    - name: Detect embedded ansible repo under /srv/monitoring_data to avoid deleting the repo by accident
+      ansible.builtin.stat:
+        path: /srv/monitoring_data/VMStation/ansible
+      register: monitoring_repo_stat
+      ignore_errors: true
+
+    - name: Stop kubelet early to prevent static pods from being recreated while we clean manifests
+      ansible.builtin.service:
+        name: kubelet
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Try to stop kube-apiserver systemd unit (if present) to avoid stray service instances
+      ansible.builtin.service:
+        name: kube-apiserver
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
     # === Enhanced Container-Specific Cleanup ===
     - name: Stop specific Podman containers (legacy VMStation)
       ansible.builtin.shell: |
