@@ -1,0 +1,80 @@
+---
+# Post-deployment validation for Grafana dashboards and datasources
+- name: Validate Grafana provisioning
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    monitoring_namespace: monitoring
+    
+  tasks:
+    - name: Check if Prometheus datasource ConfigMap exists
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: ConfigMap
+        name: prometheus-datasource
+        namespace: "{{ monitoring_namespace }}"
+        kubeconfig: /root/.kube/config
+      register: prometheus_datasource_cm
+      
+    - name: Verify Prometheus datasource ConfigMap has correct label
+      assert:
+        that:
+          - prometheus_datasource_cm.resources | length > 0
+          - prometheus_datasource_cm.resources[0].metadata.labels['grafana_datasource'] == "1"
+        fail_msg: "Prometheus datasource ConfigMap not found or missing correct label"
+        success_msg: "✓ Prometheus datasource ConfigMap exists with correct label"
+        
+    - name: Check if Grafana dashboards ConfigMap exists
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: ConfigMap
+        name: grafana-dashboards
+        namespace: "{{ monitoring_namespace }}"
+        kubeconfig: /root/.kube/config
+      register: grafana_dashboards_cm
+      
+    - name: Verify Grafana dashboards ConfigMap has correct label and data
+      assert:
+        that:
+          - grafana_dashboards_cm.resources | length > 0
+          - grafana_dashboards_cm.resources[0].metadata.labels['grafana_dashboard'] == "1"
+          - "'prometheus-dashboard.json' in grafana_dashboards_cm.resources[0].data"
+          - "'loki-dashboard.json' in grafana_dashboards_cm.resources[0].data"
+          - "'node-dashboard.json' in grafana_dashboards_cm.resources[0].data"
+        fail_msg: "Grafana dashboards ConfigMap not found, missing correct label, or missing dashboard files"
+        success_msg: "✓ Grafana dashboards ConfigMap exists with correct label and all dashboard files"
+        
+    - name: Check if Grafana pod is running
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ monitoring_namespace }}"
+        label_selectors:
+          - app.kubernetes.io/name=grafana
+        kubeconfig: /root/.kube/config
+      register: grafana_pods
+      
+    - name: Verify Grafana pod is ready
+      assert:
+        that:
+          - grafana_pods.resources | length > 0
+          - grafana_pods.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length > 0
+        fail_msg: "Grafana pod not found or not ready"
+        success_msg: "✓ Grafana pod is running and ready"
+        
+    - name: Display validation summary
+      debug:
+        msg: |
+          ✅ Grafana provisioning validation completed successfully!
+          
+          Verification steps you can run manually:
+          1. Check ConfigMaps:
+             kubectl -n {{ monitoring_namespace }} get configmap prometheus-datasource -o yaml
+             kubectl -n {{ monitoring_namespace }} get configmap grafana-dashboards -o yaml
+             
+          2. Check Grafana pod with sidecar:
+             kubectl -n {{ monitoring_namespace }} get pods -l app.kubernetes.io/name=grafana
+             
+          3. Test Grafana API (if accessible):
+             curl -s http://{{ ansible_default_ipv4.address }}:30300/api/datasources | jq '.'
+             curl -s http://{{ ansible_default_ipv4.address }}:30300/api/search?query=prometheus

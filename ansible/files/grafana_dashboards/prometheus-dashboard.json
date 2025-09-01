@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 27,
+  "title": "Prometheus Dashboard",
+  "panels": [],
+  "uid": "prom-dash",
+  "version": 1
+}
