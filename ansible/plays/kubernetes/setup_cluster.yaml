@@ -638,7 +638,7 @@
         path: /etc/kubernetes/admin.conf
       register: kubeconfig
 
-    - name: Preflight: detect listeners on API port 6443
+    - name: Preflight detect listeners on API port 6443
       shell: |
         set -o pipefail
         (ss -ltnp '( sport = :6443 )' 2>/dev/null || true) || (ss -ltnp 2>/dev/null | grep ':6443' || true)
