@@ -125,6 +125,16 @@
       failed_when: false
       changed_when: false
 
+    - name: Check for existing drone secrets
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        namespace: drone
+        name: drone-secrets
+      register: drone_secrets_check
+      failed_when: false
+      changed_when: false
+
     # === Check Mode Behavior ===
     - name: Show what would be created in check mode
       ansible.builtin.debug:
@@ -288,13 +298,35 @@
         - (dashboard_service_check.resources | default([])) | length == 0
 
     # === Drone CI ===
+    # Check if Ansible variables have placeholder values
+    - name: Set fact for drone variable validation
+      ansible.builtin.set_fact:
+        drone_vars_incomplete: "{{ 
+          (drone_github_client_id is not defined or drone_github_client_id == '' or drone_github_client_id.startswith('REPLACE_WITH_') or
+           drone_github_client_secret is not defined or drone_github_client_secret == '' or drone_github_client_secret.startswith('REPLACE_WITH_') or
+           drone_rpc_secret is not defined or drone_rpc_secret == '' or drone_rpc_secret == 'changeme' or drone_rpc_secret.startswith('REPLACE_WITH_') or
+           drone_server_host is not defined or drone_server_host == '' or drone_server_host.startswith('REPLACE_WITH_')) 
+        }}"
+        drone_secrets_exist: "{{ (drone_secrets_check.resources | default([])) | length > 0 }}"
+
+    # Show drone configuration status
+    - name: Show drone configuration status
+      ansible.builtin.debug:
+        msg: |
+          === Drone Configuration Status ===
+          Ansible variables complete: {{ not (drone_vars_incomplete | bool) }}
+          Kubernetes secrets exist: {{ drone_secrets_exist | bool }}
+          Action: {{ 'Proceed with existing secrets' if (drone_secrets_exist | bool) else ('Create new secrets' if not (drone_vars_incomplete | bool) else 'Configuration required') }}
+
     # Validate required drone secrets before deployment
     - name: Check if drone secrets are properly configured
       ansible.builtin.fail:
         msg: |
           Drone CI requires GitHub integration to function as a source code management system.
-          {{ 'Missing required secret variables' if (drone_github_client_id is not defined or drone_github_client_secret is not defined or drone_rpc_secret is not defined or drone_server_host is not defined) else 'Found placeholder values in secret variables' }}.
           
+          {{ 'ISSUE: Missing or incomplete Ansible variables AND no existing Kubernetes secrets found.' if (drone_vars_incomplete | bool and not drone_secrets_exist | bool) else 'ISSUE: Ansible variables contain placeholder values but Kubernetes secrets exist.' }}
+          
+          {% if drone_vars_incomplete | bool and not drone_secrets_exist | bool %}
           Please configure the following in ansible/group_vars/secrets.yml:
           
           Required variables:
@@ -323,14 +355,21 @@
           4. Run validation: ./scripts/validate_drone_config.sh
           
           5. Redeploy: ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml
+          {% else %}
+          STATUS: Kubernetes drone-secrets already exist. Ansible variables may be incomplete but deployment can proceed.
+          
+          If you want to update the secrets, either:
+          1. Update ansible/group_vars/secrets.yml with correct values and re-run this playbook
+          2. Or manually update the Kubernetes secret: kubectl edit secret drone-secrets -n drone
+          
+          To validate current configuration: ./scripts/validate_drone_config.sh
+          {% endif %}
       when: 
         - not ansible_check_mode
-        - (drone_github_client_id is not defined or drone_github_client_id == '' or drone_github_client_id.startswith('REPLACE_WITH_') or
-           drone_github_client_secret is not defined or drone_github_client_secret == '' or drone_github_client_secret.startswith('REPLACE_WITH_') or
-           drone_rpc_secret is not defined or drone_rpc_secret == '' or drone_rpc_secret == 'changeme' or drone_rpc_secret.startswith('REPLACE_WITH_') or
-           drone_server_host is not defined or drone_server_host == '' or drone_server_host.startswith('REPLACE_WITH_'))
+        - drone_vars_incomplete | bool
+        - not drone_secrets_exist | bool
 
-    # Create drone secrets from vault variables (if available)
+    # Create drone secrets from vault variables (if available and valid)
     - name: Create drone secrets from vault variables
       kubernetes.core.k8s:
         state: present
@@ -349,7 +388,9 @@
       register: drone_secrets_result
       failed_when: false
       changed_when: drone_secrets_result.changed | default(false)
-      when: not ansible_check_mode
+      when: 
+        - not ansible_check_mode
+        - not (drone_vars_incomplete | bool)
 
     # Ensure hostPath exists and has correct owner for Drone before creating deployment
     - name: Create temporary init pod to prepare drone hostPath on the node
