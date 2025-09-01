@@ -67,11 +67,100 @@
       - /etc/cni
       - /var/lib/local-path-provisioner
       - /var/lib/k0s
+      - /srv/monitoring_data
+    
+    # Legacy Podman containers to specifically stop and remove
+    podman_containers:
+      - prometheus
+      - grafana
+      - loki
+      - promtail_local
+      - local_registry
+      - node_exporter
+      - podman_exporter
+      - podman_system_metrics
+      - monitoring_pod
+    
+    # VMStation systemd services to clean up
+    vmstation_systemd_services:
+      - podman-monitoring
+      - podman-prometheus
+      - podman-grafana
+      - podman-loki
+    
+    # Additional packages that might be installed
+    additional_packages_apt:
+      - kubernetes-cni
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - runc
+      - helm
+    
+    additional_packages_yum:
+      - kubernetes-cni
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - runc
+      - helm
   tasks:
     - name: Safety gate - require explicit confirmation for destructive operations
       ansible.builtin.fail:
         msg: "confirm_spindown not set to true; aborting destructive cleanup. To proceed re-run with -e confirm_spindown=true"
       when: not (confirm_spindown | default(false))
+
+    # === Enhanced Container-Specific Cleanup ===
+    - name: Stop specific Podman containers (legacy VMStation)
+      ansible.builtin.shell: |
+        if command -v podman >/dev/null 2>&1; then
+          if podman ps -a --format "{% raw %}{{.Names}}{% endraw %}" | grep -q "^{{ item }}$"; then
+            echo "Stopping and removing container: {{ item }}"
+            podman stop "{{ item }}" 2>/dev/null || echo "Failed to stop {{ item }}"
+            podman rm "{{ item }}" 2>/dev/null || echo "Failed to remove {{ item }}"
+          else
+            echo "Container {{ item }} not found (already removed)"
+          fi
+        else
+          echo "Podman not installed, skipping container {{ item }}"
+        fi
+      loop: "{{ podman_containers }}"
+      ignore_errors: true
+
+    - name: Remove Podman monitoring pod (if exists)
+      ansible.builtin.shell: |
+        if command -v podman >/dev/null 2>&1; then
+          if podman pod exists monitoring_pod 2>/dev/null; then
+            echo "Removing monitoring pod..."
+            podman pod rm -f monitoring_pod
+          else
+            echo "Monitoring pod not found (already removed)"
+          fi
+        else
+          echo "Podman not installed, skipping pod cleanup"
+        fi
+      ignore_errors: true
+
+    # === Systemd Service Cleanup ===  
+    - name: Stop and disable VMStation systemd services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop: "{{ vmstation_systemd_services }}"
+      ignore_errors: true
+
+    - name: Remove VMStation systemd service files
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item }}.service"
+        state: absent
+      loop: "{{ vmstation_systemd_services }}"
+      ignore_errors: true
+
+    - name: Reload systemd daemon after service removal
+      ansible.builtin.systemd:
+        daemon_reload: true
+      ignore_errors: true
 
     - name: Stop and disable kubelet if present
       ansible.builtin.service:
@@ -103,35 +192,37 @@
 
     - name: Reset kubeadm if kubeadm is installed
       ansible.builtin.shell: kubeadm reset -f
-      args:
-        warn: false
       when: "ansible_facts.packages.kubeadm is defined or (lookup('ansible.builtin.pipe','command -v kubeadm >/dev/null 2>&1 && echo yes || true') == 'yes')"
       ignore_errors: true
 
     - name: Remove Kubernetes, container runtime packages (apt)
       ansible.builtin.apt:
-        name:
+        name: "{{ base_packages + additional_packages_apt }}"
+        state: absent
+        purge: yes
+      vars:
+        base_packages:
           - kubeadm
           - kubelet
           - kubectl
           - containerd
           - docker.io
           - podman
-        state: absent
-        purge: yes
       when: ansible_pkg_mgr == 'apt'
       ignore_errors: true
 
     - name: Remove Kubernetes, container runtime packages (dnf/yum)
       ansible.builtin.yum:
-        name:
+        name: "{{ base_packages + additional_packages_yum }}"
+        state: absent
+      vars:
+        base_packages:
           - kubeadm
           - kubelet
           - kubectl
           - containerd
           - docker
           - podman
-        state: absent
       when: ansible_pkg_mgr in ['dnf','yum']
       ignore_errors: true
 
@@ -170,6 +261,91 @@
         - /run/podman
       ignore_errors: true
 
+    # === Additional Podman/Container Cleanup ===
+    - name: Podman system prune (remove unused images and volumes)
+      ansible.builtin.shell: |
+        if command -v podman >/dev/null 2>&1; then
+          echo "Running podman system prune..."
+          podman system prune -a -f
+        else
+          echo "Podman not installed, skipping system prune"
+        fi
+      ignore_errors: true
+
+    # === Registry Configuration Cleanup ===
+    - name: Remove Podman registry configuration
+      ansible.builtin.file:
+        path: /etc/containers/registries.conf.d/local-registry.conf
+        state: absent
+      ignore_errors: true
+
+    # === Helm Cleanup ===
+    - name: Remove Helm releases (if Helm is available)
+      ansible.builtin.shell: |
+        if command -v helm >/dev/null 2>&1; then
+          echo "Removing all Helm releases..."
+          helm list --all-namespaces -q | xargs -r helm uninstall --namespace
+        else
+          echo "Helm not found, skipping Helm cleanup"
+        fi
+      ignore_errors: true
+
+    # === Certificate and TLS Cleanup ===
+    - name: Remove cert-manager and VMStation certificates
+      ansible.builtin.shell: |
+        if command -v kubectl >/dev/null 2>&1; then
+          echo "Removing cert-manager and VMStation certificates..."
+          kubectl delete certificates --all --all-namespaces --ignore-not-found || true
+          kubectl delete certificaterequests --all --all-namespaces --ignore-not-found || true
+          kubectl delete secrets -l cert-manager.io/certificate-name --all-namespaces --ignore-not-found || true
+        else
+          echo "kubectl not found, skipping certificate cleanup"
+        fi
+      ignore_errors: true
+
+    - name: Remove certificate directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/ssl/certs/vmstation
+        - /etc/pki/tls/certs/vmstation
+        - /usr/local/share/ca-certificates/vmstation
+      ignore_errors: true
+
+    # === Firewall Rules Cleanup (if ufw is used) ===
+    - name: Remove VMStation firewall rules (ufw)
+      ansible.builtin.shell: |
+        if command -v ufw >/dev/null 2>&1; then
+          echo "Removing VMStation firewall rules..."
+          # Remove common VMStation ports
+          ufw --force delete allow 6443 2>/dev/null || true
+          ufw --force delete allow 30300 2>/dev/null || true
+          ufw --force delete allow 30090 2>/dev/null || true
+          ufw --force delete allow 31100 2>/dev/null || true
+          ufw --force delete allow 30903 2>/dev/null || true
+          ufw --force delete allow 5000 2>/dev/null || true
+          ufw --force delete allow 32000 2>/dev/null || true
+          ufw --force delete allow 32001 2>/dev/null || true
+          ufw --force delete allow 32002 2>/dev/null || true
+        else
+          echo "ufw not found, skipping firewall cleanup"
+        fi
+      ignore_errors: true
+
+    # === Additional Configuration Cleanup ===
+    - name: Remove Docker daemon configuration
+      ansible.builtin.file:
+        path: /etc/docker/daemon.json
+        state: absent
+      ignore_errors: true
+
+    - name: Remove containerd configuration
+      ansible.builtin.file:
+        path: /etc/containerd/config.toml
+        state: absent
+      ignore_errors: true
+
     - name: Inform operator - host cleanup completed
       ansible.builtin.debug:
         msg: "Host-level spin-down tasks completed on {{ inventory_hostname }}"
@@ -188,13 +364,45 @@
         else
           echo "kubectl not present"
         fi
-      args:
-        warn: false
+      ignore_errors: true
+
+    - name: Remove all Helm releases from localhost (if available)
+      ansible.builtin.shell: |
+        if command -v helm >/dev/null 2>&1; then
+          echo "Removing all Helm releases..."
+          helm list --all-namespaces -q | xargs -r -I {} helm uninstall {} || true
+        else
+          echo "Helm not found on localhost"
+        fi
+      ignore_errors: true
+
+    - name: Clean up kubectl contexts and clusters
+      ansible.builtin.shell: |
+        if command -v kubectl >/dev/null 2>&1; then
+          echo "Cleaning up kubectl contexts..."
+          kubectl config delete-context --all 2>/dev/null || true
+          kubectl config delete-cluster --all 2>/dev/null || true
+          kubectl config unset current-context 2>/dev/null || true
+        else
+          echo "kubectl not present on localhost"
+        fi
       ignore_errors: true
 
     - name: Remove kube config from control user
       ansible.builtin.file:
         path: "{{ lookup('env','HOME') }}/.kube/config"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove entire .kube directory
+      ansible.builtin.file:
+        path: "{{ lookup('env','HOME') }}/.kube"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Helm configuration
+      ansible.builtin.file:
+        path: "{{ lookup('env','HOME') }}/.config/helm"
         state: absent
       ignore_errors: true
 
@@ -204,3 +412,12 @@
           Spin-down complete (best-effort). If you used a kubeadm or other custom
           installer, additional manual cleanup may be required (for example removing
           cloud-provider resources, leftover mounts, or PV hostPaths on nodes).
+          
+          Enhanced cleanup performed:
+          - Stopped and removed legacy Podman containers
+          - Cleaned up VMStation systemd services
+          - Removed registry configurations
+          - Cleaned up certificates and TLS configurations
+          - Removed firewall rules (ufw)
+          - Cleaned up Helm releases and configuration
+          - Removed kubectl contexts and clusters

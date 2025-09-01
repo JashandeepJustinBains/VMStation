@@ -4,7 +4,7 @@
 # running subsites individually for safer, more controlled deployments.
 #
 # Recommended individual execution order:
-# 0. ansible-playbook -i ansible/inventory.txt ansible/subsites/00-spindown.yaml -e confirm_spindown=true
+# 0. (DESTRUCTIVE) ansible-playbook -i ansible/inventory.txt ansible/subsites/00-spindown.yaml -e confirm_spindown=true
 # 1. ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
 # 2. ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml  
 # 3. ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
@@ -12,9 +12,13 @@
 # 4. ansible-playbook -i ansible/inventory.txt ansible/subsites/05-extra_apps.yaml
 # 5. ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes_stack.yaml
 # 6. ansible-playbook -i ansible/inventory.txt ansible/plays/jellyfin.yml
+#
+# WARNING: 00-spindown.yaml is DESTRUCTIVE and is excluded from site.yaml for safety!
 
 # === Modular Subsites (Safe, Check-Only Operations) ===
-- import_playbook: subsites/00-spindown.yaml
+# NOTE: 00-spindown.yaml is intentionally excluded from automatic deployment
+#       It should only be run manually with explicit confirmation for destructive cleanup
+# - import_playbook: subsites/00-spindown.yaml  # Run manually only!
 - import_playbook: subsites/01-checks.yaml
 - import_playbook: subsites/02-certs.yaml  
 - import_playbook: subsites/03-monitoring.yaml
@@ -123,7 +127,7 @@
 
     - name: "Optional: Validate Jellyfin using existing role (if enabled)"
       include_role:
-        name: ../roles/jellyfin
+        name: jellyfin
         tasks_from: main
       when: jellyfin_enabled | default(true)
       tags: [jellyfin, validate]
