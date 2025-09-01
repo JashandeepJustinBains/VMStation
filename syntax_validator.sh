@@ -18,7 +18,7 @@ else
 fi
 
 # Gather playbook files
-mapfile -t PLAYBOOKS < <(find "$SCRIPT_DIR/ansible/plays" -type f -name '*.yaml' ! -path '*/files/*' ! -path '*/templates/*' -print | sort)
+mapfile -t PLAYBOOKS < <(find "$SCRIPT_DIR/ansible/plays" -type f -name '*.yaml' ! -name '*.k8s.yaml' ! -path '*/files/*' ! -path '*/templates/*' -print | sort)
 if [ ${#PLAYBOOKS[@]} -eq 0 ]; then
   echo "No playbooks found under $SCRIPT_DIR/ansible/plays"
   exit 1

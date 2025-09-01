@@ -14,12 +14,12 @@
     immutable_indicators:
       - "volumeClaimTemplates"
       - "serviceName"
-      - "selector:"
+      - "selector"
       - "matchLabels"
       - "persistentVolumeClaim"
 
   tasks:
-    - name: Check for required binaries: helm and kubectl
+    - name: Check for required binaries helm and kubectl
       ansible.builtin.command:
         cmd: "command -v {{ item }}"
       loop:
