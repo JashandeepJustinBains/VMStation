@@ -346,6 +346,21 @@
           Kubernetes secrets exist: {{ drone_secrets_exist | bool }}
           Action: {{ 'Proceed with existing secrets' if (drone_secrets_exist | bool) else ('Create new secrets' if not (drone_vars_incomplete | bool) else 'Configuration required') }}
 
+    # Show skip message when SKIP_DRONE is set
+    - name: Show drone skip message
+      ansible.builtin.debug:
+        msg: |
+          === SKIPPING DRONE DEPLOYMENT ===
+          SKIP_DRONE environment variable is set to true.
+          Drone CI deployment will be skipped, but other components will continue.
+          
+          To deploy Drone later:
+          1. Configure drone secrets in ansible/group_vars/secrets.yml
+          2. Run: ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml
+          
+          Or use the setup helper: ./scripts/setup_drone_secrets.sh
+      when: lookup('env', 'SKIP_DRONE') | bool
+
     # Validate required drone secrets before deployment
     - name: Check if drone secrets are properly configured
       ansible.builtin.fail:
@@ -383,6 +398,10 @@
           4. Run validation: ./scripts/validate_drone_config.sh
           
           5. Redeploy: ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml
+          
+          ALTERNATIVE: To skip Drone deployment and continue with other components:
+          Set SKIP_DRONE=true environment variable:
+          SKIP_DRONE=true ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml
           {% else %}
           STATUS: Kubernetes drone-secrets already exist. Ansible variables may be incomplete but deployment can proceed.
           
@@ -396,6 +415,7 @@
         - not ansible_check_mode
         - drone_vars_incomplete | bool
         - not drone_secrets_exist | bool
+        - not (lookup('env', 'SKIP_DRONE') | bool)
 
     # Create drone secrets from vault variables (if available and valid)
     - name: Create drone secrets from vault variables
@@ -419,12 +439,14 @@
       when: 
         - not ansible_check_mode
         - not (drone_vars_incomplete | bool)
+        - not (lookup('env', 'SKIP_DRONE') | bool)
 
     # Ensure hostPath exists and has correct owner for Drone before creating deployment
     - name: Create temporary init pod to prepare drone hostPath on the node
       when:
         - not ansible_check_mode
         - (drone_deployment_check.resources | default([])) | length == 0
+        - not (lookup('env', 'SKIP_DRONE') | bool)
       kubernetes.core.k8s:
         state: present
         definition:
@@ -453,6 +475,7 @@
       when:
         - not ansible_check_mode
         - (drone_deployment_check.resources | default([])) | length == 0
+        - not (lookup('env', 'SKIP_DRONE') | bool)
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Pod
@@ -467,6 +490,7 @@
       when:
         - not ansible_check_mode
         - (drone_deployment_check.resources | default([])) | length == 0
+        - not (lookup('env', 'SKIP_DRONE') | bool)
       kubernetes.core.k8s:
         state: absent
         api_version: v1
@@ -570,6 +594,7 @@
       when:
         - not ansible_check_mode
         - (drone_deployment_check.resources | default([])) | length == 0
+        - not (lookup('env', 'SKIP_DRONE') | bool)
 
     - name: Create drone service
       kubernetes.core.k8s:
@@ -597,6 +622,7 @@
       when:
         - not ansible_check_mode
         - (drone_service_check.resources | default([])) | length == 0
+        - not (lookup('env', 'SKIP_DRONE') | bool)
 
     # === MongoDB ===
     - name: Create mongodb deployment
