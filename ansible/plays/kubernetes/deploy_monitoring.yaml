@@ -374,7 +374,7 @@
             namespace: "{{ monitoring_namespace }}"
             labels:
               grafana_datasource: "1"
-          data:
+          stringData:
             prometheus-datasource.yaml: "{{ lookup('file', playbook_dir + '/../../files/grafana_datasources/prometheus-datasource.yaml') }}"
         kubeconfig: /root/.kube/config
 
@@ -389,7 +389,7 @@
             namespace: "{{ monitoring_namespace }}"
             labels:
               grafana_dashboard: "1"
-          data:
+          stringData:
             prometheus-dashboard.json: "{{ lookup('file', playbook_dir + '/../../files/grafana_dashboards/prometheus-dashboard.json') }}"
             loki-dashboard.json: "{{ lookup('file', playbook_dir + '/../../files/grafana_dashboards/loki-dashboard.json') }}"
             node-dashboard.json: "{{ lookup('file', playbook_dir + '/../../files/grafana_dashboards/node-dashboard.json') }}"
