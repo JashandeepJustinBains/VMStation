@@ -56,7 +56,7 @@
       command: |
   semanage fcontext -a -t container_file_t "{{ monit_root | default(monitoring_default_root) }}(/.*)?" || true
   restorecon -Rv "{{ monit_root | default(monitoring_default_root) }}" || true
-      ignore_errors: true
+  ignore_errors: true
       when: ansible_selinux is defined and ansible_selinux.status == "enabled"
 
     - name: Set SELinux booleans for container access (if SELinux enabled)  
