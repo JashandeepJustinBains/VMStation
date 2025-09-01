@@ -122,6 +122,13 @@ if [ ${#PLAYBOOKS[@]} -eq 0 ]; then
     echo "  - ansible/site.yaml (complete deployment)"
     echo ""
     echo "Example: Uncomment '# \"ansible/subsites/01-checks.yaml\"' to enable checks."
+    echo ""
+    echo "TROUBLESHOOTING: If drone deployment is causing issues:"
+    echo "  Set SKIP_DRONE=true to skip drone and deploy other components:"
+    echo "  SKIP_DRONE=true ./update_and_deploy.sh"
+    echo ""
+    echo "  Or configure drone secrets first:"
+    echo "  ./scripts/setup_drone_secrets.sh"
     exit 0
 fi
 
