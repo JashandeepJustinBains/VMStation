@@ -619,11 +619,47 @@
     - name: Gather service facts
       service_facts:
 
-    - name: Restart and enable kubelet (only if service exists)
-      systemd:
-        name: kubelet
-        state: restarted
-        enabled: yes
+    - name: Validate kubelet binary and configuration before starting service
+      block:
+        - name: Verify kubelet binary exists and is executable
+          stat:
+            path: /usr/bin/kubelet
+          register: kubelet_binary_check
+          failed_when: not kubelet_binary_check.stat.exists or not kubelet_binary_check.stat.executable
+
+        - name: Verify containerd is running (kubelet dependency)
+          systemd:
+            name: containerd
+          register: containerd_status
+          failed_when: containerd_status.status.ActiveState != 'active'
+
+        - name: Ensure kubelet configuration directory exists
+          file:
+            path: /var/lib/kubelet
+            state: directory
+            mode: '0755'
+
+        - name: Stop kubelet if it's in a failed state
+          systemd:
+            name: kubelet
+            state: stopped
+          when: "'kubelet.service' in ansible_facts.services and ansible_facts.services['kubelet.service'].state == 'failed'"
+          ignore_errors: yes
+
+        - name: Reload systemd daemon before starting kubelet
+          systemd:
+            daemon_reload: yes
+
+        - name: Start and enable kubelet with retry logic
+          systemd:
+            name: kubelet
+            state: started
+            enabled: yes
+          register: kubelet_start_result
+          retries: 3
+          delay: 10
+          until: kubelet_start_result is succeeded
+
       when: "'kubelet.service' in ansible_facts.services"
 
 # Control plane initialization (only on monitoring_nodes)
@@ -637,6 +673,55 @@
       stat:
         path: /etc/kubernetes/admin.conf
       register: kubeconfig
+
+    - name: Check if API server port is in use
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 6443
+        state: started
+        timeout: 2
+      register: port_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check if existing Kubernetes processes are running
+      shell: pgrep -f "kube-apiserver|etcd" || true
+      register: k8s_processes
+      changed_when: false
+
+    - name: Reset Kubernetes if port is in use but cluster is not properly initialized
+      block:
+        - name: Stop kubelet service
+          systemd:
+            name: kubelet
+            state: stopped
+          ignore_errors: yes
+
+        - name: Reset kubeadm configuration
+          command: kubeadm reset -f
+          ignore_errors: yes
+
+        - name: Remove Kubernetes configuration directories
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/kubernetes
+            - /var/lib/etcd
+            - /var/lib/kubelet
+          ignore_errors: yes
+
+        - name: Wait for port to be released
+          wait_for:
+            host: "{{ ansible_default_ipv4.address }}"
+            port: 6443
+            state: stopped
+            timeout: 30
+          ignore_errors: yes
+
+      when: 
+        - not kubeconfig.stat.exists
+        - port_check.elapsed is defined or k8s_processes.stdout != ""
 
     - name: Initialize Kubernetes cluster
       command: >
@@ -714,6 +799,32 @@
             path: /usr/bin/kubeadm
           register: kubeadm_binary
           failed_when: not kubeadm_binary.stat.exists or not kubeadm_binary.stat.executable
+
+        - name: Reset any previous failed join attempts
+          block:
+            - name: Stop kubelet if running
+              systemd:
+                name: kubelet
+                state: stopped
+              ignore_errors: yes
+
+            - name: Clean up any partial kubernetes configuration
+              shell: |
+                kubeadm reset -f || true
+                rm -rf /etc/kubernetes/kubelet.conf /etc/kubernetes/pki/ || true
+                rm -rf /var/lib/kubelet/pki/ || true
+              ignore_errors: yes
+
+            - name: Restart containerd after cleanup
+              systemd:
+                name: containerd
+                state: restarted
+
+            - name: Wait for containerd to be ready
+              pause:
+                seconds: 10
+
+          when: kubelet_binary.stat.exists and kubeadm_binary.stat.exists
           
         - name: Test kubeadm preflight checks
           command: kubeadm join phase preflight --dry-run
@@ -756,13 +867,6 @@
             msg: "Container runtime test: {{ 'PASSED' if crictl_test.rc == 0 else 'FAILED - ' + crictl_test.stderr }}"
             
       when: not kubelet_conf.stat.exists
-
-    - name: Stop kubelet service if running (to prevent port conflicts)
-      systemd:
-        name: kubelet
-        state: stopped
-      when: not kubelet_conf.stat.exists
-      ignore_errors: yes
 
     - name: Copy join command to worker nodes
       copy:
