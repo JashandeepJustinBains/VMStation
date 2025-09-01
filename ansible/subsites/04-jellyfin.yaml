@@ -150,7 +150,7 @@
     - name: Report on storage node scheduling configuration
       ansible.builtin.debug:
         msg: |
-          Storage node '{{ storage_node | default('storagenodet3500') }}' status: {{ 'Found' if storage_node_info.resources | length > 0 else 'Not Found' }}
+          Storage node '{{ storage_node | default('storagenodet3500') }}' status: {{ 'Found' if (storage_node_info.resources | default([])) | length > 0 else 'Not Found' }}
           
           {% if (storage_node_info.resources | default([])) | length > 0 %}
           Node labels: {{ (storage_node_info.resources | default([]))[0].metadata.labels | default({}) }}
