@@ -24,6 +24,19 @@
 - import_playbook: subsites/03-monitoring.yaml
 - import_playbook: subsites/04-jellyfin.yaml
 - import_playbook: plays/apply_drone_secrets.yml
+
+# Add delay to prevent Kubernetes API rate limiting between drone secrets and extra apps
+- name: "API Rate Limiting Prevention"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  connection: local
+  tasks:
+    - name: Add delay between API-intensive playbooks
+      ansible.builtin.pause:
+        seconds: 5
+        prompt: "Pausing to prevent Kubernetes API rate limiting..."
+
 - import_playbook: subsites/05-extra_apps.yaml
 
 # === Monitoring Prerequisites Setup ===

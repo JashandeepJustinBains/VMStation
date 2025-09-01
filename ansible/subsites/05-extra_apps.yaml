@@ -176,8 +176,19 @@
             labels:
               name: kubernetes-dashboard
       register: dashboard_namespace_result
+      retries: 5
+      delay: 3
+      until: dashboard_namespace_result is not failed or 
+             ("Too Many Requests" not in (dashboard_namespace_result.msg | default("")) and
+              "too many requests" not in (dashboard_namespace_result.msg | default("")) and
+              "rate limit" not in (dashboard_namespace_result.msg | default("")))
       failed_when: false
       changed_when: dashboard_namespace_result.changed | default(false)
+      when: not ansible_check_mode
+
+    - name: Add delay to prevent API rate limiting
+      ansible.builtin.pause:
+        seconds: 1
       when: not ansible_check_mode
 
     - name: Create drone namespace
@@ -191,8 +202,19 @@
             labels:
               name: drone
       register: drone_namespace_result
+      retries: 5
+      delay: 3
+      until: drone_namespace_result is not failed or 
+             ("Too Many Requests" not in (drone_namespace_result.msg | default("")) and
+              "too many requests" not in (drone_namespace_result.msg | default("")) and
+              "rate limit" not in (drone_namespace_result.msg | default("")))
       failed_when: false
       changed_when: drone_namespace_result.changed | default(false)
+      when: not ansible_check_mode
+
+    - name: Add delay to prevent API rate limiting
+      ansible.builtin.pause:
+        seconds: 1
       when: not ansible_check_mode
 
     - name: Create mongodb namespace
@@ -206,6 +228,12 @@
             labels:
               name: mongodb
       register: mongodb_namespace_result
+      retries: 5
+      delay: 3
+      until: mongodb_namespace_result is not failed or 
+             ("Too Many Requests" not in (mongodb_namespace_result.msg | default("")) and
+              "too many requests" not in (mongodb_namespace_result.msg | default("")) and
+              "rate limit" not in (mongodb_namespace_result.msg | default("")))
       failed_when: false
       changed_when: mongodb_namespace_result.changed | default(false)
       when: not ansible_check_mode
