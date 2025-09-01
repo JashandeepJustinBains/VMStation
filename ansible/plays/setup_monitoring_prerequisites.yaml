@@ -36,7 +36,7 @@
 
     - name: Create monitoring root directory
       file:
-  path: "{{ monit_root | default(monitoring_default_root) }}"
+        path: "{{ monit_root | default(monitoring_default_root) }}"
         state: directory
         mode: '0755'
         owner: root
@@ -54,9 +54,9 @@
 
     - name: Set SELinux contexts for monitoring directories (if SELinux enabled)
       command: |
-  semanage fcontext -a -t container_file_t "{{ monit_root | default(monitoring_default_root) }}(/.*)?" || true
-  restorecon -Rv "{{ monit_root | default(monitoring_default_root) }}" || true
-  ignore_errors: true
+        semanage fcontext -a -t container_file_t "{{ monit_root | default(monitoring_default_root) }}(/.*)?" || true
+        restorecon -Rv "{{ monit_root | default(monitoring_default_root) }}" || true
+      ignore_errors: true
       when: ansible_selinux is defined and ansible_selinux.status == "enabled"
 
     - name: Set SELinux booleans for container access (if SELinux enabled)  
@@ -72,7 +72,7 @@
 
     - name: Check monitoring directory permissions
       stat:
-  path: "{{ monit_root | default(monitoring_default_root) }}"
+        path: "{{ monit_root | default(monitoring_default_root) }}"
       register: monit_dir_stat
 
     - name: Display monitoring setup results
