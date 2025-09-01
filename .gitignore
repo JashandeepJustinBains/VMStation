@@ -37,6 +37,7 @@ override.tf.json
 terraform.rc
 
 # Ansible and secrets
+ansible/group_vars/
 ansible/group_vars/master.yml
 ansible/group_vars/all.yml
 ansible/group_vars/worker.yml
