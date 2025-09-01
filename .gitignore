@@ -133,3 +133,6 @@ coverage/
 # Documentation build artifacts
 docs/_build/
 site/
+
+# Test scripts (keep local)
+test_deployment_order_fix.sh

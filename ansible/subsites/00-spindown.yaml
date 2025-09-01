@@ -162,6 +162,62 @@
         daemon_reload: true
       ignore_errors: true
 
+    # === Kubernetes API Server and etcd Cleanup ===
+    - name: Stop kube-apiserver static pod if present
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/manifests/kube-apiserver.yaml ]; then
+          echo "Removing kube-apiserver static pod manifest..."
+          mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.backup || true
+        else
+          echo "kube-apiserver static pod manifest not found"
+        fi
+      ignore_errors: true
+
+    - name: Stop kube-controller-manager static pod if present  
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/manifests/kube-controller-manager.yaml ]; then
+          echo "Removing kube-controller-manager static pod manifest..."
+          mv /etc/kubernetes/manifests/kube-controller-manager.yaml /tmp/kube-controller-manager.yaml.backup || true
+        else
+          echo "kube-controller-manager static pod manifest not found"
+        fi
+      ignore_errors: true
+
+    - name: Stop kube-scheduler static pod if present
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/manifests/kube-scheduler.yaml ]; then
+          echo "Removing kube-scheduler static pod manifest..."
+          mv /etc/kubernetes/manifests/kube-scheduler.yaml /tmp/kube-scheduler.yaml.backup || true
+        else
+          echo "kube-scheduler static pod manifest not found"
+        fi
+      ignore_errors: true
+
+    - name: Stop etcd static pod if present
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/manifests/etcd.yaml ]; then
+          echo "Removing etcd static pod manifest..."
+          mv /etc/kubernetes/manifests/etcd.yaml /tmp/etcd.yaml.backup || true
+        else
+          echo "etcd static pod manifest not found"  
+        fi
+      ignore_errors: true
+
+    - name: Wait for static pods to terminate
+      ansible.builtin.pause:
+        seconds: 10
+        prompt: "Waiting for static pods to terminate..."
+
+    - name: Force kill any remaining kube processes
+      ansible.builtin.shell: |
+        echo "Force killing any remaining kubernetes processes..."
+        pkill -f "kube-apiserver" || true
+        pkill -f "kube-controller-manager" || true
+        pkill -f "kube-scheduler" || true
+        pkill -f "etcd" || true
+        pkill -f "kubelet" || true
+      ignore_errors: true
+
     - name: Stop and disable kubelet if present
       ansible.builtin.service:
         name: kubelet
