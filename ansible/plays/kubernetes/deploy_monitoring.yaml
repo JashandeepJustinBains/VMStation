@@ -477,3 +477,44 @@
           - Prometheus: http://{{ ansible_default_ipv4.address }}:30090
           - AlertManager: http://{{ ansible_default_ipv4.address }}:30903
           - Loki: http://{{ ansible_default_ipv4.address }}:31100
+
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Wait for Grafana deployment to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: grafana
+        namespace: "{{ monitoring_namespace }}"
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 300
+        kubeconfig: /root/.kube/config
+      register: grafana_deploy
+      failed_when: false
+
+    - name: Retrieve Grafana service account token
+      shell: |
+        set -o pipefail
+        KUBECONFIG=/root/.kube/config
+        NS="{{ monitoring_namespace }}"
+        SA_NAME="grafana"
+        secret_name=$(kubectl -n $NS get sa $SA_NAME -o jsonpath='{.secrets[0].name}' 2>/dev/null || true)
+        if [ -n "$secret_name" ]; then
+          kubectl -n $NS get secret $secret_name -o jsonpath='{.data.token}' | base64 --decode || true
+        else
+          echo "<no serviceaccount secret found for $SA_NAME>"
+        fi
+      register: grafana_sa_token
+      changed_when: false
+      failed_when: false
+
+    - name: Show Grafana SA token
+      debug:
+        msg: |
+          Grafana service account token:
+          {{ grafana_sa_token.stdout | default('<none>') }}

@@ -38,7 +38,7 @@
       register: jellyfin_ns_info
       failed_when: false
 
-    - name: Explain how to create Jellyfin namespace if missing
+  - name: Explain how to create Jellyfin namespace if missing
       ansible.builtin.debug:
         msg: |
           Jellyfin namespace '{{ jellyfin_namespace | default('jellyfin') }}' not found. To create it, run:
@@ -53,7 +53,7 @@
             name: {{ jellyfin_namespace | default('jellyfin') }}
             labels:
               name: {{ jellyfin_namespace | default('jellyfin') }}
-      when: jellyfin_ns_info.resources | length == 0
+  when: (jellyfin_ns_info.resources | default([])) | length == 0
 
     - name: Check if Prometheus Operator is available for ServiceMonitor
       kubernetes.core.k8s_info:
@@ -185,7 +185,7 @@
           Target Namespace: {{ jellyfin_namespace | default('jellyfin') }}
           Storage Node: {{ storage_node | default('storagenodet3500') }}
           kubectl Available: {{ 'YES' if kubectl_check.rc == 0 else 'NO' }}
-          Namespace Exists: {{ 'YES' if jellyfin_ns_info.resources | length > 0 else 'NO' }}
+          Namespace Exists: {{ 'YES' if (jellyfin_ns_info.resources | default([])) | length > 0 else 'NO' }}
           ServiceMonitor Support: {{ 'YES' if servicemonitor_crd_check.resources | length > 0 else 'NO' }}
           
           Next steps for Jellyfin deployment:
