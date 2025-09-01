@@ -35,6 +35,39 @@ git pull --ff-only
 chmod +x ./ansible/deploy.sh
 chmod +x ./deploy_kubernetes.sh 2>/dev/null || true
 
+# === CONFIGURATION SETUP ===
+# Ensure configuration file exists before deployment
+if [ ! -f "ansible/group_vars/all.yml" ]; then
+    if [ -f "ansible/group_vars/all.yml.template" ]; then
+        echo "Configuration file not found. Creating from template..."
+        cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
+        echo "✓ Created ansible/group_vars/all.yml from template"
+        echo "  You may customize it if needed, but defaults should work for most setups"
+    else
+        echo "ERROR: No configuration template found at ansible/group_vars/all.yml.template"
+        exit 1
+    fi
+fi
+
+# === PREREQUISITE SETUP ===
+# Run monitoring permission setup before deployment to prevent hanging
+if [ -f "scripts/fix_monitoring_permissions.sh" ]; then
+    echo "Setting up monitoring directories and permissions..."
+    chmod +x scripts/fix_monitoring_permissions.sh
+    if sudo -n true 2>/dev/null; then
+        echo "Running monitoring permission setup with sudo..."
+        sudo ./scripts/fix_monitoring_permissions.sh
+    else
+        echo "WARNING: Cannot run sudo commands automatically."
+        echo "You may need to run this manually before deployment:"
+        echo "  sudo ./scripts/fix_monitoring_permissions.sh"
+        echo ""
+        echo "Continuing with deployment - some monitoring components may fail without proper permissions..."
+    fi
+else
+    echo "WARNING: Monitoring permission script not found at scripts/fix_monitoring_permissions.sh"
+fi
+
 # === MODULAR PLAYBOOKS CONFIGURATION ===
 # Edit the PLAYBOOKS array below to select which playbooks to run.
 # Uncomment entries you want to execute. By default, all entries are commented out for safety.

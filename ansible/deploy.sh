@@ -32,13 +32,30 @@ if [ ! -f "ansible/group_vars/all.yml" ]; then
     if [ -f "ansible/group_vars/all.yml.template" ]; then
         warn "Configuration file not found. Creating from template..."
         cp ansible/group_vars/all.yml.template ansible/group_vars/all.yml
-        warn "Please review and customize ansible/group_vars/all.yml"
-        warn "Set infrastructure_mode to either 'kubernetes' or 'podman'"
-        exit 1
+        info "✓ Created ansible/group_vars/all.yml from template"
+        info "Using default configuration - you may customize it if needed"
     else
         error "No configuration template found"
         exit 1
     fi
+fi
+
+# Setup monitoring prerequisites if Kubernetes mode
+if [ -f "scripts/fix_monitoring_permissions.sh" ]; then
+    info "Setting up monitoring directories and permissions..."
+    chmod +x scripts/fix_monitoring_permissions.sh
+    if sudo -n true 2>/dev/null; then
+        info "Running monitoring permission setup with sudo..."
+        sudo ./scripts/fix_monitoring_permissions.sh
+    else
+        warn "Cannot run sudo commands automatically."
+        warn "You may need to run this manually before deployment:"
+        warn "  sudo ./scripts/fix_monitoring_permissions.sh"
+        warn ""
+        warn "Continuing with deployment - some monitoring components may fail without proper permissions..."
+    fi
+else
+    warn "Monitoring permission script not found at scripts/fix_monitoring_permissions.sh"
 fi
 
 # Detect deployment mode

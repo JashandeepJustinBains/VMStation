@@ -26,6 +26,9 @@
 - import_playbook: plays/apply_drone_secrets.yml
 - import_playbook: subsites/05-extra_apps.yaml
 
+# === Monitoring Prerequisites Setup ===
+- import_playbook: plays/setup_monitoring_prerequisites.yaml
+
 # === Core Infrastructure Deployment ===
 - import_playbook: plays/kubernetes_stack.yaml
 
