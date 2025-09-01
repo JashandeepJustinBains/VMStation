@@ -16,7 +16,6 @@
 #
 # WARNING: 00-spindown.yaml is DESTRUCTIVE and is excluded from site.yaml for safety!
 
-# === Modular Subsites (Safe, Check-Only Operations) ===
 # === Modular Subsites (Check-Only Operations) ===
 # NOTE: These subsites are intentionally excluded from automatic site deployment for safety.
 # They should be run individually for controlled, step-by-step deployment:
@@ -32,7 +31,6 @@
 # === Monitoring Prerequisites Setup ===
 - import_playbook: plays/setup_monitoring_prerequisites.yaml
 
-# === Application Prerequisites ===
 - import_playbook: plays/apply_drone_secrets.yml
 
 # Add delay to prevent Kubernetes API rate limiting between drone secrets and extra apps

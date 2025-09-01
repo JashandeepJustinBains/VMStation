@@ -156,6 +156,7 @@ PLAYBOOKS=(
     
     # Work-in-progress subsites (wip_*) - exercise caution; these are flagged for review
 
+    "ansible/plays/kubernetes_stack.yaml"    # Core Kubernetes infrastructure only
 
     # === Full Deployment ===
     "ansible/site.yaml"                      # Complete site orchestrator (includes all subsites + kubernetes)
