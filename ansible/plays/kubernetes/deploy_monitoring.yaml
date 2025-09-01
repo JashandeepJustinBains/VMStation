@@ -509,6 +509,8 @@
         else
           echo "<no serviceaccount secret found for $SA_NAME>"
         fi
+      args:
+        executable: /bin/bash
       register: grafana_sa_token
       changed_when: false
       failed_when: false

@@ -192,6 +192,8 @@
             else
               echo "";
             fi
+          args:
+            executable: /bin/bash
           register: k8s_stable_version
           changed_when: false
           ignore_errors: yes
@@ -625,6 +627,46 @@
         state: restarted
         enabled: yes
       when: "'kubelet.service' in ansible_facts.services"
+      register: kubelet_restart_result
+      ignore_errors: yes
+
+    - name: Handle kubelet restart failure with recovery attempt
+      block:
+        - name: Stop kubelet for clean restart
+          systemd:
+            name: kubelet
+            state: stopped
+          ignore_errors: yes
+
+        - name: Clear any leftover kubelet state after spindown
+          shell: |
+            # Remove any leftover kubelet state that might prevent startup
+            rm -rf /var/lib/kubelet/pki/kubelet.crt || true
+            rm -rf /var/lib/kubelet/pki/kubelet.key || true
+            # Clear any leftover pod manifests that might cause conflicts
+            rm -rf /etc/kubernetes/manifests/*.yaml || true
+          ignore_errors: yes
+
+        - name: Reload systemd daemon to ensure clean state
+          systemd:
+            daemon_reload: yes
+
+        - name: Attempt kubelet restart after cleanup
+          systemd:
+            name: kubelet
+            state: started
+            enabled: yes
+          register: kubelet_recovery_result
+
+        - name: Display kubelet recovery status
+          debug:
+            msg: "Kubelet recovery attempt: {{ 'SUCCESS' if kubelet_recovery_result.status.ActiveState == 'active' else 'FAILED - Check logs with: journalctl -u kubelet -f' }}"
+
+      when: 
+        - "'kubelet.service' in ansible_facts.services"
+        - kubelet_restart_result is defined
+        - kubelet_restart_result.failed is defined
+        - kubelet_restart_result.failed
 
 # Control plane initialization (only on monitoring_nodes)
 - name: Initialize Kubernetes control plane
@@ -642,6 +684,8 @@
       shell: |
         set -o pipefail
         (ss -ltnp '( sport = :6443 )' 2>/dev/null || true) || (ss -ltnp 2>/dev/null | grep ':6443' || true)
+      args:
+        executable: /bin/bash
       register: port_6443
       changed_when: false
 
