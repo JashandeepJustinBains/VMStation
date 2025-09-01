@@ -638,6 +638,62 @@
         path: /etc/kubernetes/admin.conf
       register: kubeconfig
 
+    - name: Preflight: detect listeners on API port 6443
+      shell: |
+        set -o pipefail
+        (ss -ltnp '( sport = :6443 )' 2>/dev/null || true) || (ss -ltnp 2>/dev/null | grep ':6443' || true)
+      register: port_6443
+      changed_when: false
+
+    - name: Show port-6443 listener (if any)
+      debug:
+        var: port_6443.stdout_lines
+      when: port_6443.stdout != ''
+
+    - name: Attempt to free port 6443 if occupied by kube components
+      block:
+        - name: Stop kubelet to prevent static pod recreation
+          systemd:
+            name: kubelet
+            state: stopped
+          ignore_errors: true
+
+        - name: Stop kube-apiserver systemd unit if present
+          systemd:
+            name: kube-apiserver
+            state: stopped
+          ignore_errors: true
+
+        - name: Move kube-apiserver static manifest out of manifests (if present)
+          shell: |
+            if [ -f /etc/kubernetes/manifests/kube-apiserver.yaml ]; then
+              mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.backup || true
+            fi
+          args:
+            warn: false
+          ignore_errors: true
+
+        - name: Kill any remaining kube-apiserver processes
+          shell: pkill -f kube-apiserver || true
+          ignore_errors: true
+
+        - name: Re-check port 6443 after cleanup
+          shell: ss -ltnp 2>/dev/null | grep ':6443' || true
+          register: port_6443_after
+          changed_when: false
+
+        - name: Fail if port 6443 still occupied after attempts to free it
+          fail:
+            msg: |
+              Port 6443 is still in use after attempting to stop kubelet/kube-apiserver and remove static manifests.
+              Manual intervention required. Run the following on the target node to investigate:
+                sudo ss -ltnp | grep ':6443'
+                sudo ps -ef | grep kube-apiserver
+                sudo systemctl status kubelet kube-apiserver
+              If it's safe, stop the owning service or kill the process, or remove the static manifest under /etc/kubernetes/manifests.
+          when: port_6443_after.stdout != ''
+      when: port_6443.stdout != '' and not kubeconfig.stat.exists
+
     - name: Initialize Kubernetes cluster
       command: >
         kubeadm init 
