@@ -66,9 +66,9 @@
     - name: Report ServiceMonitor availability
       ansible.builtin.debug:
         msg: |
-          ServiceMonitor CRD status: {{ 'Available' if servicemonitor_crd_check.resources | length > 0 else 'Not Available' }}
+          ServiceMonitor CRD status: {{ 'Available' if (servicemonitor_crd_check.resources | default([])) | length > 0 else 'Not Available' }}
           
-          {% if servicemonitor_crd_check.resources | length == 0 %}
+          {% if (servicemonitor_crd_check.resources | default([])) | length == 0 %}
           ServiceMonitor will not be created. To enable Prometheus monitoring:
           1. Install kube-prometheus-stack via Helm
           2. Ensure Prometheus Operator is running
@@ -152,8 +152,8 @@
         msg: |
           Storage node '{{ storage_node | default('storagenodet3500') }}' status: {{ 'Found' if storage_node_info.resources | length > 0 else 'Not Found' }}
           
-          {% if storage_node_info.resources | length > 0 %}
-          Node labels: {{ storage_node_info.resources[0].metadata.labels | default({}) }}
+          {% if (storage_node_info.resources | default([])) | length > 0 %}
+          Node labels: {{ (storage_node_info.resources | default([]))[0].metadata.labels | default({}) }}
           
           Jellyfin will be scheduled on this node using nodeName: {{ storage_node | default('storagenodet3500') }}
           This ensures data locality with storage volumes.
@@ -186,7 +186,7 @@
           Storage Node: {{ storage_node | default('storagenodet3500') }}
           kubectl Available: {{ 'YES' if kubectl_check.rc == 0 else 'NO' }}
           Namespace Exists: {{ 'YES' if (jellyfin_ns_info.resources | default([])) | length > 0 else 'NO' }}
-          ServiceMonitor Support: {{ 'YES' if servicemonitor_crd_check.resources | length > 0 else 'NO' }}
+          ServiceMonitor Support: {{ 'YES' if (servicemonitor_crd_check.resources | default([])) | length > 0 else 'NO' }}
           
           Next steps for Jellyfin deployment:
           1. Ensure namespace exists: kubectl create namespace {{ jellyfin_namespace | default('jellyfin') }}
