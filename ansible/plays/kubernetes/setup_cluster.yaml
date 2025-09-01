@@ -738,13 +738,46 @@
             lsmod | grep -E "(overlay|br_netfilter)" || echo "Kernel modules check"
           ignore_errors: yes
 
+        - name: Handle systemd start rate limiting
+          block:
+            - name: Reset systemd failure state for kubelet
+              shell: |
+                # Reset any systemd failure counters that might prevent restart
+                systemctl reset-failed kubelet || true
+                # Clear systemd rate limiting for kubelet service
+                systemctl stop kubelet || true
+                sleep 2
+              ignore_errors: yes
+
+            - name: Check for systemd rate limiting issues
+              shell: |
+                # Check if kubelet is being rate limited
+                systemctl status kubelet | grep -i "start request repeated too quickly" || echo "No rate limiting detected"
+              register: rate_limit_check
+              ignore_errors: yes
+
+            - name: Apply additional rate limiting fixes if detected
+              shell: |
+                # If rate limiting is detected, reset the service completely
+                if echo "{{ rate_limit_check.stdout }}" | grep -qi "start request repeated too quickly"; then
+                  echo "Rate limiting detected, applying comprehensive reset"
+                  systemctl stop kubelet || true
+                  systemctl reset-failed kubelet || true
+                  # Wait longer to ensure systemd internal state clears
+                  sleep 5
+                else
+                  echo "No rate limiting issues detected"
+                fi
+              when: rate_limit_check.stdout is defined
+              ignore_errors: yes
+
         - name: Reload systemd daemon and dependencies
           systemd:
             daemon_reload: yes
 
-        - name: Wait for system to stabilize
+        - name: Wait for system to stabilize after configuration changes
           pause:
-            seconds: 5
+            seconds: 8
 
         - name: Attempt kubelet restart after comprehensive cleanup
           systemd:

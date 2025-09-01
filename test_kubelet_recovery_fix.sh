@@ -88,6 +88,14 @@ else
     exit 1
 fi
 
+# Check for systemd rate limiting fixes
+if grep -q "Handle systemd start rate limiting" "$SETUP_CLUSTER_FILE"; then
+    info "✓ Systemd rate limiting fixes found"
+else
+    error "✗ Systemd rate limiting fixes missing"
+    exit 1
+fi
+
 # Check for enhanced status display
 if grep -q "Display comprehensive recovery status" "$SETUP_CLUSTER_FILE"; then
     info "✓ Enhanced status display found"
