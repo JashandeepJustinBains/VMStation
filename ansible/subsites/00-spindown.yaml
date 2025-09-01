@@ -1,0 +1,206 @@
+---
+# Subsite 00: Spin-down / destructive cleanup helper
+#
+# This playbook helps operators fully remove Kubernetes and Podman from hosts so
+# the environment can be tested from a clean state. It's intentionally
+# conservative by default and requires an explicit variable to perform
+# destructive actions.
+#
+# Usage (safe dry-run):
+#   ansible-playbook -i ansible/inventory.txt ansible/subsites/00-spindown.yaml
+#
+# Run for real (destructive) - MUST set confirm_spindown=true:
+#   ansible-playbook -i ansible/inventory.txt ansible/subsites/00-spindown.yaml -e confirm_spindown=true
+
+- name: 00-spindown - Dry-run checks (non-destructive)
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Show warning and instructions when not confirmed
+      ansible.builtin.debug:
+        msg: |
+          This playbook can remove Kubernetes components, container runtimes and data.
+          To actually perform the destructive cleanup set the extra var:
+            -e confirm_spindown=true
+          Running without that variable will only report what would be changed.
+      when: not (confirm_spindown | default(false))
+
+    - name: Report installed services and packages (dry-run info)
+      block:
+        - name: Check for kubelet service
+          ansible.builtin.service_facts:
+
+        - name: Print candidate services (kubelet/containerd/podman/docker)
+          ansible.builtin.debug:
+            msg: |
+              Services present: kubelet={{ ('kubelet' in services) | ternary('yes','no') }}; \
+              containerd={{ ('containerd' in services) | ternary('yes','no') }}; \
+              docker={{ ('docker' in services) | ternary('yes','no') }}; \
+              podman={{ ('podman' in services) | ternary('yes','no') }}
+
+        - name: Show package manager and installed k8s packages (if present)
+          ansible.builtin.shell: |
+            if command -v kubeadm >/dev/null 2>&1; then echo "kubeadm: installed"; else echo "kubeadm: missing"; fi
+            if command -v kubectl >/dev/null 2>&1; then echo "kubectl: installed"; else echo "kubectl: missing"; fi
+            if command -v kubelet >/dev/null 2>&1; then echo "kubelet: installed"; else echo "kubelet: missing"; fi
+          register: pkg_check
+        - name: Show pkg_check
+          ansible.builtin.debug:
+            var: pkg_check.stdout_lines
+
+      when: not (confirm_spindown | default(false))
+
+- name: 00-spindown - Perform destructive cleanup (requires confirm_spindown=true)
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    cleanup_dirs:
+      - /etc/kubernetes
+      - /var/lib/kubelet
+      - /var/lib/etcd
+      - /var/lib/containerd
+      - /var/lib/docker
+      - /var/lib/podman
+      - /var/lib/cni
+      - /etc/cni
+      - /var/lib/local-path-provisioner
+      - /var/lib/k0s
+  tasks:
+    - name: Safety gate - require explicit confirmation for destructive operations
+      ansible.builtin.fail:
+        msg: "confirm_spindown not set to true; aborting destructive cleanup. To proceed re-run with -e confirm_spindown=true"
+      when: not (confirm_spindown | default(false))
+
+    - name: Stop and disable kubelet if present
+      ansible.builtin.service:
+        name: kubelet
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Stop and disable containerd if present
+      ansible.builtin.service:
+        name: containerd
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Stop and disable docker if present
+      ansible.builtin.service:
+        name: docker
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Stop and disable podman if present
+      ansible.builtin.service:
+        name: podman
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Reset kubeadm if kubeadm is installed
+      ansible.builtin.shell: kubeadm reset -f
+      args:
+        warn: false
+      when: "ansible_facts.packages.kubeadm is defined or (lookup('ansible.builtin.pipe','command -v kubeadm >/dev/null 2>&1 && echo yes || true') == 'yes')"
+      ignore_errors: true
+
+    - name: Remove Kubernetes, container runtime packages (apt)
+      ansible.builtin.apt:
+        name:
+          - kubeadm
+          - kubelet
+          - kubectl
+          - containerd
+          - docker.io
+          - podman
+        state: absent
+        purge: yes
+      when: ansible_pkg_mgr == 'apt'
+      ignore_errors: true
+
+    - name: Remove Kubernetes, container runtime packages (dnf/yum)
+      ansible.builtin.yum:
+        name:
+          - kubeadm
+          - kubelet
+          - kubectl
+          - containerd
+          - docker
+          - podman
+        state: absent
+      when: ansible_pkg_mgr in ['dnf','yum']
+      ignore_errors: true
+
+    - name: Remove common cluster directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ cleanup_dirs }}"
+      ignore_errors: true
+
+    - name: Remove kube config for current user
+      ansible.builtin.file:
+        path: "{{ lookup('env','HOME') }}/.kube/config"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove /etc/cni/net.d
+      ansible.builtin.file:
+        path: /etc/cni/net.d
+        state: absent
+      ignore_errors: true
+
+    - name: Remove local-path provisioner data directory if present
+      ansible.builtin.file:
+        path: /var/lib/local-path-provisioner
+        state: absent
+      ignore_errors: true
+
+    - name: Remove leftover container state directories (safe cleanup)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /run/containerd
+        - /run/docker
+        - /run/podman
+      ignore_errors: true
+
+    - name: Inform operator - host cleanup completed
+      ansible.builtin.debug:
+        msg: "Host-level spin-down tasks completed on {{ inventory_hostname }}"
+
+- name: 00-spindown - cluster control cleanup (localhost)
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  become: false
+  tasks:
+    - name: Attempt to delete all namespaces and CRDs (best-effort)
+      ansible.builtin.shell: |
+        if command -v kubectl >/dev/null 2>&1; then
+          kubectl delete namespaces --all --ignore-not-found || true
+          kubectl delete crd --all --ignore-not-found || true
+        else
+          echo "kubectl not present"
+        fi
+      args:
+        warn: false
+      ignore_errors: true
+
+    - name: Remove kube config from control user
+      ansible.builtin.file:
+        path: "{{ lookup('env','HOME') }}/.kube/config"
+        state: absent
+      ignore_errors: true
+
+    - name: Final message
+      ansible.builtin.debug:
+        msg: |
+          Spin-down complete (best-effort). If you used a kubeadm or other custom
+          installer, additional manual cleanup may be required (for example removing
+          cloud-provider resources, leftover mounts, or PV hostPaths on nodes).
