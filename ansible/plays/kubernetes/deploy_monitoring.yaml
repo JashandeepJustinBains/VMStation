@@ -55,7 +55,7 @@
               ruleSelectorNilUsesHelmValues: false
               # Node scheduling (computed earlier)
               nodeSelector: "{{ monitoring_node_selector }}"
-              tolerations: {{ monitoring_tolerations }}
+              tolerations: "{{ monitoring_tolerations }}"
               # When monitoring_scheduling_mode is 'unrestricted', no nodeSelector or tolerations are added
             service:
               type: NodePort
