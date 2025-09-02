@@ -212,6 +212,19 @@ panic: secrets "kubernetes-dashboard-csrf" is forbidden: User "system:serviceacc
 
 This indicates a Kubernetes RBAC permissions issue. **The enhanced script now automatically detects and fixes this.**
 
+Note: The repository `scripts/fix_k8s_dashboard_permissions.sh` will now auto-create the `kubernetes-dashboard-csrf` Secret when you run it with the `--auto-approve` flag. To run the automatic fix:
+
+```bash
+./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
+```
+
+After the script runs, check the dashboard pod status and logs:
+
+```bash
+kubectl -n kubernetes-dashboard get pods -o wide
+kubectl -n kubernetes-dashboard logs -l app=kubernetes-dashboard --tail=200
+```
+
 ### Manual RBAC Fix (if needed):
 ```bash
 # Create ClusterRole with required permissions

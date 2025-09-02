@@ -318,3 +318,53 @@ else
     echo "2. Re-run with: FORCE_K8S_DEPLOYMENT=true ./update_and_deploy.sh"
     echo "3. Or run individual playbooks: ansible-playbook -i ansible/inventory.txt ansible/site.yaml"
 fi
+fi
+
+#########################################
+# Post-deployment remediation (run known fix scripts if present)
+# This section will run a small set of helper scripts that attempt to
+# fix common post-deploy issues (permissions, dashboard RBAC/CSRF, monitoring pods).
+#########################################
+
+echo ""
+echo "=== Post-deployment remediation scripts ==="
+if [ "$CLUSTER_ACCESSIBLE" = true ]; then
+    # Only run Kubernetes-dependent remediation here; host-level permission fixes
+    # are performed earlier (see pre-deploy section). Keep post-deploy focused on
+    # scripts that require a reachable cluster.
+    POST_SCRIPTS=(
+        "scripts/fix_k8s_dashboard_permissions.sh"
+        "scripts/fix_k8s_monitoring_pods.sh"
+    )
+
+    for s in "${POST_SCRIPTS[@]}"; do
+        if [ -f "$s" ]; then
+            echo "Found $s - ensuring executable"
+            chmod +x "$s" || true
+
+            # Decide args: dashboard and monitoring_pods accept --auto-approve; others run without args
+            case "$(basename "$s")" in
+                fix_k8s_dashboard_permissions.sh|fix_k8s_monitoring_pods.sh)
+                    ARGS="--auto-approve"
+                    ;;
+                *)
+                    ARGS=""
+                    ;;
+            esac
+
+            if sudo -n true 2>/dev/null; then
+                echo "Running $s $ARGS with sudo (may prompt for password if required)..."
+                sudo "$s" $ARGS || echo "WARNING: $s exited with code $?"
+            else
+                echo "No passwordless sudo available - running $s $ARGS unprivileged (may require manual sudo)"
+                "$s" $ARGS || echo "WARNING: $s exited with code $?"
+            fi
+        else
+            echo "Skipping missing script: $s"
+        fi
+    done
+else
+    echo "Cluster not accessible - skipping post-deployment Kubernetes remediation scripts"
+    echo "To run post-deploy fixes later, execute:" \
+         "scripts/fix_monitoring_permissions.sh && scripts/fix_k8s_dashboard_permissions.sh --auto-approve && scripts/fix_k8s_monitoring_pods.sh --auto-approve"
+fi

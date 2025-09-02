@@ -777,11 +777,10 @@ main() {
             # Create the fix manifest for manual use
             create_dashboard_fix_manifest
         fi
-        # If auto-approve is enabled, ensure the CSRF secret and optionally patch drone host
+        # If auto-approve is enabled, ensure the CSRF secret
         if [[ "$AUTO_APPROVE" == "yes" ]]; then
-            echo "Running auto-approve prechecks: ensuring CSRF secret and Drone server-host..."
+            echo "Running auto-approve prechecks: ensuring CSRF secret..."
             ensure_csrf_secret
-            ensure_drone_server_host
         fi
     fi
 }

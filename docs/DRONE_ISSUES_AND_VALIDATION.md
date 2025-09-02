@@ -149,6 +149,10 @@ Appendix: Quick commands reference
 - Validate Drone:
   ./scripts/validate_drone_config.sh
 
+Small helper
+------------
+- If you need to patch the in-cluster `drone-secrets` `server-host` value without re-running Ansible, see `scripts/fix_drone_server_host.sh` which applies a safe merge-patch to the `drone-secrets` Secret (preserves other keys). Usage: `./scripts/fix_drone_server_host.sh 192.168.4.62`
+
 Document status
 ---------------
 - This is a concise, operational doc capturing the fixes performed, the files of interest, exact commands used, and the validation script to re-run checks. Keep secrets.yml in vault for production.
