@@ -151,7 +151,8 @@ The dashboard crashes due to directory permission issues preventing certificate 
 - Automatically analyzes pod logs to detect specific failure reasons
 - Applies targeted fixes based on detected issues when --auto-approve is used
 - Validates fixes and retries if needed
-- Supports common failure patterns: permission errors, certificate issues, volume problems, etc.
+- Supports common failure patterns: **RBAC permissions**, filesystem permissions, certificate issues, volume problems, etc.
+- **NEW**: Detects and fixes Kubernetes RBAC "forbidden" errors (e.g., ServiceAccount lacks secret access)
 
 #### Step 2: Apply Permission Fixes
 ```bash
@@ -202,7 +203,58 @@ kubectl logs -n kubernetes-dashboard -l app=kubernetes-dashboard
 curl -k https://192.168.4.63:32000
 ```
 
-## 3. Alternative Dashboard Configuration
+## 3. RBAC Permissions Issue (Most Common)
+
+If you see error logs like:
+```
+panic: secrets "kubernetes-dashboard-csrf" is forbidden: User "system:serviceaccount:kubernetes-dashboard:default" cannot get resource "secrets"
+```
+
+This indicates a Kubernetes RBAC permissions issue. **The enhanced script now automatically detects and fixes this.**
+
+### Manual RBAC Fix (if needed):
+```bash
+# Create ClusterRole with required permissions
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetes-dashboard
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["kubernetes-dashboard-key-holder", "kubernetes-dashboard-certs", "kubernetes-dashboard-csrf"]
+  verbs: ["get", "update", "delete"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["kubernetes-dashboard-settings"]
+  verbs: ["get", "update"]
+EOF
+
+# Create ClusterRoleBinding
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-dashboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-dashboard
+subjects:
+- kind: ServiceAccount
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+EOF
+
+# Restart the dashboard
+kubectl rollout restart deployment kubernetes-dashboard -n kubernetes-dashboard
+```
+
+## 4. Alternative Dashboard Configuration
 
 If permission fixes don't work, you can disable auto-certificate generation:
 
@@ -215,7 +267,7 @@ kubectl patch deployment kubernetes-dashboard -n kubernetes-dashboard --type='js
   -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args", "value": ["--namespace=kubernetes-dashboard", "--enable-insecure-login"]}]'
 ```
 
-## 4. Validation Commands
+## 5. Validation Commands
 
 ### Check Overall Cluster Health
 ```bash
