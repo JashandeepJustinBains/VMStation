@@ -1211,8 +1211,7 @@
             - { src: "/tmp/containerd-journal.log", dest: "./debug_logs/{{ inventory_hostname }}-containerd-journal.log" }
             - { src: "/tmp/kubeadm-audit.log", dest: "./debug_logs/{{ inventory_hostname }}-kubeadm-audit.log" }
           ignore_errors: yes
-          
-  when: not kubelet_conf.stat.exists and (join_result is defined and (join_result.rc | default(0)) != 0)
+      when: not kubelet_conf.stat.exists and (join_result is defined and (join_result.rc | default(0)) != 0)
 
     - name: Post-join verification
       block:
