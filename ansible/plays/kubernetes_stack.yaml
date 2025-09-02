@@ -5,5 +5,6 @@
 - import_playbook: kubernetes/setup_cluster.yaml
 - import_playbook: kubernetes/setup_helm.yaml  
 - import_playbook: kubernetes/setup_cert_manager.yaml
+- import_playbook: kubernetes/setup_local_path_provisioner.yaml
 - import_playbook: kubernetes/deploy_monitoring.yaml
 # Jellyfin HA removed. Add your minimal jellyfin deployment manually if needed.

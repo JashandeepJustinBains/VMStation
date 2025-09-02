@@ -22,6 +22,7 @@
       - "{{ monit_root | default(monitoring_default_root) }}/loki/index"
       - "{{ monit_root | default(monitoring_default_root) }}/promtail"
       - "{{ monit_root | default(monitoring_default_root) }}/promtail/data"
+      - "{{ monit_root | default(monitoring_default_root) }}/local-path-provisioner"
       - "/var/log"
       - "/var/promtail"
       - "/opt/promtail"
@@ -59,11 +60,11 @@
       ignore_errors: true
       when: ansible_selinux is defined and ansible_selinux.status == "enabled"
 
-    - name: Set SELinux booleans for container access (if SELinux enabled)  
+    - name: Set SELinux booleans for container access (if SELinux enabled)
       seboolean:
         name: "{{ item }}"
-        state: yes
-        persistent: yes
+        state: true
+        persistent: true
       loop:
         - container_use_cephfs
         - container_manage_cgroup

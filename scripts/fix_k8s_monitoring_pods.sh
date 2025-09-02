@@ -335,8 +335,9 @@ provide_pending_fixes() {
     echo "   Check if local-path storage class exists:"
     echo "   kubectl get storageclass local-path"
     echo ""
-    echo "   If missing, install local-path-provisioner:"
-    echo "   kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.24/deploy/local-path-storage.yaml"
+    echo "   If missing, the custom VMStation local-path-provisioner should be deployed:"
+    echo "   ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/setup_local_path_provisioner.yaml"
+    echo "   (This uses /srv/monitoring_data/local-path-provisioner instead of default /opt/local-path-provisioner)"
     echo ""
     
     if [[ "$AUTO_APPROVE" == "yes" ]]; then
