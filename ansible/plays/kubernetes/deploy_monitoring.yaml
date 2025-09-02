@@ -5,9 +5,9 @@
   become: true
   vars:
     monitoring_namespace: monitoring
-  # Default scheduling mode when not provided
-  # (can be 'strict', 'flexible', or 'unrestricted')
-  monitoring_scheduling_mode: "{{ monitoring_scheduling_mode | default('flexible') }}"
+    # Default scheduling mode when not provided
+    # (can be 'strict', 'flexible', or 'unrestricted')
+    monitoring_scheduling_mode: "{{ monitoring_scheduling_mode | default('flexible') }}"
     
   tasks:
     - name: Ensure kubernetes Python package is available (Debian package preferred)
@@ -25,11 +25,9 @@
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
-    - name: Compute monitoring scheduling nodeSelector and tolerations
+    - name: Set simple monitoring node selector
       ansible.builtin.set_fact:
-        monitoring_node_selector: "{{ {'kubernetes.io/hostname': ansible_hostname} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict') else {'node-role.vmstation.io/monitoring': 'true'} }}"
-        monitoring_tolerations: "{{ [{'key':'node-role.kubernetes.io/control-plane','operator':'Exists','effect':'NoSchedule'},{'key':'node-role.kubernetes.io/master','operator':'Exists','effect':'NoSchedule'}] if (monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible') else [] }}"
-      when: monitoring_scheduling_mode is defined
+        monitoring_node_selector: "{{ {'node-role.vmstation.io/monitoring': 'true'} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted') else {} }}"
 
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:
@@ -55,7 +53,6 @@
               ruleSelectorNilUsesHelmValues: false
               # Node scheduling (computed earlier)
               nodeSelector: "{{ monitoring_node_selector }}"
-              tolerations: "{{ monitoring_tolerations }}"
               # When monitoring_scheduling_mode is 'unrestricted', no nodeSelector or tolerations are added
             service:
               type: NodePort
@@ -87,7 +84,6 @@
                 enabled: true
             # Grafana node scheduling
             nodeSelector: "{{ monitoring_node_selector }}"
-            tolerations: {{ monitoring_tolerations }}
                 
           # AlertManager configuration
           alertmanager:
@@ -102,7 +98,6 @@
                         storage: 2Gi
               # AlertManager node scheduling
               nodeSelector: "{{ monitoring_node_selector }}"
-              tolerations: {{ monitoring_tolerations }}
             service:
               type: NodePort
               nodePort: 30903
@@ -146,7 +141,6 @@
                 
             # Loki node scheduling
             nodeSelector: "{{ monitoring_node_selector }}"
-            tolerations: {{ monitoring_tolerations }}
               
             # Security context for proper permissions
             securityContext:
@@ -496,7 +490,7 @@
       kubernetes.core.k8s_info:
         api_version: apps/v1
         kind: Deployment
-        name: grafana
+        name: kube-prometheus-stack-grafana
         namespace: "{{ monitoring_namespace }}"
         wait: true
         wait_condition:
@@ -512,7 +506,7 @@
         set -o pipefail
         KUBECONFIG=/root/.kube/config
         NS="{{ monitoring_namespace }}"
-        SA_NAME="grafana"
+        SA_NAME="kube-prometheus-stack-grafana"
         secret_name=$(kubectl -n $NS get sa $SA_NAME -o jsonpath='{.secrets[0].name}' 2>/dev/null || true)
         if [ -n "$secret_name" ]; then
           kubectl -n $NS get secret $secret_name -o jsonpath='{.data.token}' | base64 --decode || true
