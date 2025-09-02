@@ -441,11 +441,11 @@
 
         - name: Build safe pod_describes output list
           ansible.builtin.set_fact:
-            pod_describes_out: "{{ [ item.stdout if (item is defined and item.stdout is defined) else '' for item in (pod_describes.results | default([])) ] }}"
+            pod_describes_out: "{{ (pod_describes | default({})).results | default([]) | map(attribute='stdout', default='') | list }}"
 
         - name: Build safe pod_logs output list
           ansible.builtin.set_fact:
-            pod_logs_out: "{{ [ item.stdout if (item is defined and item.stdout is defined) else '' for item in (pod_logs.results | default([])) ] }}"
+            pod_logs_out: "{{ (pod_logs | default({})).results | default([]) | map(attribute='stdout', default='') | list }}"
 
         - name: Show monitoring diagnostics summary
           debug:
