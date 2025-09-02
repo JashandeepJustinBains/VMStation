@@ -27,6 +27,7 @@ declare -A DIRECTORIES=(
     ["/srv/monitoring_data/prometheus"]="755"
     ["/srv/monitoring_data/loki"]="755"
     ["/srv/monitoring_data/promtail"]="755"
+    ["/srv/monitoring_data/local-path-provisioner"]="755"
     ["/var/log"]="755"
     ["/var/promtail"]="755"
     ["/opt/promtail"]="755"
