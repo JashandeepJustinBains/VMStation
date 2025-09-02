@@ -7,7 +7,11 @@
     monitoring_namespace: monitoring
     # Default scheduling mode when not provided
     # (can be 'strict', 'flexible', or 'unrestricted')
-    monitoring_scheduling_mode: "{{ monitoring_scheduling_mode | default('flexible') }}"
+  # NOTE: don't set `monitoring_scheduling_mode` here by referencing itself
+  # (that causes a recursive template loop). Provide this variable in
+  # group_vars/all.yml or via --extra-vars when running the playbook.
+  # Tasks will treat an undefined value as 'flexible' using the
+  # `| default('flexible')` filter where needed.
     
   tasks:
     - name: Ensure kubernetes Python package is available (Debian package preferred)
