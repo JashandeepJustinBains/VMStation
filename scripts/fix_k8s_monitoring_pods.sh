@@ -317,7 +317,10 @@ provide_pending_fixes() {
     echo "   Available nodes and their labels:"
     echo "   kubectl get nodes --show-labels"
     echo ""
-    echo "   Fix: Ensure nodes have required labels or modify deployment to remove strict hostname requirements"
+    echo "   Fix options:"
+    echo "   a) Label nodes for monitoring: kubectl label node <node-name> node-role.vmstation.io/monitoring=true"
+    echo "   b) Set monitoring_scheduling_mode to 'unrestricted' in ansible/group_vars/all.yml"
+    echo "   c) Modify deployment to remove strict hostname requirements"
     echo ""
     
     echo -e "${YELLOW}3. Resource Constraints:${NC}"

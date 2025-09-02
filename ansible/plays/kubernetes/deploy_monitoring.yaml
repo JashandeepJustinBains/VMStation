@@ -44,9 +44,24 @@
               serviceMonitorSelectorNilUsesHelmValues: false
               podMonitorSelectorNilUsesHelmValues: false
               ruleSelectorNilUsesHelmValues: false
-              # Ensure Prometheus runs on monitoring nodes
+              # Conditional node scheduling based on monitoring_scheduling_mode
+              # When monitoring_scheduling_mode is 'strict', use hostname-based selection
+              {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
               nodeSelector:
                 kubernetes.io/hostname: "{{ ansible_hostname }}"
+              {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
+              # When monitoring_scheduling_mode is 'flexible' (default), use label-based selection with tolerations
+              nodeSelector:
+                node-role.vmstation.io/monitoring: "true"
+              tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                - key: node-role.kubernetes.io/master
+                  operator: Exists
+                  effect: NoSchedule
+              {% endif -%}
+              # When monitoring_scheduling_mode is 'unrestricted', no nodeSelector or tolerations are added
             service:
               type: NodePort
               nodePort: 30090
@@ -75,9 +90,21 @@
                 enabled: true
               datasources:
                 enabled: true
-            # Ensure Grafana runs on monitoring nodes  
+            # Conditional node scheduling based on monitoring_scheduling_mode (Grafana)
+            {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
             nodeSelector:
               kubernetes.io/hostname: "{{ ansible_hostname }}"
+            {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
+            nodeSelector:
+              node-role.vmstation.io/monitoring: "true"
+            tolerations:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                effect: NoSchedule
+            {% endif -%}
                 
           # AlertManager configuration
           alertmanager:
@@ -90,9 +117,21 @@
                     resources:
                       requests:
                         storage: 2Gi
-              # Ensure AlertManager runs on monitoring nodes
+              # Conditional node scheduling based on monitoring_scheduling_mode (AlertManager)
+              {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
               nodeSelector:
                 kubernetes.io/hostname: "{{ ansible_hostname }}"
+              {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
+              nodeSelector:
+                node-role.vmstation.io/monitoring: "true"
+              tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                - key: node-role.kubernetes.io/master
+                  operator: Exists
+                  effect: NoSchedule
+              {% endif -%}
             service:
               type: NodePort
               nodePort: 30903
@@ -134,9 +173,21 @@
               accessModes:
                 - ReadWriteOnce
                 
-            # Ensure Loki runs on monitoring nodes
+            # Conditional node scheduling based on monitoring_scheduling_mode (Loki)
+            {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
             nodeSelector:
               kubernetes.io/hostname: "{{ ansible_hostname }}"
+            {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
+            nodeSelector:
+              node-role.vmstation.io/monitoring: "true"
+            tolerations:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule
+              - key: node-role.kubernetes.io/master
+                operator: Exists
+                effect: NoSchedule
+            {% endif -%}
               
             # Security context for proper permissions
             securityContext:
