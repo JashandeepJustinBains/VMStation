@@ -93,6 +93,14 @@
         src: https://github.com/cert-manager/cert-manager/releases/download/{{ cert_manager_version }}/cert-manager.crds.yaml
         kubeconfig: /root/.kube/config
 
+    - name: Wait for cert-manager CRDs to be available
+      when: vmstation_manage_cert_manager | bool
+      command: kubectl get crd certificates.cert-manager.io --kubeconfig /root/.kube/config
+      register: cert_crd_check
+      retries: 3
+      delay: 5
+      until: cert_crd_check.rc == 0
+
     - name: Add cert-manager Helm repository
       when: vmstation_manage_cert_manager | bool
       kubernetes.core.helm_repository:
@@ -111,6 +119,24 @@
           prometheus:
             enabled: true
         kubeconfig: /root/.kube/config
+        wait: true
+        timeout: 600
+        atomic: false
+
+    - name: Wait for cert-manager deployments to be ready
+      when: vmstation_manage_cert_manager | bool
+      vars:
+        cert_manager_deployments:
+          - cert-manager
+          - cert-manager-webhook
+          - cert-manager-cainjector
+      block:
+        - name: Wait for rollout status of cert-manager deployments
+          command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=600s
+          loop: "{{ cert_manager_deployments }}"
+          register: rollout_status
+          failed_when: rollout_status is failed and rollout_status.rc != 0
+          ignore_errors: yes
 
     - name: Create self-signed cluster issuer for internal certificates
       when: vmstation_create_tls_certs | bool
