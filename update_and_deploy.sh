@@ -318,7 +318,6 @@ else
     echo "2. Re-run with: FORCE_K8S_DEPLOYMENT=true ./update_and_deploy.sh"
     echo "3. Or run individual playbooks: ansible-playbook -i ansible/inventory.txt ansible/site.yaml"
 fi
-fi
 
 #########################################
 # Post-deployment remediation (run known fix scripts if present)
