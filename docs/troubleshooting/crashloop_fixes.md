@@ -140,16 +140,34 @@ The dashboard crashes due to directory permission issues preventing certificate 
 # Diagnose permission issues
 ./scripts/diagnose_monitoring_permissions.sh
 
-# Run dashboard-specific diagnostic
+# Run enhanced dashboard-specific diagnostic and auto-fix
+./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
+
+# Or run in diagnostic-only mode (shows manual commands)
 ./scripts/fix_k8s_dashboard_permissions.sh
 ```
 
+**The enhanced script now:**
+- Automatically analyzes pod logs to detect specific failure reasons
+- Applies targeted fixes based on detected issues when --auto-approve is used
+- Validates fixes and retries if needed
+- Supports common failure patterns: permission errors, certificate issues, volume problems, etc.
+
 #### Step 2: Apply Permission Fixes
 ```bash
-# Option A: Automatic fix with the script
+# Option A: Automatic fix with enhanced script (RECOMMENDED)
 ./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
 
-# Option B: Manual permission fix
+# This will:
+# - Automatically detect the specific failure reason from pod logs
+# - Apply targeted fixes based on the detected issue
+# - Validate that fixes work and retry if needed
+# - Show final dashboard access information
+
+# Option B: Diagnostic mode (shows manual commands)
+./scripts/fix_k8s_dashboard_permissions.sh
+
+# Option C: Manual permission fix (if script fails)
 # Find the node running the dashboard
 kubectl get pods -n kubernetes-dashboard -o wide
 
