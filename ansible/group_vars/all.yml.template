@@ -27,6 +27,14 @@ prometheus_nodeport: 30090
 loki_nodeport: 31100
 alertmanager_nodeport: 30903
 
+# === Monitoring Scheduling Configuration ===
+# Controls how monitoring pods are scheduled on Kubernetes nodes
+# Options:
+#   'strict' - Use hostname-based node selector (original behavior, may cause Pending pods)
+#   'flexible' - Use role-based label with tolerations (requires labeling nodes)
+#   'unrestricted' - No node selectors, allows scheduling on any available node
+monitoring_scheduling_mode: flexible
+
 # === Legacy Podman Configuration (Deprecated) ===
 # These are kept for backward compatibility during migration
 monit_root: /srv/monitoring_data

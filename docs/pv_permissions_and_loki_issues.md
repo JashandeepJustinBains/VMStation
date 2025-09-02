@@ -1,13 +1,57 @@
-## PV permissions & Loki config: Grafana CrashLoopBackOff and Loki write errors
+## PV permissions, Loki config & Pod scheduling: Complete monitoring troubleshooting guide
 
-This mini doc explains two related issues encountered during a monitoring stack deployment: a Grafana CrashLoopBackOff caused by PVC/PV permissions, and a Loki StatefulSet crash caused by an invalid config field and a missing writable mount. The examples use placeholders like `<pvc-name-here>` and `<pv-hostpath-here>`; replace them with the values from your `kubectl` output.
+This document explains common issues encountered during monitoring stack deployment including Grafana CrashLoopBackOff (PVC/PV permissions), Loki crashes (invalid config), and Grafana Pending state (scheduling constraints). The examples use placeholders like `<pvc-name-here>` and `<pv-hostpath-here>`; replace them with the values from your `kubectl` output.
 
 ### Checklist
+- Handle Pending pods due to scheduling constraints (NEW)
 - Summarize the failure mode and root cause.
 - Show how to trace PVC → PV → hostPath.
 - Provide safe remediation steps to fix ownership/permissions and SELinux labels.
 - Provide Loki-specific fixes: remove invalid config entries and ensure the PVC is mounted at `/loki` for writeable storage.
 - Verification commands to confirm recovery.
+
+## 0) Grafana: Pending state due to scheduling constraints
+
+Summary
+- Grafana pods stuck in Pending state with `<none>` for NODE indicate they cannot be scheduled on any available nodes. This commonly occurs due to strict node selectors, node taints, resource constraints, or missing storage classes.
+
+Common causes:
+1. **Strict hostname node selectors**: Pods require specific hostnames that don't exist or are tainted
+2. **Node taints**: Control-plane nodes have NoSchedule taints preventing pod scheduling  
+3. **Resource constraints**: Insufficient CPU/memory on available nodes
+4. **Storage issues**: Missing storage class or unavailable persistent volumes
+
+Diagnosis steps:
+```bash
+# Check pod scheduling events
+kubectl -n monitoring describe pod <grafana-pod-name> | grep -A10 Events
+
+# Check node availability and taints  
+kubectl get nodes -o wide
+kubectl describe nodes | grep -E 'Name:|Taints:|Allocatable:' -A5
+
+# Check storage class
+kubectl get storageclass local-path
+```
+
+Quick fixes:
+```bash
+# Option 1: Remove taints from control-plane nodes (single-node clusters)
+kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- || true
+kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule- || true
+
+# Option 2: Change monitoring scheduling mode to 'unrestricted' in ansible/group_vars/all.yml
+# Set: monitoring_scheduling_mode: unrestricted
+# Then redeploy: ansible-playbook -i inventory.txt plays/kubernetes/deploy_monitoring.yaml
+
+# Option 3: Label nodes for flexible scheduling
+kubectl label node <node-name> node-role.vmstation.io/monitoring=true
+```
+
+For permanent fix, configure `monitoring_scheduling_mode` in `ansible/group_vars/all.yml`:
+- `strict`: Original hostname-based scheduling (may cause Pending pods)
+- `flexible`: Label-based with tolerations (default, requires node labeling)  
+- `unrestricted`: No scheduling constraints (works on any available node)
 
 ## 1) Grafana: CrashLoopBackOff due to PV permissions
 
@@ -165,9 +209,11 @@ Expected: Loki starts without config parse errors, can write to `/loki` (touch s
 
 ## TL;DR
 
-Grafana CrashLoopBackOff: init container failed because the hostPath backing the PVC was not writable/chownable by Grafana's runtime UID — fix with chown/chmod and SELinux relabel if needed.
+**Grafana Pending**: pods stuck in Pending state cannot be scheduled due to strict node selectors, taints, or resource constraints — fix by setting `monitoring_scheduling_mode: unrestricted` in `ansible/group_vars/all.yml` or removing node taints.
 
-Loki CrashLoopBackOff: first a config parse error (remove invalid keys like `max_retries`), then a runtime write failure because `/loki` was not mounted as a writable path — fix by mounting the storage PVC at `/loki` and ensuring host ownership matches the container UID.
+**Grafana CrashLoopBackOff**: init container failed because the hostPath backing the PVC was not writable/chownable by Grafana's runtime UID — fix with chown/chmod and SELinux relabel if needed.
+
+**Loki CrashLoopBackOff**: first a config parse error (remove invalid keys like `max_retries`), then a runtime write failure because `/loki` was not mounted as a writable path — fix by mounting the storage PVC at `/loki` and ensuring host ownership matches the container UID.
 
 ---
 
