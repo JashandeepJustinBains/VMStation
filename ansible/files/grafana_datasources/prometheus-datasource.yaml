@@ -1,3 +1,9 @@
+# NOTE: This file is no longer used in the deployment.
+# The kube-prometheus-stack Helm chart automatically creates a default Prometheus datasource.
+# Manually creating this datasource would cause a conflict:
+# "Only one datasource per organization can be marked as default"
+#
+# This file is kept for reference only.
 apiVersion: 1
 datasources:
   - name: Prometheus
