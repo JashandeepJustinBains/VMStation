@@ -250,14 +250,16 @@ For monitoring pods stuck in CrashLoopBackOff or other complex issues:
 
 1. **Quick focused analysis**: Use `./scripts/analyze_k8s_monitoring_diagnostics.sh` for specific Grafana/Loki issues
 2. **Comprehensive troubleshooting**: Use `./scripts/get_copilot_prompt.sh --show` to get a premium Copilot agent prompt
-3. **Basic diagnostics**: Run `./scripts/get_copilot_prompt.sh --gather` to collect cluster information
+3. **Complete troubleshooting**: Use `./scripts/get_copilot_prompt.sh --complete` for a ready-to-use prompt with embedded diagnostics
+4. **Basic diagnostics**: Run `./scripts/get_copilot_prompt.sh --gather` to collect cluster information
 
 The premium Copilot prompt provides:
-- Safe, CLI-first triage checklist
+- Safe, CLI-first triage checklist for duplicate Grafana pods and unwanted `loki-1` completing pods
 - Per-pod diagnostic recipes with exact commands
 - RBAC, storage, and configuration checks
 - Node-specific remediation for VMStation hostnames
-- Step-by-step verification procedures
+- Step-by-step verification procedures with backup and rollback capabilities
+- Dry-run first approach with operator confirmation for all destructive operations
 
 ## Jellyfin Scheduling
 

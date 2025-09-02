@@ -46,6 +46,8 @@ extract_prompt() {
 
 extract_complete_prompt() {
     # Extract the complete prompt text from the complete prompt file
+    # For now, this uses the static template. In the future, this could be enhanced
+    # to embed live diagnostic data when kubectl is available
     sed -n '/^You are an expert Kubernetes troubleshooting assistant/,/^Priority: produce the diagnostic recipes and command sets first/p' "$COMPLETE_PROMPT_FILE"
 }
 
