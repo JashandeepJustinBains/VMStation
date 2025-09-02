@@ -82,34 +82,7 @@ ensure_csrf_secret() {
     fi
 }
 
-# Ensure drone server-host key is set to the provided host (if drone namespace/secret exist)
-ensure_drone_server_host() {
-    local ns="drone"
-    local secret_name="drone-secrets"
-    local host_val="192.168.4.62"
 
-    if ! kubectl get namespace "$ns" >/dev/null 2>&1; then
-        echo -e "${YELLOW}Namespace '$ns' not found; skipping drone secret patch${NC}"
-        return 0
-    fi
-
-    if ! kubectl -n "$ns" get secret "$secret_name" >/dev/null 2>&1; then
-        echo -e "${YELLOW}Secret '$secret_name' not present in namespace '$ns'; skipping patch${NC}"
-        return 0
-    fi
-
-    echo -e "${BLUE}Patching secret '$secret_name' in namespace '$ns' to set server-host=$host_val${NC}"
-    # base64 encode the host value for the secret.data field
-    b64_host=$(printf '%s' "$host_val" | base64 | tr -d '\n')
-
-    # Use kubectl patch to merge the data key so we don't remove other keys
-    if kubectl -n "$ns" patch secret "$secret_name" --type='merge' -p "{\"data\":{\"server-host\":\"$b64_host\"}}" >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ Patched '$secret_name' with server-host=$host_val${NC}"
-        echo -e "${YELLOW}Note: ensure the Drone RPC secret remains unchanged; if you used 'kubectl apply' to recreate the secret earlier you may need to re-add RPC credentials.${NC}"
-    else
-        echo -e "${RED}✗ Failed to patch secret '$secret_name'${NC}"
-    fi
-}
 
 # Function to analyze kubernetes-dashboard pod status
 analyze_dashboard_status() {
