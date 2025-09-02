@@ -20,10 +20,10 @@
 # NOTE: These subsites are intentionally excluded from automatic site deployment for safety.
 # They should be run individually for controlled, step-by-step deployment:
 # - import_playbook: subsites/00-spindown.yaml  # DESTRUCTIVE - Run manually only!
-# - import_playbook: subsites/01-checks.yaml    # Preflight checks
-# - import_playbook: subsites/02-certs.yaml     # Certificate management  
-# - import_playbook: subsites/03-monitoring.yaml # Monitoring pre-checks
-# - import_playbook: subsites/04-jellyfin.yaml  # Jellyfin pre-checks
+- import_playbook: subsites/01-checks.yaml    # Preflight checks
+- import_playbook: subsites/02-certs.yaml     # Certificate management  
+- import_playbook: subsites/03-monitoring.yaml # Monitoring pre-checks
+- import_playbook: subsites/04-jellyfin.yaml  # Jellyfin pre-checks
 
 # === Core Infrastructure Deployment (Must come first) ===
 - import_playbook: plays/kubernetes_stack.yaml
