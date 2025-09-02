@@ -133,7 +133,9 @@ analyze_pod_logs() {
     local all_logs="${current_logs}\n${previous_logs}"
     
     # Analyze logs for specific patterns
-    if echo -e "$all_logs" | grep -i "permission denied" >/dev/null 2>&1; then
+    if echo -e "$all_logs" | grep -i "is forbidden" >/dev/null 2>&1; then
+        failure_reason="rbac_permissions_error"
+    elif echo -e "$all_logs" | grep -i "permission denied" >/dev/null 2>&1; then
         failure_reason="permission_denied"
     elif echo -e "$all_logs" | grep -i "certificate" >/dev/null 2>&1 && echo -e "$all_logs" | grep -i "write" >/dev/null 2>&1; then
         failure_reason="certificate_write_error"
@@ -162,6 +164,10 @@ apply_dashboard_fixes() {
     echo ""
     
     case "$failure_reason" in
+        "rbac_permissions_error")
+            echo -e "${YELLOW}Applying RBAC permissions fixes...${NC}"
+            apply_rbac_fixes "$dashboard_pod"
+            ;;
         "permission_denied"|"certificate_write_error"|"directory_creation_error")
             echo -e "${YELLOW}Applying permission and security context fixes...${NC}"
             apply_permission_fixes "$dashboard_pod"
@@ -190,6 +196,104 @@ apply_dashboard_fixes() {
     
     # Wait for fix application and validate
     validate_and_retry_fixes "$dashboard_pod"
+}
+
+# Function to apply RBAC permission fixes
+apply_rbac_fixes() {
+    local dashboard_pod="$1"
+    
+    echo "1. Creating comprehensive RBAC permissions for kubernetes-dashboard..."
+    
+    # Create ClusterRole with necessary permissions
+    kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetes-dashboard
+rules:
+# Allow Dashboard to get, update and delete Dashboard exclusive secrets.
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["kubernetes-dashboard-key-holder", "kubernetes-dashboard-certs", "kubernetes-dashboard-csrf"]
+  verbs: ["get", "update", "delete"]
+# Allow Dashboard to get and update 'kubernetes-dashboard-settings' config map.
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["kubernetes-dashboard-settings"]
+  verbs: ["get", "update"]
+# Allow Dashboard to get metrics.
+- apiGroups: [""]
+  resources: ["services"]
+  resourceNames: ["heapster", "dashboard-metrics-scraper"]
+  verbs: ["proxy"]
+- apiGroups: [""]
+  resources: ["services/proxy"]
+  resourceNames: ["heapster", "http:heapster:", "https:heapster:", "dashboard-metrics-scraper", "http:dashboard-metrics-scraper"]
+  verbs: ["get"]
+# Allow Dashboard to create secrets for certificate management
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+EOF
+    
+    if [[ $? -eq 0 ]]; then
+        echo -e "${GREEN}✓ ClusterRole created/updated${NC}"
+    else
+        echo -e "${RED}✗ Failed to create ClusterRole${NC}"
+        return 1
+    fi
+    
+    echo "2. Creating ClusterRoleBinding..."
+    kubectl apply -f - << 'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-dashboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-dashboard
+subjects:
+- kind: ServiceAccount
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+EOF
+    
+    if [[ $? -eq 0 ]]; then
+        echo -e "${GREEN}✓ ClusterRoleBinding created/updated${NC}"
+    else
+        echo -e "${RED}✗ Failed to create ClusterRoleBinding${NC}"
+        return 1
+    fi
+    
+    echo "3. Checking if ServiceAccount exists..."
+    if ! kubectl get serviceaccount kubernetes-dashboard -n kubernetes-dashboard >/dev/null 2>&1; then
+        echo "Creating ServiceAccount..."
+        kubectl apply -f - << 'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+EOF
+        echo -e "${GREEN}✓ ServiceAccount created${NC}"
+    else
+        echo -e "${GREEN}✓ ServiceAccount already exists${NC}"
+    fi
+    
+    echo "4. Updating deployment to use correct ServiceAccount..."
+    kubectl -n kubernetes-dashboard patch deployment kubernetes-dashboard --type='merge' -p='{
+        "spec": {
+            "template": {
+                "spec": {
+                    "serviceAccountName": "kubernetes-dashboard"
+                }
+            }
+        }
+    }' && echo -e "${GREEN}✓ Deployment updated with ServiceAccount${NC}" || echo -e "${RED}✗ Failed to update deployment${NC}"
+    
+    echo "5. Deleting failed pod to trigger recreation with new RBAC..."
+    kubectl -n kubernetes-dashboard delete pod "$dashboard_pod" --grace-period=0 --force && echo -e "${GREEN}✓ Pod deleted${NC}" || echo -e "${RED}✗ Failed to delete pod${NC}"
 }
 
 # Function to apply permission-related fixes
@@ -475,7 +579,41 @@ provide_dashboard_fixes() {
     echo -e "${BOLD}=== Dashboard Permission Fixes ===${NC}"
     echo ""
     
-    echo -e "${YELLOW}1. Certificate Generation Issue Fix:${NC}"
+    echo -e "${YELLOW}1. RBAC Permissions Issue Fix:${NC}"
+    echo "   Issue: Dashboard service account lacks permissions to access secrets"
+    echo "   Detection: kubectl -n kubernetes-dashboard logs $dashboard_pod | grep 'is forbidden'"
+    echo ""
+    
+    echo -e "${BLUE}   Fix - Create proper RBAC permissions:${NC}"
+    echo "   # Create ClusterRole with secret access permissions"
+    echo "   kubectl apply -f - << 'EOF'"
+    echo "apiVersion: rbac.authorization.k8s.io/v1"
+    echo "kind: ClusterRole"
+    echo "metadata:"
+    echo "  name: kubernetes-dashboard"
+    echo "rules:"
+    echo "- apiGroups: [\"\"]\n  resources: [\"secrets\"]\n  resourceNames: [\"kubernetes-dashboard-key-holder\", \"kubernetes-dashboard-certs\", \"kubernetes-dashboard-csrf\"]\n  verbs: [\"get\", \"update\", \"delete\"]"
+    echo "- apiGroups: [\"\"]\n  resources: [\"secrets\"]\n  verbs: [\"create\"]"
+    echo "EOF"
+    echo ""
+    echo "   # Create ClusterRoleBinding"
+    echo "   kubectl apply -f - << 'EOF'"
+    echo "apiVersion: rbac.authorization.k8s.io/v1"
+    echo "kind: ClusterRoleBinding"
+    echo "metadata:"
+    echo "  name: kubernetes-dashboard"
+    echo "roleRef:"
+    echo "  apiGroup: rbac.authorization.k8s.io"
+    echo "  kind: ClusterRole"
+    echo "  name: kubernetes-dashboard"
+    echo "subjects:"
+    echo "- kind: ServiceAccount"
+    echo "  name: kubernetes-dashboard"
+    echo "  namespace: kubernetes-dashboard"
+    echo "EOF"
+    echo ""
+    
+    echo -e "${YELLOW}2. Certificate Generation Issue Fix:${NC}"
     echo "   Issue: Dashboard may fail to generate auto-certificates due to write permissions"
     echo "   Detection: kubectl -n kubernetes-dashboard logs $dashboard_pod | grep 'certificate'"
     echo ""
@@ -484,7 +622,7 @@ provide_dashboard_fixes() {
         echo "   kubectl -n kubernetes-dashboard patch deployment kubernetes-dashboard -p '{\"spec\":{\"template\":{\"spec\":{\"securityContext\":{\"fsGroup\":65534}}}}}'"
     echo ""
     
-    echo -e "${YELLOW}2. Directory Permission Fix (Node-level operation):${NC}"
+    echo -e "${YELLOW}3. Directory Permission Fix (Node-level operation):${NC}"
     echo "   Issue: Dashboard container cannot write certificates to /certs directory"
     echo "   Detection: kubectl -n kubernetes-dashboard logs $dashboard_pod | grep 'Permission denied'"
     echo ""
@@ -500,12 +638,12 @@ provide_dashboard_fixes() {
     echo "   sudo chmod -R 755 /tmp/k8s-dashboard-certs"
     echo ""
     
-    echo -e "${YELLOW}3. SELinux Context Fix (if SELinux is enabled):${NC}"
+    echo -e "${YELLOW}4. SELinux Context Fix (if SELinux is enabled):${NC}"
     echo "   sudo semanage fcontext -a -t container_file_t '/tmp/k8s-dashboard-certs(/.*)?'"
     echo "   sudo restorecon -R /tmp/k8s-dashboard-certs"
     echo ""
     
-    echo -e "${YELLOW}4. Pod Recreation (after fixing permissions):${NC}"
+    echo -e "${YELLOW}5. Pod Recreation (after fixing permissions):${NC}"
     if [[ "$AUTO_APPROVE" == "yes" ]]; then
         echo "   kubectl -n kubernetes-dashboard delete pod -l app=kubernetes-dashboard"
         echo "   kubectl -n kubernetes-dashboard rollout restart deployment kubernetes-dashboard"
@@ -515,12 +653,12 @@ provide_dashboard_fixes() {
     fi
     echo ""
     
-    echo -e "${YELLOW}5. Alternative - Remove auto-certificate generation:${NC}"
+    echo -e "${YELLOW}6. Alternative - Remove auto-certificate generation:${NC}"
     echo "   kubectl -n kubernetes-dashboard patch deployment kubernetes-dashboard --type='json' -p='[{\"op\": \"remove\", \"path\": \"/spec/template/spec/containers/0/args\"}]'"
     echo "   kubectl -n kubernetes-dashboard patch deployment kubernetes-dashboard --type='json' -p='[{\"op\": \"add\", \"path\": \"/spec/template/spec/containers/0/args\", \"value\": [\"--namespace=kubernetes-dashboard\", \"--enable-insecure-login\"]}]'"
     echo ""
     
-    echo -e "${YELLOW}6. Verification Commands:${NC}"
+    echo -e "${YELLOW}7. Verification Commands:${NC}"
     echo "   kubectl -n kubernetes-dashboard get pods | grep kubernetes-dashboard"
     echo "   kubectl -n kubernetes-dashboard logs $dashboard_pod --tail=50"
     echo "   curl -k https://NODE_IP:32000  # Test access (replace NODE_IP)"
