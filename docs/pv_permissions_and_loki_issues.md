@@ -84,6 +84,11 @@ For permanent fix, configure `monitoring_scheduling_mode` in `ansible/group_vars
 - `flexible`: Label-based with tolerations (default, requires node labeling)  
 - `unrestricted`: No scheduling constraints (works on any available node)
 
+**Automatic Fix Available**: The deployment process now includes `scripts/fix_monitoring_scheduling.sh` which automatically handles these scheduling issues during deployment. If you encounter pending pods after deployment, run:
+```bash
+./scripts/fix_monitoring_scheduling.sh
+```
+
 ## 1) Grafana: CrashLoopBackOff due to PV permissions
 
 Summary

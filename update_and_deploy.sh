@@ -332,6 +332,7 @@ if [ "$CLUSTER_ACCESSIBLE" = true ]; then
     # are performed earlier (see pre-deploy section). Keep post-deploy focused on
     # scripts that require a reachable cluster.
     POST_SCRIPTS=(
+        "scripts/fix_monitoring_scheduling.sh"
         "scripts/fix_k8s_dashboard_permissions.sh"
         "scripts/fix_k8s_monitoring_pods.sh"
     )
@@ -345,6 +346,9 @@ if [ "$CLUSTER_ACCESSIBLE" = true ]; then
             case "$(basename "$s")" in
                 fix_k8s_dashboard_permissions.sh|fix_k8s_monitoring_pods.sh)
                     ARGS="--auto-approve"
+                    ;;
+                fix_monitoring_scheduling.sh)
+                    ARGS=""  # No args needed for scheduling fix
                     ;;
                 *)
                     ARGS=""
@@ -365,5 +369,5 @@ if [ "$CLUSTER_ACCESSIBLE" = true ]; then
 else
     echo "Cluster not accessible - skipping post-deployment Kubernetes remediation scripts"
     echo "To run post-deploy fixes later, execute:" \
-         "scripts/fix_monitoring_permissions.sh && scripts/fix_k8s_dashboard_permissions.sh --auto-approve && scripts/fix_k8s_monitoring_pods.sh --auto-approve"
+         "scripts/fix_monitoring_permissions.sh && scripts/fix_monitoring_scheduling.sh && scripts/fix_k8s_dashboard_permissions.sh --auto-approve && scripts/fix_k8s_monitoring_pods.sh --auto-approve"
 fi

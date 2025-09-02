@@ -70,5 +70,23 @@ After deployment, you should see:
 - Monitoring directories exist with proper permissions: `/srv/monitoring_data/*`
 - No hanging during kube-prometheus-stack installation
 - Successful monitoring stack deployment
+- Monitoring pods are automatically scheduled and running (no Pending state)
 
 The deployment hanging issue should now be resolved.
+
+## Additional Fixes
+
+### Automatic Monitoring Pod Scheduling Fix
+
+As of this update, the deployment process includes automatic fixes for common monitoring pod scheduling issues:
+
+- **Node Taints**: Automatically removes control-plane taints on single-node clusters
+- **Node Labels**: Automatically labels available nodes for monitoring workloads
+- **Scheduling Constraints**: Falls back to unrestricted scheduling if pods remain pending
+
+This is handled by the new `scripts/fix_monitoring_scheduling.sh` script that runs automatically during deployment.
+
+If you encounter scheduling issues after deployment, you can manually run:
+```bash
+./scripts/fix_monitoring_scheduling.sh
+```
