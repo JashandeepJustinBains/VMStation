@@ -276,7 +276,7 @@
             name: pv-mongodb-wip
           spec:
             capacity:
-              storage: 10Gi
+              storage: 5Gi
             accessModes:
               - ReadWriteOnce
             hostPath:
@@ -300,7 +300,7 @@
               - ReadWriteOnce
             resources:
               requests:
-                storage: 10Gi
+                storage: 5Gi
             volumeName: pv-mongodb-wip
       when: mongodb_dep.resources | length == 0
       failed_when: false

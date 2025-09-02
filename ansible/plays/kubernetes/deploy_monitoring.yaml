@@ -5,6 +5,9 @@
   become: true
   vars:
     monitoring_namespace: monitoring
+  # Default scheduling mode when not provided
+  # (can be 'strict', 'flexible', or 'unrestricted')
+  monitoring_scheduling_mode: "{{ monitoring_scheduling_mode | default('flexible') }}"
     
   tasks:
     - name: Ensure kubernetes Python package is available (Debian package preferred)
@@ -21,6 +24,12 @@
         executable: pip3
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
+
+    - name: Compute monitoring scheduling nodeSelector and tolerations
+      ansible.builtin.set_fact:
+        monitoring_node_selector: "{{ {'kubernetes.io/hostname': ansible_hostname} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict') else {'node-role.vmstation.io/monitoring': 'true'} }}"
+        monitoring_tolerations: "{{ [{'key':'node-role.kubernetes.io/control-plane','operator':'Exists','effect':'NoSchedule'},{'key':'node-role.kubernetes.io/master','operator':'Exists','effect':'NoSchedule'}] if (monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible') else [] }}"
+      when: monitoring_scheduling_mode is defined
 
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:
@@ -40,27 +49,13 @@
                     accessModes: ["ReadWriteOnce"]
                     resources:
                       requests:
-                        storage: 10Gi
+                        storage: 5Gi
               serviceMonitorSelectorNilUsesHelmValues: false
               podMonitorSelectorNilUsesHelmValues: false
               ruleSelectorNilUsesHelmValues: false
-              # Conditional node scheduling based on monitoring_scheduling_mode
-              # When monitoring_scheduling_mode is 'strict', use hostname-based selection
-              {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
-              nodeSelector:
-                kubernetes.io/hostname: "{{ ansible_hostname }}"
-              {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
-              # When monitoring_scheduling_mode is 'flexible' (default), use label-based selection with tolerations
-              nodeSelector:
-                node-role.vmstation.io/monitoring: "true"
-              tolerations:
-                - key: node-role.kubernetes.io/control-plane
-                  operator: Exists
-                  effect: NoSchedule
-                - key: node-role.kubernetes.io/master
-                  operator: Exists
-                  effect: NoSchedule
-              {% endif -%}
+              # Node scheduling (computed earlier)
+              nodeSelector: "{{ monitoring_node_selector }}"
+              tolerations: {{ monitoring_tolerations }}
               # When monitoring_scheduling_mode is 'unrestricted', no nodeSelector or tolerations are added
             service:
               type: NodePort
@@ -90,21 +85,9 @@
                 enabled: true
               datasources:
                 enabled: true
-            # Conditional node scheduling based on monitoring_scheduling_mode (Grafana)
-            {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ansible_hostname }}"
-            {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
-            nodeSelector:
-              node-role.vmstation.io/monitoring: "true"
-            tolerations:
-              - key: node-role.kubernetes.io/control-plane
-                operator: Exists
-                effect: NoSchedule
-              - key: node-role.kubernetes.io/master
-                operator: Exists
-                effect: NoSchedule
-            {% endif -%}
+            # Grafana node scheduling
+            nodeSelector: "{{ monitoring_node_selector }}"
+            tolerations: {{ monitoring_tolerations }}
                 
           # AlertManager configuration
           alertmanager:
@@ -117,21 +100,9 @@
                     resources:
                       requests:
                         storage: 2Gi
-              # Conditional node scheduling based on monitoring_scheduling_mode (AlertManager)
-              {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
-              nodeSelector:
-                kubernetes.io/hostname: "{{ ansible_hostname }}"
-              {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
-              nodeSelector:
-                node-role.vmstation.io/monitoring: "true"
-              tolerations:
-                - key: node-role.kubernetes.io/control-plane
-                  operator: Exists
-                  effect: NoSchedule
-                - key: node-role.kubernetes.io/master
-                  operator: Exists
-                  effect: NoSchedule
-              {% endif -%}
+              # AlertManager node scheduling
+              nodeSelector: "{{ monitoring_node_selector }}"
+              tolerations: {{ monitoring_tolerations }}
             service:
               type: NodePort
               nodePort: 30903
@@ -173,21 +144,9 @@
               accessModes:
                 - ReadWriteOnce
                 
-            # Conditional node scheduling based on monitoring_scheduling_mode (Loki)
-            {% if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
-            nodeSelector:
-              kubernetes.io/hostname: "{{ ansible_hostname }}"
-            {% elif monitoring_scheduling_mode is not defined or monitoring_scheduling_mode == 'flexible' -%}
-            nodeSelector:
-              node-role.vmstation.io/monitoring: "true"
-            tolerations:
-              - key: node-role.kubernetes.io/control-plane
-                operator: Exists
-                effect: NoSchedule
-              - key: node-role.kubernetes.io/master
-                operator: Exists
-                effect: NoSchedule
-            {% endif -%}
+            # Loki node scheduling
+            nodeSelector: "{{ monitoring_node_selector }}"
+            tolerations: {{ monitoring_tolerations }}
               
             # Security context for proper permissions
             securityContext:
