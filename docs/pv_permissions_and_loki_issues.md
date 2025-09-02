@@ -4,11 +4,42 @@ This document explains common issues encountered during monitoring stack deploym
 
 ### Checklist
 - Handle Pending pods due to scheduling constraints (NEW)
+- Handle Grafana datasource provisioning conflicts (NEW)
 - Summarize the failure mode and root cause.
 - Show how to trace PVC → PV → hostPath.
 - Provide safe remediation steps to fix ownership/permissions and SELinux labels.
 - Provide Loki-specific fixes: remove invalid config entries and ensure the PVC is mounted at `/loki` for writeable storage.
 - Verification commands to confirm recovery.
+
+## 0) Grafana: Datasource provisioning conflicts
+
+Summary
+- Grafana logs show `"Only one datasource per organization can be marked as default"` error, preventing successful provisioning of datasources.
+
+Root cause:
+- The kube-prometheus-stack Helm chart automatically creates a default Prometheus datasource when `sidecar.datasources.enabled: true`
+- Manual creation of additional default datasources (via ConfigMaps) causes conflicts
+
+Diagnosis:
+```bash
+# Check Grafana logs for datasource errors
+kubectl logs -n monitoring -l app.kubernetes.io/name=grafana --tail=100 | grep "datasource"
+
+# Check for conflicting datasource ConfigMaps
+kubectl get configmap -n monitoring -l grafana_datasource=1
+```
+
+Fix:
+```bash
+# Use the validation and fix script
+./scripts/validate_grafana_datasource_fix.sh
+
+# Or apply manual fix (see docs/grafana_datasource_conflict_fix.md for details)
+kubectl delete configmap prometheus-datasource -n monitoring  # Remove manual duplicate
+kubectl rollout restart deployment kube-prometheus-stack-grafana -n monitoring
+```
+
+For complete fix details, see: `docs/grafana_datasource_conflict_fix.md`
 
 ## 0) Grafana: Pending state due to scheduling constraints
 
