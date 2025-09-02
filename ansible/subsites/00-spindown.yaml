@@ -302,10 +302,14 @@
       when: ansible_pkg_mgr in ['dnf','yum']
       ignore_errors: true
 
-    - name: Remove common cluster directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
+    - name: Remove files from common cluster directories (preserve directory structure and permissions)
+      ansible.builtin.shell: |
+        if [ -d "{{ item }}" ]; then
+          echo "Cleaning files from directory: {{ item }}"
+          find "{{ item }}" -type f -delete 2>/dev/null || true
+        else
+          echo "Directory {{ item }} does not exist, skipping"
+        fi
       loop: "{{ cleanup_dirs }}"
       ignore_errors: true
 
