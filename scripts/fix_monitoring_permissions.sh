@@ -62,22 +62,33 @@ set_ownership() {
     if [ -d "$dir" ]; then
         echo "Setting ownership for: $dir"
         
-        # For Kubernetes, we typically want root ownership with proper group access
-        # For Podman, we might need specific user ownership
-        if command -v kubectl >/dev/null 2>&1; then
-            # Kubernetes mode - ensure readable by all
-            chown -R root:root "$dir" 2>/dev/null || {
-                echo -e "  ${YELLOW}⚠ Could not change ownership (may not have permissions)${NC}"
+        # Special handling for Grafana directory - needs UID:GID 472:472
+        if [[ "$dir" == *"/grafana"* ]]; then
+            echo "  Applying Grafana-specific ownership (UID:GID 472:472)..."
+            chown -R 472:472 "$dir" 2>/dev/null || {
+                echo -e "  ${YELLOW}⚠ Could not change ownership to 472:472 (may not have permissions)${NC}"
+                echo "  Manual fix: sudo chown -R 472:472 $dir"
                 return 1
             }
+            echo -e "  ${GREEN}✓ Grafana ownership set (472:472)${NC}"
         else
-            # Legacy Podman mode - try to use current user
-            chown -R "$(whoami):$(id -gn)" "$dir" 2>/dev/null || {
-                echo -e "  ${YELLOW}⚠ Could not change ownership (may not have permissions)${NC}"
-                return 1
-            }
+            # For Kubernetes, we typically want root ownership with proper group access
+            # For Podman, we might need specific user ownership
+            if command -v kubectl >/dev/null 2>&1; then
+                # Kubernetes mode - ensure readable by all
+                chown -R root:root "$dir" 2>/dev/null || {
+                    echo -e "  ${YELLOW}⚠ Could not change ownership (may not have permissions)${NC}"
+                    return 1
+                }
+            else
+                # Legacy Podman mode - try to use current user
+                chown -R "$(whoami):$(id -gn)" "$dir" 2>/dev/null || {
+                    echo -e "  ${YELLOW}⚠ Could not change ownership (may not have permissions)${NC}"
+                    return 1
+                }
+            fi
+            echo -e "  ${GREEN}✓ Ownership set${NC}"
         fi
-        echo -e "  ${GREEN}✓ Ownership set${NC}"
     fi
 }
 

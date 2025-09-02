@@ -318,7 +318,6 @@ else
     echo "2. Re-run with: FORCE_K8S_DEPLOYMENT=true ./update_and_deploy.sh"
     echo "3. Or run individual playbooks: ansible-playbook -i ansible/inventory.txt ansible/site.yaml"
 fi
-fi
 
 #########################################
 # Post-deployment remediation (run known fix scripts if present)
@@ -333,6 +332,7 @@ if [ "$CLUSTER_ACCESSIBLE" = true ]; then
     # are performed earlier (see pre-deploy section). Keep post-deploy focused on
     # scripts that require a reachable cluster.
     POST_SCRIPTS=(
+        "scripts/create_monitoring_pvs.sh"
         "scripts/fix_k8s_dashboard_permissions.sh"
         "scripts/fix_k8s_monitoring_pods.sh"
     )
@@ -342,9 +342,9 @@ if [ "$CLUSTER_ACCESSIBLE" = true ]; then
             echo "Found $s - ensuring executable"
             chmod +x "$s" || true
 
-            # Decide args: dashboard and monitoring_pods accept --auto-approve; others run without args
+            # Decide args: dashboard, monitoring_pods, and create_monitoring_pvs accept --auto-approve; others run without args
             case "$(basename "$s")" in
-                fix_k8s_dashboard_permissions.sh|fix_k8s_monitoring_pods.sh)
+                fix_k8s_dashboard_permissions.sh|fix_k8s_monitoring_pods.sh|create_monitoring_pvs.sh)
                     ARGS="--auto-approve"
                     ;;
                 *)
@@ -366,5 +366,5 @@ if [ "$CLUSTER_ACCESSIBLE" = true ]; then
 else
     echo "Cluster not accessible - skipping post-deployment Kubernetes remediation scripts"
     echo "To run post-deploy fixes later, execute:" \
-         "scripts/fix_monitoring_permissions.sh && scripts/fix_k8s_dashboard_permissions.sh --auto-approve && scripts/fix_k8s_monitoring_pods.sh --auto-approve"
+         "scripts/fix_monitoring_permissions.sh && scripts/create_monitoring_pvs.sh --auto-approve && scripts/fix_k8s_dashboard_permissions.sh --auto-approve && scripts/fix_k8s_monitoring_pods.sh --auto-approve"
 fi
