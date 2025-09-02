@@ -52,6 +52,65 @@ check_kubectl() {
     return 0
 }
 
+# Ensure the kubernetes-dashboard CSRF secret exists (create when missing)
+ensure_csrf_secret() {
+    local ns="kubernetes-dashboard"
+    local name="kubernetes-dashboard-csrf"
+
+    if ! kubectl -n "$ns" get namespace >/dev/null 2>&1; then
+        echo -e "${YELLOW}Namespace $ns not found; skipping CSRF secret creation${NC}"
+        return 0
+    fi
+
+    if kubectl -n "$ns" get secret "$name" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ CSRF secret '$name' already exists in namespace $ns${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}Creating missing CSRF secret '$name' in namespace $ns...${NC}"
+    # Prefer openssl, fallback to /dev/urandom base64
+    if command -v openssl >/dev/null 2>&1; then
+        token=$(openssl rand -hex 32)
+    else
+        token=$(head -c 32 /dev/urandom | base64 | tr -d '\n')
+    fi
+
+    if kubectl -n "$ns" create secret generic "$name" --from-literal=csrf="$token" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Created CSRF secret '$name'${NC}"
+    else
+        echo -e "${RED}✗ Failed to create CSRF secret '$name'${NC}"
+    fi
+}
+
+# Ensure drone server-host key is set to the provided host (if drone namespace/secret exist)
+ensure_drone_server_host() {
+    local ns="drone"
+    local secret_name="drone-secrets"
+    local host_val="192.168.4.62"
+
+    if ! kubectl get namespace "$ns" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Namespace '$ns' not found; skipping drone secret patch${NC}"
+        return 0
+    fi
+
+    if ! kubectl -n "$ns" get secret "$secret_name" >/dev/null 2>&1; then
+        echo -e "${YELLOW}Secret '$secret_name' not present in namespace '$ns'; skipping patch${NC}"
+        return 0
+    fi
+
+    echo -e "${BLUE}Patching secret '$secret_name' in namespace '$ns' to set server-host=$host_val${NC}"
+    # base64 encode the host value for the secret.data field
+    b64_host=$(printf '%s' "$host_val" | base64 | tr -d '\n')
+
+    # Use kubectl patch to merge the data key so we don't remove other keys
+    if kubectl -n "$ns" patch secret "$secret_name" --type='merge' -p "{\"data\":{\"server-host\":\"$b64_host\"}}" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Patched '$secret_name' with server-host=$host_val${NC}"
+        echo -e "${YELLOW}Note: ensure the Drone RPC secret remains unchanged; if you used 'kubectl apply' to recreate the secret earlier you may need to re-add RPC credentials.${NC}"
+    else
+        echo -e "${RED}✗ Failed to patch secret '$secret_name'${NC}"
+    fi
+}
+
 # Function to analyze kubernetes-dashboard pod status
 analyze_dashboard_status() {
     echo -e "${BOLD}=== Analyzing Kubernetes Dashboard Status ===${NC}"
@@ -744,6 +803,12 @@ main() {
             
             # Create the fix manifest for manual use
             create_dashboard_fix_manifest
+        fi
+        # If auto-approve is enabled, ensure the CSRF secret and optionally patch drone host
+        if [[ "$AUTO_APPROVE" == "yes" ]]; then
+            echo "Running auto-approve prechecks: ensuring CSRF secret and Drone server-host..."
+            ensure_csrf_secret
+            ensure_drone_server_host
         fi
     fi
 }
