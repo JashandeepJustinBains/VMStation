@@ -367,24 +367,12 @@
                   type: loki
                   access: proxy
                   url: http://loki-stack:3100
+                  isDefault: false
                   jsonData:
                     maxLines: 1000
         kubeconfig: /root/.kube/config
 
-    - name: Create Prometheus datasource for Grafana (provisioning)
-      kubernetes.core.k8s:
-        state: present
-        definition:
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: prometheus-datasource
-            namespace: "{{ monitoring_namespace }}"
-            labels:
-              grafana_datasource: "1"
-          stringData:
-            prometheus-datasource.yaml: "{{ lookup('file', playbook_dir + '/../../files/grafana_datasources/prometheus-datasource.yaml') }}"
-        kubeconfig: /root/.kube/config
+
 
     - name: Provision Grafana dashboards as ConfigMaps
       kubernetes.core.k8s:

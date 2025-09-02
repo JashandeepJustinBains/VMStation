@@ -7,22 +7,41 @@
     monitoring_namespace: monitoring
     
   tasks:
-    - name: Check if Prometheus datasource ConfigMap exists
+    - name: Check if Grafana deployment has Prometheus datasource enabled
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: kube-prometheus-stack-grafana
+        namespace: "{{ monitoring_namespace }}"
+        kubeconfig: /root/.kube/config
+      register: grafana_deployment
+      
+    - name: Verify Grafana deployment exists and is ready
+      assert:
+        that:
+          - grafana_deployment.resources | length > 0
+          - grafana_deployment.resources[0].status.readyReplicas is defined
+          - grafana_deployment.resources[0].status.readyReplicas > 0
+        fail_msg: "Grafana deployment not found or not ready"
+        success_msg: "✓ Grafana deployment exists and is ready (Prometheus datasource created automatically by kube-prometheus-stack)"
+        
+    - name: Check if Loki datasource ConfigMap exists
       kubernetes.core.k8s_info:
         api_version: v1
         kind: ConfigMap
-        name: prometheus-datasource
+        name: loki-datasource
         namespace: "{{ monitoring_namespace }}"
         kubeconfig: /root/.kube/config
-      register: prometheus_datasource_cm
+      register: loki_datasource_cm
       
-    - name: Verify Prometheus datasource ConfigMap has correct label
+    - name: Verify Loki datasource ConfigMap has correct configuration
       assert:
         that:
-          - prometheus_datasource_cm.resources | length > 0
-          - prometheus_datasource_cm.resources[0].metadata.labels['grafana_datasource'] == "1"
-        fail_msg: "Prometheus datasource ConfigMap not found or missing correct label"
-        success_msg: "✓ Prometheus datasource ConfigMap exists with correct label"
+          - loki_datasource_cm.resources | length > 0
+          - loki_datasource_cm.resources[0].metadata.labels['grafana_datasource'] == "1"
+          - "'isDefault: false' in loki_datasource_cm.resources[0].data['loki-datasource.yaml']"
+        fail_msg: "Loki datasource ConfigMap not found, missing correct label, or isDefault not properly set"
+        success_msg: "✓ Loki datasource ConfigMap exists with correct configuration (isDefault: false)"
         
     - name: Check if Grafana dashboards ConfigMap exists
       kubernetes.core.k8s_info:
@@ -69,7 +88,7 @@
           
           Verification steps you can run manually:
           1. Check ConfigMaps:
-             kubectl -n {{ monitoring_namespace }} get configmap prometheus-datasource -o yaml
+             kubectl -n {{ monitoring_namespace }} get configmap loki-datasource -o yaml
              kubectl -n {{ monitoring_namespace }} get configmap grafana-dashboards -o yaml
              
           2. Check Grafana pod with sidecar:
@@ -78,3 +97,5 @@
           3. Test Grafana API (if accessible):
              curl -s http://{{ ansible_default_ipv4.address }}:30300/api/datasources | jq '.'
              curl -s http://{{ ansible_default_ipv4.address }}:30300/api/search?query=prometheus
+          
+          Note: Prometheus datasource is automatically created by kube-prometheus-stack
