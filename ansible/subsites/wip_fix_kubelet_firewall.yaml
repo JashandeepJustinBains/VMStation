@@ -52,8 +52,6 @@
       ansible.builtin.shell: |
         firewall-cmd --permanent --zone={{ kube_zone }} --list-rich-rules | grep -F "source address=192.168.4.0/24" || \
         firewall-cmd --permanent --zone={{ kube_zone }} --add-rich-rule='rule family=ipv4 source address=192.168.4.0/24 port protocol=tcp port=10250 accept'
-      args:
-        warn: false
       register: rich_rule
       failed_when: false
       changed_when: "'added' in (rich_rule.stdout + rich_rule.stderr)"

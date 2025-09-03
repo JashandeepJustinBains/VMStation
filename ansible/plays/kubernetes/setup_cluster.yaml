@@ -880,8 +880,6 @@
             if [ -f /etc/kubernetes/manifests/kube-apiserver.yaml ]; then
               mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.backup || true
             fi
-          args:
-            warn: false
           ignore_errors: true
 
         - name: Kill any remaining kube-apiserver processes
@@ -905,6 +903,18 @@
           when: port_6443_after.stdout != ''
       when: port_6443.stdout != '' and not kubeconfig.stat.exists
 
+    - name: Ensure /etc/kubernetes directory structure exists
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /etc/kubernetes
+        - /etc/kubernetes/manifests
+        - /var/lib/kubelet
+
     - name: Initialize Kubernetes cluster
       command: >
         kubeadm init 
@@ -913,6 +923,60 @@
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
       when: not kubeconfig.stat.exists
       register: kubeadm_init
+
+    - name: Verify kubelet configuration after kubeadm init
+      block:
+        - name: Check if kubelet config file exists
+          stat:
+            path: /var/lib/kubelet/config.yaml
+          register: kubelet_config_check
+
+        - name: Check if kubelet kubeadm flags file exists  
+          stat:
+            path: /var/lib/kubelet/kubeadm-flags.env
+          register: kubelet_flags_check
+
+        - name: Restart and enable kubelet (only if service exists)
+          systemd:
+            name: kubelet
+            state: restarted
+            enabled: yes
+          when: "'kubelet.service' in ansible_facts.services"
+          register: kubelet_post_init_restart
+          ignore_errors: yes
+
+        - name: Collect initial diagnostics for kubelet failure
+          shell: |
+            echo "=== Kubelet Failure Diagnostics ==="
+            echo "System: $(uname -a)"
+            echo "Kubelet status:"
+            systemctl status kubelet --no-pager || true
+            echo "Recent kubelet logs:"
+            journalctl -u kubelet -n 20 --no-pager || true
+            echo "Container runtime status:"
+            systemctl status containerd --no-pager || true
+            echo "Kubelet configuration:"
+            ls -la /etc/systemd/system/kubelet.service.d/ || true
+            cat /etc/systemd/system/kubelet.service.d/10-kubeadm.conf || true
+          register: initial_diagnostics
+          ignore_errors: yes
+          when: kubelet_post_init_restart is defined and kubelet_post_init_restart.failed
+
+        - name: Display initial diagnostics
+          debug:
+            var: initial_diagnostics.stdout_lines
+          when: kubelet_post_init_restart is defined and kubelet_post_init_restart.failed
+
+        - name: Attempt kubelet restart after comprehensive cleanup
+          systemd:
+            name: kubelet
+            state: restarted
+            enabled: yes
+          register: kubelet_recovery_result
+          ignore_errors: yes
+          when: kubelet_post_init_restart is defined and kubelet_post_init_restart.failed
+
+      when: kubeadm_init is defined and not kubeadm_init.failed
 
     - name: Create .kube directory for root
       file:
@@ -1239,6 +1303,51 @@
           when: not final_kubelet_conf.stat.exists and (join_result is defined and (join_result.rc | default(0)) != 0)
           
       when: not kubelet_conf.stat.exists
+
+    - name: Verify worker node kubelet configuration after join
+      block:
+        - name: Check if kubelet config file exists after join
+          stat:
+            path: /var/lib/kubelet/config.yaml
+          register: worker_kubelet_config_check
+
+        - name: Check if worker kubelet kubeconfig exists
+          stat:
+            path: /etc/kubernetes/kubelet.conf
+          register: worker_kubelet_kubeconfig_check
+
+        - name: Restart and enable kubelet on worker (only if service exists)
+          systemd:
+            name: kubelet
+            state: restarted
+            enabled: yes
+          when: "'kubelet.service' in ansible_facts.services"
+          register: worker_kubelet_restart
+          ignore_errors: yes
+
+        - name: Worker kubelet diagnostics if restart failed
+          shell: |
+            echo "=== Worker Node Kubelet Diagnostics ==="
+            echo "System: $(uname -a)"
+            echo "Kubelet status:"
+            systemctl status kubelet --no-pager || true
+            echo "Recent kubelet logs:"
+            journalctl -u kubelet -n 20 --no-pager || true
+            echo "Container runtime status:"
+            systemctl status containerd --no-pager || true
+            echo "Kubelet configuration files:"
+            ls -la /var/lib/kubelet/ || true
+            ls -la /etc/kubernetes/ || true
+          register: worker_diagnostics
+          ignore_errors: yes
+          when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
+
+        - name: Display worker kubelet diagnostics
+          debug:
+            var: worker_diagnostics.stdout_lines
+          when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
+
+      when: kubelet_conf.stat.exists or (join_result is defined and (join_result.rc | default(0)) == 0)
 
     - name: Remove join command file
       file:
