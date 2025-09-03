@@ -1091,6 +1091,121 @@
       
       when: not kubelet_conf.stat.exists
 
+    - name: Install CNI plugins and configuration on worker nodes (required for kubelet)
+      block:
+        - name: Create CNI directories on worker nodes
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          loop:
+            - /opt/cni/bin
+            - /etc/cni/net.d
+            - /var/lib/cni/networks
+            - /var/lib/cni/results
+
+        - name: Download and install Flannel CNI plugin binary on worker nodes
+          get_url:
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1/flannel-amd64"
+            dest: /opt/cni/bin/flannel
+            mode: '0755'
+            owner: root
+            group: root
+            timeout: 60
+          register: flannel_download
+          retries: 3
+          delay: 10
+          until: flannel_download is succeeded
+
+        - name: Download and install additional CNI plugins on worker nodes
+          unarchive:
+            src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+            dest: /opt/cni/bin
+            remote_src: yes
+            owner: root
+            group: root
+            mode: '0755'
+            creates: /opt/cni/bin/bridge
+          register: cni_plugins_download
+          retries: 3
+          delay: 10
+          until: cni_plugins_download is succeeded
+
+        - name: Create Flannel subnet configuration for worker nodes
+          copy:
+            content: |
+              {
+                "Network": "10.244.0.0/16",
+                "EnableNFTables": false,
+                "Backend": {
+                  "Type": "vxlan"
+                }
+              }
+            dest: /run/flannel/subnet.env
+            owner: root
+            group: root
+            mode: '0644'
+          
+        - name: Ensure /run/flannel directory exists on worker nodes
+          file:
+            path: /run/flannel
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+
+        - name: Create basic CNI configuration for worker nodes
+          copy:
+            content: |
+              {
+                "name": "cni0",
+                "cniVersion": "0.3.1",
+                "plugins": [
+                  {
+                    "type": "flannel",
+                    "delegate": {
+                      "hairpinMode": true,
+                      "isDefaultGateway": true
+                    }
+                  },
+                  {
+                    "type": "portmap",
+                    "capabilities": {
+                      "portMappings": true
+                    }
+                  }
+                ]
+              }
+            dest: /etc/cni/net.d/10-flannel.conflist
+            owner: root
+            group: root
+            mode: '0644'
+
+        - name: Verify CNI plugin installation on worker nodes
+          stat:
+            path: "{{ item }}"
+          register: cni_files_check
+          failed_when: not cni_files_check.stat.exists
+          loop:
+            - /opt/cni/bin/flannel
+            - /opt/cni/bin/bridge
+            - /opt/cni/bin/portmap
+            - /etc/cni/net.d/10-flannel.conflist
+
+        - name: Display CNI installation completion
+          debug:
+            msg: |
+              ✓ CNI plugins and configuration installed on worker node {{ inventory_hostname }}
+              - Flannel CNI plugin: /opt/cni/bin/flannel
+              - Standard CNI plugins: /opt/cni/bin/
+              - CNI configuration: /etc/cni/net.d/10-flannel.conflist
+              
+              Worker nodes now have the necessary CNI infrastructure without running Flannel daemon.
+
+      when: not kubelet_conf.stat.exists
+
     - name: Pre-join validation for worker nodes
       block:
         - name: Verify containerd is running
