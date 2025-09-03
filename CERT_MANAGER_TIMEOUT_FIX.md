@@ -6,6 +6,7 @@ The VMStation deployment was experiencing timeout errors when deploying cert-man
 1. **cert-manager timeout**: "Error: context deadline exceeded" during Helm installation
 2. **cert-manager rollout failures**: All cert-manager deployments (cert-manager, cert-manager-webhook, cert-manager-cainjector) exceeding progress deadlines
 3. **local-path provisioner hanging**: "Failed to gather information about Deployment(s) even after waiting for 120 seconds"
+4. **Docker Hub connectivity false positives**: HTTP 401 responses from Docker Hub being treated as connectivity failures
 
 ## Root Cause Analysis
 
@@ -20,6 +21,7 @@ The VMStation deployment was experiencing timeout errors when deploying cert-man
 - Missing prerequisite directory creation (after 00-spindown.yaml cleanup)
 - No pre-flight cluster readiness checks
 - Aggressive image pull policies causing repeated downloads
+- Docker Hub connectivity test incorrectly treating 401 authentication challenges as failures
 
 ## Solution Implemented
 
@@ -45,19 +47,31 @@ until: operation_result is succeeded
 ### 3. Enhanced Pre-flight Checks and Connectivity Validation
 - Verify cluster nodes are ready before deployment
 - Test network connectivity to container registries (Docker Hub, Jetstack Charts)
+- Docker Hub connectivity test properly handles 401 authentication challenges as successful connectivity
 - Check cluster resource usage and component health
 - Clean up any failed previous cert-manager installations
 - Check for existing cert-manager pods (conflict detection)
 - Validate container runtime status on nodes
 - Force update Helm repositories
 
-### 4. Comprehensive Error Handling and Debugging
+### 4. Docker Hub Connectivity Fix
+```yaml
+# Treat both 200 and 401 as successful Docker Hub connectivity
+Docker Hub: {{ 'OK' if dockerhub_connectivity.status in [200, 401] else 'FAILED' }}
+
+# Don't warn about Docker Hub 401 responses (authentication challenge is expected)
+when: >
+  (jetstack_connectivity.status != 200) or
+  (dockerhub_connectivity.status not in [200, 401])
+```
+
+### 5. Comprehensive Error Handling and Debugging
 - Detailed failure analysis with resource status, pod descriptions, and events
 - Step-by-step troubleshooting guidance
 - Enhanced logging throughout the installation process
 - Graceful error recovery with actionable remediation steps
 
-### 5. Resource Optimization
+### 6. Resource Optimization
 ```yaml
 resources:
   requests:
@@ -65,7 +79,7 @@ resources:
     memory: 32Mi
 ```
 
-### 6. Image Pull Optimization
+### 7. Image Pull Optimization
 ```yaml
 global:
   imagePullPolicy: IfNotPresent
@@ -73,7 +87,7 @@ image:
   pullPolicy: IfNotPresent
 ```
 
-### 7. Directory Prerequisites
+### 8. Directory Prerequisites
 - Ensure `/srv/monitoring_data` and subdirectories exist
 - Set proper permissions (755, root:root)
 - Create required subdirectories for monitoring components
