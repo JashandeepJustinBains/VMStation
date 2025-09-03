@@ -23,22 +23,22 @@ The VMStation deployment was experiencing timeout errors when deploying cert-man
 
 ## Solution Implemented
 
-### 1. Generous Timeout Values
+### 1. Even More Generous Timeout Values
 ```yaml
 # cert-manager Helm installation
-timeout: 900s  # 15 minutes (was 120s)
+timeout: 1200s  # 20 minutes (was 900s/15 minutes, originally 120s)
 
 # cert-manager rollout status  
---timeout=900s  # 15 minutes (was 600s, now consistent)
+--timeout=1200s  # 20 minutes (was 900s/15 minutes, originally 600s)
 
 # local-path provisioner
 wait_timeout: 600  # 10 minutes (was 120s)
 ```
 
-### 2. Retry Logic with Exponential Backoff
+### 2. Enhanced Retry Logic with Longer Delays
 ```yaml
-retries: 3  # Increased from 2
-delay: 60   # Increased from 30s
+retries: 4  # Increased from 3 for Helm installation
+delay: 90   # Increased from 60s for better recovery
 until: operation_result is succeeded
 ```
 
@@ -81,9 +81,10 @@ image:
 ## Files Modified
 
 1. **`ansible/plays/kubernetes/setup_cert_manager.yaml`**
-   - Increased timeouts from 120s to 900s
-   - Added retry logic and cleanup
-   - Added pre-flight checks and debugging
+   - Increased timeouts from 900s to 1200s (20 minutes)
+   - Enhanced retry logic: 4 retries with 90s delays
+   - Added chart availability pre-check before installation
+   - Enhanced pre-flight checks and debugging
 
 2. **`ansible/plays/kubernetes/setup_local_path_provisioner.yaml`**
    - Increased timeout from 120s to 600s
@@ -154,12 +155,13 @@ kubectl get events -n cert-manager --sort-by=.metadata.creationTimestamp
 - Directory permission errors after spindown
 - No retry on transient failures
 
-### After (Fixed):
-- cert-manager installation has 15 minutes to complete
-- Consistent 15-minute timeouts for all cert-manager operations
+### After (Fixed and Enhanced):
+- cert-manager installation has 20 minutes to complete (was 15 minutes)
+- Consistent 20-minute timeouts for all cert-manager operations  
 - Local-path provisioner has 10 minutes with retry logic
 - Automatic directory creation and permission setup
-- Retry logic handles transient network/resource issues
+- Enhanced retry logic handles transient network/resource issues (4 retries vs 3)
+- Chart availability pre-check prevents installation failures from missing charts
 - Pre-flight checks prevent deployment to unhealthy clusters
 - Automatic cleanup of failed previous attempts
 

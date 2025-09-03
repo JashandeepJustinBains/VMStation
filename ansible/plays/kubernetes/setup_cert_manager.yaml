@@ -112,9 +112,23 @@
       when: vmstation_manage_cert_manager | bool
       command: helm repo update
       register: helm_repo_update
+      retries: 5
+      delay: 15
+      until: helm_repo_update.rc == 0
+
+    - name: Verify cert-manager chart availability before installation
+      when: vmstation_manage_cert_manager | bool
+      command: helm search repo jetstack/cert-manager --version {{ cert_manager_version | replace('v', '') }}
+      register: chart_search
       retries: 3
       delay: 10
-      until: helm_repo_update.rc == 0
+      until: chart_search.rc == 0
+      failed_when: chart_search.rc != 0
+      
+    - name: Show available chart information
+      when: vmstation_manage_cert_manager | bool
+      debug:
+        msg: "Found cert-manager chart: {{ chart_search.stdout_lines }}"
 
     - name: Enhanced cluster readiness and connectivity checks
       when: vmstation_manage_cert_manager | bool
@@ -222,8 +236,8 @@
           debug:
             msg: |
               About to install cert-manager with:
-              - Timeout: 900s (15 minutes)
-              - Retries: 3 attempts with 60s delays
+              - Timeout: 1200s (20 minutes)
+              - Retries: 4 attempts with 90s delays
               - Image pull policy: IfNotPresent
               - Resource requests: cpu=10m, memory=32Mi per component
 
@@ -261,12 +275,12 @@
                   memory: 32Mi
             kubeconfig: /root/.kube/config
             wait: true
-            timeout: 900s
+            timeout: 1200s
             atomic: false
             force: true
           register: helm_install_result
-          retries: 3
-          delay: 60
+          retries: 4
+          delay: 90
           until: helm_install_result is succeeded
 
         - name: Installation success message
@@ -326,16 +340,16 @@
       block:
         - name: Show initial deployment status
           debug:
-            msg: "Waiting for cert-manager deployments to become ready (timeout: 15 minutes each)..."
+            msg: "Waiting for cert-manager deployments to become ready (timeout: 20 minutes each, 3 retries with 90s delays)..."
 
         - name: Monitor cert-manager deployment progress
           block:
             - name: Wait for rollout status of cert-manager deployments
-              command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=900s
+              command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=1200s
               loop: "{{ cert_manager_deployments }}"
               register: rollout_status
-              retries: 2
-              delay: 60
+              retries: 3
+              delay: 90
               until: rollout_status.rc == 0
 
             - name: Verify all deployments are ready

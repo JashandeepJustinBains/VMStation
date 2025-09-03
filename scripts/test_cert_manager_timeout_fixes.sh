@@ -50,18 +50,18 @@ echo "=== Phase 2: Timeout Configuration Validation ==="
 
 # Check cert-manager timeout values
 echo "Checking cert-manager timeout configurations..."
-if grep -q "timeout: 900s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
-    echo -e "${GREEN}✓ cert-manager Helm timeout is generous: 900s${NC}"
+if grep -q "timeout: 1200s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
+    echo -e "${GREEN}✓ cert-manager Helm timeout is generous: 1200s (20 minutes)${NC}"
 else
-    echo -e "${RED}✗ cert-manager Helm timeout not set to 900s${NC}"
+    echo -e "${RED}✗ cert-manager Helm timeout not set to 1200s${NC}"
     exit 1
 fi
 
 # Check rollout timeout values
-if grep -q "timeout=900s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
-    echo -e "${GREEN}✓ cert-manager rollout timeout is generous: 900s${NC}"
+if grep -q "timeout=1200s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
+    echo -e "${GREEN}✓ cert-manager rollout timeout is generous: 1200s (20 minutes)${NC}"
 else
-    echo -e "${RED}✗ cert-manager rollout timeout not set to 900s${NC}"
+    echo -e "${RED}✗ cert-manager rollout timeout not set to 1200s${NC}"
     exit 1
 fi
 
@@ -145,10 +145,11 @@ echo ""
 echo -e "${GREEN}=== All Timeout Fix Tests PASSED! ===${NC}"
 echo ""
 echo "Summary of improvements:"
-echo "• cert-manager Helm timeout: 900s (was 120s)"
-echo "• cert-manager rollout timeout: 900s (was 600s)"  
+echo "• cert-manager Helm timeout: 1200s (20 minutes, was 120s)"
+echo "• cert-manager rollout timeout: 1200s (20 minutes, was 600s)"  
 echo "• local-path provisioner timeout: 600s (was 120s)"
-echo "• Enhanced retry logic with longer delays (60s vs 30s, 3 retries vs 2)"
+echo "• Enhanced retry logic: 4 retries for Helm install (was 3), 90s delays (was 60s)"
+echo "• Chart availability pre-check to prevent installation failures"
 echo "• Enhanced pre-flight cluster readiness checks with connectivity validation"
 echo "• Network connectivity tests to container registries and chart repositories"
 echo "• Comprehensive error handling with detailed debugging information"
