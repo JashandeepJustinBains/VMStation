@@ -23,6 +23,18 @@
         ansible_facts['pkg_mgr'] is not defined or
         ansible_facts['pkg_mgr'] != 'apt'
 
+    - name: Ensure monitoring directories exist with proper permissions
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /srv/monitoring_data
+        - /srv/monitoring_data/local-path-provisioner
+      become: true
+
     - name: Create local-path-storage namespace
       kubernetes.core.k8s:
         name: local-path-storage
@@ -189,8 +201,12 @@
         wait_condition:
           type: Available
           status: "True"
-        wait_timeout: 120
+        wait_timeout: 600
         kubeconfig: /root/.kube/config
+      retries: 3
+      delay: 30
+      until: local_path_ready is succeeded
+      register: local_path_ready
 
     - name: Verify local-path storage class exists
       kubernetes.core.k8s_info:

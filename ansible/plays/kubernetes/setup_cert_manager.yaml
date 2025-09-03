@@ -107,7 +107,43 @@
         name: jetstack
         repo_url: https://charts.jetstack.io
 
-    - name: Install cert-manager using Helm
+    - name: Check cluster readiness before cert-manager installation
+      when: vmstation_manage_cert_manager | bool
+      block:
+        - name: Check nodes are ready
+          command: kubectl get nodes --kubeconfig /root/.kube/config --no-headers
+          register: nodes_check
+          retries: 3
+          delay: 10
+          until: nodes_check.rc == 0
+
+        - name: Verify at least one node is Ready
+          fail:
+            msg: "No Ready nodes found in cluster. Nodes status: {{ nodes_check.stdout_lines }}"
+          when: "'Ready' not in nodes_check.stdout"
+
+        - name: Check if cert-manager namespace already has pods (potential conflict)
+          command: kubectl get pods -n cert-manager --kubeconfig /root/.kube/config --no-headers
+          register: existing_cert_manager_pods
+          ignore_errors: yes
+
+        - name: Show existing cert-manager pods if any
+          debug:
+            msg: "Found existing cert-manager pods: {{ existing_cert_manager_pods.stdout_lines }}"
+          when: existing_cert_manager_pods.rc == 0 and existing_cert_manager_pods.stdout_lines | length > 0
+
+    - name: Clean up any previous failed cert-manager installation
+      when: vmstation_manage_cert_manager | bool
+      kubernetes.core.helm:
+        name: cert-manager
+        release_namespace: cert-manager
+        state: absent
+        kubeconfig: /root/.kube/config
+        wait: true
+        timeout: 300s
+      ignore_errors: yes
+
+    - name: Install cert-manager using Helm (with retry logic)
       when: vmstation_manage_cert_manager | bool
       kubernetes.core.helm:
         name: cert-manager
@@ -118,10 +154,29 @@
           installCRDs: false
           prometheus:
             enabled: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          webhook:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+          cainjector:
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
         kubeconfig: /root/.kube/config
         wait: true
-        timeout: 120s
+        timeout: 900s
         atomic: false
+        force: true
+      register: helm_install_result
+      retries: 2
+      delay: 30
+      until: helm_install_result is succeeded
 
     - name: Wait for cert-manager deployments to be ready
       when: vmstation_manage_cert_manager | bool
@@ -132,11 +187,13 @@
           - cert-manager-cainjector
       block:
         - name: Wait for rollout status of cert-manager deployments
-          command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=600s
+          command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=900s
           loop: "{{ cert_manager_deployments }}"
           register: rollout_status
           failed_when: rollout_status is failed and rollout_status.rc != 0
-          ignore_errors: yes
+          retries: 2
+          delay: 60
+          until: rollout_status.rc == 0
 
     - name: Create self-signed cluster issuer for internal certificates
       when: vmstation_create_tls_certs | bool
