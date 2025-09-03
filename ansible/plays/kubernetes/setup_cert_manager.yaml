@@ -132,7 +132,7 @@
           - cert-manager-cainjector
       block:
         - name: Wait for rollout status of cert-manager deployments
-          command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=600s
+          command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=120s
           loop: "{{ cert_manager_deployments }}"
           register: rollout_status
           failed_when: rollout_status is failed and rollout_status.rc != 0
