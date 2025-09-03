@@ -133,8 +133,16 @@ spec:
                 operator: In
                 values:
                 - linux
-              # CRITICAL: Only run on control plane nodes
+              # CRITICAL: Only run on control plane nodes (try both label variants)
               - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+              # Fallback for older Kubernetes versions that use master label
+              - key: node-role.kubernetes.io/master
                 operator: Exists
       containers:
       - args:

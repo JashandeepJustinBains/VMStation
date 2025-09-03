@@ -87,11 +87,25 @@ tolerations:
 
 ## Validation
 
-Run the validation script to confirm the fix:
+### Pre-Deployment Validation
+Run the validation script to confirm the fix is properly implemented:
 
 ```bash
 ./test_flannel_fix.sh
 ```
+
+### Post-Deployment Validation
+After deploying the Kubernetes cluster, validate that Flannel is correctly placed:
+
+```bash
+./validate_flannel_placement.sh
+```
+
+This script will verify:
+- Flannel pods only run on control plane nodes
+- No Flannel pods on worker nodes
+- All Flannel pods are in Running state
+- Provide manual commands to check for CNI0 interfaces on worker nodes
 
 ## Usage
 
