@@ -141,6 +141,38 @@
             msg: "Found existing cert-manager pods: {{ existing_cert_manager_pods.stdout_lines }}"
           when: existing_cert_manager_pods.rc == 0 and existing_cert_manager_pods.stdout_lines | length > 0
 
+        - name: Ensure critical monitoring directories exist before cert-manager installation
+          file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0755'
+            owner: root
+            group: root
+          loop:
+            - /srv/monitoring_data
+            - /srv/monitoring_data/local-path-provisioner
+            - /var/log
+            - /var/promtail
+            - /opt/promtail
+          become: true
+
+        - name: Verify directory permissions for cert-manager deployment
+          stat:
+            path: "{{ item }}"
+          register: dir_checks
+          loop:
+            - /srv/monitoring_data
+            - /srv/monitoring_data/local-path-provisioner
+          failed_when: not dir_checks.stat.exists or not dir_checks.stat.isdir
+
+        - name: Display directory status for debugging
+          debug:
+            msg: |
+              Critical directories status:
+              /srv/monitoring_data: {{ 'EXISTS' if dir_checks.results[0].stat.exists else 'MISSING' }}
+              /srv/monitoring_data/local-path-provisioner: {{ 'EXISTS' if dir_checks.results[1].stat.exists else 'MISSING' }}
+              Permissions /srv/monitoring_data: {{ dir_checks.results[0].stat.mode if dir_checks.results[0].stat.exists else 'N/A' }}
+
     - name: Clean up any previous failed cert-manager installation
       when: vmstation_manage_cert_manager | bool
       kubernetes.core.helm:
