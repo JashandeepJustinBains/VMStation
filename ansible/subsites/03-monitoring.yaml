@@ -338,6 +338,8 @@
           when: monitoring_apply_fixes | bool
 
       when: 
+        - selinux_context_check is defined
+        - selinux_context_check.rc is defined  
         - selinux_context_check.rc == 0
         - ansible_selinux is defined 
         - ansible_selinux.status == "enabled"
