@@ -106,6 +106,15 @@
       kubernetes.core.helm_repository:
         name: jetstack
         repo_url: https://charts.jetstack.io
+        force_update: yes
+
+    - name: Update Helm repositories to ensure latest charts
+      when: vmstation_manage_cert_manager | bool
+      command: helm repo update
+      register: helm_repo_update
+      retries: 3
+      delay: 10
+      until: helm_repo_update.rc == 0
 
     - name: Check cluster readiness before cert-manager installation
       when: vmstation_manage_cert_manager | bool
@@ -154,20 +163,28 @@
           installCRDs: false
           prometheus:
             enabled: true
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
+          global:
+            imagePullPolicy: IfNotPresent
+          image:
+            pullPolicy: IfNotPresent
           webhook:
+            image:
+              pullPolicy: IfNotPresent
             resources:
               requests:
                 cpu: 10m
                 memory: 32Mi
           cainjector:
+            image:
+              pullPolicy: IfNotPresent
             resources:
               requests:
                 cpu: 10m
                 memory: 32Mi
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
         kubeconfig: /root/.kube/config
         wait: true
         timeout: 900s
@@ -194,6 +211,25 @@
           retries: 2
           delay: 60
           until: rollout_status.rc == 0
+
+        - name: Debug cert-manager deployment status on failure
+          when: rollout_status is failed
+          block:
+            - name: Get cert-manager deployment status
+              command: kubectl -n cert-manager get deployments --kubeconfig /root/.kube/config
+              register: deployment_status
+              ignore_errors: yes
+
+            - name: Get cert-manager pod status
+              command: kubectl -n cert-manager get pods --kubeconfig /root/.kube/config
+              register: pod_status
+              ignore_errors: yes
+
+            - name: Show deployment and pod status
+              debug:
+                msg: |
+                  Deployment Status: {{ deployment_status.stdout_lines }}
+                  Pod Status: {{ pod_status.stdout_lines }}
 
     - name: Create self-signed cluster issuer for internal certificates
       when: vmstation_create_tls_certs | bool
