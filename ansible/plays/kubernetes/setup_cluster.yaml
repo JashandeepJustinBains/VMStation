@@ -1414,6 +1414,22 @@
 
       when: kubelet_conf.stat.exists or (join_result is defined and (join_result.rc | default(0)) == 0)
 
+    - name: Setup static manifests directory on worker nodes (for cert-manager compatibility)
+      block:
+        - name: Create /etc/kubernetes/manifests directory on worker nodes
+          file:
+            path: /etc/kubernetes/manifests
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          
+        - name: Display manifests directory setup completion
+          debug:
+            msg: "✓ Created /etc/kubernetes/manifests directory on worker node {{ inventory_hostname }} for cert-manager compatibility"
+            
+      when: kubelet_conf.stat.exists or (join_result is defined and (join_result.rc | default(0)) == 0)
+
     - name: Remove join command file
       file:
         path: /tmp/kubeadm-join.sh
