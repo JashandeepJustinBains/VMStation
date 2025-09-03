@@ -120,7 +120,7 @@
             enabled: true
         kubeconfig: /root/.kube/config
         wait: true
-        timeout: 600s
+        timeout: 120s
         atomic: false
 
     - name: Wait for cert-manager deployments to be ready
