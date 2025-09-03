@@ -70,7 +70,7 @@
 
     - name: Generate node certificate template
       ansible.builtin.template:
-        src: node-cert-config.cnf.j2
+        src: templates/node-cert-config.cnf.j2
         dest: "{{ cert_output_dir }}/node-cert-config.cnf"
       vars:
         node_ips: "{{ groups['all'] | default([]) }}"
@@ -124,14 +124,14 @@
 
     - name: Create ClusterIssuer template for cert-manager
       ansible.builtin.template:
-        src: cluster-issuer.yaml.j2
+        src: templates/cluster-issuer.yaml.j2
         dest: "{{ cert_output_dir }}/cluster-issuer.yaml"
       vars:
         issuer_name: "vmstation-ca-issuer"
 
     - name: Create certificate request template
       ansible.builtin.template:
-        src: certificate.yaml.j2
+        src: templates/certificate.yaml.j2
         dest: "{{ cert_output_dir }}/certificate-template.yaml"
       vars:
         cert_name: "vmstation-tls"
