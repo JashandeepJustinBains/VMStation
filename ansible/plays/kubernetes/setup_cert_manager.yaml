@@ -227,6 +227,14 @@
               - Retries: 3 attempts with 60s delays
               - Image pull policy: IfNotPresent
               - Resource requests: cpu=10m, memory=32Mi per component
+              - Progress monitoring: enabled
+
+        - name: Create monitoring indicator file for site.yaml integration
+          file:
+            path: /tmp/vmstation_cert_manager_installing
+            state: touch
+            mode: '0644'
+          ignore_errors: yes
 
         - name: Attempt cert-manager Helm installation
           kubernetes.core.helm:
@@ -249,6 +257,9 @@
                   requests:
                     cpu: 10m
                     memory: 32Mi
+                  limits:
+                    cpu: 100m
+                    memory: 128Mi
               cainjector:
                 image:
                   pullPolicy: IfNotPresent
@@ -256,10 +267,16 @@
                   requests:
                     cpu: 10m
                     memory: 32Mi
+                  limits:
+                    cpu: 100m
+                    memory: 128Mi
               resources:
                 requests:
                   cpu: 10m
                   memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
             kubeconfig: /root/.kube/config
             wait: true
             timeout: 120s
@@ -274,7 +291,19 @@
           debug:
             msg: "✓ cert-manager Helm installation completed successfully!"
 
+        - name: Remove monitoring indicator file
+          file:
+            path: /tmp/vmstation_cert_manager_installing
+            state: absent
+          ignore_errors: yes
+
       rescue:
+        - name: Remove monitoring indicator file on failure
+          file:
+            path: /tmp/vmstation_cert_manager_installing
+            state: absent
+          ignore_errors: yes
+
         - name: Debug failed cert-manager installation
           block:
             - name: Get Helm release status
@@ -292,10 +321,21 @@
               register: cert_manager_events
               ignore_errors: yes
 
+            - name: Check for common stall indicators
+              set_fact:
+                stall_indicators:
+                  - "{{ 'Image pull issues' if (pods_status.stdout | default('') | regex_search('ImagePullBackOff|ErrImagePull')) else '' }}"
+                  - "{{ 'Network connectivity issues' if (cert_manager_events.stdout | default('') | regex_search('dial tcp.*i/o timeout|connection refused')) else '' }}"
+                  - "{{ 'Resource constraints' if (cert_manager_events.stdout | default('') | regex_search('Insufficient cpu|Insufficient memory')) else '' }}"
+                  - "{{ 'DNS resolution issues' if (cert_manager_events.stdout | default('') | regex_search('dial tcp.*no such host')) else '' }}"
+
             - name: Show debugging information
               debug:
                 msg: |
                   cert-manager installation failed. Debug information:
+                  
+                  Detected Stall Indicators:
+                  {{ stall_indicators | select('string') | list | join(', ') or 'No specific indicators detected' }}
                   
                   Helm Status:
                   {{ helm_status.stdout_lines | default(['Unable to get Helm status']) }}
@@ -306,16 +346,34 @@
                   Recent Events:
                   {{ cert_manager_events.stdout_lines | default(['Unable to get events']) }}
 
+            - name: Create failure summary file for monitoring scripts
+              copy:
+                content: |
+                  cert-manager installation failed at {{ ansible_date_time.iso8601 }}
+                  Stall indicators: {{ stall_indicators | select('string') | list | join(', ') or 'Unknown' }}
+                  Helm status available: {{ 'yes' if helm_status.rc == 0 else 'no' }}
+                  Pods status available: {{ 'yes' if pods_status.rc == 0 else 'no' }}
+                  Events available: {{ 'yes' if cert_manager_events.rc == 0 else 'no' }}
+                dest: /tmp/vmstation_cert_manager_failure_summary
+                mode: '0644'
+              ignore_errors: yes
+
         - name: Fail with detailed error message
           fail:
             msg: |
               cert-manager installation failed after all retries.
               Check the debugging information above for details.
+              
+              Quick Recovery Steps:
+              1. Run diagnosis: ./scripts/diagnose_cert_manager_stall.sh
+              2. Or use recovery mode: ./scripts/site_runner_with_monitoring.sh --recover-only
+              
               Common causes:
               1. Network connectivity issues to container registries
               2. Insufficient cluster resources
               3. Previous failed installation remnants
               4. Kubernetes API server issues
+              5. DNS resolution problems
 
     - name: Wait for cert-manager deployments to be ready (enhanced monitoring)
       when: vmstation_manage_cert_manager | bool

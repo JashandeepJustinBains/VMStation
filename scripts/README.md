@@ -2,7 +2,85 @@
 
 This directory contains operational scripts for VMStation infrastructure management.
 
-## CrashLoopBackOff Fix Scripts (NEW!)
+## Cert-Manager Stalling Fix Scripts (NEW!)
+
+### `diagnose_cert_manager_stall.sh`
+Comprehensive diagnostic tool for cert-manager deployment stalling issues during site.yaml execution.
+
+**Usage:**
+```bash
+# Run comprehensive diagnosis when cert-manager stalls
+./scripts/diagnose_cert_manager_stall.sh
+
+# Output includes cluster state, cert-manager status, network connectivity tests, and specific recommendations
+```
+
+**What it analyzes:**
+- Cluster connectivity and node status
+- cert-manager namespace, pods, and deployments
+- Helm release status and CRD availability
+- Network connectivity to container registries
+- Image pull status and common failure patterns
+- Recent events and error conditions
+
+### `site_runner_with_monitoring.sh`
+Enhanced site.yaml runner with real-time cert-manager monitoring and automatic recovery.
+
+**Usage:**
+```bash
+# Use instead of raw ansible-playbook for site.yaml
+./scripts/site_runner_with_monitoring.sh
+
+# With custom inventory
+./scripts/site_runner_with_monitoring.sh -i custom_inventory.txt
+
+# Diagnosis only mode
+./scripts/site_runner_with_monitoring.sh --diagnose-only
+
+# Monitor existing deployment
+./scripts/site_runner_with_monitoring.sh --monitor-only
+
+# Attempt recovery only
+./scripts/site_runner_with_monitoring.sh --recover-only
+```
+
+**Features:**
+- Real-time monitoring of cert-manager deployment progress
+- Automatic detection of stalling conditions
+- Emergency recovery and cleanup capabilities
+- Detailed logging and failure analysis
+- Integration with site.yaml orchestration
+
+### Quick Start for Cert-Manager Stalling Issues
+
+1. **If site.yaml is currently stalling:**
+   ```bash
+   # Kill the stuck ansible process
+   pkill -f "ansible-playbook.*site.yaml"
+   
+   # Run diagnosis
+   ./scripts/diagnose_cert_manager_stall.sh
+   ```
+
+2. **For new deployments:**
+   ```bash
+   # Use enhanced runner instead of direct ansible-playbook
+   ./scripts/site_runner_with_monitoring.sh
+   ```
+
+3. **Emergency recovery:**
+   ```bash
+   # Attempt automatic recovery
+   ./scripts/site_runner_with_monitoring.sh --recover-only
+   
+   # If that fails, manual cleanup
+   kubectl delete namespace cert-manager --force --grace-period=0
+   helm uninstall cert-manager -n cert-manager || true
+   ```
+
+See [cert_manager_stalling_troubleshooting.md](../docs/cert_manager_stalling_troubleshooting.md) for detailed troubleshooting guide.
+
+## CrashLoopBackOff Fix Scripts
 
 ### `fix_k8s_dashboard_permissions.sh`
 Fixes Kubernetes Dashboard CrashLoopBackOff issues related to directory permissions and certificate generation.
