@@ -1032,6 +1032,65 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
+    - name: Clean up stale CNI state on worker nodes (prevent cert-manager conflicts)
+      block:
+        - name: Stop and disable kubelet if running (to prevent CNI conflicts)
+          systemd:
+            name: kubelet
+            state: stopped
+            enabled: no
+          ignore_errors: yes
+
+        - name: Remove any existing CNI network interfaces (cni0, cbr0, flannel.1)
+          shell: |
+            # Remove cni0 interface if it exists
+            if ip link show cni0 2>/dev/null; then
+              echo "Removing existing cni0 interface"
+              ip link set cni0 down || true
+              ip link delete cni0 || true
+            fi
+            
+            # Remove cbr0 interface if it exists  
+            if ip link show cbr0 2>/dev/null; then
+              echo "Removing existing cbr0 interface"
+              ip link set cbr0 down || true
+              ip link delete cbr0 || true
+            fi
+            
+            # Remove flannel.1 interface if it exists
+            if ip link show flannel.1 2>/dev/null; then
+              echo "Removing existing flannel.1 interface"
+              ip link set flannel.1 down || true
+              ip link delete flannel.1 || true
+            fi
+          ignore_errors: yes
+          register: cni_cleanup_result
+
+        - name: Clear existing CNI configuration files
+          shell: |
+            # Remove any existing CNI configuration
+            rm -rf /etc/cni/net.d/* || true
+            rm -rf /opt/cni/bin/flannel || true
+            # Clear CNI plugin cache
+            rm -rf /var/lib/cni/networks/* || true
+            rm -rf /var/lib/cni/results/* || true
+          ignore_errors: yes
+
+        - name: Clear kubelet CNI state
+          shell: |
+            # Remove any existing kubelet CNI state
+            rm -rf /var/lib/kubelet/pods/* || true
+            rm -rf /var/lib/kubelet/plugins_registry/* || true
+          ignore_errors: yes
+
+        - name: Display CNI cleanup results
+          debug:
+            msg: |
+              CNI cleanup completed on {{ inventory_hostname }}:
+              {{ cni_cleanup_result.stdout_lines | default(['No interfaces to remove']) | join('\n') }}
+      
+      when: not kubelet_conf.stat.exists
+
     - name: Pre-join validation for worker nodes
       block:
         - name: Verify containerd is running

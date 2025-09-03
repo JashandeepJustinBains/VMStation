@@ -59,6 +59,15 @@ else
     exit 1
 fi
 
+# Test 7: Verify CNI name consistency (cni0, not cbr0)
+echo "Test 7: Checking CNI name consistency..."
+if grep -q '"name": "cni0"' ansible/plays/kubernetes/templates/kube-flannel-masteronly.yml; then
+    echo "✅ CNI name correctly set to cni0"
+else
+    echo "❌ CNI name should be cni0 for consistency"
+    exit 1
+fi
+
 echo ""
 echo "🎉 All tests passed! Flannel CNI controller placement fix validated."
 echo ""
