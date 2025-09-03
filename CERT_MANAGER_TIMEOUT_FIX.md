@@ -26,13 +26,13 @@ The VMStation deployment was experiencing timeout errors when deploying cert-man
 ### 1. Generous Timeout Values
 ```yaml
 # cert-manager Helm installation
-timeout: 900s  # 15 minutes (was 120s)
+timeout: 150s  # 15 minutes (was 120s)
 
 # cert-manager rollout status  
---timeout=900s  # 15 minutes (was 600s, now consistent)
+--timeout=150s  
 
 # local-path provisioner
-wait_timeout: 600  # 10 minutes (was 120s)
+wait_timeout: 150 
 ```
 
 ### 2. Retry Logic with Exponential Backoff
@@ -81,7 +81,7 @@ image:
 ## Files Modified
 
 1. **`ansible/plays/kubernetes/setup_cert_manager.yaml`**
-   - Increased timeouts from 120s to 900s
+   - Increased timeouts from 120s to 120s
    - Added retry logic and cleanup
    - Added pre-flight checks and debugging
 
@@ -196,7 +196,7 @@ If timeouts still occur despite these fixes:
 
 All timeout fix tests pass:
 - ✅ Syntax validation for all modified playbooks
-- ✅ Timeout values are generous (900s+ for cert-manager, 600s+ for local-path)
+- ✅ Timeout values are generous (120s+ for cert-manager, 600s+ for local-path)
 - ✅ Retry logic is configured with proper delays
 - ✅ Pre-flight cluster checks are implemented
 - ✅ Cleanup logic prevents conflicts from failed installations

@@ -222,7 +222,7 @@
           debug:
             msg: |
               About to install cert-manager with:
-              - Timeout: 900s (15 minutes)
+              - Timeout: 120s (2 minutes)
               - Retries: 3 attempts with 60s delays
               - Image pull policy: IfNotPresent
               - Resource requests: cpu=10m, memory=32Mi per component
@@ -261,7 +261,7 @@
                   memory: 32Mi
             kubeconfig: /root/.kube/config
             wait: true
-            timeout: 900s
+            timeout: 120s
             atomic: false
             force: true
           register: helm_install_result
@@ -331,7 +331,7 @@
         - name: Monitor cert-manager deployment progress
           block:
             - name: Wait for rollout status of cert-manager deployments
-              command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=900s
+              command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=120s
               loop: "{{ cert_manager_deployments }}"
               register: rollout_status
               retries: 2

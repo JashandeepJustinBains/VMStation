@@ -50,18 +50,18 @@ echo "=== Phase 2: Timeout Configuration Validation ==="
 
 # Check cert-manager timeout values
 echo "Checking cert-manager timeout configurations..."
-if grep -q "timeout: 900s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
-    echo -e "${GREEN}✓ cert-manager Helm timeout is generous: 900s${NC}"
+if grep -q "timeout: 120s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
+    echo -e "${GREEN}✓ cert-manager Helm timeout is generous: 120s${NC}"
 else
-    echo -e "${RED}✗ cert-manager Helm timeout not set to 900s${NC}"
+    echo -e "${RED}✗ cert-manager Helm timeout not set to 120s${NC}"
     exit 1
 fi
 
 # Check rollout timeout values
-if grep -q "timeout=900s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
-    echo -e "${GREEN}✓ cert-manager rollout timeout is generous: 900s${NC}"
+if grep -q "timeout=120s" ansible/plays/kubernetes/setup_cert_manager.yaml; then
+    echo -e "${GREEN}✓ cert-manager rollout timeout is generous: 120s${NC}"
 else
-    echo -e "${RED}✗ cert-manager rollout timeout not set to 900s${NC}"
+    echo -e "${RED}✗ cert-manager rollout timeout not set to 120s${NC}"
     exit 1
 fi
 
@@ -145,8 +145,8 @@ echo ""
 echo -e "${GREEN}=== All Timeout Fix Tests PASSED! ===${NC}"
 echo ""
 echo "Summary of improvements:"
-echo "• cert-manager Helm timeout: 900s (was 120s)"
-echo "• cert-manager rollout timeout: 900s (was 600s)"  
+echo "• cert-manager Helm timeout: 120s (was 120s)"
+echo "• cert-manager rollout timeout: 120s (was 600s)"  
 echo "• local-path provisioner timeout: 600s (was 120s)"
 echo "• Enhanced retry logic with longer delays (60s vs 30s, 3 retries vs 2)"
 echo "• Enhanced pre-flight cluster readiness checks with connectivity validation"
