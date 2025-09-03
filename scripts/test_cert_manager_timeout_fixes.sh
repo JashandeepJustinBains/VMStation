@@ -96,10 +96,10 @@ echo ""
 echo "=== Phase 4: Pre-flight Check Validation ==="
 
 # Check for cluster readiness checks
-if grep -q "Check cluster readiness" ansible/plays/kubernetes/setup_cert_manager.yaml; then
-    echo -e "${GREEN}✓ cert-manager has pre-flight cluster checks${NC}"
+if grep -q "Enhanced cluster readiness" ansible/plays/kubernetes/setup_cert_manager.yaml; then
+    echo -e "${GREEN}✓ cert-manager has enhanced pre-flight cluster checks${NC}"
 else
-    echo -e "${RED}✗ cert-manager missing pre-flight cluster checks${NC}"
+    echo -e "${RED}✗ cert-manager missing enhanced pre-flight cluster checks${NC}"
     exit 1
 fi
 
@@ -108,6 +108,14 @@ if grep -q "Clean up any previous failed" ansible/plays/kubernetes/setup_cert_ma
     echo -e "${GREEN}✓ cert-manager has cleanup logic for failed installations${NC}"
 else
     echo -e "${RED}✗ cert-manager missing cleanup logic${NC}"
+    exit 1
+fi
+
+# Check for connectivity validation
+if grep -q "Test internet connectivity" ansible/plays/kubernetes/setup_cert_manager.yaml; then
+    echo -e "${GREEN}✓ cert-manager has network connectivity validation${NC}"
+else
+    echo -e "${RED}✗ cert-manager missing network connectivity validation${NC}"
     exit 1
 fi
 
@@ -140,12 +148,16 @@ echo "Summary of improvements:"
 echo "• cert-manager Helm timeout: 900s (was 120s)"
 echo "• cert-manager rollout timeout: 900s (was 600s)"  
 echo "• local-path provisioner timeout: 600s (was 120s)"
-echo "• Added retry logic with exponential backoff"
-echo "• Added pre-flight cluster readiness checks"
+echo "• Enhanced retry logic with longer delays (60s vs 30s, 3 retries vs 2)"
+echo "• Enhanced pre-flight cluster readiness checks with connectivity validation"
+echo "• Network connectivity tests to container registries and chart repositories"
+echo "• Comprehensive error handling with detailed debugging information"
 echo "• Added cleanup of failed installations"
 echo "• Added monitoring directory creation"
 echo "• Added resource requests to prevent starvation"
-echo "• Added debugging information for troubleshooting"
+echo "• Added comprehensive cert-manager validation script"
+echo "• Enhanced debugging information for troubleshooting"
 echo ""
-echo "These fixes should resolve the 'context deadline exceeded' and"
-echo "'deployment exceeded its progress deadline' errors."
+echo "These enhanced fixes should resolve the 'context deadline exceeded' and"
+echo "'deployment exceeded its progress deadline' errors, plus provide better"
+echo "visibility into what's happening during deployment."

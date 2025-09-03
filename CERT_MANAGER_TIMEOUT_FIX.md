@@ -37,18 +37,27 @@ wait_timeout: 600  # 10 minutes (was 120s)
 
 ### 2. Retry Logic with Exponential Backoff
 ```yaml
-retries: 2
-delay: 30
+retries: 3  # Increased from 2
+delay: 60   # Increased from 30s
 until: operation_result is succeeded
 ```
 
-### 3. Pre-flight Checks and Cleanup
+### 3. Enhanced Pre-flight Checks and Connectivity Validation
 - Verify cluster nodes are ready before deployment
+- Test network connectivity to container registries (Docker Hub, Jetstack Charts)
+- Check cluster resource usage and component health
 - Clean up any failed previous cert-manager installations
 - Check for existing cert-manager pods (conflict detection)
+- Validate container runtime status on nodes
 - Force update Helm repositories
 
-### 4. Resource Optimization
+### 4. Comprehensive Error Handling and Debugging
+- Detailed failure analysis with resource status, pod descriptions, and events
+- Step-by-step troubleshooting guidance
+- Enhanced logging throughout the installation process
+- Graceful error recovery with actionable remediation steps
+
+### 5. Resource Optimization
 ```yaml
 resources:
   requests:
@@ -56,7 +65,7 @@ resources:
     memory: 32Mi
 ```
 
-### 5. Image Pull Optimization
+### 6. Image Pull Optimization
 ```yaml
 global:
   imagePullPolicy: IfNotPresent
@@ -64,7 +73,7 @@ image:
   pullPolicy: IfNotPresent
 ```
 
-### 6. Directory Prerequisites
+### 7. Directory Prerequisites
 - Ensure `/srv/monitoring_data` and subdirectories exist
 - Set proper permissions (755, root:root)
 - Create required subdirectories for monitoring components
@@ -85,9 +94,19 @@ image:
    - Added prerequisite monitoring directory creation
    - Ensures directories exist before any K8s deployment
 
-4. **`scripts/test_cert_manager_timeout_fixes.sh`** (NEW)
-   - Comprehensive validation script
-   - Tests syntax, timeouts, retry logic, and prerequisites
+4. **`scripts/validate_cert_manager.sh`** (NEW)
+   - Comprehensive cert-manager health validation
+   - Pre-requisite checks (kubectl, helm connectivity)
+   - Deployment, pod, and service status validation
+   - CRD availability verification
+   - Functional testing with test issuer creation
+   - Resource usage monitoring
+   - Detailed troubleshooting guidance
+
+5. **`scripts/test_cert_manager_timeout_fixes.sh`** (ENHANCED)
+   - Comprehensive validation script for all timeout configurations
+   - Tests syntax, timeouts, retry logic, connectivity checks, and prerequisites
+   - Validates enhanced pre-flight checks and network connectivity validation
 
 ## Usage Instructions
 
@@ -121,6 +140,9 @@ kubectl rollout status deployment/cert-manager -n cert-manager
 # View detailed events if issues occur
 kubectl describe deployment/cert-manager -n cert-manager
 kubectl get events -n cert-manager --sort-by=.metadata.creationTimestamp
+
+# Comprehensive cert-manager validation (NEW)
+./scripts/validate_cert_manager.sh
 ```
 
 ## Expected Outcomes
