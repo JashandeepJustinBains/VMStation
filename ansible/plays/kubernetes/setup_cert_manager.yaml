@@ -166,12 +166,13 @@
                 timeout: 30
               register: dockerhub_connectivity
               ignore_errors: yes
+              # Note: Docker Hub returns 401 for unauthenticated requests, which indicates successful connectivity
 
             - name: Show connectivity test results
               debug:
                 msg: |
                   Jetstack Charts: {{ 'OK' if jetstack_connectivity.status | default(0) == 200 else 'FAILED' }}
-                  Docker Hub: {{ 'OK' if dockerhub_connectivity.status | default(0) == 200 else 'FAILED' }}
+                  Docker Hub: {{ 'OK' if dockerhub_connectivity.status | default(0) in [200, 401] else 'FAILED' }}
 
             - name: Warn about connectivity issues
               debug:
@@ -182,7 +183,7 @@
                   This may cause cert-manager installation to hang or fail.
               when: >
                 (jetstack_connectivity.status | default(0) != 200) or
-                (dockerhub_connectivity.status | default(0) != 200)
+                (dockerhub_connectivity.status | default(0) not in [200, 401])
 
         - name: Check if cert-manager namespace already has pods (potential conflict)
           command: kubectl get pods -n cert-manager --kubeconfig /root/.kube/config --no-headers
@@ -401,7 +402,7 @@
                   ==========================================
                   TROUBLESHOOTING RECOMMENDATIONS:
                   ==========================================
-                  1. Check network connectivity: curl -I https://registry-1.docker.io/v2/
+                  1. Check network connectivity: curl -I https://registry-1.docker.io/v2/ (401 is expected)
                   2. Check cluster resources: kubectl top nodes && kubectl describe nodes
                   3. Check DNS resolution: nslookup registry-1.docker.io
                   4. Clean up and retry: helm uninstall cert-manager -n cert-manager
