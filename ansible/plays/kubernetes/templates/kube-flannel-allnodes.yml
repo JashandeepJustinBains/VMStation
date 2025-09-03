@@ -1,8 +1,8 @@
 ---
 # Custom Flannel manifest for VMStation
-# Restricts Flannel daemon to only run on control plane nodes (monitoring_nodes)
-# This prevents cni0 interfaces from being created on worker nodes
-# and ensures flanneld controller only runs on the masternode
+# Allows Flannel daemon to run on all nodes (control plane and workers)
+# This ensures CNI plugins are properly initialized on all nodes
+# to resolve "cni plugin not initialized" errors
 
 apiVersion: v1
 kind: Namespace
@@ -102,7 +102,7 @@ metadata:
   name: kube-flannel-cfg
   namespace: kube-flannel
 ---
-# Custom DaemonSet that only runs on control plane nodes
+# Enhanced DaemonSet that runs on all nodes (control plane and workers)
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -133,17 +133,6 @@ spec:
                 operator: In
                 values:
                 - linux
-              # CRITICAL: Only run on control plane nodes (try both label variants)
-              - key: node-role.kubernetes.io/control-plane
-                operator: Exists
-            - matchExpressions:
-              - key: kubernetes.io/os
-                operator: In
-                values:
-                - linux
-              # Fallback for older Kubernetes versions that use master label
-              - key: node-role.kubernetes.io/master
-                operator: Exists
       containers:
       - args:
         - --ip-masq
@@ -208,19 +197,22 @@ spec:
           name: cni
         - mountPath: /etc/kube-flannel/
           name: flannel-cfg
-      # Only run on control plane nodes, remove general tolerations
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
+      # Allow running on all nodes (control plane and workers)
+      # nodeSelector:
+      #   node-role.kubernetes.io/control-plane: ""
       priorityClassName: system-node-critical
       serviceAccountName: flannel
       tolerations:
-      # Only tolerate control plane taints
+      # Tolerate control plane taints
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
       - key: node-role.kubernetes.io/master
         operator: Exists
         effect: NoSchedule
+      # Tolerate general node taints to allow running on worker nodes
+      - effect: NoSchedule
+        operator: Exists
       volumes:
       - hostPath:
           path: /run/flannel

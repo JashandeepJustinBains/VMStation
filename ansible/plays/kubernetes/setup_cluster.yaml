@@ -997,12 +997,12 @@
 
     - name: Copy custom Flannel manifest to control plane
       copy:
-        src: "{{ playbook_dir }}/templates/kube-flannel-masteronly.yml"
-        dest: /tmp/kube-flannel-masteronly.yml
+        src: "{{ playbook_dir }}/templates/kube-flannel-allnodes.yml"
+        dest: /tmp/kube-flannel-allnodes.yml
         mode: '0644'
 
-    - name: Install Flannel CNI (custom manifest - control plane only)
-      shell: kubectl apply -f /tmp/kube-flannel-masteronly.yml
+    - name: Install Flannel CNI (custom manifest - all nodes)
+      shell: kubectl apply -f /tmp/kube-flannel-allnodes.yml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
