@@ -116,7 +116,7 @@
       delay: 10
       until: helm_repo_update.rc == 0
 
-    - name: Check cluster readiness before cert-manager installation
+    - name: Enhanced cluster readiness and connectivity checks
       when: vmstation_manage_cert_manager | bool
       block:
         - name: Check nodes are ready
@@ -131,6 +131,59 @@
             msg: "No Ready nodes found in cluster. Nodes status: {{ nodes_check.stdout_lines }}"
           when: "'Ready' not in nodes_check.stdout"
 
+        - name: Check cluster resources and readiness
+          block:
+            - name: Get node resource usage
+              command: kubectl top nodes --kubeconfig /root/.kube/config --no-headers
+              register: node_resources
+              ignore_errors: yes
+
+            - name: Check cluster component health
+              command: kubectl get componentstatuses --kubeconfig /root/.kube/config
+              register: component_health
+              ignore_errors: yes
+
+            - name: Show cluster resource status
+              debug:
+                msg: |
+                  Node Resources: {{ node_resources.stdout_lines | default(['Unable to get node resources']) }}
+                  Component Health: {{ component_health.stdout_lines | default(['Unable to get component status']) }}
+
+        - name: Test internet connectivity for chart downloads
+          block:
+            - name: Test connectivity to Helm chart repository
+              uri:
+                url: https://charts.jetstack.io/index.yaml
+                method: GET
+                timeout: 30
+              register: jetstack_connectivity
+              ignore_errors: yes
+
+            - name: Test connectivity to container registry
+              uri:
+                url: https://registry-1.docker.io/v2/
+                method: GET
+                timeout: 30
+              register: dockerhub_connectivity
+              ignore_errors: yes
+
+            - name: Show connectivity test results
+              debug:
+                msg: |
+                  Jetstack Charts: {{ 'OK' if jetstack_connectivity.status | default(0) == 200 else 'FAILED' }}
+                  Docker Hub: {{ 'OK' if dockerhub_connectivity.status | default(0) == 200 else 'FAILED' }}
+
+            - name: Warn about connectivity issues
+              debug:
+                msg: |
+                  WARNING: Network connectivity issues detected!
+                  - Jetstack Charts: {{ jetstack_connectivity.status | default('N/A') }}
+                  - Docker Hub: {{ dockerhub_connectivity.status | default('N/A') }}
+                  This may cause cert-manager installation to hang or fail.
+              when: >
+                (jetstack_connectivity.status | default(0) != 200) or
+                (dockerhub_connectivity.status | default(0) != 200)
+
         - name: Check if cert-manager namespace already has pods (potential conflict)
           command: kubectl get pods -n cert-manager --kubeconfig /root/.kube/config --no-headers
           register: existing_cert_manager_pods
@@ -140,6 +193,16 @@
           debug:
             msg: "Found existing cert-manager pods: {{ existing_cert_manager_pods.stdout_lines }}"
           when: existing_cert_manager_pods.rc == 0 and existing_cert_manager_pods.stdout_lines | length > 0
+
+        - name: Check container runtime status on nodes
+          block:
+            - name: Get container runtime info
+              command: kubectl get nodes -o wide --kubeconfig /root/.kube/config
+              register: runtime_info
+
+            - name: Show runtime information
+              debug:
+                msg: "Node runtime info: {{ runtime_info.stdout_lines }}"
 
     - name: Clean up any previous failed cert-manager installation
       when: vmstation_manage_cert_manager | bool
@@ -152,50 +215,108 @@
         timeout: 300s
       ignore_errors: yes
 
-    - name: Install cert-manager using Helm (with retry logic)
+    - name: Install cert-manager using Helm (with enhanced retry and debugging)
       when: vmstation_manage_cert_manager | bool
-      kubernetes.core.helm:
-        name: cert-manager
-        chart_ref: jetstack/cert-manager
-        release_namespace: cert-manager
-        create_namespace: yes
-        values:
-          installCRDs: false
-          prometheus:
-            enabled: true
-          global:
-            imagePullPolicy: IfNotPresent
-          image:
-            pullPolicy: IfNotPresent
-          webhook:
-            image:
-              pullPolicy: IfNotPresent
-            resources:
-              requests:
-                cpu: 10m
-                memory: 32Mi
-          cainjector:
-            image:
-              pullPolicy: IfNotPresent
-            resources:
-              requests:
-                cpu: 10m
-                memory: 32Mi
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-        kubeconfig: /root/.kube/config
-        wait: true
-        timeout: 900s
-        atomic: false
-        force: true
-      register: helm_install_result
-      retries: 2
-      delay: 30
-      until: helm_install_result is succeeded
+      block:
+        - name: Pre-installation debugging info
+          debug:
+            msg: |
+              About to install cert-manager with:
+              - Timeout: 900s (15 minutes)
+              - Retries: 3 attempts with 60s delays
+              - Image pull policy: IfNotPresent
+              - Resource requests: cpu=10m, memory=32Mi per component
 
-    - name: Wait for cert-manager deployments to be ready
+        - name: Attempt cert-manager Helm installation
+          kubernetes.core.helm:
+            name: cert-manager
+            chart_ref: jetstack/cert-manager
+            release_namespace: cert-manager
+            create_namespace: yes
+            values:
+              installCRDs: false
+              prometheus:
+                enabled: true
+              global:
+                imagePullPolicy: IfNotPresent
+              image:
+                pullPolicy: IfNotPresent
+              webhook:
+                image:
+                  pullPolicy: IfNotPresent
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 32Mi
+              cainjector:
+                image:
+                  pullPolicy: IfNotPresent
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 32Mi
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+            kubeconfig: /root/.kube/config
+            wait: true
+            timeout: 900s
+            atomic: false
+            force: true
+          register: helm_install_result
+          retries: 3
+          delay: 60
+          until: helm_install_result is succeeded
+
+        - name: Installation success message
+          debug:
+            msg: "✓ cert-manager Helm installation completed successfully!"
+
+      rescue:
+        - name: Debug failed cert-manager installation
+          block:
+            - name: Get Helm release status
+              command: helm status cert-manager -n cert-manager --kubeconfig /root/.kube/config
+              register: helm_status
+              ignore_errors: yes
+
+            - name: Get cert-manager pods status
+              command: kubectl get pods -n cert-manager --kubeconfig /root/.kube/config -o wide
+              register: pods_status
+              ignore_errors: yes
+
+            - name: Get cert-manager events
+              command: kubectl get events -n cert-manager --kubeconfig /root/.kube/config --sort-by=.metadata.creationTimestamp
+              register: cert_manager_events
+              ignore_errors: yes
+
+            - name: Show debugging information
+              debug:
+                msg: |
+                  cert-manager installation failed. Debug information:
+                  
+                  Helm Status:
+                  {{ helm_status.stdout_lines | default(['Unable to get Helm status']) }}
+                  
+                  Pod Status:
+                  {{ pods_status.stdout_lines | default(['Unable to get pod status']) }}
+                  
+                  Recent Events:
+                  {{ cert_manager_events.stdout_lines | default(['Unable to get events']) }}
+
+        - name: Fail with detailed error message
+          fail:
+            msg: |
+              cert-manager installation failed after all retries.
+              Check the debugging information above for details.
+              Common causes:
+              1. Network connectivity issues to container registries
+              2. Insufficient cluster resources
+              3. Previous failed installation remnants
+              4. Kubernetes API server issues
+
+    - name: Wait for cert-manager deployments to be ready (enhanced monitoring)
       when: vmstation_manage_cert_manager | bool
       vars:
         cert_manager_deployments:
@@ -203,33 +324,105 @@
           - cert-manager-webhook
           - cert-manager-cainjector
       block:
-        - name: Wait for rollout status of cert-manager deployments
-          command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=900s
-          loop: "{{ cert_manager_deployments }}"
-          register: rollout_status
-          failed_when: rollout_status is failed and rollout_status.rc != 0
-          retries: 2
-          delay: 60
-          until: rollout_status.rc == 0
+        - name: Show initial deployment status
+          debug:
+            msg: "Waiting for cert-manager deployments to become ready (timeout: 15 minutes each)..."
 
-        - name: Debug cert-manager deployment status on failure
-          when: rollout_status is failed
+        - name: Monitor cert-manager deployment progress
+          block:
+            - name: Wait for rollout status of cert-manager deployments
+              command: kubectl -n cert-manager rollout status deployment/{{ item }} --kubeconfig /root/.kube/config --timeout=900s
+              loop: "{{ cert_manager_deployments }}"
+              register: rollout_status
+              retries: 2
+              delay: 60
+              until: rollout_status.rc == 0
+
+            - name: Verify all deployments are ready
+              command: kubectl get deployments -n cert-manager --kubeconfig /root/.kube/config
+              register: final_deployment_status
+
+            - name: Show successful deployment status
+              debug:
+                msg: |
+                  ✓ All cert-manager deployments are ready!
+                  {{ final_deployment_status.stdout_lines }}
+
+      rescue:
+        - name: Comprehensive cert-manager failure debugging
           block:
             - name: Get cert-manager deployment status
-              command: kubectl -n cert-manager get deployments --kubeconfig /root/.kube/config
+              command: kubectl -n cert-manager get deployments --kubeconfig /root/.kube/config -o wide
               register: deployment_status
               ignore_errors: yes
 
-            - name: Get cert-manager pod status
-              command: kubectl -n cert-manager get pods --kubeconfig /root/.kube/config
+            - name: Get cert-manager pod status with details
+              command: kubectl -n cert-manager get pods --kubeconfig /root/.kube/config -o wide
               register: pod_status
               ignore_errors: yes
 
-            - name: Show deployment and pod status
+            - name: Get cert-manager pod descriptions for failed pods
+              shell: |
+                kubectl get pods -n cert-manager --kubeconfig /root/.kube/config --no-headers | \
+                grep -v "Running\|Completed" | awk '{print $1}' | \
+                xargs -I {} kubectl describe pod {} -n cert-manager --kubeconfig /root/.kube/config
+              register: pod_descriptions
+              ignore_errors: yes
+
+            - name: Get recent cert-manager events
+              command: kubectl get events -n cert-manager --kubeconfig /root/.kube/config --sort-by=.metadata.creationTimestamp --field-selector type!=Normal
+              register: cert_manager_events
+              ignore_errors: yes
+
+            - name: Get node resource status
+              command: kubectl describe nodes --kubeconfig /root/.kube/config
+              register: node_status
+              ignore_errors: yes
+
+            - name: Show comprehensive debugging information
               debug:
                 msg: |
-                  Deployment Status: {{ deployment_status.stdout_lines }}
-                  Pod Status: {{ pod_status.stdout_lines }}
+                  ==========================================
+                  cert-manager DEPLOYMENT FAILURE ANALYSIS
+                  ==========================================
+                  
+                  Deployment Status:
+                  {{ deployment_status.stdout_lines | default(['Unable to get deployment status']) }}
+                  
+                  Pod Status:
+                  {{ pod_status.stdout_lines | default(['Unable to get pod status']) }}
+                  
+                  Failed Pod Details:
+                  {{ pod_descriptions.stdout_lines | default(['No failed pods found or unable to get descriptions']) }}
+                  
+                  Warning/Error Events:
+                  {{ cert_manager_events.stdout_lines | default(['No warning events found']) }}
+                  
+                  ==========================================
+                  TROUBLESHOOTING RECOMMENDATIONS:
+                  ==========================================
+                  1. Check network connectivity: curl -I https://registry-1.docker.io/v2/
+                  2. Check cluster resources: kubectl top nodes && kubectl describe nodes
+                  3. Check DNS resolution: nslookup registry-1.docker.io
+                  4. Clean up and retry: helm uninstall cert-manager -n cert-manager
+                  5. Check firewall/proxy settings for container image pulls
+
+        - name: Fail with detailed troubleshooting guidance
+          fail:
+            msg: |
+              cert-manager deployment failed to become ready after all retries.
+              
+              Please review the debugging information above and:
+              1. Ensure cluster has sufficient resources (CPU/Memory)
+              2. Verify network connectivity to container registries
+              3. Check for firewall/proxy issues blocking image pulls
+              4. Consider manual cleanup: helm uninstall cert-manager -n cert-manager
+              5. Check cluster node status and kubelet logs
+              
+              For immediate troubleshooting, run:
+              kubectl get pods -n cert-manager -o wide
+              kubectl describe pods -n cert-manager
+              kubectl get events -n cert-manager --sort-by=.metadata.creationTimestamp
 
     - name: Create self-signed cluster issuer for internal certificates
       when: vmstation_create_tls_certs | bool
