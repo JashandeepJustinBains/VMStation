@@ -69,6 +69,9 @@ tolerations:
 3. **`test_flannel_fix.sh`** (NEW)
    - Validation script to ensure the fix is properly implemented
 
+4. **`cni_cleanup_diagnostic.sh`** (NEW)
+   - Comprehensive CNI diagnostic and cleanup tool for troubleshooting cert-manager issues
+
 ## Expected Results
 
 ### Before (Issues):
@@ -152,6 +155,28 @@ The fixed configuration establishes this network topology:
 This centralized approach prevents network conflicts and ensures stable cert-manager operation.
 
 ## Troubleshooting
+
+### Cert-Manager Hanging Issues
+
+If cert-manager pods are hanging or failing with CNI-related errors like:
+```
+"plugin type="flannel" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.x.x/24"
+```
+
+This indicates stale CNI state on worker nodes. Use the diagnostic script:
+
+```bash
+# Check CNI state on all nodes
+./cni_cleanup_diagnostic.sh show
+
+# Clean up CNI state on worker nodes (run on each worker node)
+./cni_cleanup_diagnostic.sh worker-cleanup
+
+# After cleanup, redeploy the cluster
+ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/setup_cluster.yaml
+```
+
+### General Flannel Issues
 
 If issues persist after applying this fix:
 

@@ -3,7 +3,8 @@
 ## Problem
 - CNI0 interfaces created on worker nodes when they shouldn't be
 - Flanneld controller running on worker nodes instead of only masternode
-- Cert-manager installations hanging due to network conflicts
+- **Cert-manager installations hanging due to network conflicts**
+- **Stale CNI state causing bridge address conflicts**
 
 ## Solution  
 Custom Flannel manifest restricts DaemonSet to control plane nodes only.
@@ -31,6 +32,9 @@ ansible-playbook -i ansible/inventory.txt ansible/site.yaml
 
 # After deployment  
 ./validate_flannel_placement.sh
+
+# Troubleshoot CNI issues
+./cni_cleanup_diagnostic.sh show
 ```
 
 ## Expected Result
