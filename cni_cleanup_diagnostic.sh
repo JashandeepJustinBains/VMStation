@@ -38,7 +38,8 @@ show_cni_state() {
     echo ""
     echo "CNI binaries:"
     if [ -d /opt/cni/bin ]; then
-        ls -la /opt/cni/bin/ | grep flannel || echo "No flannel CNI binary found"
+        echo "CNI plugins found:"
+        ls -la /opt/cni/bin/ | grep -E "(flannel|bridge|portmap|loopback)" || echo "No standard CNI binaries found"
     else
         echo "CNI binary directory does not exist"
     fi

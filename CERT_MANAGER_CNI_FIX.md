@@ -17,6 +17,18 @@ While the existing Flannel CNI controller fix correctly restricts Flannel to con
 - **Conflicting CNI configuration files** in `/etc/cni/net.d/`
 - **Stale CNI plugin state** in `/var/lib/cni/`
 
+### CNI Plugin Infrastructure Gap (CRITICAL)
+**The primary issue**: Worker nodes were missing the necessary CNI plugin binaries and configuration files. Even though the Flannel daemon correctly runs only on control plane nodes, **worker nodes still need**:
+
+- **CNI plugin binaries** in `/opt/cni/bin/` (flannel, bridge, portmap, etc.)
+- **CNI configuration files** in `/etc/cni/net.d/` 
+- **Basic network configuration** for kubelet to initialize CNI
+
+Without these components, kubelet on worker nodes fails with:
+```
+"Container runtime network not ready" networkReady="NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized"
+```
+
 ### CNI Name Inconsistency
 The Flannel ConfigMap was using `"name": "cbr0"` but runtime errors referenced `cni0`, creating a mismatch that prevented proper bridge configuration.
 
@@ -62,6 +74,74 @@ Added comprehensive CNI cleanup tasks to `ansible/plays/kubernetes/setup_cluster
         rm -rf /var/lib/kubelet/plugins_registry/* || true
       ignore_errors: yes
 ```
+
+### 1.5. Worker Node CNI Infrastructure Installation (NEW)
+
+**Critical Addition**: Worker nodes need CNI plugin binaries and configuration even though they don't run the Flannel daemon. Added CNI infrastructure installation:
+
+```yaml
+- name: Install CNI plugins and configuration on worker nodes (required for kubelet)
+  block:
+    - name: Create CNI directories on worker nodes
+      file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - /opt/cni/bin
+        - /etc/cni/net.d
+        - /var/lib/cni/networks
+        - /var/lib/cni/results
+
+    - name: Download and install Flannel CNI plugin binary on worker nodes
+      get_url:
+        url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1/flannel-amd64"
+        dest: /opt/cni/bin/flannel
+        mode: '0755'
+
+    - name: Download and install additional CNI plugins on worker nodes
+      unarchive:
+        src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+        dest: /opt/cni/bin
+        remote_src: yes
+
+    - name: Create basic CNI configuration for worker nodes
+      copy:
+        content: |
+          {
+            "name": "cni0",
+            "cniVersion": "0.3.1",
+            "plugins": [
+              {
+                "type": "flannel",
+                "delegate": {
+                  "hairpinMode": true,
+                  "isDefaultGateway": true
+                }
+              },
+              {
+                "type": "portmap",
+                "capabilities": {
+                  "portMappings": true
+                }
+              }
+            ]
+          }
+        dest: /etc/cni/net.d/10-flannel.conflist
+
+    - name: Create Flannel subnet configuration for worker nodes
+      copy:
+        content: |
+          {
+            "Network": "10.244.0.0/16",
+            "EnableNFTables": false,
+            "Backend": {
+              "Type": "vxlan"
+            }
+          }
+        dest: /run/flannel/subnet.env
+```
+
+This ensures worker nodes have the CNI infrastructure needed to prevent "cni plugin not initialized" errors.
 
 ### 2. Fixed CNI Name Consistency
 
@@ -147,6 +227,11 @@ Enhanced `test_flannel_fix.sh` to validate CNI name consistency:
 ./test_flannel_fix.sh  # Validates all aspects including CNI naming
 ```
 
+**NEW:** `test_worker_cni_fix.sh` to validate worker node CNI infrastructure:
+```bash
+./test_worker_cni_fix.sh  # Validates worker node CNI plugin installation
+```
+
 Enhanced `validate_flannel_placement.sh` for post-deployment verification:
 ```bash
 ./validate_flannel_placement.sh  # Confirms proper Flannel placement
@@ -158,15 +243,23 @@ Enhanced `validate_flannel_placement.sh` for post-deployment verification:
 # 1. Confirm Flannel only on control plane
 kubectl get pods -n kube-flannel -o wide
 
-# 2. Verify worker nodes have no CNI interfaces
+# 2. Verify worker nodes have CNI plugins but no CNI interfaces
+ssh root@192.168.4.61 "ls -la /opt/cni/bin/" # Should show flannel, bridge, portmap
 ssh root@192.168.4.61 "ip link show | grep -E '(cni0|cbr0|flannel)'" || echo "Clean (good)"
-ssh root@192.168.4.62 "ip link show | grep -E '(cni0|cbr0|flannel)'" || echo "Clean (good)"
 
-# 3. Check cert-manager pods are running
+# 3. Verify worker nodes have CNI configuration
+ssh root@192.168.4.61 "ls -la /etc/cni/net.d/" # Should show 10-flannel.conflist
+ssh root@192.168.4.62 "ls -la /etc/cni/net.d/" # Should show 10-flannel.conflist
+
+# 4. Check cert-manager pods are running
 kubectl get pods -n cert-manager
 
-# 4. Verify no CNI-related events/errors
+# 5. Verify no CNI-related events/errors
 kubectl get events -A | grep -i cni
+
+# 6. Check kubelet logs for CNI initialization
+ssh root@192.168.4.61 "journalctl -u kubelet | grep -i cni | tail -10"
+ssh root@192.168.4.62 "journalctl -u kubelet | grep -i cni | tail -10"
 ```
 
 ## Files Modified
