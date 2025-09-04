@@ -239,15 +239,13 @@
       when: not ansible_check_mode
 
     # === Kubernetes Dashboard ===
-    - name: Check if kubernetes-dashboard-csrf secret exists
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Secret
-        namespace: kubernetes-dashboard
-        name: kubernetes-dashboard-csrf
-      register: dashboard_csrf_secret_check
-      failed_when: false
-      changed_when: false
+
+    - name: Generate CSRF token for dashboard
+      set_fact:
+        dashboard_csrf_token: "{{ lookup('password', '/dev/null', chars='ascii_letters,digits', length=64) }}"
+      when:
+        - not ansible_check_mode
+        - (dashboard_csrf_secret_check.resources | default([])) | length == 0
 
     - name: Create kubernetes-dashboard-csrf secret if not exists
       kubernetes.core.k8s:
@@ -262,15 +260,14 @@
               app: kubernetes-dashboard
           type: Opaque
           stringData:
-            csrf: >-
-              {{ lookup('password', '/dev/null 
-                 chars=ascii_letters,digits length=64') }}
+            csrf: "{{ dashboard_csrf_token }}"
       register: dashboard_csrf_secret_result
       failed_when: false
       changed_when: dashboard_csrf_secret_result.changed | default(false)
       when:
         - not ansible_check_mode
         - (dashboard_csrf_secret_check.resources | default([])) | length == 0
+        - dashboard_csrf_token is defined
 
     - name: Create kubernetes-dashboard deployment
       kubernetes.core.k8s:
