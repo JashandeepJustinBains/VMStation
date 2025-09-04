@@ -142,8 +142,14 @@ main() {
         echo -e "${RED}✗ Found $issues deployment issues${NC}"
         echo ""
         echo -e "${BLUE}To fix issues:${NC}"
-        echo "  1. Check deployment configuration: ansible/subsites/05-extra_apps.yaml"
-        echo "  2. Redeploy apps: ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml"
+        echo "  1. Check deployment configuration:"
+        echo "     - All apps: ansible/subsites/05-extra_apps.yaml (orchestrator)"
+        echo "     - Individual: ansible/subsites/06-kubernetes-dashboard.yaml"
+        echo "                   ansible/subsites/07-drone-ci.yaml" 
+        echo "                   ansible/subsites/08-mongodb.yaml"
+        echo "  2. Redeploy apps:"
+        echo "     - All: ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml"
+        echo "     - Individual: ansible-playbook -i inventory.txt ansible/subsites/06-kubernetes-dashboard.yaml"
         echo "  3. Check pod logs: kubectl logs -n <namespace> -l app=<app-name>"
         exit 1
     fi
