@@ -152,7 +152,12 @@ PLAYBOOKS=(
     # "ansible/subsites/03-monitoring.yaml"    # Monitoring stack pre-checks and deployment
     # "ansible/subsites/04-jellyfin.yaml"      # Jellyfin deployment pre-checks and storage validation
     # "apply_drone_secrets.yml"
-    # "ansible/subsites/05-extra_apps.yaml"   # Extra Apps: Kubernetes Dashboard, Drone, MongoDB
+    # "ansible/subsites/05-extra_apps.yaml"   # Extra Apps Orchestrator: runs all individual app playbooks
+    
+    # === Individual Extra Apps (Modular) ===
+    # "ansible/subsites/06-kubernetes-dashboard.yaml"  # Kubernetes Dashboard only
+    # "ansible/subsites/07-drone-ci.yaml"              # Drone CI only
+    # "ansible/subsites/08-mongodb.yaml"               # MongoDB only
     
     # Work-in-progress subsites (wip_*) - exercise caution; these are flagged for review
 
