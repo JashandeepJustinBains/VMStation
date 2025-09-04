@@ -268,7 +268,16 @@
         - not ansible_check_mode
         - (dashboard_csrf_secret_check.resources | default([])) | length == 0
         - dashboard_csrf_token is defined
+    - name: Apply dashboard secret RBAC manifest
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ playbook_dir }}/../files/dashboard-secret-access.yaml"
+      register: dashboard_secret_rbac_result
+      failed_when: false
+      changed_when: dashboard_secret_rbac_result.changed | default(false)
+      when: not ansible_check_mode
 
+      
     - name: Create kubernetes-dashboard deployment
       kubernetes.core.k8s:
         state: present
