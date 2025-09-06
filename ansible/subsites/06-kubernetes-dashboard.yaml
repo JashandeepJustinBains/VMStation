@@ -1,0 +1,286 @@
+---
+# Subsite 06: Kubernetes Dashboard
+# This playbook deploys the Kubernetes Dashboard to the cluster
+# following VMStation non-destructive principles and idempotent operations.
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - ../group_vars/secrets.yml
+  vars:
+    # === Node Scheduling Configuration ===
+    dashboard_node: masternode
+    
+    # === NodePort Configuration ===
+    dashboard_nodeport: 32000
+
+  tasks:
+    # === Preflight Checks ===
+    - name: Check kubectl availability
+      ansible.builtin.command:
+        cmd: kubectl version --client
+      register: kubectl_check
+      failed_when: false
+      changed_when: false
+      check_mode: false
+
+    - name: Fail with remediation if kubectl not available
+      ansible.builtin.fail:
+        msg: |
+          kubectl is required for Kubernetes operations. Install it with:
+          
+          For Ubuntu/Debian:
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          For RHEL/CentOS/Fedora:
+          sudo dnf install -y kubectl
+          
+          Or download from: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+      when: kubectl_check.rc != 0
+
+    - name: Check Kubernetes cluster connectivity
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_check
+      failed_when: false
+      changed_when: false
+
+    - name: Fail if cluster not accessible
+      ansible.builtin.fail:
+        msg: |
+          Cannot connect to Kubernetes cluster. Please verify:
+          1. Cluster is running
+          2. kubectl is properly configured
+          3. Current context points to correct cluster
+          
+          Check with: kubectl cluster-info
+      when: cluster_check.failed | default(false)
+
+    # === Existing Resources Detection ===
+    - name: Check for existing kubernetes-dashboard deployment
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        namespace: kubernetes-dashboard
+        name: kubernetes-dashboard
+      register: dashboard_deployment_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing kubernetes-dashboard service
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        namespace: kubernetes-dashboard
+        name: kubernetes-dashboard
+      register: dashboard_service_check
+      failed_when: false
+      changed_when: false
+
+    - name: Check for existing CSRF secret
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Secret
+        namespace: kubernetes-dashboard
+        name: kubernetes-dashboard-csrf
+      register: dashboard_csrf_secret_check
+      failed_when: false
+      changed_when: false
+
+    # === Check Mode Behavior ===
+    - name: Show what would be created in check mode
+      ansible.builtin.debug:
+        msg: |
+          === CHECK MODE: Kubernetes Dashboard Deployment ===
+          
+          Kubernetes Dashboard:
+          - Namespace: kubernetes-dashboard {{ '(exists)' if (dashboard_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Deployment: kubernetes-dashboard {{ '(exists)' if (dashboard_deployment_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Service: NodePort on {{ dashboard_nodeport }} {{ '(exists)' if (dashboard_service_check.resources | default([])) | length > 0 else '(will create)' }}
+          - Scheduled on: {{ dashboard_node }}
+          
+          Run without --check to apply these changes.
+      when: ansible_check_mode
+
+    # === Namespace Creation ===
+    - name: Create kubernetes-dashboard namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: kubernetes-dashboard
+            labels:
+              name: kubernetes-dashboard
+      register: dashboard_namespace_result
+      retries: 5
+      delay: 3
+      until: dashboard_namespace_result is not failed or 
+             ("Too Many Requests" not in (dashboard_namespace_result.msg | default("")) and
+              "too many requests" not in (dashboard_namespace_result.msg | default("")) and
+              "rate limit" not in (dashboard_namespace_result.msg | default("")))
+      failed_when: false
+      changed_when: dashboard_namespace_result.changed | default(false)
+      when: not ansible_check_mode
+
+    - name: Add delay to prevent API rate limiting
+      ansible.builtin.pause:
+        seconds: 1
+      when: not ansible_check_mode
+
+    # === Kubernetes Dashboard ===
+
+    - name: Generate CSRF token for dashboard
+      set_fact:
+        dashboard_csrf_token: "{{ lookup('password', '/dev/null', chars='ascii_letters,digits', length=64) }}"
+      when:
+        - not ansible_check_mode
+        - (dashboard_csrf_secret_check.resources | default([])) | length == 0
+
+    - name: Create kubernetes-dashboard-csrf secret if not exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: kubernetes-dashboard-csrf
+            namespace: kubernetes-dashboard
+            labels:
+              app: kubernetes-dashboard
+          type: Opaque
+          stringData:
+            csrf: "{{ dashboard_csrf_token }}"
+      register: dashboard_csrf_secret_result
+      failed_when: false
+      changed_when: dashboard_csrf_secret_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (dashboard_csrf_secret_check.resources | default([])) | length == 0
+        - dashboard_csrf_token is defined
+
+    - name: Apply dashboard secret RBAC manifest
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ playbook_dir }}/../files/dashboard-secret-access.yaml"
+      register: dashboard_secret_rbac_result
+      failed_when: false
+      changed_when: dashboard_secret_rbac_result.changed | default(false)
+      when: not ansible_check_mode
+
+    - name: Create kubernetes-dashboard deployment
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kubernetes-dashboard
+            namespace: kubernetes-dashboard
+            labels:
+              app: kubernetes-dashboard
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: kubernetes-dashboard
+            template:
+              metadata:
+                labels:
+                  app: kubernetes-dashboard
+              spec:
+                nodeName: "{{ dashboard_node }}"
+                securityContext:
+                  runAsNonRoot: true
+                containers:
+                  - name: kubernetes-dashboard
+                    image: kubernetesui/dashboard:v2.7.0
+                    ports:
+                      - containerPort: 8443
+                        protocol: TCP
+                    args:
+                      - --auto-generate-certificates
+                      - --namespace=kubernetes-dashboard
+                    securityContext:
+                      runAsUser: 1001
+                      runAsNonRoot: true
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                    resources:
+                      limits:
+                        cpu: 500m
+                        memory: 512Mi
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                    livenessProbe:
+                      httpGet:
+                        scheme: HTTPS
+                        path: /
+                        port: 8443
+                      initialDelaySeconds: 30
+                      timeoutSeconds: 30
+      register: dashboard_deployment_result
+      failed_when: false
+      changed_when: dashboard_deployment_result.changed | default(false)
+      when: 
+        - not ansible_check_mode
+        - (dashboard_deployment_check.resources | default([])) | length == 0
+
+    - name: Create kubernetes-dashboard service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: kubernetes-dashboard
+            namespace: kubernetes-dashboard
+            labels:
+              app: kubernetes-dashboard
+          spec:
+            type: NodePort
+            selector:
+              app: kubernetes-dashboard
+            ports:
+              - protocol: TCP
+                port: 443
+                targetPort: 8443
+                nodePort: "{{ dashboard_nodeport }}"
+      register: dashboard_service_result
+      failed_when: false
+      changed_when: dashboard_service_result.changed | default(false)
+      when:
+        - not ansible_check_mode
+        - (dashboard_service_check.resources | default([])) | length == 0
+
+    # === Summary ===
+    - name: Summarize Kubernetes Dashboard deployment
+      ansible.builtin.debug:
+        msg: |
+          === Kubernetes Dashboard Deployment Summary ===
+          
+          Kubernetes Dashboard:
+          - Deployment: {{ 'EXISTS' if (dashboard_deployment_check.resources | default([])) | length > 0 else ('CREATED' if (dashboard_deployment_result.changed | default(false)) else 'NO CHANGE') }}
+          - Service: {{ 'EXISTS' if (dashboard_service_check.resources | default([])) | length > 0 else ('CREATED' if (dashboard_service_result.changed | default(false)) else 'NO CHANGE') }}
+          - Access: https://{{ dashboard_node }}:{{ dashboard_nodeport }}
+          
+          === Validation Commands ===
+          
+          Verify Deployment:
+          kubectl get pods -n kubernetes-dashboard
+          kubectl get svc -n kubernetes-dashboard
+          
+          Access Dashboard:
+          Open https://{{ dashboard_node }}:{{ dashboard_nodeport }} in browser
+          
+          === Security Notes ===
+          
+          For production deployments:
+          1. Configure proper RBAC for dashboard access
+          2. Use service accounts and tokens for authentication
+          3. Consider ingress controller for TLS termination
+      when: not ansible_check_mode

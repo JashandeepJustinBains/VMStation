@@ -18,7 +18,10 @@ Available subsites:
 - 02-certs.yaml: Certificate management
 - 03-monitoring.yaml: Monitoring stack pre-checks
 - 04-jellyfin.yaml: Jellyfin deployment pre-checks
-- 05-extra_apps.yaml: Extra applications (Kubernetes Dashboard, Drone CI, MongoDB)
+- 05-extra_apps.yaml: Extra applications orchestrator (imports individual app playbooks)
+- 06-kubernetes-dashboard.yaml: Kubernetes Dashboard deployment
+- 07-drone-ci.yaml: Drone CI deployment  
+- 08-mongodb.yaml: MongoDB deployment
 
 **Special Note about 00-spindown.yaml:**
 This playbook completely removes Podman and Kubernetes infrastructure and is intentionally
@@ -42,3 +45,69 @@ The spindown playbook removes:
 - Certificates and TLS configurations
 - Helm releases and configuration
 - Related configuration files and directories
+
+## Modular Extra Apps Architecture
+
+The extra applications deployment has been refactored into individual, modular playbooks for better maintainability:
+
+### Individual App Playbooks
+- `06-kubernetes-dashboard.yaml` - Kubernetes Dashboard only
+- `07-drone-ci.yaml` - Drone CI only  
+- `08-mongodb.yaml` - MongoDB only
+
+### Orchestrator Playbook
+- `05-extra_apps.yaml` - Runs all individual app playbooks in sequence
+
+### Usage Examples
+
+**Deploy all extra apps together (orchestrator):**
+```bash
+ansible-playbook -i ansible/inventory.txt ansible/subsites/05-extra_apps.yaml
+```
+
+**Deploy individual apps:**
+```bash
+# Deploy only Kubernetes Dashboard
+ansible-playbook -i ansible/inventory.txt ansible/subsites/06-kubernetes-dashboard.yaml
+
+# Deploy only Drone CI (with secret validation)
+ansible-playbook -i ansible/inventory.txt ansible/subsites/07-drone-ci.yaml
+
+# Deploy only MongoDB
+ansible-playbook -i ansible/inventory.txt ansible/subsites/08-mongodb.yaml
+```
+
+**Check what would be deployed (dry run):**
+```bash
+# Check all apps
+ansible-playbook -i ansible/inventory.txt ansible/subsites/05-extra_apps.yaml --check
+
+# Check individual apps
+ansible-playbook -i ansible/inventory.txt ansible/subsites/06-kubernetes-dashboard.yaml --check
+ansible-playbook -i ansible/inventory.txt ansible/subsites/07-drone-ci.yaml --check  
+ansible-playbook -i ansible/inventory.txt ansible/subsites/08-mongodb.yaml --check
+```
+
+**Skip specific apps:**
+```bash
+# Skip Drone CI (environment variable applies to orchestrator and individual playbook)
+SKIP_DRONE=true ansible-playbook -i ansible/inventory.txt ansible/subsites/05-extra_apps.yaml
+
+# Or deploy other apps individually without Drone
+ansible-playbook -i ansible/inventory.txt ansible/subsites/06-kubernetes-dashboard.yaml
+ansible-playbook -i ansible/inventory.txt ansible/subsites/08-mongodb.yaml
+```
+
+### Benefits of Modular Architecture
+1. **Individual deployment** - Deploy only what you need
+2. **Better troubleshooting** - Debug apps in isolation  
+3. **Easier maintenance** - Update individual apps without affecting others
+4. **Flexible deployment** - Skip specific apps easily
+5. **Easier expansion** - Add new apps by creating new numbered playbooks
+
+### Adding New Apps
+To add a new application (e.g., Redis):
+1. Create `ansible/subsites/09-redis.yaml` following existing app structure
+2. Add `- import_playbook: 09-redis.yaml` to the orchestrator (`05-extra_apps.yaml`)
+3. Test the new app independently before adding to orchestrator
+4. Update documentation with the new app details
