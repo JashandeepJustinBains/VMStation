@@ -32,6 +32,34 @@
     - name: Set simple monitoring node selector
       ansible.builtin.set_fact:
         monitoring_node_selector: "{{ {'node-role.vmstation.io/monitoring': 'true'} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted') else {} }}"
+    
+    - name: Get node name for current monitoring host
+      shell: kubectl get nodes -o jsonpath='{.items[?(@.status.addresses[?(@.type=="InternalIP")].address=="{{ ansible_default_ipv4.address }}")].metadata.name}'
+      register: monitoring_node_name
+      environment:
+        KUBECONFIG: /root/.kube/config
+      when: monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted'
+    
+    - name: Label monitoring node for monitoring workloads
+      shell: kubectl label node "{{ monitoring_node_name.stdout }}" node-role.vmstation.io/monitoring=true --overwrite
+      environment:
+        KUBECONFIG: /root/.kube/config
+      when: 
+        - monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted'
+        - monitoring_node_name.stdout is defined and monitoring_node_name.stdout != ""
+    
+    - name: Remove monitoring labels from compute and storage nodes
+      shell: |
+        # Get nodes that are NOT the current monitoring node
+        for node in $(kubectl get nodes -o jsonpath='{.items[?(@.status.addresses[?(@.type=="InternalIP")].address!="{{ ansible_default_ipv4.address }}")].metadata.name}'); do
+          if kubectl get node "$node" --show-labels | grep -q "node-role.vmstation.io/monitoring=true"; then
+            echo "Removing monitoring label from non-monitoring node: $node"
+            kubectl label node "$node" node-role.vmstation.io/monitoring-
+          fi
+        done
+      environment:
+        KUBECONFIG: /root/.kube/config
+      when: monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted'
 
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:
