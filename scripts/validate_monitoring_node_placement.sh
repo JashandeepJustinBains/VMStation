@@ -68,8 +68,8 @@ info "✓ Monitoring namespace exists"
 echo ""
 info "Checking node labels..."
 
-MASTERNODE_NAME=$(kubectl get nodes -o jsonpath="{.items[?(@.status.addresses[?(@.type==\"InternalIP\")].address==\"$MASTERNODE_IP\")].metadata.name}" 2>/dev/null || true)
-HOMELAB_NAME=$(kubectl get nodes -o jsonpath="{.items[?(@.status.addresses[?(@.type==\"InternalIP\")].address==\"$HOMELAB_IP\")].metadata.name}" 2>/dev/null || true)
+MASTERNODE_NAME=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 2>/dev/null | grep "$MASTERNODE_IP" | cut -f1 || true)
+HOMELAB_NAME=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 2>/dev/null | grep "$HOMELAB_IP" | cut -f1 || true)
 
 if [[ -z "$MASTERNODE_NAME" ]]; then
     error "Could not find masternode with IP $MASTERNODE_IP in cluster"

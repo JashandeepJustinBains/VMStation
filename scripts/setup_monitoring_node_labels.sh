@@ -60,7 +60,8 @@ echo ""
 debug "Looking for monitoring node with IP: $MONITORING_NODE_IP"
 
 # Get the node name for the monitoring node (masternode)
-MONITORING_NODE_NAME=$(kubectl get nodes -o jsonpath="{.items[?(@.status.addresses[?(@.type==\"InternalIP\")].address==\"$MONITORING_NODE_IP\")].metadata.name}")
+# Use range-based approach instead of nested filters for better compatibility
+MONITORING_NODE_NAME=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | grep "$MONITORING_NODE_IP" | cut -f1)
 
 if [[ -z "$MONITORING_NODE_NAME" ]]; then
     error "Could not find node with IP $MONITORING_NODE_IP in the cluster"
@@ -81,8 +82,8 @@ info "✓ Monitoring node labeled successfully"
 echo ""
 info "Removing monitoring labels from compute and storage nodes..."
 
-# Get homelab node name
-HOMELAB_NODE_NAME=$(kubectl get nodes -o jsonpath="{.items[?(@.status.addresses[?(@.type==\"InternalIP\")].address==\"$HOMELAB_NODE_IP\")].metadata.name}" 2>/dev/null || true)
+# Get homelab node name using range-based approach
+HOMELAB_NODE_NAME=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 2>/dev/null | grep "$HOMELAB_NODE_IP" | cut -f1 || true)
 if [[ -n "$HOMELAB_NODE_NAME" ]]; then
     debug "Found homelab node: $HOMELAB_NODE_NAME (IP: $HOMELAB_NODE_IP)"
     if kubectl get node "$HOMELAB_NODE_NAME" --show-labels | grep -q "node-role.vmstation.io/monitoring=true"; then
@@ -95,8 +96,8 @@ else
     debug "Homelab node not found in cluster (this is normal if it's not joined)"
 fi
 
-# Get storage node name
-STORAGE_NODE_NAME=$(kubectl get nodes -o jsonpath="{.items[?(@.status.addresses[?(@.type==\"InternalIP\")].address==\"$STORAGE_NODE_IP\")].metadata.name}" 2>/dev/null || true)
+# Get storage node name using range-based approach
+STORAGE_NODE_NAME=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 2>/dev/null | grep "$STORAGE_NODE_IP" | cut -f1 || true)
 if [[ -n "$STORAGE_NODE_NAME" ]]; then
     debug "Found storage node: $STORAGE_NODE_NAME (IP: $STORAGE_NODE_IP)"
     if kubectl get node "$STORAGE_NODE_NAME" --show-labels | grep -q "node-role.vmstation.io/monitoring=true"; then
