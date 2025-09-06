@@ -1663,7 +1663,7 @@
             ls -la /etc/kubernetes/ || true
           register: worker_diagnostics
           ignore_errors: yes
-          when: (worker_kubelet_restart is defined and worker_kubelet_restart.failed) or (worker_kubelet_restart_retry is defined and worker_kubelet_restart_retry.failed)
+          when: (worker_kubelet_restart is defined and (worker_kubelet_restart.failed | default(false))) or (worker_kubelet_restart_retry is defined and (worker_kubelet_restart_retry.failed | default(false)))
 
         - name: Display worker kubelet diagnostics
           debug:
