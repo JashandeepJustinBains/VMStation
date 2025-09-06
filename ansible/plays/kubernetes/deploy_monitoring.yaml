@@ -34,7 +34,7 @@
         monitoring_node_selector: "{{ {'node-role.vmstation.io/monitoring': 'true'} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted') else {} }}"
     
     - name: Get node name for current monitoring host
-      shell: kubectl get nodes -o jsonpath='{.items[?(@.status.addresses[?(@.type=="InternalIP")].address=="{{ ansible_default_ipv4.address }}")].metadata.name}'
+      shell: kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | grep "{{ ansible_default_ipv4.address }}" | cut -f1
       register: monitoring_node_name
       environment:
         KUBECONFIG: /root/.kube/config
@@ -50,8 +50,9 @@
     
     - name: Remove monitoring labels from compute and storage nodes
       shell: |
-        # Get nodes that are NOT the current monitoring node
-        for node in $(kubectl get nodes -o jsonpath='{.items[?(@.status.addresses[?(@.type=="InternalIP")].address!="{{ ansible_default_ipv4.address }}")].metadata.name}'); do
+        # Get nodes that are NOT the current monitoring node using range-based approach
+        kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | \
+        grep -v "{{ ansible_default_ipv4.address }}" | cut -f1 | while read node; do
           if kubectl get node "$node" --show-labels | grep -q "node-role.vmstation.io/monitoring=true"; then
             echo "Removing monitoring label from non-monitoring node: $node"
             kubectl label node "$node" node-role.vmstation.io/monitoring-
