@@ -29,9 +29,36 @@
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
-    - name: Set simple monitoring node selector
+    - name: Set monitoring node selector based on scheduling mode
       ansible.builtin.set_fact:
-        monitoring_node_selector: "{{ {'node-role.vmstation.io/monitoring': 'true'} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted') else {} }}"
+        monitoring_node_selector: >-
+          {%- if monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'strict' -%}
+            {{ {'kubernetes.io/hostname': ansible_hostname} }}
+          {%- elif monitoring_scheduling_mode is defined and monitoring_scheduling_mode == 'flexible' -%}
+            {{ {'node-role.vmstation.io/monitoring': 'true'} }}
+          {%- else -%}
+            {{- {} -}}
+          {%- endif -%}
+
+    - name: Set monitoring tolerations for control-plane nodes
+      ansible.builtin.set_fact:
+        monitoring_tolerations: >-
+          {%- if monitoring_scheduling_mode is defined and monitoring_scheduling_mode in ['strict', 'flexible'] -%}
+            [
+              {
+                "key": "node-role.kubernetes.io/control-plane",
+                "operator": "Exists",
+                "effect": "NoSchedule"
+              },
+              {
+                "key": "node-role.kubernetes.io/master",
+                "operator": "Exists",
+                "effect": "NoSchedule"
+              }
+            ]
+          {%- else -%}
+            {{- [] -}}
+          {%- endif -%}
 
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:
@@ -57,7 +84,7 @@
               ruleSelectorNilUsesHelmValues: false
               # Node scheduling (computed earlier)
               nodeSelector: "{{ monitoring_node_selector }}"
-              # When monitoring_scheduling_mode is 'unrestricted', no nodeSelector or tolerations are added
+              tolerations: "{{ monitoring_tolerations }}"
             service:
               type: NodePort
               nodePort: 30090
@@ -88,6 +115,7 @@
                 enabled: true
             # Grafana node scheduling
             nodeSelector: "{{ monitoring_node_selector }}"
+            tolerations: "{{ monitoring_tolerations }}"
                 
           # AlertManager configuration
           alertmanager:
@@ -102,6 +130,7 @@
                         storage: 2Gi
               # AlertManager node scheduling
               nodeSelector: "{{ monitoring_node_selector }}"
+              tolerations: "{{ monitoring_tolerations }}"
             service:
               type: NodePort
               nodePort: 30903
@@ -145,6 +174,7 @@
                 
             # Loki node scheduling
             nodeSelector: "{{ monitoring_node_selector }}"
+            tolerations: "{{ monitoring_tolerations }}"
               
             # Security context for proper permissions
             securityContext:
