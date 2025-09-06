@@ -68,6 +68,26 @@ else
     echo "WARNING: Monitoring permission script not found at scripts/fix_monitoring_permissions.sh"
 fi
 
+# Setup monitoring node labels for proper scheduling (if kubectl is available)
+if command -v kubectl >/dev/null 2>&1 && kubectl cluster-info >/dev/null 2>&1; then
+    if [ -f "scripts/setup_monitoring_node_labels.sh" ]; then
+        echo "Setting up monitoring node labels for proper scheduling..."
+        chmod +x scripts/setup_monitoring_node_labels.sh
+        if ./scripts/setup_monitoring_node_labels.sh; then
+            echo "✓ Monitoring node labels configured successfully"
+        else
+            echo "WARNING: Failed to setup monitoring node labels"
+            echo "You may need to run this manually before deployment:"
+            echo "  ./scripts/setup_monitoring_node_labels.sh"
+        fi
+    else
+        echo "WARNING: Monitoring node label script not found at scripts/setup_monitoring_node_labels.sh"
+    fi
+else
+    echo "INFO: Skipping node labeling setup (kubectl not available or cluster not accessible)"
+    echo "      If deploying monitoring, run manually: ./scripts/setup_monitoring_node_labels.sh"
+fi
+
 # === KUBERNETES CONNECTIVITY CHECK ===
 # Check if kubectl can connect to cluster before running Kubernetes-dependent playbooks
 echo ""
