@@ -58,6 +58,23 @@ else
     warn "Monitoring permission script not found at scripts/fix_monitoring_permissions.sh"
 fi
 
+# Setup monitoring node labels for proper scheduling
+if [ -f "scripts/setup_monitoring_node_labels.sh" ]; then
+    info "Setting up monitoring node labels for proper scheduling..."
+    chmod +x scripts/setup_monitoring_node_labels.sh
+    if ./scripts/setup_monitoring_node_labels.sh; then
+        info "✓ Monitoring node labels configured successfully"
+    else
+        warn "Failed to setup monitoring node labels"
+        warn "You may need to run this manually before deployment:"
+        warn "  ./scripts/setup_monitoring_node_labels.sh"
+        warn ""
+        warn "Continuing with deployment - monitoring may deploy on wrong nodes without proper labels..."
+    fi
+else
+    warn "Monitoring node label script not found at scripts/setup_monitoring_node_labels.sh"
+fi
+
 # Detect deployment mode
 INFRASTRUCTURE_MODE="kubernetes"  # Default to Kubernetes
 if grep -q "infrastructure_mode:.*podman" ansible/group_vars/all.yml 2>/dev/null; then
