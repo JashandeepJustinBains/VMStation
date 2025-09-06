@@ -976,7 +976,7 @@
           ignore_errors: yes
           when: kubelet_post_init_restart is defined and kubelet_post_init_restart.failed
 
-      when: kubeadm_init is defined and not kubeadm_init.skipped and not (kubeadm_init.failed | default(false))
+      when: kubeadm_init is defined and not (kubeadm_init.failed | default(false))
 
     - name: Create .kube directory for root
       file:
