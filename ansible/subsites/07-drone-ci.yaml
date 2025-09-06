@@ -9,7 +9,7 @@
     - ../group_vars/secrets.yml
   vars:
     # === Node Scheduling Configuration ===
-    apps_node: homelab
+    apps_node: r430computenode
     
     # === NodePort Configuration ===
     drone_nodeport: 32001
