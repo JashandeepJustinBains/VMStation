@@ -1187,10 +1187,15 @@
             - /var/lib/cni/networks
             - /var/lib/cni/results
 
-        - name: Download and install Flannel CNI plugin binary on worker nodes
+        - name: Set Flannel CNI destination path per node type
+          set_fact:
+            flannel_cni_dest: >-
+              {% if 'master' in group_names or 'monitoring' in group_names %}/srv/monitoring/flannel{% else %}/opt/cni/bin/flannel{% endif %}
+
+        - name: Download and install Flannel CNI plugin binary (dynamic path)
           get_url:
-            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1/flannel-amd64"
-            dest: /opt/cni/bin/flannel
+            url: "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flannel-amd64"
+            dest: "{{ flannel_cni_dest }}"
             mode: '0755'
             owner: root
             group: root
