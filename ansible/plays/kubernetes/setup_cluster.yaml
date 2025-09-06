@@ -702,6 +702,51 @@
             rm -rf /var/lib/kubelet/kubeconfig || true
           ignore_errors: yes
 
+        - name: Create minimal kubelet config to allow startup
+          copy:
+            content: |
+              apiVersion: kubelet.config.k8s.io/v1beta1
+              kind: KubeletConfiguration
+              authentication:
+                anonymous:
+                  enabled: false
+                webhook:
+                  enabled: true
+                x509:
+                  clientCAFile: /etc/kubernetes/pki/ca.crt
+              authorization:
+                mode: Webhook
+              clusterDNS:
+              - 10.96.0.10
+              clusterDomain: cluster.local
+              containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
+              cpuManagerReconcilePeriod: 0s
+              evictionPressureTransitionPeriod: 0s
+              fileCheckFrequency: 0s
+              healthzBindAddress: 127.0.0.1
+              healthzPort: 10248
+              httpCheckFrequency: 0s
+              imageMinimumGCAge: 0s
+              logging:
+                format: text
+              memorySwap: {}
+              nodeStatusReportFrequency: 0s
+              nodeStatusUpdateFrequency: 0s
+              rotateCertificates: true
+              runtimeRequestTimeout: 0s
+              shutdownGracePeriod: 0s
+              shutdownGracePeriodCriticalPods: 0s
+              staticPodPath: /etc/kubernetes/manifests
+              streamingConnectionIdleTimeout: 0s
+              syncFrequency: 0s
+              volumeStatsAggPeriod: 0s
+            dest: /var/lib/kubelet/config.yaml
+            owner: root
+            group: root
+            mode: '0644'
+          ignore_errors: yes
+          when: not ansible_check_mode
+
         - name: Regenerate kubelet service configuration
           block:
             - name: Create kubelet service drop-in directory
@@ -728,6 +773,42 @@
                 mode: '0644'
                 owner: root
                 group: root
+
+        - name: Ensure CNI infrastructure is available
+          block:
+            - name: Create CNI directories
+              file:
+                path: "{{ item }}"
+                state: directory
+                owner: root
+                group: root
+                mode: '0755'
+              loop:
+                - /opt/cni/bin
+                - /etc/cni/net.d
+                - /var/lib/cni/networks
+                - /var/lib/cni/results
+              ignore_errors: yes
+
+            - name: Check if basic CNI plugins exist
+              stat:
+                path: /opt/cni/bin/bridge
+              register: cni_plugins_check
+              ignore_errors: yes
+
+            - name: Download essential CNI plugins if missing
+              unarchive:
+                src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+                dest: /opt/cni/bin
+                remote_src: yes
+                owner: root
+                group: root
+                mode: '0755'
+                creates: /opt/cni/bin/bridge
+              when: not cni_plugins_check.stat.exists
+              ignore_errors: yes
+              retries: 2
+              delay: 5
 
         - name: Verify kernel modules are loaded
           shell: |
@@ -1505,6 +1586,63 @@
           register: worker_kubelet_restart
           ignore_errors: yes
 
+        - name: Handle worker kubelet startup failure with config recovery
+          block:
+            - name: Create minimal kubelet config if missing on worker
+              copy:
+                content: |
+                  apiVersion: kubelet.config.k8s.io/v1beta1
+                  kind: KubeletConfiguration
+                  authentication:
+                    anonymous:
+                      enabled: false
+                    webhook:
+                      enabled: true
+                    x509:
+                      clientCAFile: /etc/kubernetes/pki/ca.crt
+                  authorization:
+                    mode: Webhook
+                  clusterDNS:
+                  - 10.96.0.10
+                  clusterDomain: cluster.local
+                  containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
+                  cpuManagerReconcilePeriod: 0s
+                  evictionPressureTransitionPeriod: 0s
+                  fileCheckFrequency: 0s
+                  healthzBindAddress: 127.0.0.1
+                  healthzPort: 10248
+                  httpCheckFrequency: 0s
+                  imageMinimumGCAge: 0s
+                  logging:
+                    format: text
+                  memorySwap: {}
+                  nodeStatusReportFrequency: 0s
+                  nodeStatusUpdateFrequency: 0s
+                  rotateCertificates: true
+                  runtimeRequestTimeout: 0s
+                  shutdownGracePeriod: 0s
+                  shutdownGracePeriodCriticalPods: 0s
+                  staticPodPath: /etc/kubernetes/manifests
+                  streamingConnectionIdleTimeout: 0s
+                  syncFrequency: 0s
+                  volumeStatsAggPeriod: 0s
+                dest: /var/lib/kubelet/config.yaml
+                owner: root
+                group: root
+                mode: '0644'
+              when: not worker_kubelet_config_check.stat.exists
+              ignore_errors: yes
+
+            - name: Retry kubelet restart after config creation
+              systemd:
+                name: kubelet
+                state: restarted
+                enabled: yes
+              register: worker_kubelet_restart_retry
+              ignore_errors: yes
+
+          when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
+
         - name: Worker kubelet diagnostics if restart failed
           shell: |
             echo "=== Worker Node Kubelet Diagnostics ==="
@@ -1520,12 +1658,12 @@
             ls -la /etc/kubernetes/ || true
           register: worker_diagnostics
           ignore_errors: yes
-          when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
+          when: (worker_kubelet_restart is defined and worker_kubelet_restart.failed) or (worker_kubelet_restart_retry is defined and worker_kubelet_restart_retry.failed)
 
         - name: Display worker kubelet diagnostics
           debug:
             var: worker_diagnostics.stdout_lines
-          when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
+          when: (worker_kubelet_restart is defined and worker_kubelet_restart.failed) or (worker_kubelet_restart_retry is defined and worker_kubelet_restart_retry.failed)
 
       when: kubelet_conf.stat.exists or (join_result is defined and (join_result.rc | default(0)) == 0)
 
