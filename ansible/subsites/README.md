@@ -33,9 +33,9 @@ ansible-playbook -i ansible/inventory.txt ansible/subsites/00-spindown.yaml -e c
 ```
 
 The spindown playbook removes:
-- All Podman containers, pods, and images
+- All containerd containers, pods, and images
 - All Kubernetes clusters, namespaces, and CRDs  
-- Container runtime packages (docker, containerd, podman)
+- Container runtime packages (docker, containerd)
 - Kubernetes packages (kubeadm, kubelet, kubectl)
 - VMStation systemd services
 - Registry configurations
