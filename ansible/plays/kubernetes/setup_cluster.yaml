@@ -1668,7 +1668,7 @@
         - name: Display worker kubelet diagnostics
           debug:
             var: worker_diagnostics.stdout_lines
-          when: (worker_kubelet_restart is defined and worker_kubelet_restart.failed) or (worker_kubelet_restart_retry is defined and worker_kubelet_restart_retry.failed)
+          when: (worker_kubelet_restart is defined and (worker_kubelet_restart.failed | default(false))) or (worker_kubelet_restart_retry is defined and (worker_kubelet_restart_retry.failed | default(false)))
 
       when: kubelet_conf.stat.exists or (join_result is defined and (join_result.rc | default(0)) == 0)
 
