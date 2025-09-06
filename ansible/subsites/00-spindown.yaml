@@ -238,6 +238,38 @@
         pkill -f "kubelet" || true
       ignore_errors: true
 
+    - name: Clean up active CNI network interfaces
+      ansible.builtin.shell: |
+        echo "Cleaning up active CNI network interfaces..."
+        # Remove cni0 interface if it exists
+        if ip link show cni0 2>/dev/null; then
+          echo "Removing cni0 interface"
+          ip link set cni0 down || true
+          ip link delete cni0 || true
+        fi
+        
+        # Remove cbr0 interface if it exists  
+        if ip link show cbr0 2>/dev/null; then
+          echo "Removing cbr0 interface"
+          ip link set cbr0 down || true
+          ip link delete cbr0 || true
+        fi
+        
+        # Remove flannel.1 interface if it exists
+        if ip link show flannel.1 2>/dev/null; then
+          echo "Removing flannel.1 interface"
+          ip link set flannel.1 down || true
+          ip link delete flannel.1 || true
+        fi
+        
+        # Remove any vxlan interfaces that might be leftover
+        for iface in $(ip link show | grep vxlan | cut -d: -f2 | tr -d ' '); do
+          echo "Removing vxlan interface: $iface"
+          ip link set $iface down || true
+          ip link delete $iface || true
+        done
+      ignore_errors: true
+
     - name: Stop and disable kubelet if present
       ansible.builtin.service:
         name: kubelet
