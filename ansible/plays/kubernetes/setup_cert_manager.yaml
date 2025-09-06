@@ -271,6 +271,14 @@
               # Node targeting for cert-manager components to monitoring nodes
               nodeSelector:
                 node-role.vmstation.io/monitoring: "true"
+              # Tolerations to allow scheduling on control-plane nodes
+              tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                - key: node-role.kubernetes.io/master
+                  operator: Exists
+                  effect: NoSchedule
               image:
                 pullPolicy: IfNotPresent
               webhook:
@@ -278,6 +286,13 @@
                   pullPolicy: IfNotPresent
                 nodeSelector:
                   node-role.vmstation.io/monitoring: "true"
+                tolerations:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                    effect: NoSchedule
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    effect: NoSchedule
                 resources:
                   requests:
                     cpu: 10m
@@ -287,6 +302,13 @@
                   pullPolicy: IfNotPresent
                 nodeSelector:
                   node-role.vmstation.io/monitoring: "true"
+                tolerations:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: Exists
+                    effect: NoSchedule
+                  - key: node-role.kubernetes.io/master
+                    operator: Exists
+                    effect: NoSchedule
                 resources:
                   requests:
                     cpu: 10m
