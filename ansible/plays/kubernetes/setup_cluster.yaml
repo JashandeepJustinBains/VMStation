@@ -1649,6 +1649,13 @@
       when: not kubelet_conf.stat.exists
       ignore_errors: yes
 
+    - name: Enable kubelet service before join (required by kubeadm join)
+      systemd:
+        name: kubelet
+        enabled: yes
+      when: not kubelet_conf.stat.exists
+      ignore_errors: yes
+
     - name: Copy join command to worker nodes
       copy:
         src: /tmp/kubeadm-join.sh
