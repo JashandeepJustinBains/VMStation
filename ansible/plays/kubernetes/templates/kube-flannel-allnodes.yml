@@ -203,16 +203,9 @@ spec:
       priorityClassName: system-node-critical
       serviceAccountName: flannel
       tolerations:
-      # Tolerate control plane taints
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
+      # Tolerate all taints to ensure Flannel can run on any node
+      - operator: Exists
         effect: NoSchedule
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
-      # Tolerate general node taints to allow running on worker nodes
-      - effect: NoSchedule
-        operator: Exists
       volumes:
       - hostPath:
           path: /run/flannel
