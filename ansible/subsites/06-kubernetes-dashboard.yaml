@@ -193,6 +193,7 @@
                   app: kubernetes-dashboard
               spec:
                 nodeName: "{{ dashboard_node }}"
+                serviceAccountName: kubernetes-dashboard
                 securityContext:
                   runAsNonRoot: true
                 containers:
