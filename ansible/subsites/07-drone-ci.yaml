@@ -9,7 +9,7 @@
     - ../group_vars/secrets.yml
   vars:
     # === Node Scheduling Configuration ===
-    apps_node: r430computenode
+    apps_node: homelab
     
     # === NodePort Configuration ===
     drone_nodeport: 32001
@@ -292,9 +292,44 @@
         namespace: drone
         name: drone-hostpath-init
       register: init_pod_info
-      until: init_pod_info.resources[0].status.phase in ['Succeeded','Failed']
+      until: |
+        (init_pod_info.resources | length > 0) and 
+        (init_pod_info.resources[0].status is defined) and
+        (init_pod_info.resources[0].status.phase is defined) and
+        (init_pod_info.resources[0].status.phase in ['Succeeded','Failed'])
       retries: 30
       delay: 2
+      failed_when: |
+        (init_pod_info.resources | length == 0) or
+        ((init_pod_info.resources | length > 0) and 
+         (init_pod_info.resources[0].status is defined) and
+         (init_pod_info.resources[0].status.phase is defined) and
+         (init_pod_info.resources[0].status.phase == 'Failed'))
+
+    - name: Show init pod status for troubleshooting
+      when:
+        - not ansible_check_mode
+        - (drone_deployment_check.resources | default([])) | length == 0
+        - not (lookup('env', 'SKIP_DRONE') | bool)
+        - init_pod_info is defined
+      ansible.builtin.debug:
+        msg: |
+          === Drone Init Pod Status ===
+          Resources found: {{ init_pod_info.resources | length }}
+          {% if init_pod_info.resources | length > 0 %}
+          Pod phase: {{ init_pod_info.resources[0].status.phase | default('Unknown') }}
+          Pod conditions: {{ init_pod_info.resources[0].status.conditions | default([]) | to_nice_json }}
+          {% else %}
+          Pod was not found. This may indicate:
+          1. Pod creation failed
+          2. Pod was deleted due to node issues
+          3. Namespace or RBAC issues
+          
+          Troubleshooting steps:
+          kubectl describe pod drone-hostpath-init -n drone
+          kubectl get events -n drone --sort-by='.lastTimestamp'
+          kubectl get nodes {{ apps_node }} -o yaml
+          {% endif %}
 
     - name: Delete drone-hostpath-init pod
       when:
