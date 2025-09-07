@@ -1093,7 +1093,7 @@
                   debug:
                     msg: |
                       Bootstrap configuration fix applied to {{ inventory_hostname }}:
-                      - Node join status: {{ 'JOINED' if final_join_status.stat.exists else 'NOT JOINED' }}
+                      - Node join status: {{ 'JOINED' if final_join_status is defined and final_join_status.stat.exists else 'NOT JOINED' }}
                       - Had bootstrap config issue: {{ 'YES' if 'bootstrap-kubeconfig' in current_systemd_config.stdout else 'NO' }}
                       - Config updated: {{ 'YES' if bootstrap_config_fixed is changed else 'NO' }}
                       - Kubelet restart: {{ 'SUCCESS' if kubelet_restart_after_fix is succeeded else 'FAILED' }}
@@ -1109,7 +1109,7 @@
             msg: |
               Bootstrap configuration check completed for {{ inventory_hostname }}:
               - Bootstrap errors detected: {{ 'YES' if 'bootstrap-kubelet.conf' in bootstrap_error_check.stdout and bootstrap_error_check.stdout != 'no_bootstrap_errors' else 'NO' }}
-              - Join status: {{ 'JOINED' if final_join_status.stat.exists else 'NOT JOINED' }}
+              - Join status: {{ 'JOINED' if final_join_status is defined and final_join_status.stat.exists else 'NOT JOINED' }}
           when: bootstrap_error_check is defined
 
 # Control plane initialization (only on monitoring_nodes)
@@ -1386,6 +1386,15 @@
         - name: Set Flannel CNI destination path per node type
           set_fact:
             flannel_cni_dest: /opt/cni/bin/flannel
+
+        - name: Ensure download tools are available for Flannel installation
+          package:
+            name: 
+              - curl
+              - wget
+            state: present
+          ignore_errors: yes
+          register: download_tools_install
 
         - name: Download and install Flannel CNI plugin binary (primary method)
           get_url:
