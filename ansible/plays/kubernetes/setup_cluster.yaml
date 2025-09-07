@@ -427,35 +427,12 @@
             state: directory
             mode: '0755'
             
-        - name: Check if node has already joined cluster
-          stat:
-            path: /etc/kubernetes/kubelet.conf
-          register: node_join_status
-          
-        - name: Create kubeadm kubelet dropin (for nodes not yet joined - with bootstrap config)
+        - name: Create kubeadm kubelet dropin (standard configuration)
           copy:
             dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
             content: |
               # Note: This dropin only works with kubeadm and kubelet v1.11+
-              # Uses bootstrap-kubeconfig for initial join process
-              [Service]
-              Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
-              Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-              # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
-              EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
-              # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
-              # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
-              EnvironmentFile=-/etc/sysconfig/kubelet
-              ExecStart=
-              ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
-          when: not node_join_status.stat.exists
-          
-        - name: Create kubeadm kubelet dropin (for already joined nodes - no bootstrap config)
-          copy:
-            dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-            content: |
-              # Note: This dropin only works with kubeadm and kubelet v1.11+
-              # Node already joined - uses only kubelet.conf (no bootstrap config)
+              # Standard kubelet configuration without bootstrap dependency
               [Service]
               Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
               Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
@@ -466,7 +443,6 @@
               EnvironmentFile=-/etc/sysconfig/kubelet
               ExecStart=
               ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
-          when: node_join_status.stat.exists
               
         - name: Ensure /etc/sysconfig/kubelet exists with systemd cgroup driver (RHEL 10+)
           copy:
@@ -827,35 +803,11 @@
                 state: directory
                 mode: '0755'
 
-            - name: Check if node has joined during recovery
-              stat:
-                path: /etc/kubernetes/kubelet.conf
-              register: recovery_join_status
-              
-            - name: Generate enhanced kubelet service configuration (recovery - not joined yet)
+            - name: Generate enhanced kubelet service configuration (recovery mode)
               copy:
                 content: |
                   # Enhanced kubelet configuration for RHEL 10+ compatibility
-                  # Recovery mode - node not yet joined, use bootstrap config
-                  [Service]
-                  Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
-                  Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-                  Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
-                  Environment="KUBELET_EXTRA_ARGS=--node-ip={{ ansible_default_ipv4.address }}"
-                  ExecStart=
-                  ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
-                  Restart=always
-                  StartLimitInterval=0
-                  RestartSec=10
-                dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-                mode: '0644'
-              when: not recovery_join_status.stat.exists
-                
-            - name: Generate enhanced kubelet service configuration (recovery - already joined)
-              copy:
-                content: |
-                  # Enhanced kubelet configuration for RHEL 10+ compatibility
-                  # Recovery mode - node already joined, no bootstrap config needed
+                  # Standard kubelet configuration without bootstrap dependency
                   [Service]
                   Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
                   Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
@@ -868,9 +820,6 @@
                   RestartSec=10
                 dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
                 mode: '0644'
-                owner: root
-                group: root
-              when: recovery_join_status.stat.exists
                 
             - name: Create kubelet kubeadm flags file to prevent environment variable warnings
               copy:
@@ -1026,91 +975,6 @@
         - kubelet_restart_result.failed is defined
         - kubelet_restart_result.failed
 
-# Additional recovery for nodes stuck with bootstrap configuration
-- name: Fix nodes with bootstrap kubeconfig issues
-  hosts: all
-  become: true
-  tasks:
-    - name: Detect and fix bootstrap kubeconfig configuration issues
-      block:
-        - name: Check if kubelet is failing due to bootstrap config
-          shell: |
-            journalctl -u kubelet -n 50 --no-pager | grep -i "bootstrap-kubelet.conf" || echo "no_bootstrap_errors"
-          register: bootstrap_error_check
-          changed_when: false
-          failed_when: false
-
-        - name: Check if node has joined but kubelet config still references bootstrap
-          block:
-            - name: Check join status
-              stat:
-                path: /etc/kubernetes/kubelet.conf
-              register: final_join_status
-              
-            - name: Check current kubelet systemd config
-              shell: |
-                grep "bootstrap-kubeconfig" /etc/systemd/system/kubelet.service.d/10-kubeadm.conf || echo "no_bootstrap_in_config"
-              register: current_systemd_config
-              changed_when: false
-              failed_when: false
-              
-            - name: Fix kubelet config for joined nodes that shouldn't use bootstrap
-              copy:
-                dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-                content: |
-                  # Fixed kubelet configuration - node already joined
-                  # Removes bootstrap-kubeconfig dependency
-                  [Service]
-                  Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
-                  Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-                  # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
-                  EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
-                  # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
-                  # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
-                  EnvironmentFile=-/etc/sysconfig/kubelet
-                  ExecStart=
-                  ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
-                mode: '0644'
-              when: 
-                - final_join_status is defined and final_join_status.stat.exists
-                - "'bootstrap-kubeconfig' in current_systemd_config.stdout"
-              register: bootstrap_config_fixed
-              
-            - name: Reload systemd and restart kubelet after bootstrap fix
-              block:
-                - name: Reload systemd daemon
-                  systemd:
-                    daemon_reload: yes
-                    
-                - name: Restart kubelet service
-                  systemd:
-                    name: kubelet
-                    state: restarted
-                    enabled: yes
-                  register: kubelet_restart_after_fix
-                  
-                - name: Display bootstrap config fix results
-                  debug:
-                    msg: |
-                      Bootstrap configuration fix applied to {{ inventory_hostname }}:
-                      - Node join status: {{ 'JOINED' if final_join_status is defined and final_join_status.stat.exists else 'NOT JOINED' }}
-                      - Had bootstrap config issue: {{ 'YES' if 'bootstrap-kubeconfig' in current_systemd_config.stdout else 'NO' }}
-                      - Config updated: {{ 'YES' if bootstrap_config_fixed is changed else 'NO' }}
-                      - Kubelet restart: {{ 'SUCCESS' if kubelet_restart_after_fix is succeeded else 'FAILED' }}
-                      
-              when: bootstrap_config_fixed is changed
-              
-          when: 
-            - "'bootstrap-kubelet.conf' in bootstrap_error_check.stdout"
-            - bootstrap_error_check.stdout != "no_bootstrap_errors"
-            
-        - name: Report bootstrap fix status
-          debug:
-            msg: |
-              Bootstrap configuration check completed for {{ inventory_hostname }}:
-              - Bootstrap errors detected: {{ 'YES' if 'bootstrap-kubelet.conf' in bootstrap_error_check.stdout and bootstrap_error_check.stdout != 'no_bootstrap_errors' else 'NO' }}
-              - Join status: {{ 'JOINED' if final_join_status is defined and final_join_status.stat.exists else 'NOT JOINED' }}
-          when: bootstrap_error_check is defined
 
 # Control plane initialization (only on monitoring_nodes)
 - name: Initialize Kubernetes control plane
@@ -2005,39 +1869,12 @@
             path: /etc/kubernetes/kubelet.conf
           register: worker_kubelet_kubeconfig_check
 
-        - name: Update kubelet systemd config after successful join (remove bootstrap config)
-          copy:
-            dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-            content: |
-              # Note: This dropin only works with kubeadm and kubelet v1.11+
-              # Node successfully joined - uses only kubelet.conf (no bootstrap config)
-              [Service]
-              Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
-              Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-              # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
-              EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
-              # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
-              # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
-              EnvironmentFile=-/etc/sysconfig/kubelet
-              ExecStart=
-              ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
-            mode: '0644'
-          when: worker_kubelet_kubeconfig_check.stat.exists
-          register: post_join_config_update
-
-        - name: Reload systemd daemon after kubelet config update
-          systemd:
-            daemon_reload: yes
-          when: post_join_config_update is changed
-
-        - name: Restart and enable kubelet on worker (only if join was successful)
+        - name: Restart and enable kubelet on worker
           systemd:
             name: kubelet
             state: restarted
             enabled: yes
-          when: 
-            - "'kubelet.service' in ansible_facts.services"
-            - worker_kubelet_kubeconfig_check.stat.exists
+          when: "'kubelet.service' in ansible_facts.services"
           register: worker_kubelet_restart
           ignore_errors: yes
 

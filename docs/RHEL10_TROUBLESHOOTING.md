@@ -107,7 +107,7 @@ ssh 192.168.4.62 "ls -la /etc/kubernetes/kubelet.conf"
 # Check current systemd configuration
 ssh 192.168.4.62 "cat /etc/systemd/system/kubelet.service.d/10-kubeadm.conf"
 
-# Apply the bootstrap configuration fix (automatic detection and correction)
+# Apply the standard kubelet configuration
 ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/setup_cluster.yaml
 
 # Manual fix for already-joined nodes (if needed)
@@ -120,69 +120,11 @@ systemctl restart kubelet
 ```
 
 **Enhanced Fix (Implemented):**
-The `setup_cluster.yaml` playbook now includes automatic bootstrap configuration management:
-1. **Detects join status** by checking for `/etc/kubernetes/kubelet.conf`
-2. **Conditional configuration**: Uses bootstrap config only for nodes not yet joined
-3. **Automatic recovery**: Detects and fixes nodes stuck with incorrect bootstrap config
-4. **Validation**: Includes comprehensive testing with `./test_bootstrap_kubeconfig_fix.sh`
+The `setup_cluster.yaml` playbook now uses a simplified, consistent kubelet configuration:
+1. **Standard configuration**: Uses only `/etc/kubernetes/kubelet.conf` (no bootstrap dependency)
+2. **Automatic recovery**: Includes fallback mechanisms for various failure scenarios  
+3. **Retry logic**: Enhanced error handling and automatic retry attempts
 
-### 6. Bootstrap Kubeconfig Configuration Issues
-**Symptoms:**
-- kubelet fails with "failed to load bootstrap kubeconfig" errors
-- "bootstrap-kubelet.conf: no such file or directory" messages
-- Node was working before but now fails to start kubelet
-- Other nodes in cluster work fine with same playbook
-
-**Root Cause:**
-This occurs when a node that has already joined the cluster is still configured to use bootstrap kubeconfig. The bootstrap config is only needed during initial join - after successful join, nodes should only use the regular kubelet.conf.
-
-**Identification:**
-```bash
-# Check if node has already joined
-ssh 192.168.4.62 "ls -la /etc/kubernetes/kubelet.conf"
-
-# Check current kubelet systemd config
-ssh 192.168.4.62 "grep bootstrap /etc/systemd/system/kubelet.service.d/10-kubeadm.conf"
-
-# Check for bootstrap errors in logs
-ssh 192.168.4.62 "journalctl -u kubelet -n 50 | grep -i bootstrap"
-```
-
-**Solutions:**
-```bash
-# Automatic fix - run the enhanced setup playbook
-ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/setup_cluster.yaml
-
-# The playbook will automatically:
-# 1. Detect if node has joined by checking /etc/kubernetes/kubelet.conf
-# 2. Configure kubelet appropriately based on join status
-# 3. Fix any mismatched configurations
-# 4. Restart services with correct configuration
-
-# Verify the fix
-ssh 192.168.4.62 "systemctl status kubelet"
-ssh 192.168.4.62 "grep -i bootstrap /etc/systemd/system/kubelet.service.d/10-kubeadm.conf || echo 'No bootstrap config (correct for joined node)'"
-```
-
-**Manual Fix (if automatic fix fails):**
-```bash
-# For already-joined nodes, remove bootstrap config reference
-ssh 192.168.4.62 "
-cat > /etc/systemd/system/kubelet.service.d/10-kubeadm.conf << 'EOF'
-# Note: This dropin only works with kubeadm and kubelet v1.11+
-# Node already joined - uses only kubelet.conf (no bootstrap config)
-[Service]
-Environment=\"KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf\"
-Environment=\"KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml\"
-EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
-EnvironmentFile=-/etc/sysconfig/kubelet
-ExecStart=
-ExecStart=/usr/bin/kubelet \$KUBELET_KUBECONFIG_ARGS \$KUBELET_CONFIG_ARGS \$KUBELET_KUBEADM_ARGS \$KUBELET_EXTRA_ARGS
-EOF
-systemctl daemon-reload
-systemctl restart kubelet
-"
-```
 
 ### 5. Kernel Module and System Configuration Issues
 **Symptoms:**
