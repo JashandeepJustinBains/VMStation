@@ -2,7 +2,7 @@
 # Subsite 04: Jellyfin deployment checks and setup
 # This playbook performs pre-checks for Jellyfin deployment requirements
 # and provides remediation instructions. It follows non-destructive principles.
-- hosts: localhost
+- hosts: storage_nodes
   gather_facts: false
   connection: local
   tasks:
@@ -171,7 +171,7 @@
         - jellyfin_enabled | default(true)
         - storage_node_info is defined
 
-- hosts: localhost
+- hosts: storage_nodes
   gather_facts: false
   connection: local
   tasks:

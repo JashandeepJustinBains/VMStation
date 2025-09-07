@@ -3,7 +3,7 @@
 # This playbook does not change file permissions. It will create local cert manifests
 # and attempt to copy them to nodes; if copy requires elevated privileges, it will
 # print CLI remediation steps instead of changing permissions.
-- hosts: localhost
+- hosts: monitoring_nodes
   gather_facts: false
   connection: local
   vars:

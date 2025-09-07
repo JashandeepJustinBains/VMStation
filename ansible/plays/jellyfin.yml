@@ -1,7 +1,7 @@
 ---
 # Jellyfin Deployment Playbook
 # Deploys Jellyfin using the minimal Kubernetes manifest
-- hosts: localhost
+- hosts: storage_nodes
   gather_facts: false
   connection: local
   vars:

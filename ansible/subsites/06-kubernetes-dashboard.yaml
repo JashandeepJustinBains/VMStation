@@ -2,7 +2,7 @@
 # Subsite 06: Kubernetes Dashboard
 # This playbook deploys the Kubernetes Dashboard to the cluster
 # following VMStation non-destructive principles and idempotent operations.
-- hosts: localhost
+- hosts: monitoring_nodes
   gather_facts: false
   connection: local
   vars_files:

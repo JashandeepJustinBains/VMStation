@@ -2,7 +2,7 @@
 # Subsite 03: Monitoring stack deploy (scaffold)
 # This playbook should deploy Prometheus, Grafana, Loki, Promtail and exporters.
 # It performs pre-checks and prints remediation steps if resources/permissions are missing.
-- hosts: localhost
+- hosts: monitoring_nodes
   gather_facts: false
   connection: local
   vars:
@@ -344,7 +344,7 @@
         - ansible_selinux is defined 
         - ansible_selinux.status == "enabled"
 
-- hosts: localhost
+- hosts: monitoring_nodes
   gather_facts: false
   connection: local
   tasks:

@@ -503,7 +503,7 @@
           - AlertManager: http://{{ ansible_default_ipv4.address }}:30903
           - Loki: http://{{ ansible_default_ipv4.address }}:31100
 
-- hosts: localhost
+- hosts: monitoring_nodes
   gather_facts: false
   connection: local
   tasks:

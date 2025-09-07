@@ -2,7 +2,7 @@
 # Subsite 07: Drone CI
 # This playbook deploys Drone CI to the cluster
 # following VMStation non-destructive principles and idempotent operations.
-- hosts: localhost
+- hosts: compute_nodes
   gather_facts: false
   connection: local
   vars_files:
