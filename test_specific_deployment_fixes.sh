@@ -36,12 +36,12 @@ else
     exit 1
 fi
 
-# Count occurrences to ensure both problematic lines were fixed
+# Count occurrences to ensure all problematic lines were fixed
 variable_checks=$(grep -c "final_join_status is defined and final_join_status.stat.exists" "$SETUP_CLUSTER_FILE")
-if [ "$variable_checks" -eq 2 ]; then
-    success "✓ Both problematic variable references fixed (2 locations)"
+if [ "$variable_checks" -eq 3 ]; then
+    success "✓ All problematic variable references fixed (3 locations)"
 else
-    error "✗ Expected 2 variable reference fixes, found $variable_checks"
+    error "✗ Expected 3 variable reference fixes, found $variable_checks"
     exit 1
 fi
 
@@ -93,7 +93,7 @@ echo ""
 info "Issue 1 - Bootstrap Variable Scope:"
 info "  ✓ Added 'final_join_status is defined' checks"
 info "  ✓ Prevents 'dict object has no attribute stat' errors"
-info "  ✓ Fixed in 2 locations (lines 1096, 1112)"
+info "  ✓ Fixed in 3 locations (lines 1075, 1096, 1112)"
 echo ""
 info "Issue 2 - Flannel Download Failure:"
 info "  ✓ Added curl and wget package installation"
@@ -101,7 +101,7 @@ info "  ✓ Runs before Flannel download attempts"
 info "  ✓ Has proper error handling with ignore_errors"
 echo ""
 info "Changes made are minimal and surgical:"
-info "  - Only 2 lines modified for variable scope"
+info "  - Only 1 line modified for variable scope (added 'is defined' check)"
 info "  - Only 8 lines added for tool installation"
 info "  - No existing functionality removed or broken"
 echo ""
