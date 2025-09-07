@@ -143,7 +143,7 @@
         name: "{{ storage_node | default('storagenodet3500') }}"
       register: storage_node_info
       failed_when: false
-      delegate_to: localhost
+      delegate_to: storage_nodes
       run_once: true
       when: jellyfin_enabled | default(true)
 

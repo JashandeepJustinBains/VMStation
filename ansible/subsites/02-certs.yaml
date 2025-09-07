@@ -111,7 +111,7 @@
           IMPORTANT: This playbook does NOT modify remote file permissions or copy files automatically.
           Run the above commands manually with appropriate credentials.
 
-- hosts: localhost
+- hosts: monitoring_nodes
   gather_facts: false
   connection: local
   vars:

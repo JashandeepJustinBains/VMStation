@@ -2,7 +2,7 @@
 # Subsite 08: MongoDB
 # This playbook deploys MongoDB to the cluster
 # following VMStation non-destructive principles and idempotent operations.
-- hosts: localhost
+- hosts: compute_nodes
   gather_facts: false
   connection: local
   vars_files:

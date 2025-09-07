@@ -30,7 +30,7 @@
 
 # === API Rate Limiting Prevention ===
 - name: "Prevent API Rate Limiting Between Apps"
-  hosts: localhost
+  hosts: compute_nodes
   gather_facts: false
   connection: local
   tasks:
@@ -44,7 +44,7 @@
 
 # === Summary and Validation ===
 - name: "Extra Apps Orchestrator Summary"
-  hosts: localhost
+  hosts: compute_nodes
   gather_facts: false
   connection: local
   vars:
