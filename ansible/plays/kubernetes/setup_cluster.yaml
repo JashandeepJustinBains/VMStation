@@ -1072,7 +1072,7 @@
                   ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
                 mode: '0644'
               when: 
-                - final_join_status.stat.exists
+                - final_join_status is defined and final_join_status.stat.exists
                 - "'bootstrap-kubeconfig' in current_systemd_config.stdout"
               register: bootstrap_config_fixed
               
