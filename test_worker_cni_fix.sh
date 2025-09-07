@@ -25,7 +25,7 @@ fi
 
 # Test 3: Verify CNI plugin download tasks are present
 echo "Test 3: Checking for CNI plugin download tasks..."
-if grep -q "Download and install Flannel CNI plugin binary (dynamic path)" ansible/plays/kubernetes/setup_cluster.yaml; then
+if grep -q "Download and install Flannel CNI plugin binary (primary method)" ansible/plays/kubernetes/setup_cluster.yaml; then
     echo "✅ Flannel CNI plugin download task found"
 else
     echo "❌ Flannel CNI plugin download task missing"
