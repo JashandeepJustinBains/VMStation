@@ -1200,10 +1200,44 @@
             owner: root
             group: root
             timeout: 60
+            validate_certs: false
+            use_proxy: false
           register: flannel_download
           retries: 3
           delay: 10
           until: flannel_download is succeeded
+          failed_when: false
+
+        - name: Download Flannel CNI plugin binary using shell fallback (urllib3 compatibility)
+          shell: |
+            if command -v curl >/dev/null 2>&1; then
+              curl -fsSL "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64" -o "{{ flannel_cni_dest }}"
+            elif command -v wget >/dev/null 2>&1; then
+              wget -q -O "{{ flannel_cni_dest }}" "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64"
+            else
+              echo "Neither curl nor wget available for download"
+              exit 1
+            fi
+            chmod 0755 "{{ flannel_cni_dest }}"
+            chown root:root "{{ flannel_cni_dest }}"
+          args:
+            creates: "{{ flannel_cni_dest }}"
+          when: flannel_download is failed and ('cert_file' in flannel_download.msg or 'urllib3' in flannel_download.msg)
+          retries: 3
+          delay: 10
+
+        - name: Verify Flannel CNI plugin binary was downloaded successfully
+          stat:
+            path: "{{ flannel_cni_dest }}"
+          register: flannel_binary_check
+          failed_when: not flannel_binary_check.stat.exists
+
+        - name: Ensure Flannel CNI plugin binary permissions are correct
+          file:
+            path: "{{ flannel_cni_dest }}"
+            mode: '0755'
+            owner: root
+            group: root
 
         - name: Download and install additional CNI plugins on worker nodes
           unarchive:
