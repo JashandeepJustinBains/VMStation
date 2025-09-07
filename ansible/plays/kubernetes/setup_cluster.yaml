@@ -702,7 +702,7 @@
             rm -rf /var/lib/kubelet/kubeconfig || true
           ignore_errors: yes
 
-        - name: Create minimal kubelet config to allow startup
+        - name: Create minimal kubelet config to allow startup (control plane)
           copy:
             content: |
               apiVersion: kubelet.config.k8s.io/v1beta1
@@ -745,7 +745,54 @@
             group: root
             mode: '0644'
           ignore_errors: yes
-          when: not ansible_check_mode
+          when: 
+            - not ansible_check_mode
+            - inventory_hostname in groups['monitoring_nodes']
+
+        - name: Create minimal kubelet config to allow startup (worker nodes - CA agnostic)
+          copy:
+            content: |
+              apiVersion: kubelet.config.k8s.io/v1beta1
+              kind: KubeletConfiguration
+              authentication:
+                anonymous:
+                  enabled: false
+                webhook:
+                  enabled: false
+              authorization:
+                mode: AlwaysAllow
+              clusterDNS:
+              - 10.96.0.10
+              clusterDomain: cluster.local
+              containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
+              cpuManagerReconcilePeriod: 0s
+              evictionPressureTransitionPeriod: 0s
+              fileCheckFrequency: 0s
+              healthzBindAddress: 127.0.0.1
+              healthzPort: 10248
+              httpCheckFrequency: 0s
+              imageMinimumGCAge: 0s
+              logging:
+                format: text
+              memorySwap: {}
+              nodeStatusReportFrequency: 0s
+              nodeStatusUpdateFrequency: 0s
+              rotateCertificates: false
+              runtimeRequestTimeout: 0s
+              shutdownGracePeriod: 0s
+              shutdownGracePeriodCriticalPods: 0s
+              staticPodPath: /etc/kubernetes/manifests
+              streamingConnectionIdleTimeout: 0s
+              syncFrequency: 0s
+              volumeStatsAggPeriod: 0s
+            dest: /var/lib/kubelet/config.yaml
+            owner: root
+            group: root
+            mode: '0644'
+          ignore_errors: yes
+          when: 
+            - not ansible_check_mode
+            - inventory_hostname not in groups['monitoring_nodes']
 
         - name: Regenerate kubelet service configuration
           block:
@@ -773,6 +820,18 @@
                 mode: '0644'
                 owner: root
                 group: root
+                
+            - name: Create kubelet kubeadm flags file to prevent environment variable warnings
+              copy:
+                content: |
+                  # Kubelet kubeadm arguments - populated by kubeadm or set manually for initial startup
+                  KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9
+                dest: /var/lib/kubelet/kubeadm-flags.env
+                mode: '0644'
+                owner: root
+                group: root
+                backup: yes
+                force: no
 
         - name: Ensure CNI infrastructure is available
           block:
@@ -1189,10 +1248,9 @@
 
         - name: Set Flannel CNI destination path per node type
           set_fact:
-            flannel_cni_dest: >-
-              {% if 'master' in group_names or 'monitoring' in group_names %}/srv/monitoring/flannel{% else %}/opt/cni/bin/flannel{% endif %}
+            flannel_cni_dest: /opt/cni/bin/flannel
 
-        - name: Download and install Flannel CNI plugin binary (dynamic path)
+        - name: Download and install Flannel CNI plugin binary (primary method)
           get_url:
             url: "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64"
             dest: "{{ flannel_cni_dest }}"
@@ -1202,35 +1260,131 @@
             timeout: 60
             validate_certs: false
             use_proxy: false
-          register: flannel_download
+          register: flannel_download_primary
           retries: 3
           delay: 10
-          until: flannel_download is succeeded
+          until: flannel_download_primary is succeeded
           failed_when: false
 
-        - name: Download Flannel CNI plugin binary using shell fallback (urllib3 compatibility)
+        - name: Download Flannel CNI plugin binary using curl fallback (first fallback)
           shell: |
+            curl -fsSL --connect-timeout 30 --max-time 300 --retry 3 --retry-delay 5 \
+              "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64" \
+              -o "{{ flannel_cni_dest }}"
+            chmod 0755 "{{ flannel_cni_dest }}"
+            chown root:root "{{ flannel_cni_dest }}"
+          args:
+            creates: "{{ flannel_cni_dest }}"
+          when: flannel_download_primary is failed
+          register: flannel_download_curl
+          failed_when: false
+          retries: 2
+          delay: 15
+
+        - name: Download Flannel CNI plugin binary using wget fallback (second fallback)
+          shell: |
+            wget --connect-timeout=30 --read-timeout=300 --tries=3 --waitretry=5 \
+              -q -O "{{ flannel_cni_dest }}" \
+              "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64"
+            chmod 0755 "{{ flannel_cni_dest }}"
+            chown root:root "{{ flannel_cni_dest }}"
+          args:
+            creates: "{{ flannel_cni_dest }}"
+          when: 
+            - flannel_download_primary is failed
+            - flannel_download_curl is failed or flannel_download_curl is skipped
+          register: flannel_download_wget
+          failed_when: false
+          retries: 2
+          delay: 15
+
+        - name: Alternative Flannel binary source (third fallback - different version if needed)
+          shell: |
+            # Try older version if current version fails
             if command -v curl >/dev/null 2>&1; then
-              curl -fsSL "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64" -o "{{ flannel_cni_dest }}"
+              curl -fsSL --connect-timeout 30 --max-time 300 --retry 2 \
+                "https://github.com/flannel-io/flannel/releases/download/v0.24.2/flanneld-amd64" \
+                -o "{{ flannel_cni_dest }}" || \
+              curl -fsSL --connect-timeout 30 --max-time 300 --retry 2 \
+                "https://github.com/flannel-io/flannel/releases/download/v0.23.0/flanneld-amd64" \
+                -o "{{ flannel_cni_dest }}"
             elif command -v wget >/dev/null 2>&1; then
-              wget -q -O "{{ flannel_cni_dest }}" "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64"
-            else
-              echo "Neither curl nor wget available for download"
-              exit 1
+              wget --connect-timeout=30 --read-timeout=300 --tries=2 \
+                -q -O "{{ flannel_cni_dest }}" \
+                "https://github.com/flannel-io/flannel/releases/download/v0.24.2/flanneld-amd64" || \
+              wget --connect-timeout=30 --read-timeout=300 --tries=2 \
+                -q -O "{{ flannel_cni_dest }}" \
+                "https://github.com/flannel-io/flannel/releases/download/v0.23.0/flanneld-amd64"
             fi
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
           args:
             creates: "{{ flannel_cni_dest }}"
-          when: flannel_download is failed and ('cert_file' in flannel_download.msg or 'urllib3' in flannel_download.msg)
-          retries: 3
-          delay: 10
+          when: 
+            - flannel_download_primary is failed
+            - flannel_download_curl is failed or flannel_download_curl is skipped
+            - flannel_download_wget is failed or flannel_download_wget is skipped
+          register: flannel_download_alt
+          failed_when: false
 
         - name: Verify Flannel CNI plugin binary was downloaded successfully
           stat:
             path: "{{ flannel_cni_dest }}"
           register: flannel_binary_check
-          failed_when: not flannel_binary_check.stat.exists
+
+        - name: Collect Flannel download diagnostics if verification fails
+          block:
+            - name: Show download attempt results
+              debug:
+                msg: |
+                  Flannel download diagnostics for {{ inventory_hostname }}:
+                  Primary method: {{ 'SUCCESS' if flannel_download_primary is succeeded else 'FAILED - ' + (flannel_download_primary.msg | default('Unknown error')) }}
+                  Curl fallback: {{ 'SUCCESS' if flannel_download_curl is succeeded else ('FAILED - ' + (flannel_download_curl.stderr | default('Unknown error'))) if flannel_download_curl is not skipped else 'SKIPPED' }}
+                  Wget fallback: {{ 'SUCCESS' if flannel_download_wget is succeeded else ('FAILED - ' + (flannel_download_wget.stderr | default('Unknown error'))) if flannel_download_wget is not skipped else 'SKIPPED' }}
+                  Alt version: {{ 'SUCCESS' if flannel_download_alt is succeeded else ('FAILED - ' + (flannel_download_alt.stderr | default('Unknown error'))) if flannel_download_alt is not skipped else 'SKIPPED' }}
+                  
+                  Network connectivity test:
+            
+            - name: Test network connectivity to GitHub
+              uri:
+                url: "https://github.com"
+                method: HEAD
+                timeout: 30
+                validate_certs: false
+              register: github_connectivity
+              failed_when: false
+              
+            - name: Test DNS resolution
+              shell: nslookup github.com || true
+              register: dns_test
+              changed_when: false
+              
+            - name: Show network diagnostics
+              debug:
+                msg: |
+                  GitHub connectivity: {{ 'OK' if github_connectivity.status is defined and github_connectivity.status == 200 else 'FAILED' }}
+                  DNS resolution: {{ 'OK' if 'github.com' in dns_test.stdout else 'FAILED' }}
+                  Available tools: {{ 'curl' if ansible_facts['packages']['curl'] is defined else 'no curl' }}, {{ 'wget' if ansible_facts['packages']['wget'] is defined else 'no wget' }}
+                  
+            - name: List current /opt/cni/bin contents
+              shell: ls -la /opt/cni/bin/ || echo "Directory does not exist"
+              register: cni_dir_contents
+              changed_when: false
+              
+            - name: Show CNI directory contents
+              debug:
+                var: cni_dir_contents.stdout_lines
+                
+          when: not flannel_binary_check.stat.exists
+          
+        - name: Fail if Flannel binary still missing after all attempts
+          fail:
+            msg: |
+              Failed to download Flannel CNI plugin binary to {{ flannel_cni_dest }} on {{ inventory_hostname }}.
+              All download methods failed. Check network connectivity and GitHub access.
+              Manual installation may be required: 
+                ssh {{ inventory_hostname }} 'curl -fsSL https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64 -o {{ flannel_cni_dest }} && chmod 755 {{ flannel_cni_dest }}'
+          when: not flannel_binary_check.stat.exists
 
         - name: Ensure Flannel CNI plugin binary permissions are correct
           file:
@@ -1238,6 +1392,7 @@
             mode: '0755'
             owner: root
             group: root
+          when: flannel_binary_check.stat.exists
 
         - name: Download and install additional CNI plugins on worker nodes
           unarchive:
@@ -1616,18 +1771,20 @@
             path: /etc/kubernetes/kubelet.conf
           register: worker_kubelet_kubeconfig_check
 
-        - name: Restart and enable kubelet on worker (only if service exists)
+        - name: Restart and enable kubelet on worker (only if join was successful)
           systemd:
             name: kubelet
             state: restarted
             enabled: yes
-          when: "'kubelet.service' in ansible_facts.services"
+          when: 
+            - "'kubelet.service' in ansible_facts.services"
+            - worker_kubelet_kubeconfig_check.stat.exists
           register: worker_kubelet_restart
           ignore_errors: yes
 
         - name: Handle worker kubelet startup failure with config recovery
           block:
-            - name: Create minimal kubelet config if missing on worker
+            - name: Create minimal kubelet config if missing on worker (CA-file agnostic)
               copy:
                 content: |
                   apiVersion: kubelet.config.k8s.io/v1beta1
@@ -1636,11 +1793,9 @@
                     anonymous:
                       enabled: false
                     webhook:
-                      enabled: true
-                    x509:
-                      clientCAFile: /etc/kubernetes/pki/ca.crt
+                      enabled: false
                   authorization:
-                    mode: Webhook
+                    mode: AlwaysAllow
                   clusterDNS:
                   - 10.96.0.10
                   clusterDomain: cluster.local
@@ -1657,7 +1812,7 @@
                   memorySwap: {}
                   nodeStatusReportFrequency: 0s
                   nodeStatusUpdateFrequency: 0s
-                  rotateCertificates: true
+                  rotateCertificates: false
                   runtimeRequestTimeout: 0s
                   shutdownGracePeriod: 0s
                   shutdownGracePeriodCriticalPods: 0s
