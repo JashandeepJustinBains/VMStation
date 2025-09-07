@@ -71,6 +71,44 @@ The fix ensures:
 - ✅ Clear diagnostic output for troubleshooting
 - ✅ Syntax validation passes
 
+## ContainerCreating Issues on Homelab Node
+
+While the immediate Ansible failure is fixed, pods may still get stuck in ContainerCreating state. This is typically caused by:
+
+1. **Container Runtime Issues**: Docker/containerd/CRI-O not working properly on homelab node
+2. **Storage Problems**: HostPath directories don't exist or have wrong permissions
+3. **Resource Constraints**: Insufficient CPU/memory/disk space on homelab node
+4. **Network Issues**: CNI not properly configured (though flannel is now running)
+
+### Diagnostics
+Use the provided diagnostic script:
+```bash
+./scripts/diagnose_homelab_container_creation.sh
+```
+
+### Common Fixes
+1. **Check container runtime on homelab node:**
+   ```bash
+   # SSH to homelab node (192.168.4.62)
+   sudo systemctl status docker
+   sudo systemctl restart docker  # if needed
+   ```
+
+2. **Ensure hostPath storage exists:**
+   ```bash
+   # SSH to homelab node
+   sudo mkdir -p /mnt/storage/drone /mnt/storage/mongodb
+   sudo chown -R 1000:1000 /mnt/storage/drone
+   sudo chown -R 999:999 /mnt/storage/mongodb
+   ```
+
+3. **Check kubelet status:**
+   ```bash
+   # SSH to homelab node
+   sudo systemctl status kubelet
+   sudo journalctl -u kubelet --since '10 minutes ago'
+   ```
+
 ## Testing
 Run syntax validation:
 ```bash
@@ -89,8 +127,11 @@ This fix resolves the immediate deployment failure and provides better error han
 2. Handle edge cases gracefully without crashing the deployment
 3. Provide clear diagnostics when issues occur
 
+If pods still get stuck in ContainerCreating, the issue is likely with the homelab node's container runtime or storage configuration, not the Ansible playbook.
+
 ## Prevention
 - Always validate array access in Ansible with `| length > 0` checks
 - Verify node names match actual cluster topology
 - Include diagnostic tasks for complex workflows
 - Test playbooks in check mode before deployment
+- Use the diagnostic script to troubleshoot container creation issues
