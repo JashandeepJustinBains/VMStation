@@ -174,8 +174,13 @@
             - name: Show cluster resource status
               debug:
                 msg: |
-                  Node Resources: {{ node_resources.stdout_lines | default(['Unable to get node resources']) }}
+                  Node Resources: {{ node_resources.stdout_lines | default(['Unable to get node resources' + (' - metrics-server may still be starting' if node_resources.rc != 0 else '')]) }}
                   Component Health: {{ component_health.stdout_lines | default(['Unable to get component status']) }}
+                  {% if node_resources.rc != 0 %}
+                  Note: If node resource collection failed, this is likely because metrics-server is still starting up.
+                  This is normal during initial deployment and does not affect cert-manager installation.
+                  Resource monitoring will be available once metrics-server is fully operational.
+                  {% endif %}
 
         - name: Test internet connectivity for chart downloads
           block:

@@ -12,7 +12,8 @@
         name: python3-kubernetes
         state: present
         update_cache: yes
-      when: ansible_facts['pkg_mgr'] == 'apt' or ansible_pkg_mgr is defined and ansible_pkg_mgr == 'apt'
+      when: ansible_facts['pkg_mgr'] == 'apt' or ansible_pkg_mgr is defined and \
+        ansible_pkg_mgr == 'apt'
 
     - name: Fallback - install kubernetes Python library via pip if apt package missing
       pip:
@@ -20,7 +21,8 @@
         state: present
         executable: pip3
       become: true
-      when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
+      when: ansible_facts['pkg_mgr'] is not defined or \
+        ansible_facts['pkg_mgr'] != 'apt'
 
     - name: Download Helm installer script
       get_url:
@@ -52,11 +54,66 @@
           url: https://grafana.github.io/helm-charts
         - name: jetstack
           url: https://charts.jetstack.io
+        - name: metrics-server
+          url: https://kubernetes-sigs.github.io/metrics-server/
         - name: stable
           url: https://charts.helm.sh/stable
 
     - name: Update Helm repositories
       command: helm repo update
+
+    - name: Deploy metrics-server for resource monitoring
+      kubernetes.core.helm:
+        name: metrics-server
+        chart_ref: metrics-server/metrics-server
+        release_namespace: kube-system
+        values:
+          args:
+            - --cert-dir=/tmp
+            - --secure-port=4443
+            - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+            - --kubelet-use-node-status-port
+            - --metric-resolution=15s
+            # Add insecure flags for development/test environments
+            - --kubelet-insecure-tls
+          replicas: 1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: 1000m
+              memory: 1000Mi
+        kubeconfig: /root/.kube/config
+
+    - name: Wait for metrics-server to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: metrics-server
+        namespace: kube-system
+        kubeconfig: /root/.kube/config
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 300
+
+    - name: Verify metrics-server API is available
+      command: kubectl top nodes --kubeconfig /root/.kube/config --no-headers
+      register: metrics_test
+      retries: 5
+      delay: 10
+      until: metrics_test.rc == 0
+      ignore_errors: yes
+
+    - name: Display metrics-server readiness status
+      debug:
+        msg: |
+          Metrics server deployment status: {{ 'Ready' if metrics_test.rc == 0 else 'Not yet ready' }}  # yamllint disable-line rule:line-length
+          {% if metrics_test.rc != 0 %}
+          Note: kubectl top commands may not work immediately. The metrics API needs a few minutes to be fully operational.  # yamllint disable-line rule:line-length
+          {% endif %}
 
     - name: Create monitoring namespace
       kubernetes.core.k8s:
