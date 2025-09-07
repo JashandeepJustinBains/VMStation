@@ -35,7 +35,7 @@
 
 # Add delay to prevent Kubernetes API rate limiting between drone secrets and extra apps
 - name: "API Rate Limiting Prevention"
-  hosts: localhost
+  hosts: all
   gather_facts: false
   become: false
   connection: local
@@ -53,7 +53,7 @@
 
 # === Final Validation ===
 - name: "VMStation Deployment Validation"
-  hosts: localhost
+  hosts: all
   gather_facts: false
   become: false
   connection: local

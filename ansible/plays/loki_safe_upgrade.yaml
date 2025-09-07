@@ -3,7 +3,7 @@
 # - Compares live StatefulSet with helm-rendered manifest and detects immutable-field changes
 # - If immutable changes are present, it can delete only the StatefulSet (PVCs preserved)
 #   and re-run `helm upgrade`. This is gated by `auto_approve` (default: false).
-- hosts: localhost
+- hosts: monitoring_nodes
   connection: local
   gather_facts: false
   vars:

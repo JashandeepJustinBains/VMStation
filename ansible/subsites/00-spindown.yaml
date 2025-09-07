@@ -463,7 +463,7 @@
         msg: "Host-level spin-down tasks completed on {{ inventory_hostname }}"
 
 - name: 00-spindown - cluster control cleanup (localhost)
-  hosts: localhost
+  hosts: all
   gather_facts: false
   connection: local
   become: false

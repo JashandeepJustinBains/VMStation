@@ -16,7 +16,7 @@
 
 # === API Rate Limiting Prevention ===
 - name: "Prevent API Rate Limiting Between Apps"
-  hosts: localhost
+  hosts: monitoring_nods
   gather_facts: false
   connection: local
   tasks:
