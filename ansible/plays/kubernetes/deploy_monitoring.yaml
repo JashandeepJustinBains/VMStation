@@ -414,7 +414,7 @@
             namespace: "{{ monitoring_namespace }}"
             labels:
               grafana_dashboard: "1"
-          stringData:
+          data:
             prometheus-dashboard.json: "{{ lookup('file', playbook_dir + '/../../files/grafana_dashboards/prometheus-dashboard.json') }}"
             loki-dashboard.json: "{{ lookup('file', playbook_dir + '/../../files/grafana_dashboards/loki-dashboard.json') }}"
             node-dashboard.json: "{{ lookup('file', playbook_dir + '/../../files/grafana_dashboards/node-dashboard.json') }}"
