@@ -210,22 +210,29 @@ If you see error logs like:
 panic: secrets "kubernetes-dashboard-csrf" is forbidden: User "system:serviceaccount:kubernetes-dashboard:default" cannot get resource "secrets"
 ```
 
-This indicates a Kubernetes RBAC permissions issue. **The enhanced script now automatically detects and fixes this.**
+This indicates a Kubernetes RBAC permissions issue. **The enhanced script and deployment manifests now automatically handle this.**
 
-Note: The repository `scripts/fix_k8s_dashboard_permissions.sh` will now auto-create the `kubernetes-dashboard-csrf` Secret when you run it with the `--auto-approve` flag. To run the automatic fix:
+**This issue has been FIXED in the repository:** The kubernetes-dashboard deployment now uses a dedicated ServiceAccount with proper RBAC permissions, including the ability to create secrets.
 
+To apply the fix to an existing deployment:
+
+To apply the fix to an existing deployment:
+
+**Option 1: Redeploy with fixed manifests (Recommended)**
+```bash
+# Apply the updated RBAC and ServiceAccount
+kubectl apply -f ansible/files/dashboard-secret-access.yaml
+
+# Redeploy the dashboard with the corrected ServiceAccount
+ansible-playbook -i ansible/inventory.txt ansible/subsites/06-kubernetes-dashboard.yaml
+```
+
+**Option 2: Use the automated fix script**
 ```bash
 ./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
 ```
 
-After the script runs, check the dashboard pod status and logs:
-
-```bash
-kubectl -n kubernetes-dashboard get pods -o wide
-kubectl -n kubernetes-dashboard logs -l app=kubernetes-dashboard --tail=200
-```
-
-### Manual RBAC Fix (if needed):
+**Option 3: Manual fix for existing deployments**
 ```bash
 # Create ClusterRole with required permissions
 kubectl apply -f - <<EOF
