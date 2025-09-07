@@ -1343,14 +1343,18 @@
           ignore_errors: yes
           register: cni_cleanup_result
 
-        - name: Clear existing CNI configuration files
+        - name: Clear existing CNI configuration files (preserve directory structure)
           shell: |
-            # Remove any existing CNI configuration
+            # Remove any existing CNI configuration but preserve directories
             rm -rf /etc/cni/net.d/* || true
-            rm -rf /opt/cni/bin/flannel || true
-            # Clear CNI plugin cache
+            rm -f /opt/cni/bin/flannel || true
+            # Clear CNI plugin cache but preserve directories
             rm -rf /var/lib/cni/networks/* || true
             rm -rf /var/lib/cni/results/* || true
+            # Ensure CNI directories exist with proper permissions after cleanup
+            mkdir -p /opt/cni/bin /etc/cni/net.d /var/lib/cni/networks /var/lib/cni/results || true
+            chmod 755 /opt/cni/bin /etc/cni/net.d /var/lib/cni/networks /var/lib/cni/results || true
+            chown root:root /opt/cni/bin /etc/cni/net.d /var/lib/cni/networks /var/lib/cni/results || true
           ignore_errors: yes
 
         - name: Clear kubelet CNI state
@@ -1383,9 +1387,63 @@
             - /var/lib/cni/networks
             - /var/lib/cni/results
 
+        - name: Validate CNI directory permissions before download
+          shell: |
+            # Verify directories exist and are writable
+            for dir in /opt/cni/bin /etc/cni/net.d /var/lib/cni/networks /var/lib/cni/results; do
+              if [ ! -d "$dir" ]; then
+                echo "Creating missing directory: $dir"
+                mkdir -p "$dir" || exit 1
+                chmod 755 "$dir" || exit 1
+                chown root:root "$dir" || exit 1
+              fi
+              if [ ! -w "$dir" ]; then
+                echo "Fixing permissions for directory: $dir"
+                chmod 755 "$dir" || exit 1
+                chown root:root "$dir" || exit 1
+              fi
+              echo "Directory $dir is ready (permissions: $(stat -c '%a' "$dir"), owner: $(stat -c '%U:%G' "$dir"))"
+            done
+          register: cni_dir_validation
+          failed_when: false
+
+        - name: Display CNI directory validation results
+          debug:
+            var: cni_dir_validation.stdout_lines
+
         - name: Set Flannel CNI destination path per node type
           set_fact:
             flannel_cni_dest: /opt/cni/bin/flannel
+
+        - name: Pre-download validation for Flannel CNI binary
+          shell: |
+            # Ensure target directory exists and is writable
+            target_dir="$(dirname "{{ flannel_cni_dest }}")"
+            if [ ! -d "$target_dir" ]; then
+              echo "Creating target directory: $target_dir"
+              mkdir -p "$target_dir" || exit 1
+              chmod 755 "$target_dir" || exit 1
+              chown root:root "$target_dir" || exit 1
+            fi
+            
+            if [ ! -w "$target_dir" ]; then
+              echo "Target directory not writable, fixing permissions: $target_dir"
+              chmod 755 "$target_dir" || exit 1
+              chown root:root "$target_dir" || exit 1
+            fi
+            
+            # Test write access by creating a temporary file
+            test_file="$target_dir/.write_test_$$"
+            if echo "test" > "$test_file" 2>/dev/null; then
+              rm -f "$test_file"
+              echo "Target directory is writable: $target_dir"
+            else
+              echo "ERROR: Cannot write to target directory: $target_dir"
+              ls -la "$target_dir" || true
+              exit 1
+            fi
+          register: flannel_pre_download_check
+          failed_when: flannel_pre_download_check.rc != 0
 
         - name: Ensure download tools are available for Flannel installation
           package:
@@ -1517,9 +1575,27 @@
               register: cni_dir_contents
               changed_when: false
               
+            - name: Check directory permissions and disk space
+              shell: |
+                echo "=== Directory Permissions ==="
+                ls -la /opt/cni/ || echo "/opt/cni not found"
+                ls -la /opt/cni/bin/ || echo "/opt/cni/bin not found"
+                echo "=== Directory Ownership ==="
+                stat /opt/cni/bin/ || echo "/opt/cni/bin stat failed"
+                echo "=== Disk Space ==="
+                df -h /opt/cni/bin/ || echo "df failed"
+                echo "=== Write Test ==="
+                touch /opt/cni/bin/.write_test && rm -f /opt/cni/bin/.write_test && echo "Write test: PASSED" || echo "Write test: FAILED"
+              register: dir_diagnostics
+              changed_when: false
+              
             - name: Show CNI directory contents
               debug:
                 var: cni_dir_contents.stdout_lines
+                
+            - name: Show directory permission diagnostics
+              debug:
+                var: dir_diagnostics.stdout_lines
                 
           when: not flannel_binary_check.stat.exists
           
@@ -1528,8 +1604,20 @@
             msg: |
               Failed to download Flannel CNI plugin binary to {{ flannel_cni_dest }} on {{ inventory_hostname }}.
               All download methods failed. Check network connectivity and GitHub access.
-              Manual installation may be required: 
-                ssh {{ inventory_hostname }} 'curl -fsSL https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64 -o {{ flannel_cni_dest }} && chmod 755 {{ flannel_cni_dest }}'
+              Manual installation may be required.
+              
+              Troubleshooting steps:
+              1. Verify target directory permissions: ls -la $(dirname {{ flannel_cni_dest }})
+              2. Check available disk space: df -h $(dirname {{ flannel_cni_dest }})
+              3. Test network connectivity: curl -I https://github.com
+              4. Manual installation command:
+                 ssh {{ inventory_hostname }} 'curl -fsSL https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64 -o {{ flannel_cni_dest }} && chmod 755 {{ flannel_cni_dest }}'
+              
+              Common causes:
+              - Directory permissions issues (ensure /opt/cni/bin is writable by root)
+              - Insufficient disk space
+              - Network connectivity problems
+              - SELinux or security policies blocking downloads
           when: not flannel_binary_check.stat.exists
 
         - name: Ensure Flannel CNI plugin binary permissions are correct
