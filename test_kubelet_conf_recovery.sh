@@ -97,6 +97,34 @@ fi
 
 echo ""
 
+echo "=== Test 5: Spindown Kubelet.conf Preservation ==="
+
+# Check for kubelet.conf backup in spindown
+if grep -q "Preserve worker node kubelet.conf before cleanup" ansible/subsites/00-spindown.yaml; then
+    info "✓ Spindown kubelet.conf backup logic found"
+else
+    error "✗ Spindown kubelet.conf backup logic missing"
+    exit 1
+fi
+
+# Check for selective cleanup that preserves kubelet.conf
+if grep -A 10 "For /etc/kubernetes on worker nodes, preserve" ansible/subsites/00-spindown.yaml | grep -q "kubelet.conf"; then
+    info "✓ Selective cleanup preserving kubelet.conf found"
+else
+    error "✗ Selective cleanup preserving kubelet.conf missing"
+    exit 1
+fi
+
+# Check for kubelet.conf restoration
+if grep -q "Restore worker kubelet.conf after cleanup" ansible/subsites/00-spindown.yaml; then
+    info "✓ Kubelet.conf restoration logic found"
+else
+    error "✗ Kubelet.conf restoration logic missing"
+    exit 1
+fi
+
+echo ""
+
 echo "=== Test Summary ==="
 info "Kubelet.conf recovery fix validation:"
 info "  ✓ Validates kubelet.conf content after spindown"
@@ -104,6 +132,7 @@ info "  ✓ Attempts to copy kubelet.conf from control plane"
 info "  ✓ Triggers worker rejoin when kubeconfig cannot be recovered"
 info "  ✓ Provides clear status and action guidance"
 info "  ✓ Integrates with existing kubelet recovery logic"
+info "  ✓ Preserves worker kubelet.conf during spindown for faster recovery"
 echo ""
 info "Fix validation PASSED - Ready for deployment testing"
 echo ""
@@ -112,3 +141,4 @@ info "  - kubelet startup failures due to missing /etc/kubernetes/kubelet.conf a
 info "  - Invalid or corrupted kubelet.conf files after cleanup operations"
 info "  - Automatic recovery from control plane when possible"
 info "  - Clear guidance when manual rejoin is required"
+info "  - Faster recovery by preserving worker kubelet.conf during spindown"
