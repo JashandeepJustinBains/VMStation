@@ -806,17 +806,11 @@
                 mode: '0644'
               when: not recovery_kubelet_conf_check.stat.exists
                 
-            - name: Create kubelet kubeadm flags file to prevent environment variable warnings
-              copy:
-                content: |
-                  # Kubelet kubeadm arguments - populated by kubeadm or set manually for initial startup
-                  KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9
-                dest: /var/lib/kubelet/kubeadm-flags.env
-                mode: '0644'
-                owner: root
-                group: root
-                backup: yes
-                force: no
+            # Removed: Create kubelet kubeadm flags file to prevent environment variable warnings
+            # This task was causing kubeadm join failures by creating a static kubeadm-flags.env
+            # that conflicts with kubeadm's bootstrap process. Let kubeadm manage this file during join.
+            # The kubelet systemd service will still reference this file via EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+            # but kubeadm will create it with the correct join-specific parameters.
 
         - name: Ensure CNI infrastructure is available
           block:
