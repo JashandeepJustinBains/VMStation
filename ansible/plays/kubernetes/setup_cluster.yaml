@@ -432,10 +432,10 @@
             dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
             content: |
               # Note: This dropin only works with kubeadm and kubelet v1.11+
-              # Join-compatible kubelet configuration - lets kubeadm manage kubeconfig during join
+              # Join-compatible kubelet configuration - lets kubeadm manage all configuration during join
               [Service]
               Environment="KUBELET_KUBECONFIG_ARGS="
-              Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+              Environment="KUBELET_CONFIG_ARGS="
               # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
               EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
               # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
@@ -750,50 +750,10 @@
             - not ansible_check_mode
             - inventory_hostname in groups['monitoring_nodes']
 
-        - name: Create minimal kubelet config to allow startup (worker nodes - CA agnostic)
-          copy:
-            content: |
-              apiVersion: kubelet.config.k8s.io/v1beta1
-              kind: KubeletConfiguration
-              authentication:
-                anonymous:
-                  enabled: false
-                webhook:
-                  enabled: false
-              authorization:
-                mode: AlwaysAllow
-              clusterDNS:
-              - 10.96.0.10
-              clusterDomain: cluster.local
-              containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
-              cpuManagerReconcilePeriod: 0s
-              evictionPressureTransitionPeriod: 0s
-              fileCheckFrequency: 0s
-              healthzBindAddress: 127.0.0.1
-              healthzPort: 10248
-              httpCheckFrequency: 0s
-              imageMinimumGCAge: 0s
-              logging:
-                format: text
-              memorySwap: {}
-              nodeStatusReportFrequency: 0s
-              nodeStatusUpdateFrequency: 0s
-              rotateCertificates: false
-              runtimeRequestTimeout: 0s
-              shutdownGracePeriod: 0s
-              shutdownGracePeriodCriticalPods: 0s
-              staticPodPath: /etc/kubernetes/manifests
-              streamingConnectionIdleTimeout: 0s
-              syncFrequency: 0s
-              volumeStatsAggPeriod: 0s
-            dest: /var/lib/kubelet/config.yaml
-            owner: root
-            group: root
-            mode: '0644'
-          ignore_errors: yes
-          when: 
-            - not ansible_check_mode
-            - inventory_hostname not in groups['monitoring_nodes']
+        # Removed: Create minimal kubelet config to allow startup (worker nodes - CA agnostic)
+        # This task was causing kubeadm join failures by creating a config.yaml that conflicts
+        # with kubeadm's bootstrap process. Let kubeadm manage the config.yaml during join.
+        # The config.yaml will be properly created by kubeadm join and referenced post-join.
 
         - name: Regenerate kubelet service configuration
           block:
@@ -831,10 +791,10 @@
               copy:
                 content: |
                   # Enhanced kubelet configuration for RHEL 10+ compatibility
-                  # Node not joined - let kubeadm manage kubeconfig during join
+                  # Node not joined - let kubeadm manage all configuration during join
                   [Service]
                   Environment="KUBELET_KUBECONFIG_ARGS="
-                  Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+                  Environment="KUBELET_CONFIG_ARGS="
                   Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
                   Environment="KUBELET_EXTRA_ARGS=--node-ip={{ ansible_default_ipv4.address }}"
                   ExecStart=
@@ -1740,6 +1700,12 @@
 
       when: not kubelet_conf.stat.exists
 
+    - name: Clear kubelet config.yaml before join to allow kubeadm to create its own
+      file:
+        path: /var/lib/kubelet/config.yaml
+        state: absent
+      when: not kubelet_conf.stat.exists
+      
     - name: Join worker nodes to cluster with retries
       block:
         - name: Attempt to join cluster (attempt 1)
