@@ -297,14 +297,16 @@ for pb in "${PLAYBOOKS[@]}"; do
     echo ""
     echo "=== Running: $pb ==="
     
-    # Set timeouts for Kubernetes operations
+    # Set timeouts for Kubernetes operations to prevent hanging
     if [ "$REQUIRES_K8S" = true ]; then
         echo "Setting Kubernetes operation timeouts..."
         export K8S_WAIT_TIMEOUT=30
         export ANSIBLE_TIMEOUT=45
+        # Set additional timeout for kubeadm operations
+        export KUBEADM_TIMEOUT=600
     fi
     
-    if ! timeout 1800 ansible-playbook $INVENTORY_ARG "$pb"; then
+    if ! timeout 2400 ansible-playbook $INVENTORY_ARG "$pb"; then
         echo "ERROR: Playbook execution failed for $pb"
         FAILED_PLAYBOOKS+=("$pb (execution failed)")
         continue
