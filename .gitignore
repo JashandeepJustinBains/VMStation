@@ -136,3 +136,5 @@ site/
 
 # Test scripts (keep local)
 test_deployment_order_fix.sh
+
+tempfilesreadoutput.yml
