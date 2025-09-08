@@ -1126,13 +1126,32 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
-    - name: Get join command
-      shell: kubeadm token create --print-join-command
-      register: join_command
+    - name: Ensure any existing tokens are cleaned up before creating new one
+      shell: |
+        echo "Cleaning up any existing bootstrap tokens..."
+        kubeadm token list | awk 'NR>1 {print $1}' | xargs -r -I {} kubeadm token delete {} || true
+      ignore_errors: yes
 
-    - name: Save join command to file
+    - name: Get join command with fresh token (24h TTL)
+      shell: kubeadm token create --print-join-command --ttl 24h
+      register: join_command
+      retries: 3
+      delay: 5
+      until: join_command.rc == 0
+
+    - name: Validate join command contains required components
+      fail:
+        msg: "Generated join command is invalid or incomplete: {{ join_command.stdout }}"
+      when: not (join_command.stdout | regex_search('kubeadm join.*--token.*--discovery-token-ca-cert-hash'))
+
+    - name: Save join command to file with timestamp
       copy:
-        content: "{{ join_command.stdout }}"
+        content: |
+          #!/bin/bash
+          # Generated: {{ ansible_date_time.iso8601 }}
+          # Valid for 24 hours from generation time
+          # Control plane: {{ inventory_hostname }}:6443
+          {{ join_command.stdout }}
         dest: /tmp/kubeadm-join.sh
         mode: '0755'
 
@@ -1152,14 +1171,19 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: Validate kubelet.conf if it exists (post-spindown recovery check)
+    - name: Validate kubelet.conf if it exists (enhanced post-spindown recovery check)
       block:
-        - name: Test kubelet.conf validity by checking if it contains valid cluster info
+        - name: Test kubelet.conf validity and cluster connectivity
           shell: |
             if [ -f /etc/kubernetes/kubelet.conf ]; then
               # Check if the kubeconfig contains cluster server info
               if grep -q "server:" /etc/kubernetes/kubelet.conf && grep -q "certificate-authority-data:" /etc/kubernetes/kubelet.conf; then
-                echo "valid"
+                # Additional check: try to use the kubeconfig to verify connectivity
+                if timeout 10s kubectl --kubeconfig=/etc/kubernetes/kubelet.conf cluster-info >/dev/null 2>&1; then
+                  echo "valid-and-connected"
+                else
+                  echo "valid-but-disconnected"
+                fi
               else
                 echo "invalid"
               fi
@@ -1169,21 +1193,24 @@
           register: kubelet_conf_validation
           changed_when: false
 
-        - name: Force rejoin if kubelet.conf is invalid or empty (post-spindown recovery)
+        - name: Force rejoin if kubelet.conf is invalid, disconnected, or references old cluster
           set_fact:
             kubelet_conf: 
               stat:
                 exists: false
-          when: kubelet_conf_validation.stdout != "valid"
+            force_rejoin_reason: "{{ kubelet_conf_validation.stdout }}"
+          when: kubelet_conf_validation.stdout != "valid-and-connected"
 
         - name: Display kubelet.conf validation result
           debug:
             msg: |
               Kubelet configuration validation on {{ inventory_hostname }}:
               - File exists: {{ kubelet_conf.stat.exists }}
-              - Content valid: {{ kubelet_conf_validation.stdout }}
-              {% if kubelet_conf_validation.stdout != "valid" %}
-              - Action: Will trigger rejoin process to restore valid kubelet.conf
+              - Validation result: {{ kubelet_conf_validation.stdout }}
+              {% if kubelet_conf_validation.stdout != "valid-and-connected" %}
+              - Action: Will trigger rejoin process (reason: {{ force_rejoin_reason | default('unknown') }})
+              {% else %}
+              - Action: Node appears properly joined, skipping rejoin process
               {% endif %}
 
       when: kubelet_conf.stat.exists
@@ -1657,6 +1684,53 @@
             
       when: not kubelet_conf.stat.exists
 
+    - name: Validate join command freshness and content before use
+      block:
+        - name: Check if join command file exists and is recent
+          stat:
+            path: /tmp/kubeadm-join.sh
+          register: join_file_stat
+          delegate_to: localhost
+
+        - name: Validate join command age and content
+          shell: |
+            if [ ! -f /tmp/kubeadm-join.sh ]; then
+              echo "missing"
+              exit 0
+            fi
+            
+            # Check if file is older than 23 hours (tokens expire in 24h)
+            if [ $(find /tmp/kubeadm-join.sh -mmin +1380 | wc -l) -gt 0 ]; then
+              echo "expired"
+              exit 0
+            fi
+            
+            # Check if the join command contains required elements
+            if grep -q "kubeadm join.*--token.*--discovery-token-ca-cert-hash" /tmp/kubeadm-join.sh; then
+              echo "valid"
+            else
+              echo "malformed"
+            fi
+          register: join_command_validation
+          delegate_to: localhost
+          changed_when: false
+
+        - name: Fail if join command is not available or expired
+          fail:
+            msg: |
+              Join command issue detected: {{ join_command_validation.stdout }}
+              - missing: Join command file not found
+              - expired: Join command is older than 23 hours (tokens expire in 24h)
+              - malformed: Join command doesn't contain required token/hash elements
+              
+              To resolve:
+              1. Ensure the control plane is running
+              2. Re-run the setup_cluster playbook to generate a fresh join command
+              3. Or manually run: kubeadm token create --print-join-command on control plane
+          when: join_command_validation.stdout != "valid"
+
+      when: not kubelet_conf.stat.exists
+
     - name: Copy join command to worker nodes
       copy:
         src: /tmp/kubeadm-join.sh
@@ -1699,6 +1773,23 @@
         path: /var/lib/kubelet/config.yaml
         state: absent
       when: not kubelet_conf.stat.exists
+
+    - name: Clean up any stale join state (post-spindown recovery)
+      shell: |
+        # Remove any leftover join artifacts that might conflict
+        rm -f /etc/kubernetes/kubelet.conf.backup.* 2>/dev/null || true
+        rm -f /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || true
+        
+        # If this was triggered by invalid kubelet.conf, remove it to force fresh join
+        if [ "{{ force_rejoin_reason | default('') }}" != "" ]; then
+          echo "Removing invalid kubelet.conf (reason: {{ force_rejoin_reason | default('unknown') }})"
+          rm -f /etc/kubernetes/kubelet.conf || true
+          rm -f /etc/kubernetes/pki/ca.crt || true
+        fi
+        
+        echo "Pre-join cleanup completed"
+      when: not kubelet_conf.stat.exists
+      changed_when: true
       
     - name: Join worker nodes to cluster with retries
       block:
