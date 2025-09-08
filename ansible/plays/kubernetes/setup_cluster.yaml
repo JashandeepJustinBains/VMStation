@@ -1950,18 +1950,18 @@
 
     - name: Post-join verification
       block:
-        - name: Wait for kubelet to be ready
-          systemd:
-            name: kubelet
-          register: kubelet_final_status
-          retries: 6
-          delay: 10
-          until: kubelet_final_status.status.ActiveState == 'active'
-          
         - name: Verify node joined successfully
           stat:
             path: /etc/kubernetes/kubelet.conf
           register: final_kubelet_conf
+
+        - name: Wait for kubelet to be ready
+          systemd:
+            name: kubelet
+          register: kubelet_final_status
+          retries: 12
+          delay: 15
+          until: kubelet_final_status.status.ActiveState == 'active'
           
         - name: Display join success message
           debug:
@@ -1999,7 +1999,7 @@
                 - /var/lib/kubelet/config.yaml
                 - /var/lib/kubelet/kubeadm-flags.env
               
-            - name: Ensure kubelet systemd drop-in is kubeadm-compatible
+            - name: Update kubelet systemd config after successful join
               copy:
                 dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
                 content: |
@@ -2014,7 +2014,9 @@
                   EnvironmentFile=-/etc/sysconfig/kubelet
                   ExecStart=
                   ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+                  # Post-join config - no bootstrap config dependency
               register: post_join_config_update
+              when: worker_kubelet_kubeconfig_check.stat.exists
 
         - name: Reload systemd daemon after kubelet config update
           systemd:
