@@ -774,6 +774,14 @@
             # The kubelet systemd service will still reference this file via EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
             # but kubeadm will create it with the correct join-specific parameters.
 
+            - name: Ensure clean /etc/sysconfig/kubelet without deprecated flags
+              copy:
+                dest: /etc/sysconfig/kubelet
+                content: |
+                  # Kubelet environment - no deprecated flags like --network-plugin
+                  KUBELET_EXTRA_ARGS=--cgroup-driver=systemd --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock
+                mode: '0644'
+
         - name: Ensure CNI infrastructure is available
           block:
             - name: Create CNI directories
@@ -1824,6 +1832,8 @@
                 rm -rf /etc/kubernetes/kubelet.conf /etc/kubernetes/pki/ || true
                 # Clear kubelet state but preserve systemd config
                 rm -rf /var/lib/kubelet/config.yaml /var/lib/kubelet/kubeadm-flags.env || true
+                # Remove any existing sysconfig/kubelet that might have deprecated flags
+                rm -f /etc/sysconfig/kubelet || true
               ignore_errors: yes
               
             - name: Verify containerd is healthy before retry
@@ -1835,6 +1845,14 @@
               wait_for:
                 path: /var/run/containerd/containerd.sock
                 timeout: 30
+
+            - name: Recreate clean sysconfig/kubelet for retry attempt
+              copy:
+                dest: /etc/sysconfig/kubelet
+                content: |
+                  # Kubelet environment - no deprecated flags like --network-plugin
+                  KUBELET_EXTRA_ARGS=--cgroup-driver=systemd --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock
+                mode: '0644'
                 
             - name: Attempt to join cluster (retry with extended timeout)
               shell: timeout 900 /tmp/kubeadm-join.sh --v=5
