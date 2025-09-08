@@ -427,14 +427,14 @@
             state: directory
             mode: '0755'
             
-        - name: Create kubeadm kubelet dropin (standard configuration)
+        - name: Create kubeadm kubelet dropin (join-compatible configuration)
           copy:
             dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
             content: |
               # Note: This dropin only works with kubeadm and kubelet v1.11+
-              # Standard kubelet configuration without bootstrap dependency
+              # Join-compatible kubelet configuration - lets kubeadm manage kubeconfig during join
               [Service]
-              Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
+              Environment="KUBELET_KUBECONFIG_ARGS="
               Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
               # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
               EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
@@ -803,11 +803,16 @@
                 state: directory
                 mode: '0755'
 
-            - name: Generate enhanced kubelet service configuration (recovery mode)
+            - name: Check if kubelet.conf exists for recovery mode config decision
+              stat:
+                path: /etc/kubernetes/kubelet.conf
+              register: recovery_kubelet_conf_check
+
+            - name: Generate enhanced kubelet service configuration (recovery mode - joined node)
               copy:
                 content: |
                   # Enhanced kubelet configuration for RHEL 10+ compatibility
-                  # Standard kubelet configuration without bootstrap dependency
+                  # Node has joined - use kubelet.conf
                   [Service]
                   Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
                   Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
@@ -820,6 +825,26 @@
                   RestartSec=10
                 dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
                 mode: '0644'
+              when: recovery_kubelet_conf_check.stat.exists
+
+            - name: Generate enhanced kubelet service configuration (recovery mode - pre-join)
+              copy:
+                content: |
+                  # Enhanced kubelet configuration for RHEL 10+ compatibility
+                  # Node not joined - let kubeadm manage kubeconfig during join
+                  [Service]
+                  Environment="KUBELET_KUBECONFIG_ARGS="
+                  Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+                  Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
+                  Environment="KUBELET_EXTRA_ARGS=--node-ip={{ ansible_default_ipv4.address }}"
+                  ExecStart=
+                  ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+                  Restart=always
+                  StartLimitInterval=0
+                  RestartSec=10
+                dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+                mode: '0644'
+              when: not recovery_kubelet_conf_check.stat.exists
                 
             - name: Create kubelet kubeadm flags file to prevent environment variable warnings
               copy:
