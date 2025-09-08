@@ -703,52 +703,10 @@
             rm -rf /var/lib/kubelet/kubeconfig || true
           ignore_errors: yes
 
-        - name: Create minimal kubelet config to allow startup (control plane)
-          copy:
-            content: |
-              apiVersion: kubelet.config.k8s.io/v1beta1
-              kind: KubeletConfiguration
-              authentication:
-                anonymous:
-                  enabled: false
-                webhook:
-                  enabled: true
-                x509:
-                  clientCAFile: /etc/kubernetes/pki/ca.crt
-              authorization:
-                mode: Webhook
-              clusterDNS:
-              - 10.96.0.10
-              clusterDomain: cluster.local
-              containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
-              cpuManagerReconcilePeriod: 0s
-              evictionPressureTransitionPeriod: 0s
-              fileCheckFrequency: 0s
-              healthzBindAddress: 127.0.0.1
-              healthzPort: 10248
-              httpCheckFrequency: 0s
-              imageMinimumGCAge: 0s
-              logging:
-                format: text
-              memorySwap: {}
-              nodeStatusReportFrequency: 0s
-              nodeStatusUpdateFrequency: 0s
-              rotateCertificates: true
-              runtimeRequestTimeout: 0s
-              shutdownGracePeriod: 0s
-              shutdownGracePeriodCriticalPods: 0s
-              staticPodPath: /etc/kubernetes/manifests
-              streamingConnectionIdleTimeout: 0s
-              syncFrequency: 0s
-              volumeStatsAggPeriod: 0s
-            dest: /var/lib/kubelet/config.yaml
-            owner: root
-            group: root
-            mode: '0644'
-          ignore_errors: yes
-          when: 
-            - not ansible_check_mode
-            - inventory_hostname in groups['monitoring_nodes']
+        # Removed: Create minimal kubelet config to allow startup (control plane)
+        # This task was causing kubeadm init conflicts by creating a config.yaml that interferes
+        # with kubeadm's initialization process. Let kubeadm manage the config.yaml during init.
+        # The config.yaml will be properly created by kubeadm init and referenced post-init.
 
         # Removed: Create minimal kubelet config to allow startup (worker nodes - CA agnostic)
         # This task was causing kubeadm join failures by creating a config.yaml that conflicts
@@ -771,13 +729,15 @@
             - name: Generate enhanced kubelet service configuration (recovery mode - joined node)
               copy:
                 content: |
-                  # Enhanced kubelet configuration for RHEL 10+ compatibility
-                  # Node has joined - use kubelet.conf
+                  # Note: This dropin only works with kubeadm and kubelet v1.11+
                   [Service]
                   Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
                   Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-                  Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
-                  Environment="KUBELET_EXTRA_ARGS=--node-ip={{ ansible_default_ipv4.address }}"
+                  # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+                  EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+                  # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+                  # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+                  EnvironmentFile=-/etc/sysconfig/kubelet
                   ExecStart=
                   ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
                   Restart=always
@@ -790,13 +750,15 @@
             - name: Generate enhanced kubelet service configuration (recovery mode - pre-join)
               copy:
                 content: |
-                  # Enhanced kubelet configuration for RHEL 10+ compatibility
-                  # Node not joined - let kubeadm manage all configuration during join
+                  # Note: This dropin only works with kubeadm and kubelet v1.11+
                   [Service]
                   Environment="KUBELET_KUBECONFIG_ARGS="
                   Environment="KUBELET_CONFIG_ARGS="
-                  Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
-                  Environment="KUBELET_EXTRA_ARGS=--node-ip={{ ansible_default_ipv4.address }}"
+                  # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+                  EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+                  # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+                  # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+                  EnvironmentFile=-/etc/sysconfig/kubelet
                   ExecStart=
                   ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
                   Restart=always
@@ -1700,64 +1662,59 @@
         state: absent
       when: not kubelet_conf.stat.exists
       
-    - name: Join worker nodes to cluster with retries
+    - name: Join worker nodes to cluster with enhanced timeout handling
       block:
-        - name: Attempt to join cluster (attempt 1)
-          shell: /tmp/kubeadm-join.sh --v=5
+        - name: Attempt to join cluster (primary attempt with extended timeout)
+          shell: timeout 300 /tmp/kubeadm-join.sh --v=5
           register: join_result_1
           failed_when: false
           when: not kubelet_conf.stat.exists
           
-        - name: Wait and retry if first attempt failed
+        - name: Wait and retry if first attempt failed or timed out
           block:
+            - name: Analyze first attempt failure
+              debug:
+                msg: |
+                  First join attempt failed:
+                  Return Code: {{ join_result_1.rc | default('unknown') }}
+                  Stderr: {{ join_result_1.stderr | default('no stderr') | truncate(500) }}
+                  
             - name: Wait before retry
               pause:
                 seconds: 30
                 
-            - name: Reset any partial join state
+            - name: Reset any partial join state cleanly
               shell: |
-                kubeadm reset -f || true
+                # Stop services gracefully
                 systemctl stop kubelet || true
+                # Reset kubeadm state without removing containerd setup
+                kubeadm reset -f || true
+                # Only remove kubernetes-specific configs, preserve containerd
                 rm -rf /etc/kubernetes/kubelet.conf /etc/kubernetes/pki/ || true
+                # Clear kubelet state but preserve systemd config
+                rm -rf /var/lib/kubelet/config.yaml /var/lib/kubelet/kubeadm-flags.env || true
               ignore_errors: yes
               
-            - name: Restart containerd before retry
+            - name: Verify containerd is healthy before retry
               systemd:
                 name: containerd
                 state: restarted
                 
-            - name: Attempt to join cluster (attempt 2)
-              shell: /tmp/kubeadm-join.sh --v=5
+            - name: Wait for containerd socket
+              wait_for:
+                path: /var/run/containerd/containerd.sock
+                timeout: 30
+                
+            - name: Attempt to join cluster (retry with extended timeout)
+              shell: timeout 420 /tmp/kubeadm-join.sh --v=5
               register: join_result_2
               failed_when: false
-              
-            - name: Final retry if second attempt failed
-              block:
-                - name: Wait before final retry
-                  pause:
-                    seconds: 60
-                    
-                - name: Complete reset before final attempt
-                  shell: |
-                    kubeadm reset -f || true
-                    systemctl stop kubelet || true
-                    systemctl stop containerd || true
-                    rm -rf /etc/kubernetes/ /var/lib/kubelet/ || true
-                    systemctl start containerd
-                    sleep 10
-                  ignore_errors: yes
-                  
-                - name: Attempt to join cluster (final attempt)
-                  shell: /tmp/kubeadm-join.sh --v=5
-                  register: join_result_final
-                  
-              when: join_result_2 is defined and (join_result_2.rc | default(0)) != 0
               
           when: join_result_1 is defined and (join_result_1.rc | default(0)) != 0
           
         - name: Set final join result
           set_fact:
-            join_result: "{{ join_result_final if join_result_final is defined else (join_result_2 if join_result_2 is defined else join_result_1) }}"
+            join_result: "{{ join_result_2 if join_result_2 is defined else join_result_1 }}"
             
       when: not kubelet_conf.stat.exists
 
@@ -1899,25 +1856,34 @@
             path: /etc/kubernetes/kubelet.conf
           register: worker_kubelet_kubeconfig_check
 
-        - name: Update kubelet systemd config after successful join (remove bootstrap config)
-          copy:
-            dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-            content: |
-              # Node successfully joined - uses only kubelet.conf (no bootstrap config)
-              [Service]
-              Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
-              Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-              Environment="KUBELET_SYSTEM_PODS_ARGS=--pod-manifest-path=/etc/kubernetes/manifests"
-              Environment="KUBELET_NETWORK_ARGS=--network-plugin=cni --cni-conf-dir=/etc/cni/net.d --cni-bin-dir=/opt/cni/bin"
-              Environment="KUBELET_DNS_ARGS=--cluster-dns=10.96.0.10 --cluster-domain=cluster.local"
-              Environment="KUBELET_AUTHZ_ARGS=--authorization-mode=Webhook --client-ca-file=/etc/kubernetes/pki/ca.crt"
-              Environment="KUBELET_CADVISOR_ARGS=--cadvisor-port=0"
-              Environment="KUBELET_CGROUP_ARGS=--cgroup-driver=systemd"
-              Environment="KUBELET_CERTIFICATE_ARGS=--rotate-certificates=true --cert-dir=/var/lib/kubelet/pki"
-              ExecStart=
-              ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_SYSTEM_PODS_ARGS $KUBELET_NETWORK_ARGS $KUBELET_DNS_ARGS $KUBELET_AUTHZ_ARGS $KUBELET_CADVISOR_ARGS $KUBELET_CGROUP_ARGS $KUBELET_CERTIFICATE_ARGS $KUBELET_EXTRA_ARGS
-          when: worker_kubelet_kubeconfig_check.stat.exists
-          register: post_join_config_update
+        - name: Verify kubelet is using kubeadm-generated configuration after join
+          block:
+            - name: Check that kubeadm created the necessary files
+              stat:
+                path: "{{ item }}"
+              register: kubeadm_files
+              failed_when: not kubeadm_files.stat.exists
+              loop:
+                - /etc/kubernetes/kubelet.conf
+                - /var/lib/kubelet/config.yaml
+                - /var/lib/kubelet/kubeadm-flags.env
+              
+            - name: Ensure kubelet systemd drop-in is kubeadm-compatible
+              copy:
+                dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+                content: |
+                  # Note: This dropin only works with kubeadm and kubelet v1.11+
+                  [Service]
+                  Environment="KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"
+                  Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+                  # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+                  EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+                  # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+                  # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+                  EnvironmentFile=-/etc/sysconfig/kubelet
+                  ExecStart=
+                  ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+              register: post_join_config_update
 
         - name: Reload systemd daemon after kubelet config update
           systemd:
@@ -1933,125 +1899,26 @@
           register: worker_kubelet_restart
           ignore_errors: yes
 
-        - name: Handle worker kubelet startup failure with config recovery
+        - name: Handle worker kubelet startup failure (simplified recovery)
           block:
             - name: Check if worker kubelet kubeconfig is missing (post-spindown recovery)
               stat:
                 path: /etc/kubernetes/kubelet.conf
               register: worker_kubelet_kubeconfig_missing
 
-            - name: Ensure kubelet kubeconfig exists or trigger rejoin if missing
-              block:
-                - name: Attempt to copy kubelet.conf from control plane if available
-                  block:
-                    - name: Fetch kubelet.conf template from control plane 
-                      fetch:
-                        src: /etc/kubernetes/kubelet.conf
-                        dest: /tmp/control-plane-kubelet.conf
-                        flat: yes
-                      delegate_to: "{{ groups['monitoring_nodes'][0] }}"
-                      register: fetch_kubeconfig_result
-                      ignore_errors: yes
-
-                    - name: Copy control plane kubelet.conf as template for worker
-                      copy:
-                        src: /tmp/control-plane-kubelet.conf
-                        dest: /etc/kubernetes/kubelet.conf
-                        owner: root
-                        group: root
-                        mode: '0644'
-                        backup: yes
-                      when: fetch_kubeconfig_result is succeeded
-                      register: copy_kubeconfig_result
-                      ignore_errors: yes
-
-                  rescue:
-                    - name: Control plane kubelet.conf not available, will trigger rejoin
-                      debug:
-                        msg: "Control plane kubelet.conf not available, worker needs to rejoin cluster"
-
-                - name: Create /etc/kubernetes directory if missing
-                  file:
-                    path: /etc/kubernetes
-                    state: directory
-                    owner: root
-                    group: root
-                    mode: '0755'
-                  when: worker_kubelet_kubeconfig_missing.stat.exists == false
-
-                - name: Set flag to trigger worker rejoin if kubeconfig still missing
-                  set_fact:
-                    worker_needs_rejoin: true
-                  when: 
-                    - worker_kubelet_kubeconfig_missing.stat.exists == false
-                    - copy_kubeconfig_result is not defined or copy_kubeconfig_result is failed
-
-              when: worker_kubelet_kubeconfig_missing.stat.exists == false
-
-            - name: Create minimal kubelet config if missing on worker (CA-file agnostic)
-              copy:
-                content: |
-                  apiVersion: kubelet.config.k8s.io/v1beta1
-                  kind: KubeletConfiguration
-                  authentication:
-                    anonymous:
-                      enabled: false
-                    webhook:
-                      enabled: false
-                  authorization:
-                    mode: AlwaysAllow
-                  clusterDNS:
-                  - 10.96.0.10
-                  clusterDomain: cluster.local
-                  containerRuntimeEndpoint: unix:///run/containerd/containerd.sock
-                  cpuManagerReconcilePeriod: 0s
-                  evictionPressureTransitionPeriod: 0s
-                  fileCheckFrequency: 0s
-                  healthzBindAddress: 127.0.0.1
-                  healthzPort: 10248
-                  httpCheckFrequency: 0s
-                  imageMinimumGCAge: 0s
-                  logging:
-                    format: text
-                  memorySwap: {}
-                  nodeStatusReportFrequency: 0s
-                  nodeStatusUpdateFrequency: 0s
-                  rotateCertificates: false
-                  runtimeRequestTimeout: 0s
-                  shutdownGracePeriod: 0s
-                  shutdownGracePeriodCriticalPods: 0s
-                  staticPodPath: /etc/kubernetes/manifests
-                  streamingConnectionIdleTimeout: 0s
-                  syncFrequency: 0s
-                  volumeStatsAggPeriod: 0s
-                dest: /var/lib/kubelet/config.yaml
-                owner: root
-                group: root
-                mode: '0644'
-              when: not worker_kubelet_config_check.stat.exists
-              ignore_errors: yes
-
-            - name: Retry kubelet restart after config creation
-              systemd:
-                name: kubelet
-                state: restarted
-                enabled: yes
-              register: worker_kubelet_restart_retry
-              ignore_errors: yes
-              when: worker_needs_rejoin is not defined
-
             - name: Display worker recovery status
               debug:
                 msg: |
-                  Worker kubelet recovery status:
-                  - kubelet.conf missing: {{ worker_kubelet_kubeconfig_missing.stat.exists == false }}
-                  - kubeconfig recovered: {{ copy_kubeconfig_result is defined and copy_kubeconfig_result is succeeded }}
-                  - needs rejoin: {{ worker_needs_rejoin | default(false) }}
-                  {% if worker_needs_rejoin | default(false) %}
-                  
+                  Worker kubelet recovery needed: {{ worker_kubelet_kubeconfig_missing.stat.exists == false }}
+                  {% if worker_kubelet_kubeconfig_missing.stat.exists == false %}
                   Action required: Worker node needs to rejoin the cluster
-                  Run: kubeadm reset -f && <join-command>
+                  The node must be reset and rejoined using kubeadm join command
                   {% endif %}
+
+            - name: Set rejoin flag if kubeconfig is missing
+              set_fact:
+                worker_needs_rejoin: true
+              when: worker_kubelet_kubeconfig_missing.stat.exists == false
 
           when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
 
