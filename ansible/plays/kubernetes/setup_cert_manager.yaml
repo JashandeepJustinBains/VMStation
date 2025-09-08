@@ -28,33 +28,12 @@
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
-    - name: Set up monitoring node labels for cert-manager targeting
+    # Simplified targeting - rely on Ansible hosts field for cert-manager deployment targeting
+    # No node labeling needed since Ansible handles deployment location via hosts field
+    - name: Skip node labeling (using Ansible hosts-based targeting instead)
+      debug:
+        msg: "Using Ansible hosts field for targeting - no Kubernetes node labeling required"
       when: vmstation_manage_cert_manager | bool
-      block:
-        - name: Get node name for current monitoring host
-          shell: kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | grep "{{ ansible_default_ipv4.address }}" | cut -f1
-          register: monitoring_node_name
-          environment:
-            KUBECONFIG: /root/.kube/config
-        
-        - name: Label monitoring node for monitoring workloads
-          shell: kubectl label node "{{ monitoring_node_name.stdout }}" node-role.vmstation.io/monitoring=true --overwrite
-          environment:
-            KUBECONFIG: /root/.kube/config
-          when: monitoring_node_name.stdout is defined and monitoring_node_name.stdout != ""
-        
-        - name: Remove monitoring labels from compute and storage nodes
-          shell: |
-            # Get nodes that are NOT the current monitoring node using range-based approach
-            kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | \
-            grep -v "{{ ansible_default_ipv4.address }}" | cut -f1 | while read node; do
-              if kubectl get node "$node" --show-labels | grep -q "node-role.vmstation.io/monitoring=true"; then
-                echo "Removing monitoring label from non-monitoring node: $node"
-                kubectl label node "$node" node-role.vmstation.io/monitoring-
-              fi
-            done
-          environment:
-            KUBECONFIG: /root/.kube/config
 
     - name: Cleanup existing VMStation TLS certificates and issuers (optional)
       when: vmstation_cleanup_tls_on_deploy | bool
@@ -268,31 +247,11 @@
                 enabled: true
               global:
                 imagePullPolicy: IfNotPresent
-              # Node targeting for cert-manager components to monitoring nodes
-              nodeSelector:
-                node-role.vmstation.io/monitoring: "true"
-              # Tolerations to allow scheduling on control-plane nodes
-              tolerations:
-                - key: node-role.kubernetes.io/control-plane
-                  operator: Exists
-                  effect: NoSchedule
-                - key: node-role.kubernetes.io/master
-                  operator: Exists
-                  effect: NoSchedule
               image:
                 pullPolicy: IfNotPresent
               webhook:
                 image:
                   pullPolicy: IfNotPresent
-                nodeSelector:
-                  node-role.vmstation.io/monitoring: "true"
-                tolerations:
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: Exists
-                    effect: NoSchedule
-                  - key: node-role.kubernetes.io/master
-                    operator: Exists
-                    effect: NoSchedule
                 resources:
                   requests:
                     cpu: 10m
@@ -300,15 +259,6 @@
               cainjector:
                 image:
                   pullPolicy: IfNotPresent
-                nodeSelector:
-                  node-role.vmstation.io/monitoring: "true"
-                tolerations:
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: Exists
-                    effect: NoSchedule
-                  - key: node-role.kubernetes.io/master
-                    operator: Exists
-                    effect: NoSchedule
                 resources:
                   requests:
                     cpu: 10m

@@ -29,38 +29,11 @@
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
-    - name: Set simple monitoring node selector
+    # Simplified targeting - rely on Ansible hosts field for deployment targeting
+    # No nodeSelector or complex node labeling needed since Ansible handles deployment location
+    - name: Set monitoring node selector to empty (use Ansible hosts-based targeting)
       ansible.builtin.set_fact:
-        monitoring_node_selector: "{{ {'node-role.vmstation.io/monitoring': 'true'} if (monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted') else {} }}"
-    
-    - name: Get node name for current monitoring host
-      shell: kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | grep "{{ ansible_default_ipv4.address }}" | cut -f1
-      register: monitoring_node_name
-      environment:
-        KUBECONFIG: /root/.kube/config
-      when: monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted'
-    
-    - name: Label monitoring node for monitoring workloads
-      shell: kubectl label node "{{ monitoring_node_name.stdout }}" node-role.vmstation.io/monitoring=true --overwrite
-      environment:
-        KUBECONFIG: /root/.kube/config
-      when: 
-        - monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted'
-        - monitoring_node_name.stdout is defined and monitoring_node_name.stdout != ""
-    
-    - name: Remove monitoring labels from compute and storage nodes
-      shell: |
-        # Get nodes that are NOT the current monitoring node using range-based approach
-        kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | \
-        grep -v "{{ ansible_default_ipv4.address }}" | cut -f1 | while read node; do
-          if kubectl get node "$node" --show-labels | grep -q "node-role.vmstation.io/monitoring=true"; then
-            echo "Removing monitoring label from non-monitoring node: $node"
-            kubectl label node "$node" node-role.vmstation.io/monitoring-
-          fi
-        done
-      environment:
-        KUBECONFIG: /root/.kube/config
-      when: monitoring_scheduling_mode is defined and monitoring_scheduling_mode != 'unrestricted'
+        monitoring_node_selector: {}
 
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:
