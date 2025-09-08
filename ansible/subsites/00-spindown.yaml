@@ -334,16 +334,50 @@
       when: ansible_pkg_mgr in ['dnf','yum']
       ignore_errors: true
 
+    - name: Preserve worker node kubelet.conf before cleanup (allows faster recovery)
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/kubelet.conf ] && [ "{{ inventory_hostname }}" != "{{ groups['monitoring_nodes'][0] }}" ]; then
+          echo "Backing up worker kubelet.conf for faster recovery..."
+          mkdir -p /tmp/vmstation-backup
+          cp /etc/kubernetes/kubelet.conf /tmp/vmstation-backup/kubelet.conf.backup
+          echo "Worker kubelet.conf backed up to /tmp/vmstation-backup/kubelet.conf.backup"
+        else
+          echo "Skipping kubelet.conf backup (not a worker or file doesn't exist)"
+        fi
+      ignore_errors: true
+      when: inventory_hostname not in groups['monitoring_nodes']
+
     - name: Remove files from common cluster directories (preserve directory structure and permissions)
       ansible.builtin.shell: |
         if [ -d "{{ item }}" ]; then
           echo "Cleaning files from directory: {{ item }}"
-          find "{{ item }}" -type f -delete 2>/dev/null || true
+          # For /etc/kubernetes on worker nodes, preserve the backed up kubelet.conf
+          if [ "{{ item }}" == "/etc/kubernetes" ] && [ "{{ inventory_hostname }}" != "{{ groups['monitoring_nodes'][0] }}" ] && [ -f /tmp/vmstation-backup/kubelet.conf.backup ]; then
+            echo "Preserving worker kubelet.conf during cleanup..."
+            find "{{ item }}" -type f ! -name "kubelet.conf" -delete 2>/dev/null || true
+          else
+            find "{{ item }}" -type f -delete 2>/dev/null || true
+          fi
         else
           echo "Directory {{ item }} does not exist, skipping"
         fi
       loop: "{{ cleanup_dirs }}"
       ignore_errors: true
+
+    - name: Restore worker kubelet.conf after cleanup (for easier recovery)
+      ansible.builtin.shell: |
+        if [ -f /tmp/vmstation-backup/kubelet.conf.backup ] && [ "{{ inventory_hostname }}" != "{{ groups['monitoring_nodes'][0] }}" ]; then
+          echo "Restoring worker kubelet.conf for easier recovery..."
+          mkdir -p /etc/kubernetes
+          cp /tmp/vmstation-backup/kubelet.conf.backup /etc/kubernetes/kubelet.conf
+          chown root:root /etc/kubernetes/kubelet.conf
+          chmod 600 /etc/kubernetes/kubelet.conf
+          echo "Worker kubelet.conf restored from backup"
+        else
+          echo "No kubelet.conf backup to restore or not a worker node"
+        fi
+      ignore_errors: true
+      when: inventory_hostname not in groups['monitoring_nodes']
 
     - name: Remove kube config for current user
       ansible.builtin.file:
