@@ -403,6 +403,7 @@ kubectl apply --dry-run=client -f k8s/
 ```
 
 ### Troubleshooting Tools
+- **Service enablement**: `./scripts/fix_kubernetes_service_enablement.sh` - **NEW!** Enables disabled kubelet/containerd services
 - **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
 - **RHEL 10 fixes validation**: `./scripts/validate_rhel10_fixes.sh`
 - **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
@@ -465,6 +466,22 @@ ls -la debug_logs/
 
 # 4. Re-run RHEL 10 fixes
 ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/rhel10_setup_fixes.yaml
+```
+
+#### Kubernetes Service Issues (kubelet/containerd disabled)
+If services were disabled during testing or troubleshooting:
+```bash
+# 1. Quick fix for disabled services
+./scripts/fix_kubernetes_service_enablement.sh
+
+# 2. Manual check if automatic fix fails
+systemctl status kubelet containerd
+sudo systemctl enable kubelet containerd
+sudo systemctl start kubelet containerd
+
+# 3. Verify cluster after fixing services
+kubectl cluster-info
+kubectl get nodes
 ```
 
 #### General Deployment Issues

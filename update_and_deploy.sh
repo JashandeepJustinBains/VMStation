@@ -50,6 +50,30 @@ if [ ! -f "ansible/group_vars/all.yml" ]; then
 fi
 
 # === PREREQUISITE SETUP ===
+# Check and fix Kubernetes service enablement before deployment
+if [ -f "scripts/fix_kubernetes_service_enablement.sh" ]; then
+    echo "Checking Kubernetes service enablement (kubelet, containerd)..."
+    chmod +x scripts/fix_kubernetes_service_enablement.sh
+    if sudo -n true 2>/dev/null; then
+        echo "Running Kubernetes service enablement check..."
+        if ./scripts/fix_kubernetes_service_enablement.sh; then
+            echo "✓ Kubernetes services are properly enabled"
+        else
+            echo "⚠ Some Kubernetes services may need manual intervention"
+            echo "Check the output above for specific issues"
+        fi
+    else
+        echo "WARNING: Cannot run service commands automatically."
+        echo "You may need to run this manually before deployment:"
+        echo "  sudo ./scripts/fix_kubernetes_service_enablement.sh"
+        echo ""
+        echo "Continuing with deployment - kubelet/containerd issues may cause failures..."
+    fi
+    echo ""
+else
+    echo "INFO: Service enablement script not found - assuming services are properly configured"
+fi
+
 # Run monitoring permission setup before deployment to prevent hanging
 if [ -f "scripts/fix_monitoring_permissions.sh" ]; then
     echo "Setting up monitoring directories and permissions..."
@@ -324,6 +348,7 @@ else
     if [ ${#SKIPPED_PLAYBOOKS[@]} -gt 0 ]; then
         echo ""
         echo "For Kubernetes connectivity issues:"
+        echo "- Check service enablement: ./scripts/fix_kubernetes_service_enablement.sh"
         echo "- Check cluster status: systemctl status kubelet"
         echo "- Test connectivity: kubectl cluster-info"
         echo "- Verify kubeconfig: kubectl config view"
