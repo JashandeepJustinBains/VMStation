@@ -79,8 +79,8 @@ echo "=== Test 3: Configuration Flow Validation ==="
 
 # Verify the configuration flow sequence
 initial_config_line=$(grep -n "Create kubeadm kubelet dropin (join-compatible configuration)" "$SETUP_CLUSTER_FILE" | cut -d: -f1)
-join_line=$(grep -n "Attempt to join cluster (attempt 1)" "$SETUP_CLUSTER_FILE" | cut -d: -f1)
-post_join_config_line=$(grep -n "Update kubelet systemd config after successful join" "$SETUP_CLUSTER_FILE" | cut -d: -f1)
+join_line=$(grep -n "Attempt to join cluster (primary attempt with extended timeout)" "$SETUP_CLUSTER_FILE" | cut -d: -f1)
+post_join_config_line=$(grep -n "Ensure kubelet systemd drop-in is kubeadm-compatible" "$SETUP_CLUSTER_FILE" | cut -d: -f1)
 
 if [ "$initial_config_line" -lt "$join_line" ] && [ "$join_line" -lt "$post_join_config_line" ]; then
     success "✓ Configuration flow is correct: initial config → join → post-join config"
@@ -101,7 +101,7 @@ else
 fi
 
 # Ensure post-join config properly sets kubelet.conf
-if grep -A 15 "Update kubelet systemd config after successful join" "$SETUP_CLUSTER_FILE" | grep -q "KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"; then
+if grep -A 15 "Ensure kubelet systemd drop-in is kubeadm-compatible" "$SETUP_CLUSTER_FILE" | grep -q "KUBELET_KUBECONFIG_ARGS=--kubeconfig=/etc/kubernetes/kubelet.conf"; then
     success "✓ Post-join config properly sets kubelet.conf path"
 else
     error "✗ Post-join config missing proper kubeconfig setting"

@@ -1755,8 +1755,31 @@
       
     - name: Join worker nodes to cluster with enhanced timeout handling
       block:
+        - name: Pre-join kubelet readiness verification
+          block:
+            - name: Ensure kubelet service is stopped before join
+              systemd:
+                name: kubelet
+                state: stopped
+              ignore_errors: yes
+              
+            - name: Verify containerd socket is available
+              wait_for:
+                path: /var/run/containerd/containerd.sock
+                timeout: 30
+                
+            - name: Test kubelet can start with current configuration
+              shell: |
+                # Try to start kubelet briefly to test configuration
+                timeout 10 kubelet --config=/var/lib/kubelet/config.yaml --kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf || true
+              register: kubelet_test_start
+              ignore_errors: yes
+              failed_when: false
+              
+          when: not kubelet_conf.stat.exists
+          
         - name: Attempt to join cluster (primary attempt with extended timeout)
-          shell: timeout 300 /tmp/kubeadm-join.sh --v=5
+          shell: timeout 600 /tmp/kubeadm-join.sh --v=5
           register: join_result_1
           failed_when: false
           when: not kubelet_conf.stat.exists
@@ -1769,10 +1792,27 @@
                   First join attempt failed:
                   Return Code: {{ join_result_1.rc | default('unknown') }}
                   Stderr: {{ join_result_1.stderr | default('no stderr') | truncate(500) }}
+                  Stdout: {{ join_result_1.stdout | default('no stdout') | truncate(300) }}
                   
-            - name: Wait before retry
+            - name: Check kubelet status for diagnostic information
+              shell: |
+                echo "=== Kubelet Status ==="
+                systemctl status kubelet --no-pager -l || true
+                echo "=== Kubelet Logs (last 10 lines) ==="
+                journalctl -u kubelet --no-pager -l -n 10 || true
+                echo "=== Kubelet Health Endpoint ==="
+                curl -s http://localhost:10248/healthz || echo "Health endpoint not available"
+              register: kubelet_diagnostic
+              ignore_errors: yes
+              
+            - name: Display kubelet diagnostic information  
+              debug:
+                msg: "{{ kubelet_diagnostic.stdout }}"
+              when: kubelet_diagnostic.stdout is defined
+                  
+            - name: Wait before retry (extended for timeout recovery)
               pause:
-                seconds: 30
+                seconds: 60
                 
             - name: Reset any partial join state cleanly
               shell: |
@@ -1797,7 +1837,7 @@
                 timeout: 30
                 
             - name: Attempt to join cluster (retry with extended timeout)
-              shell: timeout 420 /tmp/kubeadm-join.sh --v=5
+              shell: timeout 900 /tmp/kubeadm-join.sh --v=5
               register: join_result_2
               failed_when: false
               

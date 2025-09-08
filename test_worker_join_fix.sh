@@ -58,7 +58,7 @@ run_test "Worker CNI infrastructure installation" \
 
 # Test 8: Join retry mechanism exists
 run_test "Join retry mechanism present" \
-    "grep -q 'Join worker nodes to cluster with retries' '$SETUP_CLUSTER_FILE'"
+    "grep -q 'Join worker nodes to cluster with enhanced timeout handling' '$SETUP_CLUSTER_FILE'"
 
 # Test 9: Ansible syntax validation
 run_test "Ansible syntax validation" \
