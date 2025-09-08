@@ -1173,6 +1173,42 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
+    - name: Validate kubelet.conf if it exists (post-spindown recovery check)
+      block:
+        - name: Test kubelet.conf validity by checking if it contains valid cluster info
+          shell: |
+            if [ -f /etc/kubernetes/kubelet.conf ]; then
+              # Check if the kubeconfig contains cluster server info
+              if grep -q "server:" /etc/kubernetes/kubelet.conf && grep -q "certificate-authority-data:" /etc/kubernetes/kubelet.conf; then
+                echo "valid"
+              else
+                echo "invalid"
+              fi
+            else
+              echo "missing"
+            fi
+          register: kubelet_conf_validation
+          changed_when: false
+
+        - name: Force rejoin if kubelet.conf is invalid or empty (post-spindown recovery)
+          set_fact:
+            kubelet_conf: 
+              stat:
+                exists: false
+          when: kubelet_conf_validation.stdout != "valid"
+
+        - name: Display kubelet.conf validation result
+          debug:
+            msg: |
+              Kubelet configuration validation on {{ inventory_hostname }}:
+              - File exists: {{ kubelet_conf.stat.exists }}
+              - Content valid: {{ kubelet_conf_validation.stdout }}
+              {% if kubelet_conf_validation.stdout != "valid" %}
+              - Action: Will trigger rejoin process to restore valid kubelet.conf
+              {% endif %}
+
+      when: kubelet_conf.stat.exists
+
     - name: Clean up stale CNI state on worker nodes (prevent cert-manager conflicts)
       block:
         - name: Stop and disable kubelet if running (to prevent CNI conflicts)
@@ -1905,6 +1941,59 @@
 
         - name: Handle worker kubelet startup failure with config recovery
           block:
+            - name: Check if worker kubelet kubeconfig is missing (post-spindown recovery)
+              stat:
+                path: /etc/kubernetes/kubelet.conf
+              register: worker_kubelet_kubeconfig_missing
+
+            - name: Ensure kubelet kubeconfig exists or trigger rejoin if missing
+              block:
+                - name: Attempt to copy kubelet.conf from control plane if available
+                  block:
+                    - name: Fetch kubelet.conf template from control plane 
+                      fetch:
+                        src: /etc/kubernetes/kubelet.conf
+                        dest: /tmp/control-plane-kubelet.conf
+                        flat: yes
+                      delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+                      register: fetch_kubeconfig_result
+                      ignore_errors: yes
+
+                    - name: Copy control plane kubelet.conf as template for worker
+                      copy:
+                        src: /tmp/control-plane-kubelet.conf
+                        dest: /etc/kubernetes/kubelet.conf
+                        owner: root
+                        group: root
+                        mode: '0644'
+                        backup: yes
+                      when: fetch_kubeconfig_result is succeeded
+                      register: copy_kubeconfig_result
+                      ignore_errors: yes
+
+                  rescue:
+                    - name: Control plane kubelet.conf not available, will trigger rejoin
+                      debug:
+                        msg: "Control plane kubelet.conf not available, worker needs to rejoin cluster"
+
+                - name: Create /etc/kubernetes directory if missing
+                  file:
+                    path: /etc/kubernetes
+                    state: directory
+                    owner: root
+                    group: root
+                    mode: '0755'
+                  when: worker_kubelet_kubeconfig_missing.stat.exists == false
+
+                - name: Set flag to trigger worker rejoin if kubeconfig still missing
+                  set_fact:
+                    worker_needs_rejoin: true
+                  when: 
+                    - worker_kubelet_kubeconfig_missing.stat.exists == false
+                    - copy_kubeconfig_result is not defined or copy_kubeconfig_result is failed
+
+              when: worker_kubelet_kubeconfig_missing.stat.exists == false
+
             - name: Create minimal kubelet config if missing on worker (CA-file agnostic)
               copy:
                 content: |
@@ -1955,6 +2044,20 @@
                 enabled: yes
               register: worker_kubelet_restart_retry
               ignore_errors: yes
+              when: worker_needs_rejoin is not defined
+
+            - name: Display worker recovery status
+              debug:
+                msg: |
+                  Worker kubelet recovery status:
+                  - kubelet.conf missing: {{ worker_kubelet_kubeconfig_missing.stat.exists == false }}
+                  - kubeconfig recovered: {{ copy_kubeconfig_result is defined and copy_kubeconfig_result is succeeded }}
+                  - needs rejoin: {{ worker_needs_rejoin | default(false) }}
+                  {% if worker_needs_rejoin | default(false) %}
+                  
+                  Action required: Worker node needs to rejoin the cluster
+                  Run: kubeadm reset -f && <join-command>
+                  {% endif %}
 
           when: worker_kubelet_restart is defined and worker_kubelet_restart.failed
 
