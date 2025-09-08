@@ -444,6 +444,12 @@
               ExecStart=
               ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
               
+        - name: Ensure /etc/sysconfig directory exists (RHEL 10+)
+          file:
+            path: /etc/sysconfig
+            state: directory
+            mode: '0755'
+            
         - name: Ensure /etc/sysconfig/kubelet exists with systemd cgroup driver (RHEL 10+)
           copy:
             dest: /etc/sysconfig/kubelet
@@ -774,6 +780,12 @@
             # The kubelet systemd service will still reference this file via EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
             # but kubeadm will create it with the correct join-specific parameters.
 
+            - name: Ensure /etc/sysconfig directory exists
+              file:
+                path: /etc/sysconfig
+                state: directory
+                mode: '0755'
+                
             - name: Ensure clean /etc/sysconfig/kubelet without deprecated flags
               copy:
                 dest: /etc/sysconfig/kubelet
@@ -1846,6 +1858,12 @@
                 path: /var/run/containerd/containerd.sock
                 timeout: 30
 
+            - name: Ensure /etc/sysconfig directory exists for retry
+              file:
+                path: /etc/sysconfig
+                state: directory
+                mode: '0755'
+                
             - name: Recreate clean sysconfig/kubelet for retry attempt
               copy:
                 dest: /etc/sysconfig/kubelet
