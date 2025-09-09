@@ -56,7 +56,7 @@
             baseurl: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/"
             gpgcheck: yes
             repo_gpgcheck: yes
-            gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/Release.key"
+            gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/rpm/repodata/repomd.xml.key"
             enabled: yes
 
         - name: "Install Kubernetes packages (RHEL/CentOS)"
