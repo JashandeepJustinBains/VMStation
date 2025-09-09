@@ -234,16 +234,14 @@
         timeout: 300
         delay: 10
       
-    - name: "Verify API server accessibility"
-      uri:
-        url: "https://{{ ansible_default_ipv4.address }}:6443/healthz"
-        method: GET
-        validate_certs: no
-        timeout: 10
+    - name: "Verify API server accessibility using kubectl"
+      shell: kubectl get nodes --request-timeout=10s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: api_health
       retries: 10
       delay: 15
-      until: api_health.status == 200
+      until: api_health.rc == 0
 
     - name: "Validate kubernetes-admin RBAC permissions"
       shell: >
@@ -290,6 +288,8 @@
 
     - name: "Generate join command"
       shell: kubeadm token create --print-join-command
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
       retries: 3
       delay: 10
