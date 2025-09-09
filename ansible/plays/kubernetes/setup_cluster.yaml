@@ -1872,6 +1872,29 @@
                   KUBELET_EXTRA_ARGS=--cgroup-driver=systemd --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock
                 mode: '0644'
                 
+            - name: Update systemd drop-in to clean format for retry attempt
+              copy:
+                dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+                content: |
+                  # Note: This dropin only works with kubeadm and kubelet v1.11+
+                  # Join-compatible kubelet configuration - lets kubeadm manage all configuration during join
+                  [Service]
+                  Environment="KUBELET_KUBECONFIG_ARGS="
+                  Environment="KUBELET_CONFIG_ARGS="
+                  # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, 
+                  # populating the KUBELET_KUBEADM_ARGS variable dynamically
+                  EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+                  # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+                  # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+                  EnvironmentFile=-/etc/sysconfig/kubelet
+                  ExecStart=
+                  ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+                mode: '0644'
+                
+            - name: Reload systemd daemon after updating drop-in
+              systemd:
+                daemon_reload: yes
+                
             - name: Attempt to join cluster (retry with extended timeout)
               shell: timeout 900 /tmp/kubeadm-join.sh --v=5
               register: join_result_2
