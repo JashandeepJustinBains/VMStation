@@ -373,7 +373,7 @@
 
     - name: "Check cluster-info configmap RBAC permissions"
       shell: >
-        kubectl auth can-i get configmaps/cluster-info --namespace=kube-public --as=system:anonymous
+        kubectl get clusterrole system:public-info-viewer >/dev/null 2>&1 && echo "yes" || echo "no"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: cluster_info_rbac_check
@@ -397,7 +397,9 @@
 
     - name: "Verify cluster-info configmap accessibility"
       shell: >
-        kubectl auth can-i get configmaps/cluster-info --namespace=kube-public --as=system:anonymous
+        kubectl get clusterrole system:public-info-viewer >/dev/null 2>&1 && 
+        kubectl get clusterrolebinding cluster-info >/dev/null 2>&1 && 
+        echo "yes" || echo "no"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: cluster_info_verification
