@@ -61,6 +61,32 @@ The error occurs when:
     mode: '0644'
 ```
 
+#### 4. Clean Systemd Drop-in Update for Retries (Lines 1875-1896)  
+```yaml
+- name: Update systemd drop-in to clean format for retry attempt
+  copy:
+    dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    content: |
+      # Note: This dropin only works with kubeadm and kubelet v1.11+
+      # Join-compatible kubelet configuration - lets kubeadm manage all configuration during join
+      [Service]
+      Environment="KUBELET_KUBECONFIG_ARGS="
+      Environment="KUBELET_CONFIG_ARGS="
+      # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, 
+      # populating the KUBELET_KUBEADM_ARGS variable dynamically
+      EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+      # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+      # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+      EnvironmentFile=-/etc/sysconfig/kubelet
+      ExecStart=
+      ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+    mode: '0644'
+
+- name: Reload systemd daemon after updating drop-in
+  systemd:
+    daemon_reload: yes
+```
+
 ## Technical Flow
 
 ### Before Fix (Problematic)
@@ -74,18 +100,23 @@ Existing /etc/sysconfig/kubelet → contains --network-plugin=cni
 ### After Fix (Resolved)
 ```
 Recovery Process → removes old /etc/sysconfig/kubelet
-                → creates clean configuration
+                → removes old systemd drop-in configuration  
+                → creates clean sysconfig configuration
+                → creates clean systemd drop-in configuration
+                → reloads systemd daemon
                 → kubelet starts successfully  
                 → join completes without flag errors
 ```
 
 ## Testing
 
-Created comprehensive test suite `test_deprecated_flag_fix.sh` that validates:
+Created comprehensive test suite `test_deprecated_flag_fix.sh` and `test_systemd_dropin_retry_fix.sh` that validates:
 
 - ✅ Retry cleanup removes potentially problematic sysconfig files
 - ✅ Clean sysconfig creation without deprecated flags  
 - ✅ Retry attempts properly recreate clean configuration
+- ✅ **NEW**: Systemd drop-in file properly updated during retries
+- ✅ **NEW**: Systemd daemon reload after drop-in file updates
 - ✅ No deprecated --network-plugin flags found in playbook
 - ✅ Ansible syntax validation passes
 
@@ -98,26 +129,31 @@ Created comprehensive test suite `test_deprecated_flag_fix.sh` that validates:
 
 This fix resolves:
 - Kubelet startup failures due to deprecated `--network-plugin` flag
+- **NEW**: Old systemd drop-in files with deprecated KUBELET_NETWORK_ARGS environment
 - Join timeout issues on nodes with legacy configuration files
+- **NEW**: Persistence of problematic systemd configurations during retries
 - Prevents similar issues from recurring during cluster recovery
 
 ## Expected Results
 
 After applying this fix, nodes experiencing the deprecated flag error should:
 1. Have their problematic sysconfig files cleaned up during recovery
-2. Receive clean kubelet configuration without deprecated flags
-3. Successfully start kubelet service during join attempts
-4. Complete cluster join without flag parsing errors
+2. **NEW**: Have their old systemd drop-in files updated to clean format
+3. Receive clean kubelet configuration without deprecated flags
+4. **NEW**: Have systemd daemon reloaded to apply configuration changes
+5. Successfully start kubelet service during join attempts
+6. Complete cluster join without flag parsing errors
 
 ## Files Modified
 
-- `ansible/plays/kubernetes/setup_cluster.yaml` - Added deprecated flag cleanup (3 small additions)
-- `test_deprecated_flag_fix.sh` - Comprehensive test validation (new)
+- `ansible/plays/kubernetes/setup_cluster.yaml` - Added deprecated flag cleanup (4 additional tasks)
+- `test_deprecated_flag_fix.sh` - Comprehensive test validation (existing)
+- `test_systemd_dropin_retry_fix.sh` - Systemd drop-in retry test (new)
 - `DEPRECATED_NETWORK_PLUGIN_FIX.md` - Documentation (this file)
 
 ## Backward Compatibility
 
 - No breaking changes to existing functionality
-- Only affects nodes with legacy/problematic sysconfig files
+- Only affects nodes with legacy/problematic configuration files
 - All existing recovery and join mechanisms remain intact
-- Minimal surgical changes (only 7 lines added total)
+- Minimal surgical changes (only 23 lines added total across 4 new tasks)
