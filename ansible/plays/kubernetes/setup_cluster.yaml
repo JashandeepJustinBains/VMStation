@@ -1146,6 +1146,12 @@
         dest: /tmp/kube-flannel-allnodes.yml
         mode: '0644'
 
+    - name: Delete existing Flannel DaemonSet if present (to handle immutable selector)
+      shell: kubectl delete daemonset kube-flannel-ds -n kube-flannel --ignore-not-found=true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      ignore_errors: yes
+
     - name: Install Flannel CNI (custom manifest - all nodes)
       shell: kubectl apply -f /tmp/kube-flannel-allnodes.yml
       environment:
