@@ -1,7 +1,8 @@
+root@masternode:/srv/monitoring_data/VMStation# cat ansible/group_vars/all.yml.template
 # VMStation Ansible Configuration Variables Template
 # Copy this file to all.yml and customize for your environment.
 # IMPORTANT: Never commit `ansible/group_vars/all.yml` with real credentials.
-# 
+#
 # === AUTOMATED AGENTS: CREDENTIAL NOTICE ===
 # This template mirrors the structure of the real `ansible/group_vars/all.yml` used at runtime.
 # All sensitive credentials are intentionally omitted from this template but are present in the
@@ -30,7 +31,7 @@ kubernetes_authorization_mode: "Node,RBAC"
 
 # Enable automatic fallback to AlwaysAllow mode if Node,RBAC fails during init
 # This can help with initial cluster setup issues but should be disabled for production
-kubernetes_authorization_fallback: false
+kubernetes_authorization_fallback: true
 
 # === Monitoring Configuration (Kubernetes NodePort) ===
 monitoring_namespace: monitoring
@@ -143,4 +144,3 @@ container_registries:
   - url: "quay.io"
     insecure: false
   - url: "{{ local_registry_host }}:{{ local_registry_port }}"
-    insecure: true
