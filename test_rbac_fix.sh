@@ -42,9 +42,9 @@ echo "1. Testing RBAC fix implementation in setup-cluster.yaml..."
 
 run_test "RBAC validation task exists" "grep -q 'Validate kubernetes-admin RBAC permissions' ansible/plays/setup-cluster.yaml"
 run_test "RBAC fix task exists" "grep -q 'Fix kubernetes-admin RBAC if needed' ansible/plays/setup-cluster.yaml"
-run_test "Join command has retry logic" "grep -A 3 'Generate join command' ansible/plays/setup-cluster.yaml | grep -q 'retries: 3'"
-run_test "Join command has delay logic" "grep -A 4 'Generate join command' ansible/plays/setup-cluster.yaml | grep -q 'delay: 10'"
-run_test "Join command has until condition" "grep -A 5 'Generate join command' ansible/plays/setup-cluster.yaml | grep -q 'until: join_command.rc == 0'"
+run_test "Join command has retry logic" "grep -A 5 'Generate join command' ansible/plays/setup-cluster.yaml | grep -q 'retries: 3'"
+run_test "Join command has delay logic" "grep -A 6 'Generate join command' ansible/plays/setup-cluster.yaml | grep -q 'delay: 10'"
+run_test "Join command has until condition" "grep -A 7 'Generate join command' ansible/plays/setup-cluster.yaml | grep -q 'until: join_command.rc == 0'"
 
 echo
 echo "2. Testing RBAC command logic..."
