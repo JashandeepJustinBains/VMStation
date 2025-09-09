@@ -1239,14 +1239,25 @@
           ignore_errors: yes
           register: cni_cleanup_result
 
-        - name: Clear existing CNI configuration files (preserve directory structure)
+        - name: Clear existing CNI configuration files (preserve directory structure and flannel config)
           shell: |
+            # Backup flannel configuration if it exists
+            if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
+              cp /etc/cni/net.d/10-flannel.conflist /tmp/10-flannel.conflist.backup
+            fi
+            
             # Remove any existing CNI configuration but preserve directories
             rm -rf /etc/cni/net.d/* || true
             rm -f /opt/cni/bin/flannel || true
             # Clear CNI plugin cache but preserve directories
             rm -rf /var/lib/cni/networks/* || true
             rm -rf /var/lib/cni/results/* || true
+            
+            # Restore flannel configuration if backup exists
+            if [ -f /tmp/10-flannel.conflist.backup ]; then
+              mv /tmp/10-flannel.conflist.backup /etc/cni/net.d/10-flannel.conflist
+            fi
+            
             # Ensure CNI directories exist with proper permissions after cleanup
             mkdir -p /opt/cni/bin /etc/cni/net.d /var/lib/cni/networks /var/lib/cni/results || true
             chmod 755 /opt/cni/bin /etc/cni/net.d /var/lib/cni/networks /var/lib/cni/results || true
@@ -1814,7 +1825,67 @@
                 crictl images | grep pause || crictl pull registry.k8s.io/pause:3.9 || true
               register: runtime_precheck
               ignore_errors: yes
+            
+            - name: Verify CNI configuration exists before join attempt
+              block:
+                - name: Check if flannel CNI configuration exists
+                  stat:
+                    path: /etc/cni/net.d/10-flannel.conflist
+                  register: cni_config_check
+                
+                - name: Recreate flannel CNI configuration if missing
+                  copy:
+                    content: |
+                      {
+                        "name": "cni0",
+                        "cniVersion": "0.3.1",
+                        "plugins": [
+                          {
+                            "type": "flannel",
+                            "delegate": {
+                              "hairpinMode": true,
+                              "isDefaultGateway": true
+                            }
+                          },
+                          {
+                            "type": "portmap",
+                            "capabilities": {
+                              "portMappings": true
+                            }
+                          }
+                        ]
+                      }
+                    dest: /etc/cni/net.d/10-flannel.conflist
+                    owner: root
+                    group: root
+                    mode: '0644'
+                  when: not cni_config_check.stat.exists
+                
+                - name: Verify containerd can read CNI configuration
+                  shell: |
+                    # Test that containerd can parse the CNI configuration
+                    timeout 10s crictl info | grep -A5 '"Network"' || echo "CNI info not available yet"
+                  register: cni_runtime_check
+                  ignore_errors: yes
+                  failed_when: false
               
+          when: not kubelet_conf.stat.exists
+
+        - name: Final CNI readiness check before join
+          block:
+            - name: Ensure CNI configuration is present and valid
+              stat:
+                path: /etc/cni/net.d/10-flannel.conflist
+              register: final_cni_check
+              failed_when: not final_cni_check.stat.exists
+            
+            - name: Display CNI readiness status
+              debug:
+                msg: |
+                  CNI Configuration Status:
+                  - Flannel config exists: {{ final_cni_check.stat.exists }}
+                  - CNI runtime check: {{ cni_runtime_check.stdout | default('not performed') }}
+                  Ready for kubelet join attempt.
           when: not kubelet_conf.stat.exists
           
         - name: Attempt to join cluster (primary attempt with reasonable timeout)
@@ -1967,8 +2038,16 @@
 
     - name: Enhanced error collection and diagnostics
       block:
-        - name: Extract join target from script (for connectivity checks)
-          shell: "awk '{print $3}' /tmp/kubeadm-join.sh"
+        - name: Extract join target from script (for connectivity checks) - robust parsing
+          shell: |
+            # More robust extraction that handles comments and variations in join script format
+            if [ ! -f /tmp/kubeadm-join.sh ]; then
+              echo "ERROR: Join script not found"
+              exit 1
+            fi
+            
+            # Extract the API server address from the join command, handling various formats
+            grep -E "^kubeadm join" /tmp/kubeadm-join.sh | head -1 | awk '{print $3}' | sed 's/[[:space:]]*$//'
           register: join_target
           changed_when: false
           failed_when: false
@@ -1983,7 +2062,15 @@
           changed_when: false
           
         - name: Test basic network connectivity to control plane
-          command: "ping -c 3 {{ join_target.stdout.split(':')[0] }}"
+          shell: |
+            # Extract IP from join target (remove port if present)
+            TARGET_IP=$(echo "{{ join_target.stdout }}" | sed 's/:.*$//')
+            if [ -n "$TARGET_IP" ] && [ "$TARGET_IP" != "ERROR:" ]; then
+              ping -c 3 "$TARGET_IP"
+            else
+              echo "Cannot ping - invalid target IP: {{ join_target.stdout }}"
+              exit 1
+            fi
           register: ping_test
           failed_when: false
           changed_when: false
@@ -1998,6 +2085,13 @@
             crictl info || true
             echo "=== Kubelet Status ==="
             systemctl status kubelet --no-pager || true
+            echo "=== CNI Configuration Status ==="
+            echo "CNI Config Files:"
+            ls -la /etc/cni/net.d/ || true
+            echo "Flannel Config Content:"
+            cat /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "Flannel config missing"
+            echo "CNI Plugins:"
+            ls -la /opt/cni/bin/ | head -10 || true
             echo "=== Network Configuration ==="
             ip addr show || true
             ip route show || true
