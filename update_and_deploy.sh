@@ -138,6 +138,26 @@ if command -v kubectl >/dev/null 2>&1; then
         # Show basic cluster info
         echo "Cluster context: $(kubectl config current-context 2>/dev/null || echo 'unknown')"
         echo "Server version: $(kubectl version --short --client=false 2>/dev/null | grep 'Server Version' || echo 'unavailable')"
+        
+        # Certificate validation for control plane
+        if [ -f "/etc/kubernetes/pki/ca.crt" ] && [ -f "/etc/kubernetes/pki/apiserver.crt" ]; then
+            echo "Validating control plane certificates..."
+            
+            # Check certificate validity
+            if openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -checkend 86400 >/dev/null 2>&1; then
+                echo "✓ API server certificate is valid"
+            else
+                echo "⚠ API server certificate expires within 24 hours - worker joins may fail"
+            fi
+            
+            if openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -checkend 86400 >/dev/null 2>&1; then
+                echo "✓ CA certificate is valid"
+            else
+                echo "⚠ CA certificate expires within 24 hours - requires cluster attention"
+            fi
+        else
+            echo "⚠ Not running on control plane or certificates not accessible"
+        fi
     else
         echo "⚠ Kubernetes cluster is not accessible or timed out"
         echo "  This may be due to:"
@@ -145,6 +165,7 @@ if command -v kubectl >/dev/null 2>&1; then
         echo "  - Network connectivity issues"
         echo "  - Incorrect kubeconfig configuration"
         echo "  - Firewall blocking access to API server"
+        echo "  - Certificate issues preventing API server access"
     fi
 else
     echo "⚠ kubectl command not found"
