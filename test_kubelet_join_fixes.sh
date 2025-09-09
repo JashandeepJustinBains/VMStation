@@ -57,12 +57,12 @@ if ! grep -q "timeout 2400" update_and_deploy.sh; then
 fi
 echo "✓ Deployment timeout increased to 2400s"
 
-# Check for enhanced join timeout handling
-if ! grep -q "timeout 300.*kubeadm-join" ansible/plays/kubernetes/setup_cluster.yaml; then
-    echo "ERROR: Enhanced join timeout not found"
+# Check for performance-optimized join timeout handling
+if ! grep -q "timeout 600.*kubeadm-join" ansible/plays/kubernetes/setup_cluster.yaml; then
+    echo "ERROR: Performance-optimized join timeout not found"
     exit 1
 fi
-echo "✓ Enhanced kubeadm join timeout handling added"
+echo "✓ Performance-optimized kubeadm join timeout handling (600s)"
 
 # Check that kubeadm-compatible systemd config is used
 if ! grep -q "Note: This dropin only works with kubeadm and kubelet" ansible/plays/kubernetes/setup_cluster.yaml; then
@@ -84,9 +84,11 @@ echo "=== All Tests Passed! ==="
 echo ""
 echo "Key improvements implemented:"
 echo "- Removed kubelet config.yaml creation conflicts"
-echo "- Added proper timeout handling (300s/420s for joins, 2400s for deployment)"
+echo "- Performance-optimized timeout handling (600s/900s for joins, 2400s for deployment)"
 echo "- Simplified to kubeadm-compatible systemd configuration"
 echo "- Removed complex recovery logic that was causing more issues"
 echo "- Enhanced error reporting and diagnostics"
+echo "- Eliminated excessive containerd restarts during join"
+echo "- Streamlined container pre-warming to essential images only"
 echo ""
 echo "These fixes should resolve the kubelet join timeout issues on nodes 192.168.4.61 and 192.168.4.62"

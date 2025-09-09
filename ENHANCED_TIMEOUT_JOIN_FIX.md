@@ -1,5 +1,7 @@
 # Enhanced Timeout Join Fix
 
+> **⚠️ SUPERSEDED**: This approach has been superseded by the performance optimization approach documented in `KUBELET_PERFORMANCE_ROOT_CAUSE_FIX.md`. Instead of increasing timeouts, we now eliminate performance bottlenecks and use optimized timeouts: 600s primary (vs 900s), 900s retry (vs 1200s), and 60s wait (vs 90s).
+
 ## Problem Statement
 
 Worker nodes (192.168.4.61 and 192.168.4.62) were still experiencing join timeout failures despite existing comprehensive fixes:
