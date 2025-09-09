@@ -144,20 +144,48 @@
   become: true
   vars:
     pod_network_cidr: "10.244.0.0/16"
+    auth_mode: "{{ kubernetes_authorization_mode | default('Node,RBAC') }}"
+    enable_fallback: "{{ kubernetes_authorization_fallback | default(false) }}"
   tasks:
     - name: "Check if cluster exists"
       stat:
         path: /etc/kubernetes/admin.conf
       register: kubeconfig
 
-    - name: "Initialize cluster"
+    - name: "Initialize cluster with secure authorization mode"
       command: >
         kubeadm init 
         --pod-network-cidr={{ pod_network_cidr }}
         --apiserver-advertise-address={{ ansible_default_ipv4.address }}
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
+        --authorization-mode={{ auth_mode }}
       when: not kubeconfig.stat.exists
       register: kubeadm_init
+      ignore_errors: "{{ enable_fallback | bool }}"
+
+    - name: "Initialize cluster with AlwaysAllow fallback (if secure mode failed)"
+      command: >
+        kubeadm init 
+        --pod-network-cidr={{ pod_network_cidr }}
+        --apiserver-advertise-address={{ ansible_default_ipv4.address }}
+        --control-plane-endpoint={{ ansible_default_ipv4.address }}
+        --authorization-mode=AlwaysAllow
+      when: 
+        - not kubeconfig.stat.exists
+        - enable_fallback | bool
+        - kubeadm_init.failed | default(false)
+      register: kubeadm_init_fallback
+
+    - name: "Display authorization mode warning if fallback was used"
+      debug:
+        msg: |
+          WARNING: Cluster initialized with --authorization-mode=AlwaysAllow
+          This is less secure and should only be used for troubleshooting.
+          Consider investigating why {{ auth_mode }} mode failed.
+      when: 
+        - enable_fallback | bool
+        - kubeadm_init_fallback is defined
+        - kubeadm_init_fallback is succeeded
 
     - name: "Setup kubeconfig for root"
       block:
@@ -189,6 +217,20 @@
       register: rbac_check
       failed_when: false
 
+    - name: "Check current authorization mode"
+      shell: >
+        kubectl get pods -n kube-system kube-apiserver-* -o jsonpath='{.items[0].spec.containers[0].command}' | 
+        grep -o '\--authorization-mode=[^[:space:]]*' | 
+        cut -d= -f2
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: current_auth_mode
+      failed_when: false
+
+    - name: "Display current authorization mode"
+      debug:
+        msg: "Current Kubernetes authorization mode: {{ current_auth_mode.stdout | default('Unable to determine') }}"
+
     - name: "Fix kubernetes-admin RBAC if needed"
       shell: |
         kubectl create clusterrolebinding kubernetes-admin \
@@ -197,7 +239,18 @@
           --dry-run=client -o yaml | kubectl apply -f -
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      when: rbac_check.stdout != "yes"
+      when: 
+        - rbac_check.stdout != "yes"
+        - current_auth_mode.stdout is defined
+        - "'RBAC' in current_auth_mode.stdout"
+
+    - name: "Skip RBAC fix for AlwaysAllow mode"
+      debug:
+        msg: "Skipping RBAC fix - cluster is running in AlwaysAllow mode"
+      when: 
+        - rbac_check.stdout != "yes"
+        - current_auth_mode.stdout is defined
+        - "'AlwaysAllow' in current_auth_mode.stdout"
 
     - name: "Generate join command"
       shell: kubeadm token create --print-join-command

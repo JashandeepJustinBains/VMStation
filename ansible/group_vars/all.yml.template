@@ -20,6 +20,18 @@ pod_network_cidr: "10.244.0.0/16"
 cert_manager_version: "v1.13.3"
 helm_version: "3.13.3"
 
+# === Kubernetes Authorization Configuration ===
+# Controls the authorization mode for the Kubernetes API server
+# Options:
+#   'Node,RBAC' - Default secure mode with Node and RBAC authorization (recommended)
+#   'AlwaysAllow' - Allows all API requests (less secure, use only for troubleshooting)
+#   'RBAC' - Only RBAC authorization
+kubernetes_authorization_mode: "Node,RBAC"
+
+# Enable automatic fallback to AlwaysAllow mode if Node,RBAC fails during init
+# This can help with initial cluster setup issues but should be disabled for production
+kubernetes_authorization_fallback: false
+
 # === Monitoring Configuration (Kubernetes NodePort) ===
 monitoring_namespace: monitoring
 grafana_nodeport: 30300

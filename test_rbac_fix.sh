@@ -51,7 +51,7 @@ echo "2. Testing RBAC command logic..."
 
 run_test "kubectl auth can-i command present" "grep -q 'kubectl auth can-i create secrets --namespace=kube-system' ansible/plays/setup-cluster.yaml"
 run_test "ClusterRoleBinding creation command present" "grep -q 'kubectl create clusterrolebinding kubernetes-admin' ansible/plays/setup-cluster.yaml"
-run_test "RBAC fix conditional on rbac_check" "grep -q 'when: rbac_check.stdout != \"yes\"' ansible/plays/setup-cluster.yaml"
+run_test "RBAC fix conditional on rbac_check" "grep -A 5 -B 2 'when:' ansible/plays/setup-cluster.yaml | grep -q 'rbac_check.stdout != \"yes\"'"
 
 echo
 echo "3. Testing file syntax and structure..."
