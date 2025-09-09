@@ -1796,7 +1796,7 @@
                 path: /var/run/containerd/containerd.sock
                 timeout: 30
                 
-            - name: Optimize kubelet configuration for faster startup
+            - name: Optimize kubelet configuration for join
               shell: |
                 # Clear any kubelet cache that might slow startup
                 rm -rf /var/lib/kubelet/plugins_registry/* || true
@@ -1804,40 +1804,23 @@
                 
                 # Ensure kubelet state directory has optimal permissions
                 chmod 755 /var/lib/kubelet || true
-                
-                # Verify containerd is responsive before kubelet attempts
-                if ! timeout 15 crictl version >/dev/null 2>&1; then
-                  echo "Restarting containerd for better responsiveness"
-                  systemctl restart containerd
-                  sleep 5
-                fi
               register: kubelet_optimization
               ignore_errors: yes
-                
-            - name: Test kubelet can start with current configuration
-              shell: |
-                # Try to start kubelet briefly to test configuration
-                timeout 10 kubelet --config=/var/lib/kubelet/config.yaml --kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf || true
-              register: kubelet_test_start
-              ignore_errors: yes
-              failed_when: false
+
               
-            - name: Pre-warm container runtime for faster join
+            - name: Pre-warm container runtime (essential containers only)
               shell: |
-                # Pull pause container early to avoid delays during kubelet-start
-                crictl pull registry.k8s.io/pause:3.9 || true
-                
-                # Test container creation to ensure runtime is ready
-                timeout 30 crictl run --rm alpine:latest /bin/true || true
+                # Only pull pause container if not already present - avoid delays
+                crictl images | grep pause || crictl pull registry.k8s.io/pause:3.9 || true
               register: runtime_precheck
               ignore_errors: yes
               
           when: not kubelet_conf.stat.exists
           
-        - name: Attempt to join cluster (primary attempt with extended timeout and kubelet-start optimization)
+        - name: Attempt to join cluster (primary attempt with reasonable timeout)
           shell: |
-            # Enhanced join with kubelet-start phase optimization
-            timeout 900 /tmp/kubeadm-join.sh \
+            # Join with standard timeout - performance issues resolved
+            timeout 600 /tmp/kubeadm-join.sh \
               --v=5 \
               --node-name={{ inventory_hostname }} \
               --skip-phases=addon/kube-proxy
@@ -1863,21 +1846,16 @@
                     
                 - name: Apply kubelet-start specific recovery if detected
                   shell: |
-                    echo "Detected kubelet-start phase timeout, applying specific recovery measures"
+                    echo "Detected kubelet-start phase timeout, applying recovery"
                     
-                    # Ensure kubelet service configuration is optimal for startup speed
+                    # Stop kubelet service
                     systemctl stop kubelet || true
                     
-                    # Remove any kubelet state that might cause delays
+                    # Remove problematic kubelet state only
                     rm -rf /var/lib/kubelet/pki/* || true
-                    rm -rf /var/lib/kubelet/pods/* || true
                     
-                    # Optimize systemd service for faster startup
+                    # Quick systemd reload
                     systemctl daemon-reload
-                    
-                    # Pre-pull required container images to avoid download delays during kubelet-start
-                    crictl pull registry.k8s.io/pause:3.9 || true
-                    crictl pull registry.k8s.io/kube-proxy:v1.29.0 || true
                   when: is_kubelet_start_timeout | default(false)
                   register: kubelet_start_recovery
                   ignore_errors: yes
@@ -1898,58 +1876,27 @@
                 msg: "{{ kubelet_diagnostic.stdout }}"
               when: kubelet_diagnostic.stdout is defined
                   
-            - name: Wait before retry (extended for kubelet-start timeout recovery)
+            - name: Wait before retry
               pause:
-                seconds: 90
+                seconds: 60
                 
             - name: Enhanced kubelet service preparation for retry
               block:
-                - name: Stop kubelet and clear problematic state
+                - name: Clear problematic kubelet state for retry
                   shell: |
-                    # Stop kubelet service completely
+                    # Stop kubelet service
                     systemctl stop kubelet || true
                     
-                    # Clear kubelet state that may cause kubelet-start issues
+                    # Clear only problematic kubelet state - keep essential files
                     rm -f /var/lib/kubelet/kubeadm-flags.env || true
                     rm -f /var/lib/kubelet/config.yaml || true
-                    
-                    # Clear any kubelet plugins that might delay startup
-                    rm -rf /var/lib/kubelet/plugins_registry/* || true
                     
                     # Ensure kubelet directories have correct permissions
                     chmod -R 755 /var/lib/kubelet || true
                     chown -R root:root /var/lib/kubelet || true
                   ignore_errors: yes
                   
-                - name: Restart containerd to ensure optimal performance
-                  systemd:
-                    name: containerd
-                    state: restarted
-                  
-                - name: Wait for containerd to be fully ready
-                  wait_for:
-                    path: /var/run/containerd/containerd.sock
-                    timeout: 60
-                    
-                - name: Verify containerd can create containers quickly
-                  shell: |
-                    # Test that containerd can quickly create containers
-                    start_time=$(date +%s)
-                    timeout 30 crictl run --rm busybox:latest /bin/true || echo "Container creation test failed"
-                    end_time=$(date +%s)
-                    duration=$((end_time - start_time))
-                    echo "Container creation took ${duration} seconds"
-                    
-                    # If container creation is slow, restart containerd again
-                    if [ $duration -gt 10 ]; then
-                      echo "Container creation too slow, restarting containerd"
-                      systemctl restart containerd
-                      sleep 10
-                    fi
-                  register: containerd_performance_test
-                  ignore_errors: yes
-                  
-                - name: Reset kubeadm state after containerd optimization
+                - name: Reset kubeadm state for clean retry
                   shell: |
                     # Reset kubeadm state without removing containerd setup
                     kubeadm reset -f || true
@@ -1957,12 +1904,7 @@
                     rm -rf /etc/kubernetes/kubelet.conf /etc/kubernetes/pki/ || true
                   ignore_errors: yes
               
-            - name: Verify containerd is healthy before retry
-              systemd:
-                name: containerd
-                state: restarted
-                
-            - name: Wait for containerd socket
+            - name: Verify containerd is ready before retry
               wait_for:
                 path: /var/run/containerd/containerd.sock
                 timeout: 30
@@ -2004,10 +1946,10 @@
               systemd:
                 daemon_reload: yes
                 
-            - name: Attempt to join cluster (retry with enhanced kubelet-start timeout and optimization)
+            - name: Attempt to join cluster (retry with reasonable timeout)
               shell: |
-                # Retry join with maximum timeout and kubelet-start phase optimization
-                timeout 1200 /tmp/kubeadm-join.sh \
+                # Retry join with reasonable timeout - performance optimized
+                timeout 900 /tmp/kubeadm-join.sh \
                   --v=5 \
                   --node-name={{ inventory_hostname }} \
                   --skip-phases=addon/kube-proxy \
