@@ -55,11 +55,51 @@ fi
 echo ""
 info "Generating fresh join token and command..."
 
+# Validate certificates before generating join command
+info "Validating control plane certificates..."
+
+# Check API server certificate
+if [ ! -f "/etc/kubernetes/pki/apiserver.crt" ]; then
+    error "API server certificate not found at /etc/kubernetes/pki/apiserver.crt"
+    exit 1
+fi
+
+if ! openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -checkend 86400 >/dev/null 2>&1; then
+    error "API server certificate expires within 24 hours"
+    error "Run: kubeadm certs renew apiserver"
+    exit 1
+fi
+
+# Check CA certificate
+if [ ! -f "/etc/kubernetes/pki/ca.crt" ]; then
+    error "CA certificate not found at /etc/kubernetes/pki/ca.crt"
+    exit 1
+fi
+
+if ! openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -checkend 86400 >/dev/null 2>&1; then
+    error "CA certificate expires within 24 hours"
+    error "This requires cluster recovery - consult Kubernetes documentation"
+    exit 1
+fi
+
+success "✓ Certificates are valid and ready for worker joins"
+
 # Generate the join command
 JOIN_COMMAND=$(kubeadm token create --print-join-command 2>/dev/null)
 
 if [ $? -eq 0 ] && [ -n "$JOIN_COMMAND" ]; then
     success "Join command generated successfully!"
+    
+    # Validate the generated join command contains proper certificate hash
+    CA_HASH=$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //')
+    if [[ "$JOIN_COMMAND" == *"sha256:$CA_HASH"* ]]; then
+        success "✓ Join command contains correct CA certificate hash"
+    else
+        warn "⚠ Join command CA hash may not match current CA certificate"
+        warn "Expected: sha256:$CA_HASH"
+        warn "Generated: $(echo "$JOIN_COMMAND" | grep -o 'sha256:[a-f0-9]\{64\}')"
+    fi
+    
     echo ""
     echo "=== WORKER NODE JOIN COMMAND ==="
     echo "Run this command on each worker node as root:"
@@ -74,6 +114,16 @@ if [ $? -eq 0 ] && [ -n "$JOIN_COMMAND" ]; then
     info "Worker nodes should be able to reach this IP on port 6443"
     echo ""
     
+    # Test API server accessibility
+    info "Testing API server accessibility..."
+    if timeout 5 bash -c "</dev/tcp/$CONTROL_PLANE_IP/6443" 2>/dev/null; then
+        success "✓ API server port 6443 is accessible"
+    else
+        warn "⚠ API server port 6443 may not be accessible from this host"
+        warn "Ensure firewall allows access to port 6443"
+    fi
+    
+    echo ""
     echo "=== STEP-BY-STEP PROCEDURE ==="
     echo ""
     echo "1. ON WORKER NODE: Run the join command above as root"

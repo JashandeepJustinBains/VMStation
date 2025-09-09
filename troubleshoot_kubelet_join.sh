@@ -181,6 +181,89 @@ echo ""
 info "Recent kubelet logs (last 20 lines):"
 journalctl -u kubelet -n 20 --no-pager || true
 
+# 7. Certificate diagnostics
+echo ""
+echo "=== Certificate Diagnostics ==="
+if [ "$NODE_ROLE" = "control-plane" ]; then
+    info "Control plane certificate status:"
+    
+    # Check API server certificate
+    if [ -f "/etc/kubernetes/pki/apiserver.crt" ]; then
+        echo "✓ API server certificate exists"
+        if openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -checkend 86400 >/dev/null 2>&1; then
+            echo "✓ API server certificate is valid (expires > 24h)"
+            
+            # Show certificate SANs
+            echo "API server certificate SANs:"
+            openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -text | grep -A1 "Subject Alternative Name" | grep -E "IP Address|DNS" || echo "  No SANs found"
+        else
+            echo "❌ API server certificate expires within 24 hours!"
+            echo "   Fix: kubeadm certs renew apiserver"
+        fi
+    else
+        echo "❌ API server certificate missing"
+    fi
+    
+    # Check CA certificate
+    if [ -f "/etc/kubernetes/pki/ca.crt" ]; then
+        echo "✓ CA certificate exists"
+        if openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -checkend 86400 >/dev/null 2>&1; then
+            echo "✓ CA certificate is valid (expires > 24h)"
+            
+            # Show CA hash for join commands
+            CA_HASH=$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //')
+            echo "CA cert hash for joins: sha256:$CA_HASH"
+        else
+            echo "❌ CA certificate expires within 24 hours!"
+            echo "   This requires cluster recovery - consult Kubernetes documentation"
+        fi
+    else
+        echo "❌ CA certificate missing"
+    fi
+    
+    # Check if API server is accessible
+    API_SERVER_IP=$(grep -E "apiserver-advertise-address|control-plane-endpoint" /etc/kubernetes/manifests/kube-apiserver.yaml 2>/dev/null | grep -o '[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}' | head -1)
+    if [ -n "$API_SERVER_IP" ]; then
+        echo "API server IP: $API_SERVER_IP"
+        if timeout 5 bash -c "</dev/tcp/$API_SERVER_IP/6443" 2>/dev/null; then
+            echo "✓ API server port 6443 is accessible"
+        else
+            echo "❌ API server port 6443 not accessible"
+        fi
+    fi
+    
+else
+    info "Worker node certificate status:"
+    
+    # Check kubelet client certificate
+    if [ -f "/var/lib/kubelet/pki/kubelet-client-current.pem" ]; then
+        echo "✓ Kubelet client certificate exists"
+        if openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -noout -checkend 86400 >/dev/null 2>&1; then
+            echo "✓ Kubelet client certificate is valid"
+        else
+            echo "❌ Kubelet client certificate expires within 24 hours"
+            echo "   Fix: Rejoin the cluster"
+        fi
+    else
+        echo "⚠ Kubelet client certificate missing (may be normal before join)"
+    fi
+    
+    # Check if worker can reach API server
+    if [ -f "/etc/kubernetes/kubelet.conf" ]; then
+        API_SERVER=$(grep server: /etc/kubernetes/kubelet.conf | awk '{print $2}' | sed 's|https://||' | sed 's|/.*||')
+        if [ -n "$API_SERVER" ]; then
+            echo "API server from kubelet.conf: $API_SERVER"
+            if timeout 5 bash -c "</dev/tcp/${API_SERVER%:*}/${API_SERVER#*:}" 2>/dev/null; then
+                echo "✓ Can reach API server"
+            else
+                echo "❌ Cannot reach API server"
+            fi
+        fi
+    else
+        echo "⚠ kubelet.conf missing - worker not joined"
+    fi
+fi
+
 echo ""
 echo "=== Verification Commands ==="
 info "Run these after applying fixes:"
