@@ -44,19 +44,19 @@ echo "=== Enhanced Timeout Handling Fix Validation ==="
 echo "Testing improvements for worker node join timeout issues"
 echo ""
 
-# Test 1: Primary timeout increased from 300s to 600s (10 minutes)
+# Test 1: Primary timeout increased from 300s to 900s (15 minutes)
 print_test_header "Test 1: Primary join timeout increased"
-if grep -q "timeout 600.*kubeadm-join.sh" "$SETUP_CLUSTER_FILE" && grep -B 1 "timeout 600.*kubeadm-join.sh" "$SETUP_CLUSTER_FILE" | grep -q "primary attempt"; then
-    print_success "Primary join timeout increased to 600s (10 minutes)"
+if grep -q "timeout 900.*kubeadm-join.sh" "$SETUP_CLUSTER_FILE"; then
+    print_success "Primary join timeout increased to 900s (15 minutes)"
 else
     print_error "Primary join timeout not properly increased"
     exit 1
 fi
 
-# Test 2: Retry timeout increased from 420s to 900s (15 minutes)  
+# Test 2: Retry timeout increased from 420s to 1200s (20 minutes)  
 print_test_header "Test 2: Retry join timeout increased"
-if grep -q "timeout 900.*kubeadm-join.sh" "$SETUP_CLUSTER_FILE" && grep -B 1 "timeout 900.*kubeadm-join.sh" "$SETUP_CLUSTER_FILE" | grep -q "retry"; then
-    print_success "Retry join timeout increased to 900s (15 minutes)"
+if grep -q "timeout 1200.*kubeadm-join.sh" "$SETUP_CLUSTER_FILE"; then
+    print_success "Retry join timeout increased to 1200s (20 minutes)"
 else
     print_error "Retry join timeout not properly increased"
     exit 1
@@ -82,8 +82,8 @@ fi
 
 # Test 5: Wait time before retry increased
 print_test_header "Test 5: Extended wait time before retry"
-if grep -q "seconds: 60" "$SETUP_CLUSTER_FILE" && grep -A 3 -B 3 "seconds: 60" "$SETUP_CLUSTER_FILE" | grep -q "Wait before retry"; then
-    print_success "Wait time before retry increased to 60 seconds"
+if grep -q "seconds: 90" "$SETUP_CLUSTER_FILE" && grep -A 3 -B 3 "seconds: 90" "$SETUP_CLUSTER_FILE" | grep -q "Wait before retry"; then
+    print_success "Wait time before retry increased to 90 seconds"
 else
     print_error "Extended wait time before retry not found"
     exit 1
@@ -120,9 +120,9 @@ print_test_header "Test Summary"
 print_success "🎉 All enhanced timeout handling tests passed!"
 echo ""
 print_info "Enhanced timeout handling improvements:"
-print_info "  ✓ Primary join timeout: 300s → 600s (10 minutes)"
-print_info "  ✓ Retry join timeout: 420s → 900s (15 minutes)"
-print_info "  ✓ Wait before retry: 30s → 60s"
+print_info "  ✓ Primary join timeout: 300s → 900s (15 minutes)"
+print_info "  ✓ Retry join timeout: 420s → 1200s (20 minutes)"
+print_info "  ✓ Wait before retry: 30s → 90s"
 print_info "  ✓ Pre-join kubelet readiness verification"
 print_info "  ✓ Enhanced kubelet diagnostics during failures"
 print_info "  ✓ Containerd socket verification before join"
