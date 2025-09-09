@@ -202,12 +202,46 @@
             mode: '0644'
             remote_src: yes
 
+    - name: "Open firewall ports for Kubernetes"
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "6443/tcp"    # API server
+        - "10250/tcp"   # Kubelet
+        - "10251/tcp"   # kube-scheduler
+        - "10252/tcp"   # kube-controller-manager
+        - "8472/udp"    # Flannel VXLAN
+      failed_when: false
+      when: ansible_os_family == 'RedHat'
+
     - name: "Install Flannel CNI"
       shell: |
         kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      when: kubeadm_init is changed
+      register: flannel_install
+      retries: 3
+      delay: 10
+      until: flannel_install.rc == 0
+
+    - name: "Wait for API server to be ready"
+      wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 6443
+        timeout: 300
+        delay: 10
+      
+    - name: "Verify API server accessibility using kubectl"
+      shell: kubectl get nodes --request-timeout=10s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: api_health
+      retries: 10
+      delay: 15
+      until: api_health.rc == 0
 
     - name: "Validate kubernetes-admin RBAC permissions"
       shell: >
@@ -254,6 +288,8 @@
 
     - name: "Generate join command"
       shell: kubeadm token create --print-join-command
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
       retries: 3
       delay: 10
@@ -269,17 +305,40 @@
 - name: "Join Worker Nodes"
   hosts: storage_nodes:compute_nodes
   become: true
+  vars:
+    control_plane_ip: "{{ groups['monitoring_nodes'][0] }}"
   tasks:
     - name: "Check if node is joined"
       stat:
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
+    - name: "Open firewall ports for worker nodes"
+      firewalld:
+        port: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - "10250/tcp"   # Kubelet
+        - "8472/udp"    # Flannel VXLAN
+      failed_when: false
+      when: 
+        - ansible_os_family == 'RedHat'
+        - not kubelet_conf.stat.exists
+
+    - name: "Test connectivity to control plane API server"
+      wait_for:
+        host: "{{ control_plane_ip }}"
+        port: 6443
+        timeout: 60
+      when: not kubelet_conf.stat.exists
+
     - name: "Copy join command from control plane"
       slurp:
         src: /tmp/kubeadm-join.sh
       register: join_command_content
-      delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+      delegate_to: "{{ control_plane_ip }}"
       when: not kubelet_conf.stat.exists
       
     - name: "Write join command to worker"
@@ -289,8 +348,22 @@
         mode: '0755'
       when: not kubelet_conf.stat.exists
 
-    - name: "Join cluster"
+    - name: "Join cluster with retry logic"
       shell: /tmp/kubeadm-join.sh
+      register: join_result
+      retries: 3
+      delay: 30
+      until: join_result.rc == 0
+      when: not kubelet_conf.stat.exists
+
+    - name: "Display join result"
+      debug:
+        msg: |
+          Join attempt result:
+          Return code: {{ join_result.rc | default('N/A') }}
+          {% if join_result.stderr is defined %}
+          Error output: {{ join_result.stderr }}
+          {% endif %}
       when: not kubelet_conf.stat.exists
 
     - name: "Remove join command"
