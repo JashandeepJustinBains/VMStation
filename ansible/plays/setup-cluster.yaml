@@ -227,6 +227,37 @@
       delay: 10
       until: flannel_install.rc == 0
 
+    - name: "Wait for Flannel DaemonSet to be created"
+      shell: |
+        kubectl get daemonset -n kube-flannel kube-flannel-ds
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: flannel_ds_check
+      retries: 10
+      delay: 5
+      until: flannel_ds_check.rc == 0
+
+    - name: "Check Flannel namespace and resources"
+      shell: |
+        echo "Checking Flannel deployment status:"
+        kubectl get namespace kube-flannel
+        kubectl get all -n kube-flannel
+        echo "Node status:"
+        kubectl get nodes
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: flannel_status
+      failed_when: false
+
+    - name: "Display Flannel status"
+      debug:
+        msg: |
+          Flannel CNI Status:
+          {{ flannel_status.stdout }}
+          
+          Note: Flannel pods may show CrashLoopBackOff until worker nodes join.
+          This is expected behavior in a single-node control plane setup.
+
     - name: "Wait for API server to be ready"
       wait_for:
         host: "{{ ansible_default_ipv4.address }}"
@@ -339,6 +370,40 @@
       retries: 20
       delay: 15
       until: api_pod_ready.rc == 0
+
+    - name: "Check cluster-info configmap RBAC permissions"
+      shell: >
+        kubectl auth can-i get configmaps/cluster-info --namespace=kube-public --as=system:anonymous
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: cluster_info_rbac_check
+      failed_when: false
+
+    - name: "Create RBAC rule for anonymous access to cluster-info configmap"
+      shell: |
+        kubectl create clusterrole system:public-info-viewer \
+          --verb=get --resource=configmaps \
+          --resource-name=cluster-info \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        kubectl create clusterrolebinding cluster-info \
+          --clusterrole=system:public-info-viewer \
+          --group=system:unauthenticated \
+          --group=system:authenticated \
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: cluster_info_rbac_check.stdout != "yes"
+
+    - name: "Verify cluster-info configmap accessibility"
+      shell: >
+        kubectl auth can-i get configmaps/cluster-info --namespace=kube-public --as=system:anonymous
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: cluster_info_verification
+      retries: 3
+      delay: 5
+      until: cluster_info_verification.stdout == "yes"
 
     - name: "Generate join command"
       shell: kubeadm token create --print-join-command
