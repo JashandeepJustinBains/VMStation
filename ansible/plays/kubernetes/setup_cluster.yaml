@@ -1396,6 +1396,35 @@
           set_fact:
             flannel_cni_dest: /opt/cni/bin/flannel
 
+        - name: Clean up any incorrect Flannel CNI state (fix directory conflicts)
+          shell: |
+            if [ -d "{{ flannel_cni_dest }}" ]; then
+              echo "Found flannel directory at {{ flannel_cni_dest }}, removing it..."
+              rm -rf "{{ flannel_cni_dest }}"
+            fi
+            
+            if [ -f "{{ flannel_cni_dest }}" ] && [ ! -x "{{ flannel_cni_dest }}" ]; then
+              echo "Found non-executable flannel file at {{ flannel_cni_dest }}, removing it..."
+              rm -f "{{ flannel_cni_dest }}"
+            fi
+            
+            if [ -f "{{ flannel_cni_dest }}" ]; then
+              size=$(stat -c%s "{{ flannel_cni_dest }}" 2>/dev/null || echo 0)
+              if [ "$size" -lt 1000000 ]; then
+                echo "Found suspiciously small flannel file ($size bytes), removing it..."
+                rm -f "{{ flannel_cni_dest }}"
+              else
+                echo "Valid flannel binary found at {{ flannel_cni_dest }} ($size bytes), keeping it"
+              fi
+            fi
+          register: flannel_cleanup_result
+          changed_when: "'removing' in flannel_cleanup_result.stdout"
+
+        - name: Display Flannel cleanup results
+          debug:
+            var: flannel_cleanup_result.stdout_lines
+          when: flannel_cleanup_result.stdout != ""
+
         - name: Pre-download validation for Flannel CNI binary
           shell: |
             # Ensure target directory exists and is writable
@@ -1609,6 +1638,51 @@
             group: root
           when: flannel_binary_check.stat.exists
 
+        - name: Final validation of Flannel CNI binary installation
+          block:
+            - name: Verify Flannel binary is properly installed and executable
+              shell: |
+                if [ ! -f "{{ flannel_cni_dest }}" ]; then
+                  echo "ERROR: Flannel binary not found at {{ flannel_cni_dest }}"
+                  exit 1
+                fi
+                
+                if [ ! -x "{{ flannel_cni_dest }}" ]; then
+                  echo "ERROR: Flannel binary at {{ flannel_cni_dest }} is not executable"
+                  exit 1
+                fi
+                
+                size=$(stat -c%s "{{ flannel_cni_dest }}" 2>/dev/null || echo 0)
+                if [ "$size" -lt 1000000 ]; then
+                  echo "ERROR: Flannel binary at {{ flannel_cni_dest }} is too small ($size bytes)"
+                  exit 1
+                fi
+                
+                if ! file "{{ flannel_cni_dest }}" | grep -q "ELF.*executable"; then
+                  echo "ERROR: Flannel binary at {{ flannel_cni_dest }} is not a valid ELF executable"
+                  exit 1
+                fi
+                
+                echo "SUCCESS: Flannel binary properly installed at {{ flannel_cni_dest }} ($size bytes)"
+                echo "File info: $(file "{{ flannel_cni_dest }}")"
+              register: flannel_final_validation
+              
+            - name: Display Flannel binary validation results
+              debug:
+                var: flannel_final_validation.stdout_lines
+
+        - name: Protect Flannel binary before CNI plugins installation
+          shell: |
+            # Backup flannel binary if it exists to prevent corruption during CNI plugins extraction
+            if [ -f "{{ flannel_cni_dest }}" ]; then
+              cp "{{ flannel_cni_dest }}" "/tmp/flannel-backup-$$"
+              echo "Flannel binary backed up to /tmp/flannel-backup-$$"
+            else
+              echo "WARNING: No Flannel binary found to backup"
+              exit 1
+            fi
+          register: flannel_backup_result
+
         - name: Download and install additional CNI plugins on worker nodes
           unarchive:
             src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
@@ -1622,6 +1696,43 @@
           retries: 3
           delay: 10
           until: cni_plugins_download is succeeded
+
+        - name: Restore and verify Flannel binary after CNI plugins installation
+          shell: |
+            # Check if Flannel binary still exists and is valid
+            if [ -f "{{ flannel_cni_dest }}" ] && [ -x "{{ flannel_cni_dest }}" ]; then
+              size=$(stat -c%s "{{ flannel_cni_dest }}" 2>/dev/null || echo 0)
+              if [ "$size" -gt 1000000 ]; then
+                echo "Flannel binary survived CNI plugins installation ($size bytes)"
+                # Clean up backup
+                rm -f /tmp/flannel-backup-*
+                exit 0
+              fi
+            fi
+            
+            echo "Flannel binary was corrupted or removed during CNI plugins installation, restoring from backup..."
+            
+            # Find and restore backup
+            backup_file=$(ls -1 /tmp/flannel-backup-* 2>/dev/null | head -1)
+            if [ -n "$backup_file" ] && [ -f "$backup_file" ]; then
+              cp "$backup_file" "{{ flannel_cni_dest }}"
+              chmod 755 "{{ flannel_cni_dest }}"
+              chown root:root "{{ flannel_cni_dest }}"
+              rm -f /tmp/flannel-backup-*
+              echo "Flannel binary restored from backup"
+            else
+              echo "ERROR: No backup found to restore Flannel binary"
+              exit 1
+            fi
+          register: flannel_restore_result
+          changed_when: "'restored' in flannel_restore_result.stdout"
+
+        - name: Display Flannel protection results
+          debug:
+            msg: |
+              Flannel binary protection:
+              - Backup: {{ flannel_backup_result.stdout | default('Failed') }}
+              - Restore: {{ flannel_restore_result.stdout | default('Not needed') }}
 
         - name: Ensure /run/flannel directory exists on worker nodes
           file:
@@ -1966,7 +2077,32 @@
             - name: Check CNI plugins availability on this node
               shell: |
                 echo "CNI Plugin Status:"
-                ls -la /opt/cni/bin/ 2>/dev/null | grep -E "(flannel|bridge|portmap)" || echo "CNI plugins missing"
+                if [ -d /opt/cni/bin ]; then
+                  ls -la /opt/cni/bin/ 2>/dev/null | grep -E "(flannel|bridge|portmap)" || echo "CNI plugins missing"
+                  
+                  echo ""
+                  echo "Flannel Binary Validation:"
+                  if [ -f /opt/cni/bin/flannel ]; then
+                    if [ -x /opt/cni/bin/flannel ]; then
+                      size=$(stat -c%s /opt/cni/bin/flannel 2>/dev/null || echo 0)
+                      if [ "$size" -gt 1000000 ]; then
+                        echo "✅ Flannel binary is valid: executable file ($size bytes)"
+                      else
+                        echo "❌ Flannel binary is too small: $size bytes (corrupted)"
+                      fi
+                    else
+                      echo "❌ Flannel binary exists but is not executable"
+                    fi
+                  elif [ -d /opt/cni/bin/flannel ]; then
+                    echo "❌ CRITICAL: /opt/cni/bin/flannel is a directory, not a binary file!"
+                    echo "   This will cause CNI plugin failures. Requires cleanup and reinstallation."
+                  else
+                    echo "❌ Flannel binary not found at /opt/cni/bin/flannel"
+                  fi
+                else
+                  echo "❌ CNI bin directory /opt/cni/bin does not exist"
+                fi
+                
                 echo ""
                 echo "CNI Configuration:"
                 if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
@@ -2001,8 +2137,79 @@
                 cni_has_real_network: "{{ 'flannel' in (cni_runtime_check.stdout | default('')) or 'bridge' in (cni_runtime_check.stdout | default('')) }}"
                 cni_only_loopback: "{{ 'loopback' in (cni_runtime_check.stdout | default('')) and 'flannel' not in (cni_runtime_check.stdout | default('')) }}"
             
+            - name: Check Flannel binary status for enhanced remediation
+              shell: |
+                if [ -f /opt/cni/bin/flannel ] && [ -x /opt/cni/bin/flannel ]; then
+                  size=$(stat -c%s /opt/cni/bin/flannel 2>/dev/null || echo 0)
+                  if [ "$size" -gt 1000000 ]; then
+                    echo "flannel_binary_ok"
+                  else
+                    echo "flannel_binary_corrupted"
+                  fi
+                elif [ -d /opt/cni/bin/flannel ]; then
+                  echo "flannel_is_directory"
+                else
+                  echo "flannel_binary_missing"
+                fi
+              register: flannel_binary_status_check
+              ignore_errors: yes
+              failed_when: false
+            
+            - name: Set enhanced CNI status facts
+              set_fact:
+                flannel_binary_ok: "{{ flannel_binary_status_check.stdout == 'flannel_binary_ok' }}"
+                flannel_binary_missing: "{{ flannel_binary_status_check.stdout in ['flannel_binary_missing', 'flannel_binary_corrupted', 'flannel_is_directory'] }}"
+                flannel_is_directory: "{{ flannel_binary_status_check.stdout == 'flannel_is_directory' }}"
+                needs_flannel_reinstall: "{{ cni_only_loopback | bool or flannel_binary_status_check.stdout in ['flannel_binary_missing', 'flannel_binary_corrupted', 'flannel_is_directory'] }}"
+
             - name: Apply Flannel remediation if needed
               block:
+                - name: Fix Flannel binary issues on worker node if needed
+                  shell: |
+                    echo "Flannel binary status: {{ flannel_binary_status_check.stdout }}"
+                    
+                    # Remove invalid flannel state
+                    if [ -d /opt/cni/bin/flannel ]; then
+                      echo "Removing flannel directory..."
+                      rm -rf /opt/cni/bin/flannel
+                    elif [ -f /opt/cni/bin/flannel ] && [ ! -x /opt/cni/bin/flannel ]; then
+                      echo "Removing non-executable flannel file..."
+                      rm -f /opt/cni/bin/flannel
+                    fi
+                    
+                    # Download flannel binary if missing or corrupted
+                    if [ ! -f /opt/cni/bin/flannel ] || [ ! -x /opt/cni/bin/flannel ]; then
+                      echo "Downloading Flannel binary..."
+                      if curl -fsSL --connect-timeout 30 --max-time 300 --retry 2 \
+                        "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64" \
+                        -o /opt/cni/bin/flannel; then
+                        chmod 755 /opt/cni/bin/flannel
+                        chown root:root /opt/cni/bin/flannel
+                        echo "Flannel binary downloaded successfully"
+                      else
+                        echo "ERROR: Failed to download Flannel binary"
+                        exit 1
+                      fi
+                    fi
+                    
+                    # Verify the binary is now OK
+                    if [ -f /opt/cni/bin/flannel ] && [ -x /opt/cni/bin/flannel ]; then
+                      size=$(stat -c%s /opt/cni/bin/flannel 2>/dev/null || echo 0)
+                      echo "Flannel binary verification: $size bytes"
+                      if [ "$size" -gt 1000000 ]; then
+                        echo "SUCCESS: Flannel binary is now properly installed"
+                      else
+                        echo "ERROR: Flannel binary is still too small after download"
+                        exit 1
+                      fi
+                    else
+                      echo "ERROR: Flannel binary is still not properly installed"
+                      exit 1
+                    fi
+                  when: flannel_binary_missing | bool
+                  register: flannel_binary_remediation
+                  ignore_errors: yes
+
                 - name: Reapply Flannel on control plane if CNI only shows loopback
                   shell: |
                     echo "Reapplying Flannel CNI to resolve loopback-only issue..."
@@ -2023,7 +2230,7 @@
                   register: cni_runtime_recheck
                   ignore_errors: yes
                   failed_when: false
-              when: cni_only_loopback | bool
+              when: needs_flannel_reinstall | bool
             
             - name: Display comprehensive CNI readiness status
               debug:
@@ -2032,6 +2239,7 @@
                   - Flannel config exists: {{ final_cni_check.stat.exists }}
                   - CNI runtime shows real network: {{ cni_has_real_network | default(false) }}
                   - CNI only shows loopback: {{ cni_only_loopback | default(true) }}
+                  - Flannel binary status: {{ flannel_binary_status_check.stdout | default('not checked') }}
                   
                   === Control Plane Flannel Status ===
                   {{ flannel_status_check.stdout | default('Not checked') }}
@@ -2049,10 +2257,32 @@
                   Initial check: {{ cni_runtime_check.stdout | default('not performed') }}
                   {% endif %}
                   
-                  {% if cni_only_loopback | default(true) %}
-                  ⚠️  WARNING: CNI runtime only shows loopback plugin. This means:
+                  {% if flannel_binary_remediation is defined and flannel_binary_remediation.changed %}
+                  === Flannel Binary Remediation ===
+                  {{ flannel_binary_remediation.stdout | default('Remediation attempted') }}
+                  
+                  {% endif %}
+                  {% if not (flannel_binary_ok | default(false)) and (flannel_is_directory | default(false)) %}
+                  🚨 CRITICAL ISSUE: Flannel binary is a directory, not an executable file!
+                  
+                  This is the root cause of the kubelet join timeout. The CNI plugin cannot execute
+                  because /opt/cni/bin/flannel is a directory instead of the Flannel binary.
+                  
+                  Resolution: The remediation above should have fixed this. If join still fails:
+                  1. SSH to the worker node
+                  2. Run: rm -rf /opt/cni/bin/flannel
+                  3. Run: curl -fsSL https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64 -o /opt/cni/bin/flannel
+                  4. Run: chmod 755 /opt/cni/bin/flannel
+                  5. Retry kubelet join
+                  
+                  {% elif cni_only_loopback | default(true) or not (flannel_binary_ok | default(false)) %}
+                  ⚠️  WARNING: CNI issues detected:
+                  - CNI runtime only shows loopback: {{ cni_only_loopback | default('unknown') }}
+                  - Flannel binary OK: {{ flannel_binary_ok | default('unknown') }}
+                  
+                  This means:
                   - No real network plugin (Flannel) is active
-                  - Pod networking may not function properly
+                  - Pod networking may not function properly  
                   - kubelet join may succeed but pods will use only loopback
                   
                   Recommended actions:
