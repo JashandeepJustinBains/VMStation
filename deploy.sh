@@ -65,6 +65,28 @@ case "${1:-full}" in
         info "Deploying Jellyfin only..."
         ansible-playbook -i "$INVENTORY" ansible/plays/jellyfin.yml
         ;;
+    "spindown")
+        warn "WARNING: This will completely remove Kubernetes and container infrastructure!"
+        echo "This action will:"
+        echo "  - Stop all Kubernetes services and containers"
+        echo "  - Remove all Kubernetes packages and data"
+        echo "  - Clean up network interfaces and iptables rules"
+        echo "  - Remove container runtimes and configurations"
+        echo "  - Clean up user configurations and caches"
+        echo
+        read -p "Are you sure you want to proceed? Type 'yes' to continue: " confirm
+        if [ "$confirm" = "yes" ]; then
+            info "Proceeding with destructive spindown..."
+            ansible-playbook -i "$INVENTORY" ansible/subsites/00-spindown.yaml -e confirm_spindown=true
+        else
+            info "Spindown cancelled."
+            exit 0
+        fi
+        ;;
+    "spindown-check")
+        info "Running spindown in check mode (safe dry-run)..."
+        ansible-playbook -i "$INVENTORY" ansible/subsites/00-spindown.yaml --check
+        ;;
     "full"|"")
         info "Deploying complete VMStation stack..."
         ansible-playbook -i "$INVENTORY" ansible/simple-deploy.yaml
@@ -74,14 +96,16 @@ case "${1:-full}" in
         ansible-playbook -i "$INVENTORY" ansible/simple-deploy.yaml --check
         ;;
     *)
-        echo "Usage: $0 [cluster|apps|jellyfin|full|check]"
+        echo "Usage: $0 [cluster|apps|jellyfin|full|check|spindown|spindown-check]"
         echo
         echo "Options:"
-        echo "  cluster  - Deploy Kubernetes cluster only"
-        echo "  apps     - Deploy applications only (requires existing cluster)"
-        echo "  jellyfin - Deploy Jellyfin only"
-        echo "  full     - Deploy complete stack (default)"
-        echo "  check    - Run in check mode (dry run)"
+        echo "  cluster       - Deploy Kubernetes cluster only"
+        echo "  apps          - Deploy applications only (requires existing cluster)"
+        echo "  jellyfin      - Deploy Jellyfin only"
+        echo "  full          - Deploy complete stack (default)"
+        echo "  check         - Run in check mode (dry run)"
+        echo "  spindown      - DESTRUCTIVE: Remove all Kubernetes infrastructure"
+        echo "  spindown-check - Show what spindown would remove (safe)"
         exit 1
         ;;
 esac

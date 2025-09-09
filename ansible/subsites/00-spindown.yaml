@@ -418,6 +418,22 @@
         fi
       ignore_errors: true
 
+    - name: Clean up container image stores and overlayfs mounts
+      ansible.builtin.shell: |
+        echo "Cleaning up container storage overlays..."
+        # Unmount any overlay filesystems
+        mount | grep overlay | awk '{print $3}' | xargs -r umount -l 2>/dev/null || true
+        
+        # Clean up container storage
+        rm -rf /var/lib/containers/storage/overlay* 2>/dev/null || true
+        rm -rf /var/lib/containers/storage/vfs* 2>/dev/null || true
+        
+        # Clean up containerd storage
+        rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/* 2>/dev/null || true
+        
+        echo "Container storage cleanup completed"
+      ignore_errors: true
+
     # === Registry Configuration Cleanup ===
     - name: Remove Podman registry configuration
       ansible.builtin.file:
@@ -492,9 +508,195 @@
         state: absent
       ignore_errors: true
 
+    # === Network and iptables cleanup ===
+    - name: Clean up iptables rules related to Kubernetes and containers
+      ansible.builtin.shell: |
+        echo "Cleaning up iptables rules..."
+        
+        # Clean up Kubernetes chains
+        iptables -t nat -F KUBE-SERVICES 2>/dev/null || true
+        iptables -t nat -X KUBE-SERVICES 2>/dev/null || true
+        iptables -t nat -F KUBE-NODEPORTS 2>/dev/null || true
+        iptables -t nat -X KUBE-NODEPORTS 2>/dev/null || true
+        iptables -t nat -F KUBE-POSTROUTING 2>/dev/null || true
+        iptables -t nat -X KUBE-POSTROUTING 2>/dev/null || true
+        iptables -t nat -F KUBE-MARK-MASQ 2>/dev/null || true
+        iptables -t nat -X KUBE-MARK-MASQ 2>/dev/null || true
+        
+        # Clean up filter chains
+        iptables -t filter -F KUBE-FORWARD 2>/dev/null || true
+        iptables -t filter -X KUBE-FORWARD 2>/dev/null || true
+        iptables -t filter -F KUBE-FIREWALL 2>/dev/null || true
+        iptables -t filter -X KUBE-FIREWALL 2>/dev/null || true
+        
+        # Clean up CNI related rules
+        iptables -t nat -F CNI-* 2>/dev/null || true
+        iptables -t nat -X CNI-* 2>/dev/null || true
+        iptables -t filter -F CNI-* 2>/dev/null || true
+        iptables -t filter -X CNI-* 2>/dev/null || true
+        
+        # Clean up FLANNEL chains
+        iptables -t nat -F FLANNEL 2>/dev/null || true
+        iptables -t nat -X FLANNEL 2>/dev/null || true
+        iptables -t filter -F FLANNEL 2>/dev/null || true
+        iptables -t filter -X FLANNEL 2>/dev/null || true
+        
+        echo "iptables cleanup completed"
+      ignore_errors: true
+
+    - name: Clean up routing tables and IP routes
+      ansible.builtin.shell: |
+        echo "Cleaning up IP routes..."
+        
+        # Remove pod network routes (10.244.0.0/16 is common Flannel range)
+        ip route del 10.244.0.0/16 2>/dev/null || true
+        
+        # Remove any routes pointing to CNI interfaces
+        ip route show | grep -E "(cni0|cbr0|flannel)" | while read route; do
+          echo "Removing route: $route"
+          ip route del $route 2>/dev/null || true
+        done
+        
+        # Flush any remaining routes in custom tables
+        for table in $(ip route show table all | grep -o 'table [0-9]*' | cut -d' ' -f2 | sort -u); do
+          if [ "$table" -gt 255 ]; then  # Custom tables are usually > 255
+            echo "Flushing routing table $table"
+            ip route flush table "$table" 2>/dev/null || true
+          fi
+        done
+        
+        echo "IP route cleanup completed"
+      ignore_errors: true
+
+    # === Systemd and service cleanup ===
+    - name: Clean up systemd drop-in directories and overrides
+      ansible.builtin.shell: |
+        echo "Cleaning up systemd drop-ins and overrides..."
+        
+        # Remove kubelet drop-ins
+        rm -rf /etc/systemd/system/kubelet.service.d/ 2>/dev/null || true
+        rm -rf /usr/lib/systemd/system/kubelet.service.d/ 2>/dev/null || true
+        
+        # Remove containerd drop-ins
+        rm -rf /etc/systemd/system/containerd.service.d/ 2>/dev/null || true
+        
+        # Remove docker drop-ins
+        rm -rf /etc/systemd/system/docker.service.d/ 2>/dev/null || true
+        
+        # Remove any VMStation-related timers or services
+        find /etc/systemd/system -name "*vmstation*" -o -name "*monitoring*" -o -name "*k8s*" -o -name "*kubernetes*" | xargs rm -f 2>/dev/null || true
+        
+        echo "systemd cleanup completed"
+      ignore_errors: true
+
+    # === User configuration cleanup ===
+    - name: Clean up user bash history and profiles related to VMStation
+      ansible.builtin.shell: |
+        echo "Cleaning up user configurations..."
+        
+        # Clean up root user configs
+        sed -i '/# VMStation/,/# End VMStation/d' /root/.bashrc 2>/dev/null || true
+        sed -i '/kubectl\|kubeadm\|docker\|podman/d' /root/.bash_history 2>/dev/null || true
+        
+        # Clean up other users that might have been used
+        for user_home in /home/*; do
+          if [ -d "$user_home" ]; then
+            user=$(basename "$user_home")
+            sed -i '/# VMStation/,/# End VMStation/d' "$user_home/.bashrc" 2>/dev/null || true
+            sed -i '/kubectl\|kubeadm\|docker\|podman/d' "$user_home/.bash_history" 2>/dev/null || true
+          fi
+        done
+        
+        echo "User configuration cleanup completed"
+      ignore_errors: true
+
+    # === Temporary and cache cleanup ===
+    - name: Clean up temporary files and caches
+      ansible.builtin.shell: |
+        echo "Cleaning up temporary files and caches..."
+        
+        # Clean up VMStation temp files
+        rm -rf /tmp/vmstation-* 2>/dev/null || true
+        rm -rf /tmp/k8s-* 2>/dev/null || true
+        rm -rf /tmp/kube-* 2>/dev/null || true
+        rm -rf /tmp/flannel-* 2>/dev/null || true
+        
+        # Clean up package manager caches
+        if command -v apt >/dev/null 2>&1; then
+          apt clean 2>/dev/null || true
+        fi
+        
+        if command -v yum >/dev/null 2>&1; then
+          yum clean all 2>/dev/null || true
+        fi
+        
+        # Clean up container-related caches
+        rm -rf /var/cache/containers/ 2>/dev/null || true
+        rm -rf /var/cache/docker/ 2>/dev/null || true
+        
+        echo "Cache cleanup completed"
+      ignore_errors: true
+
     - name: Inform operator - host cleanup completed
       ansible.builtin.debug:
         msg: "Host-level spin-down tasks completed on {{ inventory_hostname }}"
+
+    # === Final validation and cleanup report ===
+    - name: Validate cleanup completeness
+      ansible.builtin.shell: |
+        echo "=== Cleanup Validation Report for {{ inventory_hostname }} ==="
+        
+        # Check for remaining processes
+        echo "Checking for remaining Kubernetes/container processes..."
+        remaining_procs=$(ps aux | grep -E "(kube|docker|podman|containerd|etcd)" | grep -v grep || echo "None found")
+        if [ "$remaining_procs" = "None found" ]; then
+          echo "✓ No Kubernetes/container processes running"
+        else
+          echo "⚠ Remaining processes found:"
+          echo "$remaining_procs"
+        fi
+        
+        # Check for remaining network interfaces
+        echo ""
+        echo "Checking for remaining CNI interfaces..."
+        remaining_ifaces=$(ip link show | grep -E "(cni0|cbr0|flannel)" || echo "None found")
+        if [ "$remaining_ifaces" = "None found" ]; then
+          echo "✓ No CNI interfaces remaining"
+        else
+          echo "⚠ Remaining CNI interfaces:"
+          echo "$remaining_ifaces"
+        fi
+        
+        # Check for remaining mounts
+        echo ""
+        echo "Checking for remaining container/k8s mounts..."
+        remaining_mounts=$(mount | grep -E "(overlay|kubelet|docker|podman|containerd)" || echo "None found")
+        if [ "$remaining_mounts" = "None found" ]; then
+          echo "✓ No container/k8s mounts remaining"
+        else
+          echo "⚠ Remaining mounts:"
+          echo "$remaining_mounts"
+        fi
+        
+        # Check directory cleanup
+        echo ""
+        echo "Checking directory cleanup..."
+        for dir in /etc/kubernetes /var/lib/kubelet /var/lib/etcd /var/lib/containerd /etc/cni; do
+          if [ -d "$dir" ] && [ "$(ls -A "$dir" 2>/dev/null)" ]; then
+            echo "⚠ Directory $dir still contains files"
+          else
+            echo "✓ Directory $dir is clean or removed"
+          fi
+        done
+        
+        echo ""
+        echo "=== Cleanup validation completed ==="
+      register: cleanup_validation
+      ignore_errors: true
+    
+    - name: Display cleanup validation results
+      ansible.builtin.debug:
+        var: cleanup_validation.stdout_lines
 
 - name: 00-spindown - cluster control cleanup (localhost)
   hosts: all
