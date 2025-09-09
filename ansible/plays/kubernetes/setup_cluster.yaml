@@ -1509,6 +1509,46 @@
           register: download_tools_install
           when: not (skip_flannel_download | default(false))
 
+        - name: Validate download tools are available after installation
+          block:
+            - name: Check if curl is available
+              command: which curl
+              register: curl_check
+              failed_when: false
+              changed_when: false
+              
+            - name: Check if wget is available
+              command: which wget  
+              register: wget_check
+              failed_when: false
+              changed_when: false
+              
+            - name: Fail if no download tools are available for Flannel
+              fail:
+                msg: |
+                  No download tools (curl or wget) are available on {{ inventory_hostname }}.
+                  This will prevent Flannel binary download if the primary method fails.
+                  
+                  Tool availability:
+                  - curl: {{ 'AVAILABLE' if curl_check.rc == 0 else
+                             'NOT AVAILABLE' }}
+                  - wget: {{ 'AVAILABLE' if wget_check.rc == 0 else
+                             'NOT AVAILABLE' }}
+                  
+                  Package installation result: {{ download_tools_install }}
+                  
+                  Manual resolution required:
+                  1. Install curl: {{ 'yum install curl -y' if
+                                     ansible_os_family == 'RedHat' else
+                                     'apt-get install curl -y' }}
+                  2. Install wget: {{ 'yum install wget -y' if
+                                     ansible_os_family == 'RedHat' else
+                                     'apt-get install wget -y' }}
+                  3. Retry the playbook
+              when: curl_check.rc != 0 and wget_check.rc != 0
+              
+          when: not (skip_flannel_download | default(false))
+
         - name: Download and install Flannel CNI plugin binary (primary method)
           get_url:
             url: "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64"
