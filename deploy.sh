@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# VMStation Simplified Deployment Script
+# Replaces the complex update_and_deploy.sh with clean, minimal deployment
+
+set -e
+
+echo "=== VMStation Simplified Deployment ==="
+echo "Timestamp: $(date)"
+echo
+
+# Color output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Navigate to script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Configuration
+INVENTORY="ansible/inventory.txt"
+CONFIG_FILE="ansible/group_vars/all.yml"
+
+info "Simplified VMStation deployment starting..."
+
+# Create config from template if needed
+if [ ! -f "$CONFIG_FILE" ]; then
+    if [ -f "ansible/group_vars/all.yml.template" ]; then
+        info "Creating config from template..."
+        cp ansible/group_vars/all.yml.template "$CONFIG_FILE"
+    else
+        error "No configuration template found"
+        exit 1
+    fi
+fi
+
+# Check basic requirements
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+    error "ansible-playbook not found. Please install Ansible."
+    exit 1
+fi
+
+if [ ! -f "$INVENTORY" ]; then
+    error "Inventory file not found: $INVENTORY"
+    exit 1
+fi
+
+# Deployment options
+case "${1:-full}" in
+    "cluster")
+        info "Deploying Kubernetes cluster only..."
+        ansible-playbook -i "$INVENTORY" ansible/plays/setup-cluster.yaml
+        ;;
+    "apps")
+        info "Deploying applications only..."
+        ansible-playbook -i "$INVENTORY" ansible/plays/deploy-apps.yaml
+        ;;
+    "jellyfin")
+        info "Deploying Jellyfin only..."
+        ansible-playbook -i "$INVENTORY" ansible/plays/jellyfin.yml
+        ;;
+    "full"|"")
+        info "Deploying complete VMStation stack..."
+        ansible-playbook -i "$INVENTORY" ansible/simple-deploy.yaml
+        ;;
+    "check")
+        info "Running deployment checks..."
+        ansible-playbook -i "$INVENTORY" ansible/simple-deploy.yaml --check
+        ;;
+    *)
+        echo "Usage: $0 [cluster|apps|jellyfin|full|check]"
+        echo
+        echo "Options:"
+        echo "  cluster  - Deploy Kubernetes cluster only"
+        echo "  apps     - Deploy applications only (requires existing cluster)"
+        echo "  jellyfin - Deploy Jellyfin only"
+        echo "  full     - Deploy complete stack (default)"
+        echo "  check    - Run in check mode (dry run)"
+        exit 1
+        ;;
+esac
+
+info "Deployment completed successfully!"
+echo
+info "Access URLs:"
+info "  - Grafana: http://192.168.4.63:30300"
+info "  - Prometheus: http://192.168.4.63:30090"
+info "  - Jellyfin: http://192.168.4.61:30096"
+
+echo
+info "To check status: kubectl get pods --all-namespaces"
