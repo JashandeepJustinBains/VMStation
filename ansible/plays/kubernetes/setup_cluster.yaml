@@ -707,6 +707,10 @@
             rm -rf /var/lib/kubelet/cache/* || true
             # Reset kubelet configuration if corrupted
             rm -rf /var/lib/kubelet/kubeconfig || true
+            # Remove any existing systemd drop-in files that might have deprecated flags
+            rm -f /etc/systemd/system/kubelet.service.d/10-kubeadm.conf || true
+            # Remove any existing sysconfig/kubelet that might have deprecated flags  
+            rm -f /etc/sysconfig/kubelet || true
           ignore_errors: yes
 
         # Removed: Create minimal kubelet config to allow startup (control plane)
@@ -773,6 +777,10 @@
                 dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
                 mode: '0644'
               when: not recovery_kubelet_conf_check.stat.exists
+              
+            - name: Reload systemd daemon after updating drop-in configuration
+              systemd:
+                daemon_reload: yes
                 
             # Removed: Create kubelet kubeadm flags file to prevent environment variable warnings
             # This task was causing kubeadm join failures by creating a static kubeadm-flags.env
