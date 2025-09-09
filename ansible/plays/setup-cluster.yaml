@@ -158,7 +158,6 @@
         --pod-network-cidr={{ pod_network_cidr }}
         --apiserver-advertise-address={{ ansible_default_ipv4.address }}
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
-        --authorization-mode={{ auth_mode }}
       when: not kubeconfig.stat.exists
       register: kubeadm_init
       ignore_errors: "{{ enable_fallback | bool }}"
@@ -169,7 +168,6 @@
         --pod-network-cidr={{ pod_network_cidr }}
         --apiserver-advertise-address={{ ansible_default_ipv4.address }}
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
-        --authorization-mode=AlwaysAllow
       when: 
         - not kubeconfig.stat.exists
         - enable_fallback | bool
