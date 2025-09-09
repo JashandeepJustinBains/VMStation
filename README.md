@@ -272,6 +272,41 @@ kubectl get pods -n monitoring
 ./scripts/validate_rhel10_fixes.sh
 ```
 
+### Worker Node Join Issues Fix
+If worker nodes fail to join the cluster with kubelet errors:
+
+```bash
+# On any node, run the diagnostic script
+sudo ./troubleshoot_kubelet_join.sh
+
+# On control plane, generate fresh join command
+./generate_join_command.sh
+
+# Common issues resolved:
+# - Missing /etc/kubernetes/kubelet.conf
+# - Missing /var/lib/kubelet/config.yaml  
+# - Deprecated --network-plugin flags
+```
+
+**Manual Recovery Steps (if automated join fails)**:
+```bash
+# 1. On control plane: Generate join command
+kubeadm token create --print-join-command
+
+# 2. On worker: Execute join command as root
+sudo kubeadm join <CONTROL_PLANE>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>
+
+# 3. On control plane: Approve CSRs
+kubectl get csr
+kubectl certificate approve <CSR_NAME>
+
+# 4. On worker: Restart kubelet
+sudo systemctl restart kubelet
+
+# 5. Verify join successful
+kubectl get nodes -o wide
+```
+
 ## Infrastructure Overview
 
 ### Kubernetes Cluster
