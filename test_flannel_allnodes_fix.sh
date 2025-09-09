@@ -76,8 +76,25 @@ else
     exit 1
 fi
 
-# Test 9: Verify Ansible syntax is valid
-echo "Test 9: Checking Ansible syntax..."
+# Test 9: Verify DaemonSet cleanup task is present
+echo "Test 9: Checking for DaemonSet cleanup task..."
+if grep -q "Delete existing Flannel DaemonSet if present" ansible/plays/kubernetes/setup_cluster.yaml; then
+    echo "✅ DaemonSet cleanup task found"
+    
+    # Verify it includes the correct kubectl delete command
+    if grep -A 5 "Delete existing Flannel DaemonSet if present" ansible/plays/kubernetes/setup_cluster.yaml | grep -q "kubectl delete daemonset kube-flannel-ds -n kube-flannel"; then
+        echo "✅ DaemonSet cleanup command is correct"
+    else
+        echo "❌ DaemonSet cleanup command is incorrect"
+        exit 1
+    fi
+else
+    echo "❌ DaemonSet cleanup task missing"
+    exit 1
+fi
+
+# Test 10: Verify Ansible syntax is valid
+echo "Test 10: Checking Ansible syntax..."
 if ansible-playbook --syntax-check ansible/plays/kubernetes/setup_cluster.yaml >/dev/null 2>&1; then
     echo "✅ Ansible syntax check passed"
 else
@@ -94,8 +111,9 @@ echo "- Removed nodeSelector restriction to control-plane only"
 echo "- Removed control-plane node affinity requirement"
 echo "- Added general tolerations to allow running on worker nodes"
 echo "- Updated setup_cluster.yaml to use new manifest"
+echo "- Added DaemonSet cleanup task to handle immutable selector field"
 echo "- Updated comments to reflect all-nodes deployment"
 echo ""
 echo "This fix allows Flannel agents to run on all nodes (control plane and workers)"
-echo "to resolve 'cni plugin not initialized' errors while maintaining the existing"
-echo "CNI infrastructure setup on worker nodes."
+echo "to resolve 'cni plugin not initialized' errors and handles the DaemonSet"
+echo "selector immutability issue by deleting existing DaemonSets before applying updates."
