@@ -61,12 +61,12 @@ else
     exit 1
 fi
 
-# Test 5: Check for proper kubectl auth can-i usage
-echo "Test 5: Verify kubectl auth can-i usage for anonymous user"
-if grep -q "kubectl auth can-i get configmaps/cluster-info --namespace=kube-public --as=system:anonymous" "$SETUP_CLUSTER_FILE"; then
-    success "Proper kubectl auth can-i command found"
+# Test 5: Check for proper RBAC resource verification
+echo "Test 5: Verify RBAC resource verification method"
+if grep -q "kubectl get clusterrole system:public-info-viewer" "$SETUP_CLUSTER_FILE"; then
+    success "Proper RBAC resource verification found"
 else
-    error "Incorrect kubectl auth can-i command"
+    error "RBAC resource verification missing"
     exit 1
 fi
 
@@ -121,9 +121,9 @@ echo "=== All tests passed! ==="
 echo "The cluster-info RBAC fix has been correctly implemented."
 echo
 echo "Expected behavior after deployment:"
-echo "1. Control plane checks if anonymous users can access cluster-info configmap"
-echo "2. If not accessible, creates ClusterRole and ClusterRoleBinding"
-echo "3. Verifies that access is granted"
+echo "1. Control plane checks if RBAC resources exist for cluster-info access"
+echo "2. If not present, creates ClusterRole and ClusterRoleBinding"
+echo "3. Verifies that RBAC resources are properly created"
 echo "4. Worker nodes should now be able to join successfully"
 echo
 echo "This fix addresses the error:"
