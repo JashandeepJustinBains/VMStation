@@ -1471,7 +1471,7 @@
             mode: '0755'
             owner: root
             group: root
-            timeout: 60
+            timeout: 120
             validate_certs: false
             use_proxy: false
           register: flannel_download_primary
@@ -1480,6 +1480,17 @@
           until: flannel_download_primary is succeeded
           failed_when: false
 
+        - name: Clean up partial download if primary method failed
+          file:
+            path: "{{ flannel_cni_dest }}"
+            state: absent
+          when: flannel_download_primary is failed
+          
+        - name: Add delay before first fallback to avoid server overwhelm
+          pause:
+            seconds: 5
+          when: flannel_download_primary is failed
+
         - name: Download Flannel CNI plugin binary using curl fallback (first fallback)
           shell: |
             curl -fsSL --connect-timeout 30 --max-time 300 --retry 3 --retry-delay 5 \
@@ -1487,13 +1498,26 @@
               -o "{{ flannel_cni_dest }}"
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
-          args:
-            creates: "{{ flannel_cni_dest }}"
           when: flannel_download_primary is failed
           register: flannel_download_curl
           failed_when: false
           retries: 2
           delay: 15
+
+        - name: Clean up partial download if curl method failed
+          file:
+            path: "{{ flannel_cni_dest }}"
+            state: absent
+          when: 
+            - flannel_download_primary is failed
+            - flannel_download_curl is failed
+            
+        - name: Add delay before second fallback to avoid server overwhelm
+          pause:
+            seconds: 5
+          when: 
+            - flannel_download_primary is failed
+            - flannel_download_curl is failed or flannel_download_curl is skipped
 
         - name: Download Flannel CNI plugin binary using wget fallback (second fallback)
           shell: |
@@ -1502,8 +1526,6 @@
               "https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64"
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
-          args:
-            creates: "{{ flannel_cni_dest }}"
           when: 
             - flannel_download_primary is failed
             - flannel_download_curl is failed or flannel_download_curl is skipped
@@ -1511,6 +1533,23 @@
           failed_when: false
           retries: 2
           delay: 15
+
+        - name: Clean up partial download if wget method failed
+          file:
+            path: "{{ flannel_cni_dest }}"
+            state: absent
+          when: 
+            - flannel_download_primary is failed
+            - flannel_download_curl is failed or flannel_download_curl is skipped
+            - flannel_download_wget is failed or flannel_download_wget is skipped
+            
+        - name: Add delay before alternative version fallback
+          pause:
+            seconds: 5
+          when: 
+            - flannel_download_primary is failed
+            - flannel_download_curl is failed or flannel_download_curl is skipped
+            - flannel_download_wget is failed or flannel_download_wget is skipped
 
         - name: Alternative Flannel binary source (third fallback - different version if needed)
           shell: |
@@ -1532,8 +1571,6 @@
             fi
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
-          args:
-            creates: "{{ flannel_cni_dest }}"
           when: 
             - flannel_download_primary is failed
             - flannel_download_curl is failed or flannel_download_curl is skipped
