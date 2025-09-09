@@ -1396,6 +1396,45 @@
           set_fact:
             flannel_cni_dest: /opt/cni/bin/flannel
 
+        - name: Check if valid Flannel binary already exists (preserve pre-downloaded binaries)
+          shell: |
+            if [ -f "{{ flannel_cni_dest }}" ] && [ -x "{{ flannel_cni_dest }}" ]; then
+              size=$(stat -c%s "{{ flannel_cni_dest }}" 2>/dev/null || echo 0)
+              if [ "$size" -gt 1000000 ]; then
+                if file "{{ flannel_cni_dest }}" | grep -q "ELF.*executable"; then
+                  echo "valid_existing_binary"
+                  echo "Found existing valid Flannel binary ($size bytes) - skipping cleanup and download"
+                  exit 0
+                else
+                  echo "invalid_format"
+                fi
+              else
+                echo "too_small"
+              fi
+            elif [ -d "{{ flannel_cni_dest }}" ]; then
+              echo "is_directory"
+            elif [ -f "{{ flannel_cni_dest }}" ]; then
+              echo "not_executable"
+            else
+              echo "missing"
+            fi
+          register: flannel_existing_check
+          changed_when: false
+
+        - name: Set skip download flag if valid binary exists
+          set_fact:
+            skip_flannel_download: "{{ flannel_existing_check.stdout_lines[0] == 'valid_existing_binary' }}"
+
+        - name: Display existing Flannel binary status
+          debug:
+            msg: |
+              Existing Flannel binary check: {{ flannel_existing_check.stdout_lines[0] }}
+              {% if skip_flannel_download %}
+              ✓ Valid Flannel binary already exists - skipping cleanup and download
+              {% else %}
+              ⚠ Flannel binary needs cleanup/download ({{ flannel_existing_check.stdout_lines[0] }})
+              {% endif %}
+
         - name: Clean up any incorrect Flannel CNI state (fix directory conflicts)
           shell: |
             if [ -d "{{ flannel_cni_dest }}" ]; then
@@ -1419,11 +1458,15 @@
             fi
           register: flannel_cleanup_result
           changed_when: "'removing' in flannel_cleanup_result.stdout"
+          when: not (skip_flannel_download | default(false))
 
         - name: Display Flannel cleanup results
           debug:
             var: flannel_cleanup_result.stdout_lines
-          when: flannel_cleanup_result.stdout != ""
+          when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_cleanup_result is defined
+            - flannel_cleanup_result.stdout != ""
 
         - name: Pre-download validation for Flannel CNI binary
           shell: |
@@ -1454,6 +1497,7 @@
             fi
           register: flannel_pre_download_check
           failed_when: flannel_pre_download_check.rc != 0
+          when: not (skip_flannel_download | default(false))
 
         - name: Ensure download tools are available for Flannel installation
           package:
@@ -1463,6 +1507,7 @@
             state: present
           ignore_errors: yes
           register: download_tools_install
+          when: not (skip_flannel_download | default(false))
 
         - name: Download and install Flannel CNI plugin binary (primary method)
           get_url:
@@ -1479,17 +1524,24 @@
           delay: 10
           until: flannel_download_primary is succeeded
           failed_when: false
+          when: not (skip_flannel_download | default(false))
 
         - name: Clean up partial download if primary method failed
           file:
             path: "{{ flannel_cni_dest }}"
             state: absent
-          when: flannel_download_primary is failed
+          when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
+            - flannel_download_primary is failed
           
         - name: Add delay before first fallback to avoid server overwhelm
           pause:
             seconds: 5
-          when: flannel_download_primary is failed
+          when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
+            - flannel_download_primary is failed
 
         - name: Download Flannel CNI plugin binary using curl fallback (first fallback)
           shell: |
@@ -1498,7 +1550,10 @@
               -o "{{ flannel_cni_dest }}"
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
-          when: flannel_download_primary is failed
+          when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
+            - flannel_download_primary is failed
           register: flannel_download_curl
           failed_when: false
           retries: 2
@@ -1509,15 +1564,20 @@
             path: "{{ flannel_cni_dest }}"
             state: absent
           when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
             - flannel_download_primary is failed
+            - flannel_download_curl is defined
             - flannel_download_curl is failed
             
         - name: Add delay before second fallback to avoid server overwhelm
           pause:
             seconds: 5
           when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
             - flannel_download_primary is failed
-            - flannel_download_curl is failed or flannel_download_curl is skipped
+            - (flannel_download_curl is defined and (flannel_download_curl is failed or flannel_download_curl is skipped))
 
         - name: Download Flannel CNI plugin binary using wget fallback (second fallback)
           shell: |
@@ -1527,8 +1587,10 @@
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
           when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
             - flannel_download_primary is failed
-            - flannel_download_curl is failed or flannel_download_curl is skipped
+            - (flannel_download_curl is defined and (flannel_download_curl is failed or flannel_download_curl is skipped))
           register: flannel_download_wget
           failed_when: false
           retries: 2
@@ -1539,17 +1601,21 @@
             path: "{{ flannel_cni_dest }}"
             state: absent
           when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
             - flannel_download_primary is failed
-            - flannel_download_curl is failed or flannel_download_curl is skipped
-            - flannel_download_wget is failed or flannel_download_wget is skipped
+            - (flannel_download_curl is defined and (flannel_download_curl is failed or flannel_download_curl is skipped))
+            - (flannel_download_wget is defined and (flannel_download_wget is failed or flannel_download_wget is skipped))
             
         - name: Add delay before alternative version fallback
           pause:
             seconds: 5
           when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
             - flannel_download_primary is failed
-            - flannel_download_curl is failed or flannel_download_curl is skipped
-            - flannel_download_wget is failed or flannel_download_wget is skipped
+            - (flannel_download_curl is defined and (flannel_download_curl is failed or flannel_download_curl is skipped))
+            - (flannel_download_wget is defined and (flannel_download_wget is failed or flannel_download_wget is skipped))
 
         - name: Alternative Flannel binary source (third fallback - different version if needed)
           shell: |
@@ -1572,9 +1638,11 @@
             chmod 0755 "{{ flannel_cni_dest }}"
             chown root:root "{{ flannel_cni_dest }}"
           when: 
+            - not (skip_flannel_download | default(false))
+            - flannel_download_primary is defined
             - flannel_download_primary is failed
-            - flannel_download_curl is failed or flannel_download_curl is skipped
-            - flannel_download_wget is failed or flannel_download_wget is skipped
+            - (flannel_download_curl is defined and (flannel_download_curl is failed or flannel_download_curl is skipped))
+            - (flannel_download_wget is defined and (flannel_download_wget is failed or flannel_download_wget is skipped))
           register: flannel_download_alt
           failed_when: false
 
@@ -1589,10 +1657,15 @@
               debug:
                 msg: |
                   Flannel download diagnostics for {{ inventory_hostname }}:
-                  Primary method: {{ 'SUCCESS' if flannel_download_primary is succeeded else 'FAILED - ' + (flannel_download_primary.msg | default('Unknown error')) }}
-                  Curl fallback: {{ 'SUCCESS' if flannel_download_curl is succeeded else ('FAILED - ' + (flannel_download_curl.stderr | default('Unknown error'))) if flannel_download_curl is not skipped else 'SKIPPED' }}
-                  Wget fallback: {{ 'SUCCESS' if flannel_download_wget is succeeded else ('FAILED - ' + (flannel_download_wget.stderr | default('Unknown error'))) if flannel_download_wget is not skipped else 'SKIPPED' }}
-                  Alt version: {{ 'SUCCESS' if flannel_download_alt is succeeded else ('FAILED - ' + (flannel_download_alt.stderr | default('Unknown error'))) if flannel_download_alt is not skipped else 'SKIPPED' }}
+                  {% if skip_flannel_download | default(false) %}
+                  Status: SKIPPED - Valid pre-existing binary found
+                  Pre-existing binary check: {{ flannel_existing_check.stdout_lines[0] | default('unknown') }}
+                  {% else %}
+                  Primary method: {{ 'SUCCESS' if flannel_download_primary is succeeded else 'FAILED - ' + (flannel_download_primary.msg | default('Unknown error')) if flannel_download_primary is defined else 'NOT ATTEMPTED' }}
+                  Curl fallback: {{ 'SUCCESS' if flannel_download_curl is succeeded else ('FAILED - ' + (flannel_download_curl.stderr | default('Unknown error'))) if flannel_download_curl is defined and flannel_download_curl is not skipped else 'SKIPPED' }}
+                  Wget fallback: {{ 'SUCCESS' if flannel_download_wget is succeeded else ('FAILED - ' + (flannel_download_wget.stderr | default('Unknown error'))) if flannel_download_wget is defined and flannel_download_wget is not skipped else 'SKIPPED' }}
+                  Alt version: {{ 'SUCCESS' if flannel_download_alt is succeeded else ('FAILED - ' + (flannel_download_alt.stderr | default('Unknown error'))) if flannel_download_alt is defined and flannel_download_alt is not skipped else 'SKIPPED' }}
+                  {% endif %}
                   
                   Network connectivity test:
             
@@ -1604,18 +1677,24 @@
                 validate_certs: false
               register: github_connectivity
               failed_when: false
+              when: not (skip_flannel_download | default(false))
               
             - name: Test DNS resolution
               shell: nslookup github.com || true
               register: dns_test
               changed_when: false
+              when: not (skip_flannel_download | default(false))
               
             - name: Show network diagnostics
               debug:
                 msg: |
+                  {% if not (skip_flannel_download | default(false)) %}
                   GitHub connectivity: {{ 'OK' if github_connectivity.status is defined and github_connectivity.status == 200 else 'FAILED' }}
                   DNS resolution: {{ 'OK' if 'github.com' in dns_test.stdout else 'FAILED' }}
                   Available tools: {{ 'curl' if ansible_facts['packages']['curl'] is defined else 'no curl' }}, {{ 'wget' if ansible_facts['packages']['wget'] is defined else 'no wget' }}
+                  {% else %}
+                  Network diagnostics skipped - using pre-existing binary
+                  {% endif %}
                   
             - name: List current /opt/cni/bin contents
               shell: ls -la /opt/cni/bin/ || echo "Directory does not exist"
@@ -1649,22 +1728,38 @@
         - name: Fail if Flannel binary still missing after all attempts
           fail:
             msg: |
+              {% if skip_flannel_download | default(false) %}
+              Flannel binary validation failed on {{ inventory_hostname }}.
+              A pre-existing binary was detected but verification still shows it as missing.
+              This indicates the binary was removed or corrupted after the initial check.
+              Manual installation may be required.
+              
+              Pre-existing binary status: {{ flannel_existing_check.stdout_lines[0] | default('unknown') }}
+              {% else %}
               Failed to download Flannel CNI plugin binary to {{ flannel_cni_dest }} on {{ inventory_hostname }}.
               All download methods failed. Check network connectivity and GitHub access.
               Manual installation may be required.
+              {% endif %}
               
               Troubleshooting steps:
               1. Verify target directory permissions: ls -la $(dirname {{ flannel_cni_dest }})
               2. Check available disk space: df -h $(dirname {{ flannel_cni_dest }})
+              {% if not (skip_flannel_download | default(false)) %}
               3. Test network connectivity: curl -I https://github.com
+              {% endif %}
               4. Manual installation command:
                  ssh {{ inventory_hostname }} 'curl -fsSL https://github.com/flannel-io/flannel/releases/download/v0.25.2/flanneld-amd64 -o {{ flannel_cni_dest }} && chmod 755 {{ flannel_cni_dest }}'
               
               Common causes:
               - Directory permissions issues (ensure /opt/cni/bin is writable by root)
               - Insufficient disk space
+              {% if not (skip_flannel_download | default(false)) %}
               - Network connectivity problems
               - SELinux or security policies blocking downloads
+              {% else %}
+              - Pre-downloaded binary was corrupted or removed
+              - File system issues affecting the binary
+              {% endif %}
           when: not flannel_binary_check.stat.exists
 
         - name: Ensure Flannel CNI plugin binary permissions are correct
