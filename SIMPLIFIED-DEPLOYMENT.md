@@ -120,6 +120,44 @@ Deploys only Jellyfin media server. Requires cluster to exist.
 ```
 Runs deployment in check mode (dry run) to validate configuration without making changes.
 
+### Infrastructure Removal (Spindown)
+
+⚠️ **WARNING: Destructive operations that will completely remove Kubernetes infrastructure** ⚠️
+
+#### Safe Preview (Recommended First)
+```bash
+./deploy.sh spindown-check
+```
+Shows what would be removed without making any changes. Always run this first to review the cleanup scope.
+
+#### Complete Infrastructure Removal
+```bash
+./deploy.sh spindown
+```
+**DESTRUCTIVE**: Completely removes all VMStation and Kubernetes infrastructure including:
+
+- **Services & Processes**: All Kubernetes services (kubelet, kube-apiserver, etcd, etc.)
+- **Packages**: Kubernetes packages (kubeadm, kubectl, kubelet), container runtimes (docker, containerd, podman)
+- **Data Directories**: `/etc/kubernetes`, `/var/lib/kubelet`, `/var/lib/etcd`, `/var/lib/containerd`, etc.
+- **Network Configuration**: CNI interfaces (cni0, flannel.1), iptables rules, routing tables
+- **System Configuration**: systemd services, drop-in directories, user configurations
+- **Certificates & TLS**: All cluster certificates and TLS configurations
+- **Storage**: Container images, volumes, local-path provisioner data
+- **Monitoring Data**: Prometheus, Grafana, and Loki data
+- **Temporary Files**: Caches, temporary files, build artifacts
+
+The spindown process includes:
+1. **Safety confirmation** - Requires typing 'yes' to proceed
+2. **Comprehensive cleanup** - Removes all infrastructure components systematically
+3. **Validation reporting** - Shows cleanup results and any remaining artifacts
+
+#### Recovery After Spindown
+After running spindown, the system is returned to a clean state. To redeploy:
+```bash
+./deploy.sh full    # Complete fresh deployment
+```
+Worker nodes will automatically rejoin the cluster with fresh certificates and tokens.
+
 ## Troubleshooting
 
 ### Common Issues
