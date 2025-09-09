@@ -1879,13 +1879,116 @@
               register: final_cni_check
               failed_when: not final_cni_check.stat.exists
             
-            - name: Display CNI readiness status
+            - name: Check Flannel DaemonSet status on control plane
+              shell: |
+                # Check if we can reach the control plane and Flannel pods
+                kubectl --kubeconfig=/tmp/admin.conf get daemonset,pods -n kube-flannel -l app=flannel -o wide 2>/dev/null || echo "Unable to check Flannel status - control plane may not be ready"
+              register: flannel_status_check
+              ignore_errors: yes
+              failed_when: false
+              delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+              run_once: true
+            
+            - name: Check CNI plugins availability on this node
+              shell: |
+                echo "CNI Plugin Status:"
+                ls -la /opt/cni/bin/ 2>/dev/null | grep -E "(flannel|bridge|portmap)" || echo "CNI plugins missing"
+                echo ""
+                echo "CNI Configuration:"
+                if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
+                  cat /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "Cannot read flannel config"
+                else
+                  echo "Flannel config missing"
+                fi
+                echo ""
+                echo "CNI Network Interfaces:"
+                ip link show | grep -E "(cni0|cbr0|flannel)" || echo "No CNI interfaces (expected for worker nodes)"
+              register: node_cni_status
+              ignore_errors: yes
+              failed_when: false
+            
+            - name: Check containerd CNI configuration
+              shell: |
+                echo "Containerd CNI Status:"
+                if [ -f /etc/containerd/config.toml ]; then
+                  grep -n "cni" /etc/containerd/config.toml 2>/dev/null || echo "No CNI config in containerd.toml"
+                else
+                  echo "containerd config.toml missing"
+                fi
+                echo ""
+                echo "Containerd Socket:"
+                ls -l /run/containerd/containerd.sock 2>/dev/null || echo "containerd socket missing"
+              register: containerd_cni_status
+              ignore_errors: yes
+              failed_when: false
+            
+            - name: Analyze CNI runtime status
+              set_fact:
+                cni_has_real_network: "{{ 'flannel' in (cni_runtime_check.stdout | default('')) or 'bridge' in (cni_runtime_check.stdout | default('')) }}"
+                cni_only_loopback: "{{ 'loopback' in (cni_runtime_check.stdout | default('')) and 'flannel' not in (cni_runtime_check.stdout | default('')) }}"
+            
+            - name: Apply Flannel remediation if needed
+              block:
+                - name: Reapply Flannel on control plane if CNI only shows loopback
+                  shell: |
+                    echo "Reapplying Flannel CNI to resolve loopback-only issue..."
+                    kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /tmp/kube-flannel-allnodes.yml
+                    echo "Waiting for Flannel DaemonSet to become ready..."
+                    kubectl --kubeconfig=/etc/kubernetes/admin.conf rollout status daemonset/kube-flannel-ds -n kube-flannel --timeout=120s || echo "Flannel rollout may still be in progress"
+                  delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+                  run_once: true
+                  ignore_errors: yes
+                  
+                - name: Wait for CNI to stabilize after Flannel reapplication
+                  wait_for:
+                    timeout: 30
+                  
+                - name: Re-check CNI runtime after remediation
+                  shell: |
+                    timeout 10s crictl info | grep -A5 '"Network"' || echo "CNI info still not available"
+                  register: cni_runtime_recheck
+                  ignore_errors: yes
+                  failed_when: false
+              when: cni_only_loopback | bool
+            
+            - name: Display comprehensive CNI readiness status
               debug:
                 msg: |
-                  CNI Configuration Status:
+                  === CNI Configuration Status ===
                   - Flannel config exists: {{ final_cni_check.stat.exists }}
-                  - CNI runtime check: {{ cni_runtime_check.stdout | default('not performed') }}
-                  Ready for kubelet join attempt.
+                  - CNI runtime shows real network: {{ cni_has_real_network | default(false) }}
+                  - CNI only shows loopback: {{ cni_only_loopback | default(true) }}
+                  
+                  === Control Plane Flannel Status ===
+                  {{ flannel_status_check.stdout | default('Not checked') }}
+                  
+                  === Node CNI Infrastructure ===
+                  {{ node_cni_status.stdout | default('Not checked') }}
+                  
+                  === Containerd CNI Status ===
+                  {{ containerd_cni_status.stdout | default('Not checked') }}
+                  
+                  === CNI Runtime Check ===
+                  {% if cni_runtime_recheck is defined %}
+                  After remediation: {{ cni_runtime_recheck.stdout | default('No output') }}
+                  {% else %}
+                  Initial check: {{ cni_runtime_check.stdout | default('not performed') }}
+                  {% endif %}
+                  
+                  {% if cni_only_loopback | default(true) %}
+                  ⚠️  WARNING: CNI runtime only shows loopback plugin. This means:
+                  - No real network plugin (Flannel) is active
+                  - Pod networking may not function properly
+                  - kubelet join may succeed but pods will use only loopback
+                  
+                  Recommended actions:
+                  1. Verify Flannel DaemonSet is running on control plane
+                  2. Check Flannel pod logs for errors
+                  3. Ensure worker nodes have CNI plugins in /opt/cni/bin/
+                  4. Verify CNI configuration in /etc/cni/net.d/
+                  {% else %}
+                  ✅ CNI runtime shows active network plugin - Ready for kubelet join.
+                  {% endif %}
           when: not kubelet_conf.stat.exists
           
         - name: Attempt to join cluster (primary attempt with reasonable timeout)
