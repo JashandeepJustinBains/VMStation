@@ -1,0 +1,94 @@
+---
+# VMStation Simplified Deployment Playbook
+# Replaces the complex site.yaml with essential functionality only
+
+- name: "VMStation Simplified Deployment"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tasks:
+    - name: "Display deployment overview"
+      debug:
+        msg: |
+          === VMStation Simplified Deployment ===
+          
+          This playbook deploys:
+          1. Kubernetes cluster (if not exists)
+          2. Essential monitoring stack (Prometheus, Grafana, Loki)
+          3. Jellyfin media server
+          4. Additional applications (Dashboard, MongoDB, etc.)
+          
+          Target Infrastructure:
+          - Control plane: 192.168.4.63 (monitoring_nodes)
+          - Storage node: 192.168.4.61 (storage_nodes)  
+          - Compute node: 192.168.4.62 (compute_nodes)
+
+# Step 1: Setup Kubernetes cluster
+- import_playbook: plays/setup-cluster.yaml
+
+# Step 2: Deploy core monitoring stack
+- import_playbook: plays/deploy-apps.yaml
+
+# Step 3: Deploy Jellyfin if enabled
+- import_playbook: plays/jellyfin.yml
+  when: jellyfin_enabled | default(true)
+
+# Step 4: Final validation
+- name: "VMStation Deployment Validation"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: false
+  tasks:
+    - name: "Verify Kubernetes cluster"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_nodes
+      
+    - name: "Check essential namespaces"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ item }}"
+      loop:
+        - monitoring
+        - jellyfin
+        - kube-system
+      register: namespace_check
+      failed_when: false
+
+    - name: "Verify monitoring pods"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: monitoring
+        label_selectors:
+          - app.kubernetes.io/name=prometheus
+      register: prometheus_pods
+      failed_when: false
+
+    - name: "Display deployment summary"
+      debug:
+        msg: |
+          === Deployment Summary ===
+          
+          Cluster Nodes: {{ cluster_nodes.resources | length }}
+          {% for node in cluster_nodes.resources %}
+          - {{ node.metadata.name }}: {{ node.status.addresses[0].address }} ({{ node.status.conditions[-1].type }})
+          {% endfor %}
+          
+          Namespaces: 
+          {% for ns in namespace_check.results %}
+          - {{ ns.item }}: {{ 'OK' if ns.resources else 'Missing' }}
+          {% endfor %}
+          
+          Monitoring: {{ 'Running' if prometheus_pods.resources else 'Not Ready' }}
+          
+          {% if jellyfin_enabled | default(true) %}
+          Jellyfin: Enabled
+          {% endif %}
+          
+          Access URLs:
+          - Grafana: http://192.168.4.63:30300  
+          - Prometheus: http://192.168.4.63:30090
+          - Jellyfin: http://192.168.4.61:30096

@@ -1,0 +1,305 @@
+---
+# VMStation Simplified Application Deployment
+# Deploys essential monitoring and applications
+
+- name: "Deploy VMStation Applications"
+  hosts: monitoring_nodes
+  become: false
+  vars:
+    monitoring_namespace: monitoring
+    grafana_nodeport: 30300
+    prometheus_nodeport: 30090
+    loki_nodeport: 31100
+    alertmanager_nodeport: 30903
+  tasks:
+    - name: "Create monitoring namespace"
+      kubernetes.core.k8s:
+        name: "{{ monitoring_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+
+    - name: "Deploy Prometheus"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: prometheus
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              app.kubernetes.io/name: prometheus
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: prometheus
+              spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                containers:
+                - name: prometheus
+                  image: prom/prometheus:latest
+                  ports:
+                  - containerPort: 9090
+                  args:
+                    - --config.file=/etc/prometheus/prometheus.yml
+                    - --storage.tsdb.path=/prometheus/
+                    - --web.console.libraries=/etc/prometheus/console_libraries
+                    - --web.console.templates=/etc/prometheus/consoles
+                    - --web.enable-lifecycle
+                  volumeMounts:
+                  - name: config-volume
+                    mountPath: /etc/prometheus/
+                  - name: storage-volume
+                    mountPath: /prometheus/
+                volumes:
+                - name: config-volume
+                  configMap:
+                    name: prometheus-config
+                - name: storage-volume
+                  emptyDir: {}
+
+    - name: "Create Prometheus ConfigMap"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: prometheus-config
+            namespace: "{{ monitoring_namespace }}"
+          data:
+            prometheus.yml: |
+              global:
+                scrape_interval: 15s
+                evaluation_interval: 15s
+              
+              scrape_configs:
+              - job_name: 'kubernetes-nodes'
+                kubernetes_sd_configs:
+                - role: node
+                relabel_configs:
+                - source_labels: [__address__]
+                  regex: '(.*):10250'
+                  target_label: __address__
+                  replacement: '${1}:9100'
+              
+              - job_name: 'kubernetes-pods'
+                kubernetes_sd_configs:
+                - role: pod
+                relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  action: keep
+                  regex: true
+
+    - name: "Deploy Prometheus Service"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: prometheus
+            namespace: "{{ monitoring_namespace }}"
+          spec:
+            type: NodePort
+            selector:
+              app.kubernetes.io/name: prometheus
+            ports:
+            - port: 9090
+              targetPort: 9090
+              nodePort: "{{ prometheus_nodeport }}"
+
+    - name: "Deploy Grafana"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: grafana
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              app.kubernetes.io/name: grafana
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: grafana
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: grafana
+              spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                containers:
+                - name: grafana
+                  image: grafana/grafana:latest
+                  ports:
+                  - containerPort: 3000
+                  env:
+                  - name: GF_SECURITY_ADMIN_PASSWORD
+                    value: "admin"
+                  volumeMounts:
+                  - name: storage
+                    mountPath: /var/lib/grafana
+                volumes:
+                - name: storage
+                  emptyDir: {}
+
+    - name: "Deploy Grafana Service"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: grafana
+            namespace: "{{ monitoring_namespace }}"
+          spec:
+            type: NodePort
+            selector:
+              app.kubernetes.io/name: grafana
+            ports:
+            - port: 3000
+              targetPort: 3000
+              nodePort: "{{ grafana_nodeport }}"
+
+    - name: "Deploy Loki"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: loki
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              app.kubernetes.io/name: loki
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: loki
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: loki
+              spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                containers:
+                - name: loki
+                  image: grafana/loki:latest
+                  ports:
+                  - containerPort: 3100
+                  args:
+                    - -config.file=/etc/loki/local-config.yaml
+                  volumeMounts:
+                  - name: storage
+                    mountPath: /tmp/loki
+                volumes:
+                - name: storage
+                  emptyDir: {}
+
+    - name: "Deploy Loki Service"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: loki
+            namespace: "{{ monitoring_namespace }}"
+          spec:
+            type: NodePort
+            selector:
+              app.kubernetes.io/name: loki
+            ports:
+            - port: 3100
+              targetPort: 3100
+              nodePort: "{{ loki_nodeport }}"
+
+    - name: "Deploy Kubernetes Dashboard"
+      kubernetes.core.k8s:
+        state: present
+        src: https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+    - name: "Create Dashboard Admin User"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: admin-user
+            namespace: kubernetes-dashboard
+
+    - name: "Create Dashboard Admin ClusterRoleBinding"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: admin-user
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: cluster-admin
+          subjects:
+          - kind: ServiceAccount
+            name: admin-user
+            namespace: kubernetes-dashboard
+
+    - name: "Wait for applications to be ready"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ monitoring_namespace }}"
+        label_selectors:
+          - app.kubernetes.io/name={{ item }}
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 300
+      loop:
+        - prometheus
+        - grafana
+        - loki
+      ignore_errors: yes
+
+    - name: "Display deployment status"
+      debug:
+        msg: |
+          === VMStation Applications Deployed ===
+          
+          Services available at:
+          - Prometheus: http://192.168.4.63:{{ prometheus_nodeport }}
+          - Grafana: http://192.168.4.63:{{ grafana_nodeport }} (admin/admin)
+          - Loki: http://192.168.4.63:{{ loki_nodeport }}
+          
+          To access Kubernetes Dashboard:
+          1. kubectl -n kubernetes-dashboard create token admin-user
+          2. kubectl proxy
+          3. Navigate to: http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
