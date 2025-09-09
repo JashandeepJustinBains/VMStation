@@ -85,7 +85,7 @@ echo "6. Validating simplified system vs complex system..."
 
 # Check that we've actually simplified things
 SIMPLE_LINES=$(wc -l deploy.sh ansible/simple-deploy.yaml ansible/plays/setup-cluster.yaml ansible/plays/deploy-apps.yaml 2>/dev/null | tail -1 | awk '{print $1}' || echo "0")
-COMPLEX_LINES=$(wc -l update_and_deploy.sh ansible/site.yaml ansible/plays/kubernetes/setup_cluster.yaml 2>/dev/null | tail -1 | awk '{print $1}' || echo "9999")
+COMPLEX_LINES=$(wc -l legacy/update_and_deploy.sh legacy/ansible/site.yaml legacy/ansible/plays/kubernetes/setup_cluster.yaml 2>/dev/null | tail -1 | awk '{print $1}' || echo "9999")
 
 if [ "$SIMPLE_LINES" -lt "$COMPLEX_LINES" ]; then
     pass "Simplified system has fewer lines ($SIMPLE_LINES vs $COMPLEX_LINES)"

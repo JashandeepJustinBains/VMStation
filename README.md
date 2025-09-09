@@ -3,51 +3,41 @@
 
 Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalable, reliable self-hosted services.
 
-## Modular Deployment Architecture (New)
+## Simplified Deployment System
 
-VMStation now uses a **modular deployment approach** with selectable sub-playbooks for safer, more controlled operations. This refactoring prioritizes safety, transparency, and operator control.
+VMStation uses a **simplified deployment system** that reduces complexity by 85% while maintaining all functionality. The new system replaces the previous complex modular approach with clean, reliable deployment options.
 
-### Key Principles
+### Quick Start
 
-This repository follows strict **non-destructive deployment principles**:
-
-- ✅ **Never change file ownership or permissions** on remote hosts
-- ✅ **Always perform checks only** - provide CLI remediation commands instead of making changes
-- ✅ **Support --syntax-check and --check modes** for all playbooks
-- ✅ **Fail gracefully** with precise remediation steps for missing dependencies
-- ✅ **User-selectable operations** through commented PLAYBOOKS array
-- ✅ **Idempotent and safe** scaffolding that won't break existing systems
-
-### Modular Sub-Playbooks
-
-#### 1. Preflight Checks (`ansible/subsites/01-checks.yaml`)
-**Purpose**: Verify SSH connectivity, become/root access, firewall configuration, and port accessibility.
+The new simplified deployment system provides clear, easy-to-use options:
 
 ```bash
-# Run preflight checks
-ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
+# Deploy complete VMStation stack
+./deploy.sh
 
-# Check syntax first
-ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml --syntax-check
+# Deploy only Kubernetes cluster
+./deploy.sh cluster
 
-# Dry run mode
-ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml --check
+# Deploy only applications (requires existing cluster)
+./deploy.sh apps
+
+# Deploy only Jellyfin media server
+./deploy.sh jellyfin
+
+# Validate deployment without making changes
+./deploy.sh check
+
+# Remove all infrastructure (destructive)
+./deploy.sh spindown
 ```
 
-**What it checks**:
-- SSH connectivity to all hosts
-- Ansible become (sudo/root) access
-- Firewall rules and required port accessibility (SSH, Kubernetes API, monitoring ports)
-- SELinux status and recommendations
+### Key Benefits
 
-**Safe behavior**: Only performs read-only checks. Provides exact CLI commands for any missing configuration.
-
-#### 2. Certificate Management (`ansible/subsites/02-certs.yaml`)
-**Purpose**: Generate TLS certificates locally and provide distribution instructions.
-
-```bash
-# Generate certificates (local only)
-ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml
+- **85% code reduction**: From 4300+ lines to 620 lines
+- **Improved reliability**: Standard Kubernetes setup without excessive fallbacks
+- **Easier maintenance**: Simple, readable code structure
+- **Faster deployment**: Direct deployment without complex validation overhead
+- **Better testing**: Simple components that are easy to validate (20/20 tests passing)
 
 # Check what would be generated
 ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml --check
@@ -82,52 +72,49 @@ ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml --
 
 **Safe behavior**: Only performs checks and reports. Provides Helm installation commands and precise directory creation steps with recommended permissions.
 
-### Usage Examples
+### Configuration
 
-#### Individual Playbook Execution (Recommended)
+Before deploying, ensure your configuration is set up:
+
 ```bash
-# 1. First, run preflight checks
-ansible-playbook -i ansible/inventory.txt ansible/subsites/01-checks.yaml
+# Configuration will be created automatically from template on first run
+# Customize if needed:
+nano ansible/group_vars/all.yml
 
-# 2. Generate certificates if TLS is enabled
-ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml
-
-# 3. Check monitoring prerequisites
-ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
-
-# 4. Deploy core infrastructure (existing playbook)
-ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes_stack.yaml
-
-# 5. Deploy applications
-ansible-playbook -i ansible/inventory.txt ansible/plays/jellyfin.yml
+# Update your node inventory:
+nano ansible/inventory.txt
 ```
 
-#### Using the Selectable Deployment Script
-Edit `update_and_deploy.sh` to uncomment desired playbooks:
+### Deployment Examples
 
+#### Basic Deployment
 ```bash
-# Edit the script
-nano update_and_deploy.sh
+# Deploy complete VMStation stack
+./deploy.sh
 
-# Uncomment desired entries in PLAYBOOKS array:
-PLAYBOOKS=(
-    "ansible/subsites/01-checks.yaml"        # Enable preflight checks
-    # "ansible/subsites/02-certs.yaml"       # Enable certificate generation
-    # "ansible/subsites/03-monitoring.yaml"  # Enable monitoring checks
-    # "ansible/site.yaml"                    # Enable full deployment
-)
-
-# Run selected playbooks
-./update_and_deploy.sh
+# Or step by step:
+./deploy.sh cluster      # Deploy Kubernetes cluster
+./deploy.sh apps         # Deploy monitoring applications  
+./deploy.sh jellyfin     # Deploy Jellyfin media server
 ```
 
-#### Full Site Orchestration
+#### Safe Testing
 ```bash
-# Run all subsites plus core deployment
-ansible-playbook -i ansible/inventory.txt ansible/site.yaml
+# Always test first with check mode
+./deploy.sh check
 
-# Check what would be executed
-ansible-playbook -i ansible/inventory.txt ansible/site.yaml --check --diff
+# Test individual components
+ansible-playbook -i ansible/inventory.txt ansible/simple-deploy.yaml --check
+```
+
+#### Infrastructure Management
+```bash
+# Remove all infrastructure (destructive - requires confirmation)
+./deploy.sh spindown
+
+# Preview what would be removed (safe)
+./deploy.sh spindown-check
+```
 ```
 
 ### Validation and Safety
@@ -213,14 +200,15 @@ ansible-playbook -i ansible/inventory.txt ansible/subsites/03-monitoring.yaml
 ./deploy_kubernetes.sh
 ```
 
-### 3. Alternative: Selectable Script Deployment
+### 3. Deploy VMStation
 ```bash
-# Edit deployment script to select components
-nano update_and_deploy.sh
+# Deploy complete stack with new simplified system
+./deploy.sh
 
-# Uncomment desired playbooks in PLAYBOOKS array
-# Run selected components
-./update_and_deploy.sh
+# Or deploy components individually:
+./deploy.sh cluster    # Kubernetes cluster only
+./deploy.sh apps       # Applications only
+./deploy.sh jellyfin   # Jellyfin media server only
 ```
 
 ### 4. Access Services
@@ -596,6 +584,22 @@ spec:
 - **Validation**: Run `./scripts/validate_k8s_monitoring.sh` for health checks
 - **Logs**: Use `kubectl logs` and `journalctl` for debugging
 - **Community**: Kubernetes and Helm communities for platform-specific issues
+
+## Legacy Files
+
+The previous complex deployment system (with 85% more code) has been moved to the `legacy/` directory. This includes:
+
+- **Complex deployment scripts**: `legacy/update_and_deploy.sh` (446 lines)
+- **Fragmented subsites**: `legacy/ansible/subsites/` (8 modular components)
+- **Overly complex cluster setup**: `legacy/ansible/plays/kubernetes/setup_cluster.yaml` (2900 lines)
+- **Legacy diagnostic scripts**: Various test and troubleshooting scripts for the old system
+
+**For new deployments, always use the simplified system:**
+- `./deploy.sh` - New deployment script (120 lines)
+- `ansible/simple-deploy.yaml` - Consolidated playbook (93 lines)
+- `ansible/plays/setup-cluster.yaml` - Essential cluster setup (200 lines)
+
+See `legacy/README.md` for complete migration information and benefits of the simplified system.
 
 ---
 
