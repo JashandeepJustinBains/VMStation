@@ -1,4 +1,29 @@
-# Kubelet-Start Timeout Fix
+# Kubelet-Start Timeout Fix (SUPERSEDED)
+
+## ⚠️ THIS APPROACH HAS BEEN SUPERSEDED
+
+**This fix has been replaced by [KUBELET_PERFORMANCE_ROOT_CAUSE_FIX.md](KUBELET_PERFORMANCE_ROOT_CAUSE_FIX.md)**
+
+The approach in this document (increasing timeouts) was treating symptoms rather than root causes. The new fix addresses the actual performance bottlenecks that were causing slow joins.
+
+### Why This Approach Was Problematic
+
+1. **Symptom Treatment**: Increasing timeouts from 600s → 900s → 1200s didn't fix the underlying issue
+2. **Resource Waste**: Waiting 15-20 minutes for operations that should take 5-10 minutes
+3. **Masking Problems**: Longer timeouts hid performance bottlenecks instead of fixing them
+
+### New Approach
+
+The replacement fix reduces timeouts while improving actual performance:
+- **Primary timeout**: 900s → 600s (33% faster)
+- **Retry timeout**: 1200s → 900s (25% faster)
+- **Root causes addressed**: Containerd restarts, performance testing, excessive cleanup
+
+See [KUBELET_PERFORMANCE_ROOT_CAUSE_FIX.md](KUBELET_PERFORMANCE_ROOT_CAUSE_FIX.md) for details.
+
+---
+
+## Original Documentation (For Historical Reference)
 
 ## Problem Description
 
