@@ -278,13 +278,67 @@
         - current_auth_mode.stdout is defined
         - "'RBAC' in current_auth_mode.stdout"
 
-    - name: "Skip RBAC fix for AlwaysAllow mode"
+    - name: "Fix API server authorization mode if using AlwaysAllow"
+      block:
+        - name: "Backup API server manifest"
+          copy:
+            src: /etc/kubernetes/manifests/kube-apiserver.yaml
+            dest: /etc/kubernetes/manifests/kube-apiserver.yaml.backup
+            remote_src: yes
+
+        - name: "Update authorization mode from AlwaysAllow to Node,RBAC"
+          replace:
+            path: /etc/kubernetes/manifests/kube-apiserver.yaml
+            regexp: '--authorization-mode=AlwaysAllow'
+            replace: '--authorization-mode=Node,RBAC'
+
+        - name: "Wait for API server to restart after authorization fix"
+          wait_for:
+            host: "{{ ansible_default_ipv4.address }}"
+            port: 6443
+            timeout: 300
+            delay: 30
+
+        - name: "Verify API server health after authorization fix"
+          shell: kubectl get nodes --request-timeout=10s
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: api_health_after_fix
+          retries: 10
+          delay: 15
+          until: api_health_after_fix.rc == 0
+
+        - name: "Apply RBAC fix after authorization mode change"
+          shell: |
+            kubectl create clusterrolebinding kubernetes-admin \
+              --clusterrole=cluster-admin \
+              --user=kubernetes-admin \
+              --dry-run=client -o yaml | kubectl apply -f -
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+      when: 
+        - current_auth_mode.stdout is defined
+        - "'AlwaysAllow' in current_auth_mode.stdout"
+
+    - name: "Skip RBAC fix for AlwaysAllow mode (no longer needed after fix)"
       debug:
-        msg: "Skipping RBAC fix - cluster is running in AlwaysAllow mode"
+        msg: "Authorization mode fixed from AlwaysAllow to Node,RBAC"
       when: 
         - rbac_check.stdout != "yes"
         - current_auth_mode.stdout is defined
         - "'AlwaysAllow' in current_auth_mode.stdout"
+
+    - name: "Wait for API server pod to be Ready"
+      shell: |
+        kubectl get pods -n kube-system -l component=kube-apiserver \
+          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' | grep -q "True"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: api_pod_ready
+      retries: 20
+      delay: 15
+      until: api_pod_ready.rc == 0
 
     - name: "Generate join command"
       shell: kubeadm token create --print-join-command
