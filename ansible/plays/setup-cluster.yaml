@@ -481,9 +481,16 @@
 
     - name: "Reset node if it has cluster artifacts but isn't properly joined"
       block:
-        - name: "Stop kubelet service"
+        - name: "Stop and disable kubelet service"
           systemd:
             name: kubelet
+            state: stopped
+            enabled: no
+          failed_when: false
+
+        - name: "Stop containerd temporarily for thorough cleanup"
+          systemd:
+            name: containerd
             state: stopped
           failed_when: false
 
@@ -497,16 +504,27 @@
             iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
           failed_when: false
 
-        - name: "Remove CNI configuration"
+        - name: "Remove all Kubernetes directories and configurations"
           shell: |
             rm -rf /etc/cni/net.d/*
             rm -rf /var/lib/cni/
+            rm -rf /var/lib/kubelet/*
+            rm -rf /etc/kubernetes/*
+            rm -rf /var/lib/etcd/*
           failed_when: false
 
-        - name: "Clean up kubelet data"
+        - name: "Reset systemd services"
           shell: |
-            rm -rf /var/lib/kubelet/*
+            systemctl reset-failed kubelet || true
+            systemctl reset-failed containerd || true
+            systemctl daemon-reload
           failed_when: false
+
+        - name: "Restart containerd after cleanup"
+          systemd:
+            name: containerd
+            state: started
+            enabled: yes
 
       when: 
         - cluster_artifacts.stat.exists
@@ -570,38 +588,40 @@
             state: started
             enabled: yes
 
-        - name: "Prepare kubelet service for join"
+        - name: "Stop and disable kubelet service for clean join"
           shell: |
-            # Stop kubelet if running
             systemctl stop kubelet || true
+            systemctl disable kubelet || true
             systemctl reset-failed kubelet || true
-            
-            # Clean up any existing kubelet state that might conflict with join
+          failed_when: false
+
+        - name: "Clean up kubelet configuration files"
+          shell: |
             rm -f /var/lib/kubelet/config.yaml || true
             rm -f /var/lib/kubelet/kubeadm-flags.env || true
-            
-            # Reload systemd to pick up any changes
+            rm -f /etc/kubernetes/kubelet.conf || true
+          failed_when: false
+
+        - name: "Reload systemd and enable kubelet"
+          shell: |
             systemctl daemon-reload
-            
-            # Ensure kubelet is enabled but not started (kubeadm join will start it)
             systemctl enable kubelet
           failed_when: false
+
+        - name: "Verify containerd is running and healthy"
+          command: systemctl is-active containerd
+          register: containerd_check
+          failed_when: false
+
+        - name: "Fail if containerd is not running"
+          fail:
+            msg: "ERROR: containerd is not active - cannot proceed with join"
+          when: containerd_check.stdout != "active"
 
       when: not kubelet_conf.stat.exists
 
     - name: "Join cluster with retry logic"
-      shell: |
-        echo "=== Starting kubeadm join process ===" 
-        echo "Timestamp: $(date)"
-        echo "Node: $(hostname)"
-        echo "Containerd status:"
-        systemctl is-active containerd || echo "Containerd not running"
-        echo "Kubelet status before join:"
-        systemctl is-active kubelet || echo "Kubelet not running (expected)"
-        echo ""
-        
-        # Execute the join command
-        /tmp/kubeadm-join.sh --v=5
+      shell: timeout 600 /tmp/kubeadm-join.sh --v=5
       register: join_result
       retries: 3
       delay: 30
@@ -643,53 +663,59 @@
             kubeadm reset --force --v=5
           failed_when: false
 
-        - name: "Clean up after failed join"
+        - name: "Stop services for comprehensive cleanup"
           shell: |
-            echo "=== Cleaning up after failed join ==="
-            # Stop services
             systemctl stop kubelet || true
+            systemctl disable kubelet || true
             systemctl stop containerd || true
-            
-            # Clean up networking
-            iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X || true
-            
-            # Remove CNI and kubelet state
+          failed_when: false
+
+        - name: "Clean up networking rules"
+          shell: iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X || true
+          failed_when: false
+
+        - name: "Remove Kubernetes state directories"
+          shell: |
             rm -rf /etc/cni/net.d/* || true
             rm -rf /var/lib/cni/ || true
             rm -rf /var/lib/kubelet/* || true
-            rm -f /etc/kubernetes/kubelet.conf || true
-            rm -f /etc/kubernetes/pki/ca.crt || true
-            
-            # Reset systemd state
+            rm -rf /etc/kubernetes/* || true
+            rm -rf /var/lib/etcd/* || true
+          failed_when: false
+
+        - name: "Reset systemd services"
+          shell: |
             systemctl reset-failed kubelet || true
             systemctl reset-failed containerd || true
-            
-            echo "Cleanup completed"
-          failed_when: false
-
-        - name: "Restart containerd and prepare for retry"
-          shell: |
-            echo "=== Preparing for retry ==="
-            # Restart containerd
-            systemctl start containerd
-            systemctl enable containerd
-            
-            # Reload systemd and enable kubelet
             systemctl daemon-reload
-            systemctl enable kubelet
-            
-            echo "Services prepared for retry"
           failed_when: false
 
-        - name: "Wait before retry"
-          pause:
-            seconds: 30
+        - name: "Restart containerd after cleanup"
+          systemd:
+            name: containerd
+            state: started
+            enabled: yes
 
-        - name: "Retry join after cleanup"
-          shell: |
-            echo "=== Retrying join after cleanup ==="
-            echo "Timestamp: $(date)"
-            /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+        - name: "Wait for containerd to be fully ready"
+          pause:
+            seconds: 10
+
+        - name: "Enable kubelet for kubeadm join"
+          systemd:
+            name: kubelet
+            enabled: yes
+
+        - name: "Verify containerd is running before retry"
+          command: systemctl is-active containerd
+          register: containerd_retry_check
+          failed_when: containerd_retry_check.stdout != "active"
+
+        - name: "Wait longer before retry to ensure system stability"
+          pause:
+            seconds: 60
+
+        - name: "Retry join after thorough cleanup"
+          shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
           register: join_retry_result
           failed_when: join_retry_result.rc != 0
 
