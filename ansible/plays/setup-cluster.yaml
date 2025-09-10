@@ -579,59 +579,100 @@
         mode: '0755'
       when: not kubelet_conf.stat.exists
 
-    - name: "Prepare kubelet for join"
+    - name: "Copy enhanced join scripts to worker nodes"
+      copy:
+        src: "{{ item }}"
+        dest: "/tmp/{{ item | basename }}"
+        mode: '0755'
+      loop:
+        - "../scripts/validate_join_prerequisites.sh"
+        - "../scripts/enhanced_kubeadm_join.sh"
+      when: not kubelet_conf.stat.exists
+
+    - name: "Enhanced kubeadm join with comprehensive validation"
       block:
-        - name: "Ensure kubelet service directory exists"
-          file:
-            path: /etc/systemd/system/kubelet.service.d
-            state: directory
-            mode: '0755'
-
-        - name: "Remove conflicting kubelet configuration files"
-          file:
-            path: "{{ item }}"
-            state: absent
-          loop:
-            - /etc/systemd/system/kubelet.service.d/20-join-config.conf
-            - /var/lib/kubelet/kubeadm-flags.env
-          failed_when: false
-
-        - name: "Ensure containerd is running"
-          systemd:
-            name: containerd
-            state: started
-            enabled: yes
-
-        - name: "Stop and disable kubelet service for clean join"
+        - name: "Execute enhanced join process"
           shell: |
-            systemctl stop kubelet || true
-            systemctl disable kubelet || true
-            systemctl reset-failed kubelet || true
-          failed_when: false
+            # Set environment variables for enhanced join
+            export MASTER_IP="{{ control_plane_ip }}"
+            export JOIN_TIMEOUT=300
+            export MAX_RETRIES=2
+            
+            # Extract base join command from script
+            JOIN_COMMAND=$(grep -v '^#' /tmp/kubeadm-join.sh | grep kubeadm | head -1)
+            
+            # Run enhanced join process
+            /tmp/enhanced_kubeadm_join.sh $JOIN_COMMAND
+          register: enhanced_join_result
+          failed_when: enhanced_join_result.rc != 0
+          
+        - name: "Display enhanced join results"
+          debug:
+            msg: |
+              Enhanced Join Results:
+              Exit Code: {{ enhanced_join_result.rc }}
+              {% if enhanced_join_result.stdout %}
+              Output: {{ enhanced_join_result.stdout }}
+              {% endif %}
+              {% if enhanced_join_result.stderr %}
+              Errors: {{ enhanced_join_result.stderr }}
+              {% endif %}
 
-        - name: "Clean up kubelet configuration files"
+      when: not kubelet_conf.stat.exists
+
+    - name: "Post-join validation and verification"
+      block:
+        - name: "Wait for kubelet to stabilize after join"
+          pause:
+            seconds: 30
+            
+        - name: "Verify kubelet is running and not in standalone mode"
           shell: |
-            rm -f /var/lib/kubelet/config.yaml || true
-            rm -f /var/lib/kubelet/kubeadm-flags.env || true
-            rm -f /etc/kubernetes/kubelet.conf || true
-          failed_when: false
-
-        - name: "Reload systemd and enable kubelet"
-          shell: |
-            systemctl daemon-reload
-            systemctl enable kubelet
-          failed_when: false
-
-        - name: "Verify containerd is running and healthy"
-          command: systemctl is-active containerd
-          register: containerd_check
-          failed_when: false
-
-        - name: "Fail if containerd is not running"
-          fail:
-            msg: "ERROR: containerd is not active - cannot proceed with join"
-          when: containerd_check.stdout != "active"
-
+            # Check if kubelet is active
+            systemctl is-active kubelet || exit 1
+            
+            # Check kubelet logs for standalone mode indicators
+            if journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -q "standalone"; then
+              echo "ERROR: kubelet is still in standalone mode"
+              exit 1
+            fi
+            
+            # Check for successful cluster connection
+            if journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -q "Started kubelet"; then
+              if ! journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -q "No API server defined"; then
+                echo "SUCCESS: kubelet successfully connected to cluster"
+                exit 0
+              else
+                echo "ERROR: kubelet started but no API server connection"
+                exit 1
+              fi
+            else
+              echo "WARNING: kubelet status unclear"
+              exit 1
+            fi
+          register: kubelet_validation
+          failed_when: kubelet_validation.rc != 0
+          
+        - name: "Display kubelet status"
+          debug:
+            msg: "{{ kubelet_validation.stdout }}"
+            
+        - name: "Verify node appears in cluster (from control plane)"
+          shell: kubectl get nodes {{ ansible_hostname }} -o wide
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          delegate_to: "{{ control_plane_ip }}"
+          register: node_status
+          retries: 5
+          delay: 10
+          until: node_status.rc == 0
+          
+        - name: "Display node status in cluster"
+          debug:
+            msg: |
+              Node Status in Cluster:
+              {{ node_status.stdout }}
+              
       when: not kubelet_conf.stat.exists
 
     - name: "Install CNI plugins and configuration on worker nodes (required for kubelet)"

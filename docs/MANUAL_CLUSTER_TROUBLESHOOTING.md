@@ -31,12 +31,20 @@ Sep 09 14:37:19 masternode kubelet[3098388]: I0909 14:37:19.281165 3098388 serve
 ```
 
 **Root Cause:**
-kubelet is not properly configured to connect to the Kubernetes API server.
+kubelet is not properly configured to connect to the Kubernetes API server, often due to failed or incomplete kubeadm join process.
 
-**Fix:**
+**Enhanced Fix (Recommended):**
+```bash
+# Use the enhanced join process for comprehensive resolution
+sudo ./scripts/enhanced_kubeadm_join.sh <join-command>
+```
+
+**Legacy Fix (if enhanced process unavailable):**
 ```bash
 sudo ./scripts/fix_kubelet_cluster_connection.sh
 ```
+
+**For complete resolution, see:** [Enhanced Join Process Documentation](./ENHANCED_JOIN_PROCESS.md)
 
 ### 3. Container Runtime Issues
 
