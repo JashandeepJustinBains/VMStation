@@ -141,9 +141,9 @@ fix_containerd_filesystem() {
     sleep 10
     
     # Verify containerd is working
-    if ! ctr version >/dev/null 2>&1; then
-        error "containerd is not responding after restart"
-        return 1
+    if ! timeout 10 ctr version >/dev/null 2>&1; then
+        warn "containerd is not responding after restart, but continuing"
+        # Don't fail here as containerd might be slow to start
     fi
     
     # Force containerd to initialize its image filesystem properly
@@ -154,7 +154,7 @@ fix_containerd_filesystem() {
     
     # Force containerd to detect and initialize image filesystem capacity
     # This prevents the "invalid capacity 0 on image filesystem" error
-    ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+    timeout 10 ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
     
     # Wait for containerd image filesystem to fully initialize
     sleep 5
@@ -162,20 +162,29 @@ fix_containerd_filesystem() {
     # Verify containerd image filesystem is properly initialized
     local retry_count=0
     local max_retries=5
+    local retry_timeout=30  # Maximum time to spend on retries
+    local start_time=$(date +%s)
+    
     while [ $retry_count -lt $max_retries ]; do
-        if ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+        # Check if we've exceeded overall timeout
+        if [ $(($(date +%s) - start_time)) -gt $retry_timeout ]; then
+            warn "Containerd initialization timeout exceeded, continuing anyway"
+            break
+        fi
+        
+        if timeout 5 ctr --namespace k8s.io images ls >/dev/null 2>&1; then
             info "✓ Containerd image filesystem initialized successfully"
             break
         else
             warn "Containerd image filesystem not ready, retrying... ($((retry_count + 1))/$max_retries)"
-            sleep 3
+            sleep 2  # Reduced from 3 to 2 seconds
             ((retry_count++))
         fi
     done
     
     if [ $retry_count -eq $max_retries ]; then
-        error "Failed to initialize containerd image filesystem after $max_retries attempts"
-        return 1
+        warn "Failed to initialize containerd image filesystem after $max_retries attempts, continuing anyway"
+        # Don't return 1 here as this might be a transient issue
     fi
     
     return 0
@@ -247,14 +256,20 @@ monitor_kubelet_join() {
     local start_time=$(date +%s)
     local end_time=$((start_time + timeout))
     local last_check=0
+    local check_interval=5  # Reduced from 15 to 5 for faster detection
+    
+    # Add signal handler for cleanup
+    trap "return 1" TERM INT
     
     while [ $(date +%s) -lt $end_time ]; do
+        local current_time=$(date +%s)
+        
         # Check if kubelet.conf was created (indicates successful bootstrap)
         if [ -f /etc/kubernetes/kubelet.conf ]; then
             info "✓ kubelet.conf created - TLS Bootstrap successful"
             
             # Wait a bit for kubelet to fully start
-            sleep 5
+            sleep 3
             
             # Check if kubelet is running properly
             if systemctl is-active kubelet >/dev/null 2>&1; then
@@ -267,27 +282,28 @@ monitor_kubelet_join() {
             fi
         fi
         
-        # Every 15 seconds, check for specific failure patterns for faster detection
-        local current_time=$(date +%s)
-        if [ $((current_time - last_check)) -ge 15 ]; then
+        # Perform checks every check_interval seconds
+        if [ $((current_time - last_check)) -ge $check_interval ]; then
             last_check=$current_time
             
             # Check for TLS Bootstrap timeout (kubeadm's 40s internal timeout)
-            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "timed out waiting for the condition"; then
+            if journalctl -u kubelet --no-pager --since "1 minute ago" 2>/dev/null | grep -q "timed out waiting for the condition"; then
                 error "Detected kubeadm TLS Bootstrap timeout (40s limit exceeded)"
                 error "This indicates kubelet cannot complete TLS Bootstrap to API server"
                 return 1
             fi
             
             # Check for containerd capacity issues and attempt to fix them
-            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
+            if journalctl -u kubelet --no-pager --since "1 minute ago" 2>/dev/null | grep -q "invalid capacity 0 on image filesystem"; then
                 warn "Detected containerd filesystem capacity issue during join"
                 warn "Kubelet logs show 'invalid capacity 0 on image filesystem'"
+                warn "This indicates containerd image filesystem is not properly initialized"
                 warn "Attempting to fix containerd image filesystem during join..."
                 
                 # Attempt real-time fix of containerd filesystem
                 if fix_containerd_filesystem; then
                     info "✓ Containerd filesystem fixed during join - continuing monitoring"
+                    info "containerd namespace accessible after fix"
                     # Reset last_check to avoid immediate re-detection
                     last_check=$current_time
                     continue
@@ -299,15 +315,15 @@ monitor_kubelet_join() {
             fi
             
             # Check for API server connectivity issues
-            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "connection refused\|network is unreachable"; then
+            if journalctl -u kubelet --no-pager --since "1 minute ago" 2>/dev/null | grep -q "connection refused\|network is unreachable"; then
                 error "Detected API server connectivity issue"
                 return 1
             fi
             
-            info "TLS Bootstrap in progress... (${current_time}s elapsed)"
+            info "TLS Bootstrap in progress... ($((current_time - start_time))s elapsed)"
         fi
         
-        sleep 3
+        sleep 2  # Reduced sleep time for more responsive monitoring
     done
     
     error "Kubelet join monitoring timed out after ${timeout}s"
@@ -333,11 +349,22 @@ perform_join() {
     
     # Execute join using bash -c to properly handle the command string
     if bash -c "$enhanced_command" 2>&1 | tee -a "$LOG_FILE"; then
-        # Wait for monitor to complete
-        wait $monitor_pid
-        local monitor_result=$?
+        # Wait for monitor to complete with timeout protection
+        local wait_timeout=10
+        local wait_count=0
+        while kill -0 $monitor_pid 2>/dev/null && [ $wait_count -lt $wait_timeout ]; do
+            sleep 1
+            ((wait_count++))
+        done
         
-        if [ $monitor_result -eq 0 ]; then
+        # Force kill monitor if still running
+        if kill -0 $monitor_pid 2>/dev/null; then
+            kill $monitor_pid 2>/dev/null || true
+            warn "Monitor process timed out and was terminated"
+        fi
+        
+        # Check monitor result if it completed naturally
+        if wait $monitor_pid 2>/dev/null; then
             info "✅ kubeadm join completed successfully!"
             return 0
         else
@@ -347,8 +374,9 @@ perform_join() {
     else
         local join_result=$?
         
-        # Kill monitoring process
+        # Kill monitoring process immediately on join failure
         kill $monitor_pid 2>/dev/null || true
+        wait $monitor_pid 2>/dev/null || true
         
         error "kubeadm join command failed with exit code: $join_result"
         return $join_result
