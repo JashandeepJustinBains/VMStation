@@ -1,0 +1,594 @@
+=== Worker Node Join Diagnostics Script ===
+Timestamp: Wed 10 Sep 2025 01:25:54 PM EDT
+Hostname: masternode
+IP Address: 192.168.4.63
+
+This script provides safe, read-only diagnostic commands to identify:
+  1. CNI configuration issues (no network config found in /etc/cni/net.d)
+  2. kubelet standalone mode conflicts (port 10250 in use)
+  3. containerd image filesystem capacity issues (invalid capacity 0)
+  4. PLEG health problems affecting node registration
+
+### 1. CNI AND KUBERNETES CONFIGURATION CHECKS ###
+
+=== CNI Directory Structure ===
+Command: ls -la /etc/cni/net.d/ 2>/dev/null || echo 'CNI directory does not exist'
+Output:
+total 12
+drwx------ 2 root root 4096 Sep  9 19:28 .
+drwxr-xr-x 3 root root 4096 Sep  9 14:27 ..
+-rw-r--r-- 1 root root  292 Sep  9 19:28 10-flannel.conflist
+
+=== CNI Configuration Files Content ===
+Command: find /etc/cni -type f -exec echo 'File: {}' \; -exec cat {} \; 2>/dev/null || echo 'No CNI configuration files found'
+Output:
+File: /etc/cni/net.d/10-flannel.conflist
+{
+  "name": "cbr0",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "flannel",
+      "delegate": {
+        "hairpinMode": true,
+        "isDefaultGateway": true
+      }
+    },
+    {
+      "type": "portmap",
+      "capabilities": {
+        "portMappings": true
+      }
+    }
+  ]
+}
+
+=== CNI Binary Directory ===
+Command: ls -la /opt/cni/bin/ 2>/dev/null || echo 'CNI binary directory missing'
+Output:
+total 79484
+drwxr-xr-x 2 root root     4096 Sep  9 19:28 .
+drwxr-xr-x 3 root root     4096 Aug 25 22:18 ..
+-rwxr-xr-x 1 root root  4016001 Sep 11  2023 bandwidth
+-rwxr-xr-x 1 root root  4531309 Sep 11  2023 bridge
+-rwxr-xr-x 1 root root 10816051 Sep 11  2023 dhcp
+-rwxr-xr-x 1 root root  4171248 Sep 11  2023 dummy
+-rwxr-xr-x 1 root root  4649749 Sep 11  2023 firewall
+-rwxr-xr-x 1 root root  2907995 Sep  9 19:28 flannel
+-rwxr-xr-x 1 root root  4059321 Sep 11  2023 host-device
+-rwxr-xr-x 1 root root  3444776 Sep 11  2023 host-local
+-rwxr-xr-x 1 root root  4193323 Sep 11  2023 ipvlan
+-rwxr-xr-x 1 root root  3514598 Sep 11  2023 loopback
+-rwxr-xr-x 1 root root  4227193 Sep 11  2023 macvlan
+-rwxr-xr-x 1 root root  3955775 Sep 11  2023 portmap
+-rwxr-xr-x 1 root root  4348835 Sep 11  2023 ptp
+-rwxr-xr-x 1 root root  3716095 Sep 11  2023 sbr
+-rwxr-xr-x 1 root root  2984504 Sep 11  2023 static
+-rwxr-xr-x 1 root root  4258344 Sep 11  2023 tap
+-rwxr-xr-x 1 root root  3603365 Sep 11  2023 tuning
+-rwxr-xr-x 1 root root  4187498 Sep 11  2023 vlan
+-rwxr-xr-x 1 root root  3754911 Sep 11  2023 vrf
+
+=== Kubernetes Configuration Directory ===
+Command: ls -la /etc/kubernetes/ 2>/dev/null || echo 'Kubernetes config directory missing'
+Output:
+total 60
+drwxr-xr-x   4 root root  4096 Sep  9 19:28 .
+drwxr-xr-x 111 root root 12288 Sep 10 12:59 ..
+-rw-------   1 root root  5652 Sep  9 19:28 admin.conf
+-rw-------   1 root root  5680 Sep  9 19:28 controller-manager.conf
+-rw-------   1 root root  1984 Sep  9 19:28 kubelet.conf
+drwxr-xr-x   2 root root  4096 Sep  9 19:28 manifests
+drwxr-xr-x   3 root root  4096 Sep  9 19:28 pki
+-rw-------   1 root root  5624 Sep  9 19:28 scheduler.conf
+-rw-------   1 root root  5676 Sep  9 19:28 super-admin.conf
+
+=== Kubelet Data Directory ===
+Command: ls -la /var/lib/kubelet/ 2>/dev/null || echo 'Kubelet data directory missing'
+Output:
+total 48
+drwxr-xr-x  8 root root 4096 Sep  9 19:28 .
+drwxr-xr-x 47 root root 4096 Sep  9 14:37 ..
+-rw-r--r--  1 root root 1021 Sep  9 19:28 config.yaml
+-rw-------  1 root root   62 Sep  9 19:28 cpu_manager_state
+drwxr-xr-x  2 root root 4096 Sep 10 08:56 device-plugins
+-rw-r--r--  1 root root  149 Sep  9 19:28 kubeadm-flags.env
+-rw-------  1 root root   61 Sep  9 19:28 memory_manager_state
+drwxr-xr-x  2 root root 4096 Sep  9 19:28 pki
+drwxr-x---  2 root root 4096 Sep  9 19:28 plugins
+drwxr-x---  2 root root 4096 Sep  9 19:28 plugins_registry
+drwxr-x---  2 root root 4096 Sep 10 08:56 pod-resources
+drwxr-x--- 14 root root 4096 Sep  9 22:11 pods
+
+=== kubeadm Flags Environment ===
+Command: cat /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || echo 'kubeadm-flags.env not found'
+Output:
+KUBELET_KUBEADM_ARGS="--container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
+
+=== Bootstrap Kubelet Configuration ===
+Command: ls -la /etc/kubernetes/bootstrap-kubelet.conf 2>/dev/null || echo 'Bootstrap kubelet config not found'
+Output:
+Bootstrap kubelet config not found
+
+### 2. IMAGE FILESYSTEM AND MOUNT CHECKS ###
+
+=== Containerd Filesystem Capacity ===
+Command: df -h /var/lib/containerd 2>/dev/null || echo 'Cannot check containerd filesystem'
+Output:
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sdb1        58G   14G   42G  25% /
+
+=== Containerd Directory Contents ===
+Command: ls -la /var/lib/containerd/ 2>/dev/null || echo 'Containerd directory missing'
+Output:
+total 44
+drwx--x--x 11 root root 4096 Sep  2 16:06 .
+drwxr-xr-x 47 root root 4096 Sep  9 14:37 ..
+drwxr-xr-x  4 root root 4096 Sep  2 16:05 io.containerd.content.v1.content
+drwxr-xr-x  4 root root 4096 Sep  2 16:06 io.containerd.grpc.v1.cri
+drwx--x--x  2 root root 4096 Sep  9 14:05 io.containerd.metadata.v1.bolt
+drwx--x--x  2 root root 4096 Sep  2 16:04 io.containerd.runtime.v1.linux
+drwx--x--x  3 root root 4096 Sep  2 16:06 io.containerd.runtime.v2.task
+drwx------  2 root root 4096 Sep  2 16:04 io.containerd.snapshotter.v1.btrfs
+drwx------  3 root root 4096 Sep  2 16:04 io.containerd.snapshotter.v1.native
+drwx------  3 root root 4096 Sep  9 14:05 io.containerd.snapshotter.v1.overlayfs
+drwx------  2 root root 4096 Sep  9 22:11 tmpmounts
+
+=== Containerd Subdirectory Sizes ===
+Command: du -sh /var/lib/containerd/* 2>/dev/null || echo 'Cannot determine containerd directory sizes'
+Output:
+658M    /var/lib/containerd/io.containerd.content.v1.content
+340K    /var/lib/containerd/io.containerd.grpc.v1.cri
+2.0M    /var/lib/containerd/io.containerd.metadata.v1.bolt
+4.0K    /var/lib/containerd/io.containerd.runtime.v1.linux
+104K    /var/lib/containerd/io.containerd.runtime.v2.task
+4.0K    /var/lib/containerd/io.containerd.snapshotter.v1.btrfs
+8.0K    /var/lib/containerd/io.containerd.snapshotter.v1.native
+2.1G    /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs
+4.0K    /var/lib/containerd/tmpmounts
+
+=== Relevant Mount Points ===
+Command: mount | grep -E '(containerd|kubelet|var/lib)' || echo 'No relevant mount points found'
+Output:
+/var/lib/snapd/snaps/core_17212.snap on /snap/core/17212 type squashfs (ro,nodev,relatime,errors=continue,x-gdu.hide,x-gvfs-hide)
+/var/lib/snapd/snaps/core_17247.snap on /snap/core/17247 type squashfs (ro,nodev,relatime,errors=continue,x-gdu.hide,x-gvfs-hide)
+/var/lib/snapd/snaps/core20_2599.snap on /snap/core20/2599 type squashfs (ro,nodev,relatime,errors=continue,x-gdu.hide,x-gvfs-hide)
+/var/lib/snapd/snaps/core20_2582.snap on /snap/core20/2582 type squashfs (ro,nodev,relatime,errors=continue,x-gdu.hide,x-gvfs-hide)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/d2fcf7a89bfd0e7ae0ca75863ac3063e01b48ae0d68e921516f9012db782aa53/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/3898cff818a04de7338255757d48f5633717192be7afe2ef60d140afe562a827/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/d2fcf7a89bfd0e7ae0ca75863ac3063e01b48ae0d68e921516f9012db782aa53/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/229/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/229/work)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/dad2d02c15872147c3d2b8ee967b4e56193d6c6a20ea9d7e6e6eaef160789ede/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/a58680571cf526a6bff393d523dae55800d1702de060fba5cc969ac887edd6e2/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/3898cff818a04de7338255757d48f5633717192be7afe2ef60d140afe562a827/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/228/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/228/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/dad2d02c15872147c3d2b8ee967b4e56193d6c6a20ea9d7e6e6eaef160789ede/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/230/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/230/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/a58680571cf526a6bff393d523dae55800d1702de060fba5cc969ac887edd6e2/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/231/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/231/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/c10f200b0c934a421610be5c8c6b1108e406324680fedc7f876bceb062934238/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/43/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/42/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/41/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/40/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/39/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/38/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/37/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/36/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/35/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/34/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/33/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/32/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/31/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/30/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/235/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/235/work)
+tmpfs on /var/lib/kubelet/pods/09a90088-9476-4b89-914e-84a62d28eafc/volumes/kubernetes.io~projected/kube-api-access-gxdl4 type tmpfs (rw,relatime,size=7939296k,inode64)
+tmpfs on /var/lib/kubelet/pods/ccb2eabc-b70a-40b3-ad2c-41b7b46ccdad/volumes/kubernetes.io~projected/kube-api-access-nbnhr type tmpfs (rw,relatime,size=7939296k,inode64)
+tmpfs on /var/lib/kubelet/pods/b587b6a0-785f-4183-a343-bbf47a0d1de9/volumes/kubernetes.io~projected/kube-api-access-qctn5 type tmpfs (rw,relatime,size=174080k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/e65c1ba88d4dbb8f8ea9a652b035c4daec0b958e5f3e62b4d7ddfd357a2bf4bf/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/e65c1ba88d4dbb8f8ea9a652b035c4daec0b958e5f3e62b4d7ddfd357a2bf4bf/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/236/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/236/work)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/e47ebaf6eaf5fc261abc7f0eae476fc43cb8c2f197d0fa219747c2c377f5661a/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/e47ebaf6eaf5fc261abc7f0eae476fc43cb8c2f197d0fa219747c2c377f5661a/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/237/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/237/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/1540840b25a7b72d5e6cf0fbcb63d43109e55ffc6010fef4111e4acf82297bd7/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/17/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/16/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/238/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/238/work)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/3e904f0d941ef5da948c5be2176d495c4538284ff937fa4c1052730e2a7e0205/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/3e904f0d941ef5da948c5be2176d495c4538284ff937fa4c1052730e2a7e0205/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/240/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/240/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/fa57b788268a027cbc17741b94277d5cc57a3c01d77fce34144a9ad86b9b2b47/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/28/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/27/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/26/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/25/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/24/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/23/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/22/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/21/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/20/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/18/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/241/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/241/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/76c48b9d8eaa1a60841d8fdcc7a858d26f558a73e71eed41e80c91a5a0fc31e2/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/96/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/95/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/94/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/93/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/92/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/91/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/90/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/89/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/88/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/87/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/243/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/243/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/d119d9ee93285e80152b167c7f47346c5674dbfb1680180781727c53be71f43a/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/14/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/12/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/9/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/8/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/7/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/6/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/5/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/3/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/2/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/1/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/244/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/244/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/7a35cccb75ff9c0bd248edb762c97aa957f5c035361b4a5ffc973f04aed8e52d/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/15/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/12/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/9/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/8/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/7/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/6/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/5/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/3/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/2/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/1/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/245/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/245/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/79625cdf1f7d30bec97ed426cc794e139359fc6d1adb38932503fb8e0f4dd634/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/13/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/12/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/9/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/8/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/7/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/6/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/5/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/3/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/2/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/1/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/246/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/246/work)
+tmpfs on /var/lib/kubelet/pods/c78470a7-a4dd-42d4-886c-b177283a573d/volumes/kubernetes.io~projected/kube-api-access-9gsh8 type tmpfs (rw,relatime,size=7939296k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/2d38890877c0eaf64314ff2a56b34f0cbe1cee1940e823193482c829ad8ae60a/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/2d38890877c0eaf64314ff2a56b34f0cbe1cee1940e823193482c829ad8ae60a/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/247/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/247/work)
+tmpfs on /var/lib/kubelet/pods/a3054c3a-c45f-40f1-bb18-4ccf4b54e790/volumes/kubernetes.io~projected/kube-api-access-zzkbp type tmpfs (rw,relatime,size=7939296k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/96da60fbf13d9d0bf0f68e66c1e7708e0f923da261b4a4886f311d2ae204f5a9/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/197/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/196/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/195/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/194/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/193/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/192/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/191/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/189/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/188/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/187/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/248/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/248/work)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/09c0e62148f7e3beb225eef8d4dc0faf936d8e9e315daa7198a7ec92b7e24558/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/09c0e62148f7e3beb225eef8d4dc0faf936d8e9e315daa7198a7ec92b7e24558/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/249/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/249/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/ae90fbf55800d812ad24b9ca921025afcf0e7102b431ea2eec232e1902c74ed8/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/208/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/207/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/206/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/205/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/204/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/203/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/202/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/201/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/200/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/199/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/250/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/250/work)
+tmpfs on /var/lib/kubelet/pods/01e13837-70b7-4ce6-ae20-3590b48f55ce/volumes/kubernetes.io~projected/kube-api-access-dhhlf type tmpfs (rw,relatime,size=7939296k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/61c57f43cac0c1579baa1dc7d03633c1648aa621fc4b884c6011565b3ee0e1d1/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/61c57f43cac0c1579baa1dc7d03633c1648aa621fc4b884c6011565b3ee0e1d1/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/251/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/251/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/bbedd1474ea9af5e2642ca547de5228fceb0844f383d978aa7357cca07e47a8d/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/226/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/225/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/224/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/223/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/222/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/221/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/220/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/219/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/218/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/217/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/216/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/215/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/214/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/213/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/212/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/211/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/210/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/252/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/252/work)
+tmpfs on /var/lib/kubelet/pods/22f45acf-ffbf-42f5-9d88-e7f133c4a40a/volumes/kubernetes.io~secret/kubernetes-dashboard-certs type tmpfs (rw,relatime,size=7939296k,inode64)
+tmpfs on /var/lib/kubelet/pods/22f45acf-ffbf-42f5-9d88-e7f133c4a40a/volumes/kubernetes.io~projected/kube-api-access-rdf62 type tmpfs (rw,relatime,size=7939296k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/450bcf4938efc8c05226a0b1f67a6f62cc259412070a006505751300a531b1a4/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/450bcf4938efc8c05226a0b1f67a6f62cc259412070a006505751300a531b1a4/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/253/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/253/work)
+tmpfs on /var/lib/kubelet/pods/11e15d50-b75d-4048-99b9-0b7d8b4094f3/volumes/kubernetes.io~projected/kube-api-access-kbj78 type tmpfs (rw,relatime,size=7939296k,inode64)
+shm on /run/containerd/io.containerd.grpc.v1.cri/sandboxes/e6457163b089f688dee8fda22a2403be4c89f368d9527013987a26188a8b5755/shm type tmpfs (rw,nosuid,nodev,noexec,relatime,size=65536k,inode64)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/e6457163b089f688dee8fda22a2403be4c89f368d9527013987a26188a8b5755/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/44/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/254/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/254/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/544713fbe59d598c4ba70bee09a668b6e7829e61e57d769319d8a781152466d8/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/256/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/255/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/257/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/257/work)
+overlay on /run/containerd/io.containerd.runtime.v2.task/k8s.io/33f4b4be77dac05add377397791a5fd6eb6e7a965e1a119a747218f6565347af/rootfs type overlay (rw,relatime,lowerdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/259/fs:/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/258/fs,upperdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/260/fs,workdir=/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/260/work)
+
+=== Filesystem Capacity Overview ===
+Command: df -h | grep -E '(Filesystem|/var|tmpfs)'
+Output:
+Filesystem               Size  Used Avail Use% Mounted on
+tmpfs                    786M  3.6M  782M   1% /run
+tmpfs                    3.9G     0  3.9G   0% /dev/shm
+tmpfs                    5.0M     0  5.0M   0% /run/lock
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/09a90088-9476-4b89-914e-84a62d28eafc/volumes/kubernetes.io~projected/kube-api-access-gxdl4
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/ccb2eabc-b70a-40b3-ad2c-41b7b46ccdad/volumes/kubernetes.io~projected/kube-api-access-nbnhr
+tmpfs                    170M   12K  170M   1% /var/lib/kubelet/pods/b587b6a0-785f-4183-a343-bbf47a0d1de9/volumes/kubernetes.io~projected/kube-api-access-qctn5
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/c78470a7-a4dd-42d4-886c-b177283a573d/volumes/kubernetes.io~projected/kube-api-access-9gsh8
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/a3054c3a-c45f-40f1-bb18-4ccf4b54e790/volumes/kubernetes.io~projected/kube-api-access-zzkbp
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/01e13837-70b7-4ce6-ae20-3590b48f55ce/volumes/kubernetes.io~projected/kube-api-access-dhhlf
+tmpfs                    7.6G     0  7.6G   0% /var/lib/kubelet/pods/22f45acf-ffbf-42f5-9d88-e7f133c4a40a/volumes/kubernetes.io~secret/kubernetes-dashboard-certs
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/22f45acf-ffbf-42f5-9d88-e7f133c4a40a/volumes/kubernetes.io~projected/kube-api-access-rdf62
+tmpfs                    7.6G   12K  7.6G   1% /var/lib/kubelet/pods/11e15d50-b75d-4048-99b9-0b7d8b4094f3/volumes/kubernetes.io~projected/kube-api-access-kbj78
+tmpfs                    786M  4.0K  786M   1% /run/user/0
+
+=== Containerd Filesystem Write Test ===
+Command: touch /var/lib/containerd/diagnostic_test 2>/dev/null && rm -f /var/lib/containerd/diagnostic_test && echo 'Filesystem is writable' || echo 'Filesystem is read-only or has permission issues'
+Output:
+Filesystem is writable
+
+### 3. CONTAINER RUNTIME INTERFACE (CRI) CHECKS ###
+
+=== Containerd Socket Status ===
+Command: ls -la /run/containerd/containerd.sock 2>/dev/null || echo 'Containerd socket missing'
+Output:
+srw-rw---- 1 root root 0 Sep 10 12:59 /run/containerd/containerd.sock
+
+=== Containerd Service Status ===
+Command: systemctl status containerd --no-pager -l 2>/dev/null || echo 'Cannot check containerd service status'
+Output:
+● containerd.service - containerd container runtime
+     Loaded: loaded (/lib/systemd/system/containerd.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2025-09-10 12:59:29 EDT; 26min ago
+       Docs: https://containerd.io
+    Process: 3507787 ExecStartPre=/sbin/modprobe overlay (code=exited, status=0/SUCCESS)
+   Main PID: 3507788 (containerd)
+      Tasks: 880
+     Memory: 4.1G
+        CPU: 32.384s
+     CGroup: /system.slice/containerd.service
+             ├─    894 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id fd438f78a9b763b95883bfdd2b825905fc4644f7c6a33f159f601c27292d0251 -address /run/containerd/containerd.sock
+             ├─    895 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 2648eb7ce62c15ccaf6b6f0930dda32b8d35427dcd9f0637a9ee5f864080b7d1 -address /run/containerd/containerd.sock
+             ├─    896 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 6938ed60897d21c1def01a10eeb14be18ca0e37926c19a926bf8fe4d9235f7f0 -address /run/containerd/containerd.sock
+             ├─    897 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 88cb55b270def6c51502b4184f1619c0b66fe4ea66b1d0bfba75dd4599493bf4 -address /run/containerd/containerd.sock
+             ├─   1217 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 70288373c914d5cc0105bfc8394f4ade5a4b3b6b876ec21d0698941db62b6494 -address /run/containerd/containerd.sock
+             ├─   1865 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id c0cc7cb5bd868ba1296b955df3ff02fc879b6cd9e6b006aee33e83f6703aa5eb -address /run/containerd/containerd.sock
+             ├─   2014 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 816dcf9b46ed68782a063684f3f3b82e94b2e394b1919df1cc7815bb243f05fb -address /run/containerd/containerd.sock
+             ├─  13762 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 4ddc677a9113cb9b79d9090b51ca58e6e842b6830fb260faf3e1f427b3892295 -address /run/containerd/containerd.sock
+             ├─  79264 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 0881056cf521d96557c5b94cbbede69f57d402ccf1ad321c0e66b1d30cb84c3f -address /run/containerd/containerd.sock
+             ├─  79276 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 9c71f0ff9e244b26893239aaae10de69e7b8bfb7dc523105a58d5f7101125175 -address /run/containerd/containerd.sock
+             ├─  79315 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 37ebe82bf57758b9322753ddea6b371bc567988664a58f95894e1c86ec43a1b8 -address /run/containerd/containerd.sock
+             ├─  79329 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id f24e7bda8672b68587fa2bb2ca5df3ad07449021e3eee804a20f134bfc427f0b -address /run/containerd/containerd.sock
+             ├─  79705 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 7ca7bba557fe4153b2d62cdd2ccd8be7cc65f2dab2d89686a9315af63153cf40 -address /run/containerd/containerd.sock
+             ├─ 132870 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id d1cca91824393b8b047c14c75cc5a8b0073d3deb9c4071ccc9532c8e3153b45b -address /run/containerd/containerd.sock
+             ├─ 138691 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 440c9f72b37b54ba2bdfdd5703c0d09a2a04b6556635a408915c32018b9342c8 -address /run/containerd/containerd.sock
+             ├─ 138978 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id a947d3d5a67a17801df22643e5084ed742992bc0c74946b2a13ae9462a04362d -address /run/containerd/containerd.sock
+             ├─ 142659 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id b240c0e4fbc952ddc6ac22bce3c322748d52ecf1850f33af0f075f07ce2995f0 -address /run/containerd/containerd.sock
+             ├─1391614 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id ac6a605ea31913e3522d68e3fc95621bf3e169768fa0527ed1f2fae7f5260b9b -address /run/containerd/containerd.sock
+             ├─1391638 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id b670480d00806c0fb20223b3100c8edb7aad1ceb9bf0a97e55dcb64b02774c48 -address /run/containerd/containerd.sock
+             ├─1391664 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 6b90a9897c29000157d46557bef544fa0860c387642b05fbd5bdcf28c8a58832 -address /run/containerd/containerd.sock
+             ├─1391674 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id cbc5b48b8b63b2569a528c04162ab169b5eb489248f2cee9a76c9fc792579e08 -address /run/containerd/containerd.sock
+             ├─1392082 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 5cb21202270b96735ecd37aee2c2a7676a17af971cbd620eea866a5030248dd0 -address /run/containerd/containerd.sock
+             ├─1399419 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 07a473a28922d126dd090fa5a1520b00832e499d970cce0df5a662e90978c3bd -address /run/containerd/containerd.sock
+             ├─1399817 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 6efa49579c92d9902e80b9738f72a95d81fde7b27e03caff25d453de13beb154 -address /run/containerd/containerd.sock
+             ├─1399850 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 35c9a31fd388d198758191c82578e5f95486dfd42efab3ec9d6184920499fd60 -address /run/containerd/containerd.sock
+             ├─1417454 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id e64678c0c2b0e32ae95a57992eac317cf4d428167340114face0119ce20cf1f7 -address /run/containerd/containerd.sock
+             ├─1417492 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 30e6836f64d4ff8256d3e7da740a975b37a53379aecaa7dbb09882aa79500bc7 -address /run/containerd/containerd.sock
+             ├─1417514 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 8f56b1fb15251f8dca15729ddd0330ef928fb085c0ab65f2ed9e6ab524826ca6 -address /run/containerd/containerd.sock
+             ├─1417534 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 78cdc0b6b2222149e8d206b66fb2a5b03c97f8d39991e2e943b2d6cbca2554be -address /run/containerd/containerd.sock
+             ├─1418414 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 8b159b8e7ef4ca7d05811049ce77dc01934415e7956bba02b24a061d621c3e18 -address /run/containerd/containerd.sock
+             ├─1553116 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 30ae2a6bac1d952f5c69cbdc14c9dd6769293c77a8808efc7846abaa5e3d8b65 -address /run/containerd/containerd.sock
+             ├─1553389 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id be2e25deb37a8a236a405319643b35bef074c18abde8f7bd494d4ee9e081930d -address /run/containerd/containerd.sock
+             ├─1815449 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 75ed7e71c0e619f565db0f305ab4ad000f194e5ef70a489503b8ff03a58f3200 -address /run/containerd/containerd.sock
+             ├─2041115 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 047b084c11c2bdc94269a988532f71a9703636dc3d16f58b1c2a394ae40328bc -address /run/containerd/containerd.sock
+             ├─2074019 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 569ce44f0db38c6352dd25cffcfca917972d15123009b3e69736ecbc57e1c6b2 -address /run/containerd/containerd.sock
+             ├─2074043 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 7475251accec281e892325d400fe01b8fc0e4e65b1fa0e32b65ff7cce57d9a99 -address /run/containerd/containerd.sock
+             ├─2074070 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 71f8d7bd1c392dbea336f75fbd0107f33c3cc976830f68638924a069f3b827a8 -address /run/containerd/containerd.sock
+             ├─2074083 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 792241c1d56a4f0e818c8dca4026627afe70490fab2be5a728186a935da523ed -address /run/containerd/containerd.sock
+             ├─2074979 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id b0db71ef5bb71e72cbb799a34dccb8e4d76a1fd95620d4c52b8ea316444bf41a -address /run/containerd/containerd.sock
+             ├─2075004 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 3461c57bec8d3eafc043c8bb9f4d0798fafa9c2029b7330a51452608b66bb02f -address /run/containerd/containerd.sock
+             ├─2075468 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 3979fb4f9208561958f3bd77c2b6e59ff2f5d748c2ab4ed996a7f7270b572cd8 -address /run/containerd/containerd.sock
+             ├─2075614 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 08ca04906cd86c7902b937c8d0b87f891c6a460041ef694db35c5f7246b79574 -address /run/containerd/containerd.sock
+             ├─2083235 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 6bd6e3d848dade502f5e01e160459c1f1bbdd69792bbb66eecce983732093931 -address /run/containerd/containerd.sock
+             ├─2083512 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 9938b844daefdb80db914ba8a2bbd2a3d833545a4b6e6c256394004416faf733 -address /run/containerd/containerd.sock
+             ├─2086510 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id a39de32f4576d4bc87335a54529730cccde2263c6617391418c1a3b563046c03 -address /run/containerd/containerd.sock
+             ├─2490324 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 55c0d263ac9b92bcc59ca4974606637ff35df1bc72059ce05c520bc6cb474349 -address /run/containerd/containerd.sock
+             ├─2490340 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id d9a863b2b62e2c23d65302438a8be59a004f7915f504673f22915d56c5d34ab5 -address /run/containerd/containerd.sock
+             ├─2490363 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 2bdc9c8b4f9ff9af30cb8696379b1ec0cbe515779a25393505c762e833d4a22a -address /run/containerd/containerd.sock
+             ├─2490405 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id ff472fc22cf2ae0b48f7f45945ffc0e9291e4e57bee04d5057d41a8c502e8cb7 -address /run/containerd/containerd.sock
+             ├─2491447 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 798f94b99afdc4684b14b7c2824a8ea7c8d0958d8be04a0af385aca9d4d6f4ef -address /run/containerd/containerd.sock
+             ├─2491990 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 22bd00c8f4bf7d2f14f48086fef26cbf84f534c6c83a527a2ae1660bd501f57d -address /run/containerd/containerd.sock
+             ├─2492011 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 01e414564f9270caafd0ac0903bad4bd85049d4609e296bf56b6b0b1883067ea -address /run/containerd/containerd.sock
+             ├─3052493 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 2efe01f996a21b95c2fba153948c10ace07bfc0b11f5f27fd290b058106af8cf -address /run/containerd/containerd.sock
+             ├─3062823 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 8d6a38355054621f379d06ad3b0447726b3e261a26627bb97ff9b76d788ed266 -address /run/containerd/containerd.sock
+             ├─3062978 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 201da22ff8938a6ee69c10284e34a2284068c205ecd9c9c605b33004f42b01a5 -address /run/containerd/containerd.sock
+             ├─3063162 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 2b94445755c3b7f82ee43f7a7b353e04d1ad4ba1c1cacc3d2de0d0f84359ebb5 -address /run/containerd/containerd.sock
+             ├─3167010 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id d2fcf7a89bfd0e7ae0ca75863ac3063e01b48ae0d68e921516f9012db782aa53 -address /run/containerd/containerd.sock
+             ├─3167032 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 3898cff818a04de7338255757d48f5633717192be7afe2ef60d140afe562a827 -address /run/containerd/containerd.sock
+             ├─3167054 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id dad2d02c15872147c3d2b8ee967b4e56193d6c6a20ea9d7e6e6eaef160789ede -address /run/containerd/containerd.sock
+             ├─3167058 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id a58680571cf526a6bff393d523dae55800d1702de060fba5cc969ac887edd6e2 -address /run/containerd/containerd.sock
+             ├─3167672 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id e65c1ba88d4dbb8f8ea9a652b035c4daec0b958e5f3e62b4d7ddfd357a2bf4bf -address /run/containerd/containerd.sock
+             ├─3167698 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id e47ebaf6eaf5fc261abc7f0eae476fc43cb8c2f197d0fa219747c2c377f5661a -address /run/containerd/containerd.sock
+             ├─3167928 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 3e904f0d941ef5da948c5be2176d495c4538284ff937fa4c1052730e2a7e0205 -address /run/containerd/containerd.sock
+             ├─3192639 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 2d38890877c0eaf64314ff2a56b34f0cbe1cee1940e823193482c829ad8ae60a -address /run/containerd/containerd.sock
+             ├─3192786 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 09c0e62148f7e3beb225eef8d4dc0faf936d8e9e315daa7198a7ec92b7e24558 -address /run/containerd/containerd.sock
+             ├─3192960 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 61c57f43cac0c1579baa1dc7d03633c1648aa621fc4b884c6011565b3ee0e1d1 -address /run/containerd/containerd.sock
+             ├─3224095 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 450bcf4938efc8c05226a0b1f67a6f62cc259412070a006505751300a531b1a4 -address /run/containerd/containerd.sock
+             ├─3224221 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id e6457163b089f688dee8fda22a2403be4c89f368d9527013987a26188a8b5755 -address /run/containerd/containerd.sock
+             └─3507788 /usr/bin/containerd
+
+Sep 10 12:59:29 masternode containerd[3507788]: time="2025-09-10T12:59:29.824258639-04:00" level=info msg="Start subscribing containerd event"
+Sep 10 12:59:29 masternode containerd[3507788]: time="2025-09-10T12:59:29.824331329-04:00" level=info msg="Start recovering state"
+Sep 10 12:59:29 masternode containerd[3507788]: time="2025-09-10T12:59:29.824510493-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
+Sep 10 12:59:29 masternode containerd[3507788]: time="2025-09-10T12:59:29.824580248-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
+Sep 10 12:59:29 masternode systemd[1]: Started containerd.service - containerd container runtime.
+Sep 10 12:59:29 masternode containerd[3507788]: time="2025-09-10T12:59:29.826550818-04:00" level=info msg="containerd successfully booted in 0.038423s"
+Sep 10 12:59:30 masternode containerd[3507788]: time="2025-09-10T12:59:30.018684145-04:00" level=info msg="Start event monitor"
+Sep 10 12:59:30 masternode containerd[3507788]: time="2025-09-10T12:59:30.018714164-04:00" level=info msg="Start snapshots syncer"
+Sep 10 12:59:30 masternode containerd[3507788]: time="2025-09-10T12:59:30.018739698-04:00" level=info msg="Start cni network conf syncer for default"
+Sep 10 12:59:30 masternode containerd[3507788]: time="2025-09-10T12:59:30.018751317-04:00" level=info msg="Start streaming server"
+
+=== CRI Tool Version Check ===
+Command: which crictl >/dev/null 2>&1 && crictl version 2>/dev/null || echo 'crictl not available or not working'
+Output:
+Version:  0.1.0
+RuntimeName:  containerd
+RuntimeVersion:  1.6.20~ds1
+RuntimeApiVersion:  v1
+
+=== Container Tool Version Check ===
+Command: which ctr >/dev/null 2>&1 && ctr version 2>/dev/null || echo 'ctr not available or not working'
+Output:
+Client:
+  Version:  1.6.20~ds1
+  Revision: 1.6.20~ds1-1+deb12u1
+  Go version: go1.19.8
+
+Server:
+  Version:  1.6.20~ds1
+  Revision: 1.6.20~ds1-1+deb12u1
+  UUID: 6445019f-969c-4233-a4ca-eb9b1f0a64d1
+
+=== Containerd CNI Configuration ===
+Command: grep -n cni /etc/containerd/config.toml 2>/dev/null || echo 'No CNI configuration found in containerd.toml'
+Output:
+71:    [plugins."io.containerd.grpc.v1.cri".cni]
+72:      bin_dir = "/opt/cni/bin"
+73:      conf_dir = "/etc/cni/net.d"
+88:        cni_conf_dir = ""
+89:        cni_max_conf_num = 0
+104:          cni_conf_dir = ""
+105:          cni_max_conf_num = 0
+129:        cni_conf_dir = ""
+130:        cni_max_conf_num = 0
+
+### 4. KUBELET SERVICE AND PORT STATUS ###
+
+=== kubelet Service Status ===
+Command: systemctl status kubelet --no-pager -l 2>/dev/null || echo 'Cannot check kubelet service status'
+Output:
+● kubelet.service - kubelet: The Kubernetes Node Agent
+     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; preset: enabled)
+    Drop-In: /etc/systemd/system/kubelet.service.d
+             └─10-kubeadm.conf, 20-join-config.conf
+     Active: active (running) since Wed 2025-09-10 08:56:53 EDT; 4h 29min ago
+       Docs: https://kubernetes.io/docs/
+   Main PID: 3411910 (kubelet)
+      Tasks: 13 (limit: 9366)
+     Memory: 52.5M
+        CPU: 10min 30.793s
+     CGroup: /system.slice/kubelet.service
+             └─3411910 /usr/bin/kubelet --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/lib/kubelet/config.yaml --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9
+
+Sep 10 12:36:13 masternode kubelet[3411910]: E0910 12:36:13.269428 3411910 remote_runtime.go:294] "ListPodSandbox with filter from runtime service failed" err="rpc error: code = Unknown desc = server is not initialized yet" filter="&PodSandboxFilter{Id:,State:&PodSandboxStateValue{State:SANDBOX_READY,},LabelSelector:map[string]string{},}"
+Sep 10 12:36:13 masternode kubelet[3411910]: E0910 12:36:13.269466 3411910 kuberuntime_sandbox.go:297] "Failed to list pod sandboxes" err="rpc error: code = Unknown desc = server is not initialized yet"
+Sep 10 12:36:13 masternode kubelet[3411910]: E0910 12:36:13.269487 3411910 kubelet_pods.go:1090] "Error listing containers" err="rpc error: code = Unknown desc = server is not initialized yet"
+Sep 10 12:36:13 masternode kubelet[3411910]: E0910 12:36:13.269506 3411910 kubelet.go:2517] "Failed cleaning pods" err="rpc error: code = Unknown desc = server is not initialized yet"
+Sep 10 12:36:14 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 10 12:36:14 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 10 12:39:26 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 10 12:39:26 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 10 12:59:30 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 10 12:59:30 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+
+=== kubelet Active State ===
+Command: systemctl is-active kubelet 2>/dev/null || echo 'kubelet service state unknown'
+Output:
+active
+
+=== kubelet Enabled State ===
+Command: systemctl is-enabled kubelet 2>/dev/null || echo 'kubelet service enabled state unknown'
+Output:
+enabled
+
+=== Port 10250 Usage (netstat) ===
+Command: netstat -tulpn 2>/dev/null | grep :10250 || echo 'Port 10250 not in use (netstat)'
+Output:
+tcp6       0      0 :::10250                :::*                    LISTEN      3411910/kubelet
+
+=== Port 10250 Usage (ss) ===
+Command: ss -tulpn 2>/dev/null | grep :10250 || echo 'Port 10250 not in use (ss)'
+Output:
+tcp   LISTEN 0      4096               *:10250            *:*    users:(("kubelet",pid=3411910,fd=9))
+
+=== Port 10250 Process Info ===
+Command: lsof -i :10250 2>/dev/null || echo 'lsof not available or port 10250 not in use'
+Output:
+COMMAND     PID USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+kubelet 3411910 root    9u  IPv6 22525420      0t0  TCP *:10250 (LISTEN)
+
+=== Recent kubelet Logs ===
+Command: journalctl -u kubelet --no-pager -l --since='5 minutes ago' 2>/dev/null | tail -20 || echo 'Cannot retrieve kubelet logs'
+Output:
+Sep 10 13:25:54 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+
+### 5. ADDITIONAL SYSTEM HEALTH CHECKS ###
+
+=== System Load and Memory ===
+Command: uptime && free -h
+Output:
+ 13:25:55 up 7 days,  2:42,  1 user,  load average: 0.29, 0.23, 0.26
+               total        used        free      shared  buff/cache   available
+Mem:           7.7Gi       2.6Gi       760Mi       3.8Mi       4.8Gi       5.1Gi
+Swap:             0B          0B          0B
+
+=== Disk Space Overview ===
+Command: df -h | head -10
+Output:
+Filesystem               Size  Used Avail Use% Mounted on
+udev                     3.9G     0  3.9G   0% /dev
+tmpfs                    786M  3.6M  782M   1% /run
+/dev/sdb1                 58G   14G   42G  25% /
+tmpfs                    3.9G     0  3.9G   0% /dev/shm
+tmpfs                    5.0M     0  5.0M   0% /run/lock
+/dev/loop1               105M  105M     0 100% /snap/core/17212
+/dev/loop2               105M  105M     0 100% /snap/core/17247
+/dev/loop3                64M   64M     0 100% /snap/core20/2599
+/dev/loop0                64M   64M     0 100% /snap/core20/2582
+
+=== Network Interface Status ===
+Command: ip addr show | grep -E '^[0-9]+:|inet ' | head -10
+Output:
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    inet 127.0.0.1/8 scope host lo
+2: enp2s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    inet 192.168.4.63/24 brd 192.168.4.255 scope global enp2s0
+3: wlp3s0b1: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN group default qlen 1000
+6: veth9d2dff38@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
+7: veth65d56622@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
+10: vethec7f95f1@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
+12: veth701f2970@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
+13: vethadc55b67@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP group default
+
+=== Systemd Failed Services ===
+Command: systemctl list-units --failed --no-pager || echo 'No failed systemd services found'
+Output:
+  UNIT                     LOAD      ACTIVE SUB    DESCRIPTION
+● fail2ban.service         loaded    failed failed Fail2Ban Service
+● isc-dhcp-server.service  loaded    failed failed LSB: DHCP server
+● openipmi.service         loaded    failed failed LSB: OpenIPMI Driver init script
+● podman-metrics.service   loaded    failed failed Podman Metrics Service
+● monitoring-cleanup.timer not-found failed failed monitoring-cleanup.timer
+
+LOAD   = Reflects whether the unit definition was properly loaded.
+ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
+SUB    = The low-level unit activation state, values depend on unit type.
+5 loaded units listed.
+
+=== DIAGNOSTIC SUMMARY ===
+
+Review the output above for:
+  ❌ CNI configuration missing: Look for 'CNI directory does not exist' or empty /etc/cni/net.d/
+  ❌ Port 10250 conflicts: Look for kubelet or other processes using port 10250
+  ❌ Filesystem capacity 0: Look for 0G, 0B, or 'No space' in containerd filesystem checks
+  ❌ Containerd socket issues: Look for missing /run/containerd/containerd.sock
+  ❌ Service health problems: Look for failed/inactive states in systemctl status
+
+Copy the relevant sections above and provide them for analysis.
+This diagnostic information will help determine the exact remediation steps needed.
+
+=== Worker Node Join Remediation Script ===
+Timestamp: Wed 10 Sep 2025 01:28:37 PM EDT
+Hostname: masternode
+Target: Fix CNI config, kubelet conflicts, containerd filesystem issues
+
+[WARN] This script will:
+[WARN]   1. Stop and mask kubelet service
+[WARN]   2. Fix containerd image filesystem issues
+[WARN]   3. Reset Kubernetes state (preserves /mnt/media)
+[WARN]   4. Prepare for clean kubeadm join
+[WARN]
+[WARN] NOTE: This will NOT modify /mnt/media or any mounted storage
+Continue with remediation? (y/N): y
+
+[INFO] Starting remediation sequence...
+[INFO] === Phase 1: Stop Services and Clean State ===
+[INFO] Stopping kubelet service...
+[SUCCESS] kubelet stopped
+[INFO] Masking kubelet to prevent auto-start...
+Created symlink /etc/systemd/system/kubelet.service → /dev/null.
+[SUCCESS] kubelet masked
+[INFO] Checking port 10250 release...
+[SUCCESS] Port 10250 released successfully
+[INFO] === Phase 2: Fix Runtime and Filesystem Issues ===
+[INFO] Checking containerd image filesystem...
+[INFO] Containerd filesystem capacity: 58G
+[SUCCESS] Containerd filesystem capacity normal: 58G
+[INFO] Starting containerd service...
+[SUCCESS] Containerd service active
+[INFO] Testing containerd functionality...
+[SUCCESS] Containerd responding to API calls
+[INFO] === Phase 3: Reset Kubernetes State ===
+[INFO] Resetting kubeadm state (preserves /mnt/media)...
+[reset] Reading configuration from the cluster...
+[reset] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[preflight] Running pre-flight checks
+[reset] Deleted contents of the etcd data directory: /var/lib/etcd
+[reset] Stopping the kubelet service
+[reset] Unmounting mounted directories in "/var/lib/kubelet"
+[reset] Deleting contents of directories: [/etc/kubernetes/manifests /var/lib/kubelet /etc/kubernetes/pki]
+[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]
+
+The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
+
+The reset process does not reset or clean up iptables rules or IPVS tables.
+If you wish to reset iptables, you must do so manually by using the "iptables" command.
+
+If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
+to reset your system's IPVS tables.
+
+The reset process does not clean your kubeconfig files and you must remove them manually.
+Please, check the contents of the $HOME/.kube/config file.
+[INFO] Cleaning Kubernetes directories...
+[INFO] Cleaning kubeadm flags...
+[SUCCESS] Kubernetes state reset completed
+[INFO] === Phase 4: Prepare for Join ===
+[INFO] Unmasking kubelet service...
+Removed "/etc/systemd/system/kubelet.service".
+[SUCCESS] kubelet unmasked and systemd reloaded
+[INFO] Verifying prerequisites...
+[SUCCESS] ✓ containerd service is active
+[SUCCESS] ✓ No existing kubelet.conf (clean state)
+[SUCCESS] ✓ No existing CNI config (clean state)
+[INFO] === Phase 5: Ready for Join ===
+[SUCCESS] System prepared for kubeadm join!
+[INFO]
+[INFO] Next steps:
+[INFO] 1. Obtain join command from control plane:
+[INFO]    ssh <control-plane-ip> 'kubeadm token create --print-join-command'
+[INFO]
+[INFO] 2. Execute join with appropriate flags:
+[INFO]    kubeadm join <control-plane-ip>:6443 \
+[INFO]      --token <token> \
+[INFO]      --discovery-token-ca-cert-hash <hash> \
+[INFO]      --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt \
+[INFO]      --v=5
+[INFO]
+[INFO] 3. Monitor join progress:
+[INFO]    journalctl -u kubelet -f
+[INFO]
+[INFO] === Phase 6: Post-Join Verification (after join completes) ===
+[INFO]
+[INFO] After successful join, verify with these commands:
+[INFO]
+[INFO] # Wait for kubelet to stabilize
+[INFO] sleep 30
+[INFO]
+[INFO] # Check node registration (from control plane)
+[INFO] kubectl get nodes -o wide
+[INFO]
+[INFO] # Verify CNI configuration populated
+[INFO] ls -la /etc/cni/net.d/
+[INFO] cat /etc/cni/net.d/10-flannel.conflist
+[INFO]
+[INFO] # Check kubelet health
+[INFO] systemctl status kubelet
+[INFO] journalctl -u kubelet --since='2 minutes ago' | grep -v 'level=info'
+
+[SUCCESS] Remediation completed successfully!
+[INFO] System is ready for kubeadm join operation.
+
+[INFO] === Final System Status ===
+[INFO] kubelet: inactive (enabled)
+[INFO] containerd: active (enabled)
+[INFO] Port 10250: available
+[INFO] CNI config: 0 files
+[INFO] Containerd filesystem: 58G used: 13G
+
+[SUCCESS] Ready for kubeadm join!
