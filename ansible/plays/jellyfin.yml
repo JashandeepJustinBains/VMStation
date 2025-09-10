@@ -48,12 +48,126 @@
           sudo dnf install -y kubectl
       when: kubectl_check.rc != 0
 
-    - name: Deploy Jellyfin using manifest (do not wait on Namespace objects)
+    - name: Deploy Jellyfin namespace
       kubernetes.core.k8s:
-        src: "{{ jellyfin_manifest_path }}"
         state: present
-        wait: false
-      register: jellyfin_deployment
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: jellyfin
+            labels:
+              name: jellyfin
+              app: jellyfin
+
+    - name: Deploy Jellyfin pod
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: jellyfin
+            namespace: jellyfin
+            labels:
+              app: jellyfin
+              component: media-server
+          spec:
+            nodeSelector:
+              kubernetes.io/hostname: "{{ jellyfin_node_name | default('homelab') }}"
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 1000
+              fsGroup: 1000
+            containers:
+            - name: jellyfin
+              image: jellyfin/jellyfin:latest
+              imagePullPolicy: IfNotPresent
+              ports:
+              - name: http
+                containerPort: 8096
+                protocol: TCP
+              - name: https
+                containerPort: 8920
+                protocol: TCP
+              env:
+              - name: JELLYFIN_PublishedServerUrl
+                value: "http://{{ ansible_host }}:30096"
+              resources:
+                requests:
+                  memory: "512Mi"
+                  cpu: "200m"
+                limits:
+                  memory: "2Gi"
+                  cpu: "1000m"
+              volumeMounts:
+              - name: media
+                mountPath: /media
+                readOnly: true
+              - name: config
+                mountPath: /config
+                readOnly: false
+              livenessProbe:
+                httpGet:
+                  path: /health
+                  port: 8096
+                initialDelaySeconds: 120
+                periodSeconds: 30
+                timeoutSeconds: 10
+                failureThreshold: 3
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: 8096
+                initialDelaySeconds: 60
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 3
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                capabilities:
+                  drop:
+                  - ALL
+            volumes:
+            - name: media
+              hostPath:
+                path: "{{ jellyfin_media_path | default('/srv/media') }}"
+                type: Directory
+            - name: config
+              hostPath:
+                path: "{{ jellyfin_config_path | default('/var/lib/jellyfin') }}"
+                type: DirectoryOrCreate
+            restartPolicy: Always
+
+    - name: Deploy Jellyfin service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: jellyfin-service
+            namespace: jellyfin
+            labels:
+              app: jellyfin
+              component: media-server
+          spec:
+            type: NodePort
+            selector:
+              app: jellyfin
+              component: media-server
+            ports:
+            - name: http
+              port: 8096
+              targetPort: 8096
+              nodePort: 30096
+              protocol: TCP
+            - name: https
+              port: 8920
+              targetPort: 8920
+              nodePort: 30920
+              protocol: TCP
 
     - name: Get Jellyfin pod status
       kubernetes.core.k8s_info:
