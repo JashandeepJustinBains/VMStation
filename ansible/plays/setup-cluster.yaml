@@ -733,8 +733,32 @@
         msg: "Initiating kubeadm join with enhanced retry logic"
       when: not kubelet_conf.stat.exists
 
+    - name: "Prepare kubelet for join (ensure clean state)"
+      block:
+        - name: "Stop kubelet service before join"
+          systemd:
+            name: kubelet
+            state: stopped
+          failed_when: false
+
+        - name: "Remove any stale kubelet configuration files"
+          shell: |
+            rm -f /var/lib/kubelet/config.yaml || true
+            rm -f /var/lib/kubelet/kubeadm-flags.env || true
+          failed_when: false
+
+        - name: "Ensure kubelet service is enabled for post-join management"
+          systemd:
+            name: kubelet
+            enabled: yes
+
+        - name: "Wait for kubelet to fully stop"
+          pause:
+            seconds: 5
+      when: not kubelet_conf.stat.exists
+
     - name: "Join cluster with retry logic"
-      shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+      shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --timeout=300s --v=5
       register: join_result
       retries: 3
       delay: 30
@@ -874,8 +898,26 @@
           pause:
             seconds: 60
 
+        - name: "Prepare kubelet for retry join (ensure clean state)"
+          block:
+            - name: "Stop kubelet service before retry"
+              systemd:
+                name: kubelet
+                state: stopped
+              failed_when: false
+
+            - name: "Remove any stale kubelet configuration files before retry"
+              shell: |
+                rm -f /var/lib/kubelet/config.yaml || true
+                rm -f /var/lib/kubelet/kubeadm-flags.env || true
+              failed_when: false
+
+            - name: "Wait for kubelet to fully stop before retry"
+              pause:
+                seconds: 5
+
         - name: "Retry join after thorough cleanup"
-          shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+          shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --timeout=300s --v=5
           register: join_retry_result
           failed_when: join_retry_result.rc != 0
 
