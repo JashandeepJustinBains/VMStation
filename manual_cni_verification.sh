@@ -28,6 +28,23 @@ ls -l /opt/cni/bin || true
 ls -l /run/containerd/containerd.sock
 sudo grep -R "cni" /etc/containerd/config.toml /etc/containerd -n 2>/dev/null || true
 
+## Critical Checks for "no network config found in /etc/cni/net.d" errors:
+
+# Check if CNI directory exists and has proper permissions
+ls -la /etc/cni/net.d/ || echo "ERROR: CNI directory missing"
+find /etc/cni -type f 2>/dev/null || echo "No CNI config files found"
+
+# Check containerd CNI configuration
+grep -R "cni" /etc/containerd/config.toml /etc/containerd -n 2>/dev/null || echo "No CNI config in containerd"
+
+# Check if kubelet is blocking join (port 10250 conflict)
+netstat -tulpn | grep :10250 || ss -tulpn | grep :10250 || echo "Port 10250 available"
+systemctl is-active kubelet || echo "kubelet not running"
+
+# Check containerd image filesystem capacity (PLEG health)
+df -h /var/lib/containerd || echo "Cannot check containerd filesystem"
+du -sh /var/lib/containerd/* 2>/dev/null || echo "Containerd directory empty or inaccessible"
+
 ## Reapply Flannel (control plane) if needed:
 
 # use the version that matches your Kubernetes minor version (example)

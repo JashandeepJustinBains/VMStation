@@ -277,6 +277,198 @@ kubectl describe node 192.168.4.62
 kubectl get pods --all-namespaces -o wide
 ```
 
+## Critical Worker Node Join Failures - Advanced Diagnostics
+
+### Why Joins Still Fail After Basic Fixes
+
+The most common persistent join failures are caused by:
+
+1. **CNI Configuration Missing**: containerd reports "no network config found in /etc/cni/net.d" 
+   - The playbook may have failed to install a binary, so per-node CNI files were not created
+   - Flannel DaemonSet only populates CNI on nodes after they join (chicken-and-egg problem)
+   
+2. **kubelet Standalone Mode Conflict**: kubelet running in "standalone mode" blocks kubeadm join
+   - systemd started kubelet which listens on port 10250
+   - kubeadm join cannot proceed while port is occupied
+   
+3. **Image Filesystem Issues**: kubelet and containerd report "invalid capacity 0 on image filesystem"
+   - containerd's image filesystem (/var/lib/containerd) missing, unmounted or zero capacity
+   - PLEG becomes unhealthy, causing node registration failures
+
+### Immediate Read-Only Diagnostic Commands
+
+Run these commands on the failing worker node and paste results for analysis:
+
+#### 1. CNI and Kubernetes Configuration Check
+```bash
+# Check CNI directory and files
+ls -la /etc/cni/net.d/
+find /etc/cni -type f -exec ls -la {} \; 2>/dev/null
+cat /etc/cni/net.d/* 2>/dev/null || echo "No CNI config files found"
+
+# Check Kubernetes configs
+ls -la /etc/kubernetes/ 2>/dev/null || echo "No kubernetes config directory"
+ls -la /var/lib/kubelet/ 2>/dev/null || echo "No kubelet data directory"
+
+# Check kubeadm-flags and bootstrap configs
+cat /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || echo "No kubeadm-flags.env"
+ls -la /etc/kubernetes/bootstrap-kubelet.conf 2>/dev/null || echo "No bootstrap config"
+```
+
+#### 2. Image Filesystem and Mounts Check
+```bash
+# Check containerd image filesystem
+df -h /var/lib/containerd
+ls -la /var/lib/containerd/
+du -sh /var/lib/containerd/* 2>/dev/null
+
+# Check mount points and filesystem capacity
+mount | grep -E "(containerd|kubelet|var/lib)"
+df -h | grep -E "(Filesystem|/var|tmpfs)"
+
+# Verify filesystem not read-only
+touch /var/lib/containerd/test_write 2>/dev/null && rm /var/lib/containerd/test_write && echo "Filesystem writable" || echo "Filesystem read-only or permission issue"
+```
+
+#### 3. Container Runtime Interface (CRI) Socket Check
+```bash
+# Check containerd socket
+ls -la /run/containerd/containerd.sock
+systemctl status containerd --no-pager -l
+
+# Test CRI connectivity (if crictl available)
+which crictl && crictl version 2>/dev/null || echo "crictl not available"
+which ctr && ctr version 2>/dev/null || echo "ctr not available"
+
+# Check containerd config for CNI
+grep -n cni /etc/containerd/config.toml 2>/dev/null || echo "No CNI config in containerd.toml"
+```
+
+#### 4. kubelet Service Status and Port Check
+```bash
+# Check kubelet service status
+systemctl status kubelet --no-pager -l
+systemctl is-active kubelet
+systemctl is-enabled kubelet
+
+# Check port 10250 usage
+netstat -tulpn | grep :10250 || ss -tulpn | grep :10250
+lsof -i :10250 2>/dev/null || echo "lsof not available, port check incomplete"
+
+# Check kubelet logs for errors
+journalctl -u kubelet --no-pager -l --since="5 minutes ago" | tail -20
+```
+
+### Exact Remediation Sequence
+
+When diagnostics confirm the issues above, follow this precise sequence:
+
+#### Phase 1: Stop Services and Clean State
+```bash
+# Stop kubelet to release port 10250
+systemctl stop kubelet
+systemctl mask kubelet
+
+# Verify port is released
+sleep 2
+netstat -tulpn | grep :10250 && echo "ERROR: Port still in use" || echo "OK: Port 10250 released"
+
+# Stop containerd if filesystem issues detected
+systemctl stop containerd
+sleep 2
+```
+
+#### Phase 2: Fix Runtime and Filesystem Issues
+```bash
+# Fix containerd image filesystem if capacity was 0
+if [ ! -d /var/lib/containerd ]; then
+    mkdir -p /var/lib/containerd
+    chown root:root /var/lib/containerd
+    chmod 755 /var/lib/containerd
+fi
+
+# Clear any corrupted containerd state (ONLY if capacity was 0)
+if [ "$(df -BG /var/lib/containerd | tail -1 | awk '{print $2}' | sed 's/G//')" = "0" ]; then
+    echo "WARNING: Containerd filesystem shows 0 capacity, clearing state"
+    rm -rf /var/lib/containerd/*
+fi
+
+# Start containerd and verify health
+systemctl start containerd
+sleep 3
+systemctl status containerd --no-pager | grep Active
+
+# Test containerd functionality
+ctr version >/dev/null 2>&1 && echo "OK: containerd responding" || echo "ERROR: containerd not responding"
+```
+
+#### Phase 3: Reset Kubernetes State (Safe)
+```bash
+# Reset kubeadm state (preserves /mnt/media and other data)
+kubeadm reset -f --cert-dir=/etc/kubernetes/pki
+
+# Clean kubernetes directories (avoiding /mnt/media)
+rm -rf /etc/kubernetes/*
+rm -rf /var/lib/kubelet/*
+rm -rf /etc/cni/net.d/*
+
+# Clean temporary kubeadm flags
+rm -f /var/lib/kubelet/kubeadm-flags.env
+```
+
+#### Phase 4: Prepare for Join
+```bash
+# Unmask kubelet (but don't start it - let kubeadm handle this)
+systemctl unmask kubelet
+systemctl daemon-reload
+
+# Verify prerequisites
+systemctl status containerd --no-pager | grep "Active: active"
+test ! -f /etc/kubernetes/kubelet.conf && echo "OK: No existing kubelet.conf"
+test ! -d /etc/cni/net.d/*.conflist && echo "OK: No existing CNI config"
+```
+
+#### Phase 5: Execute Join
+```bash
+# Generate and execute join command (replace with actual values)
+# Example: kubeadm join 192.168.4.63:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+
+# Add specific flags for the identified issues:
+kubeadm join <CONTROL_PLANE_IP>:6443 \
+  --token <TOKEN> \
+  --discovery-token-ca-cert-hash <HASH> \
+  --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt \
+  --v=5
+
+# Monitor join progress
+echo "Join initiated. Monitor with: journalctl -u kubelet -f"
+```
+
+#### Phase 6: Post-Join Verification
+```bash
+# Wait for kubelet to stabilize
+sleep 30
+
+# Verify node registration (run from control plane)
+kubectl get nodes -o wide
+
+# Check CNI configuration was populated by Flannel
+ls -la /etc/cni/net.d/
+cat /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "CNI config still missing"
+
+# Verify kubelet health
+systemctl status kubelet --no-pager
+journalctl -u kubelet --no-pager -l --since="2 minutes ago" | grep -E "(ERROR|FATAL)" || echo "No critical kubelet errors"
+```
+
+### Troubleshooting Notes
+
+- **Never modify `/mnt/media`** - This sequence carefully avoids any interaction with mounted media storage
+- **Port 10250 conflicts** - Always mask kubelet before join attempts if it's already running
+- **CNI chicken-and-egg** - Flannel DaemonSet can't populate CNI configs until node joins, but join may fail without CNI
+- **Filesystem capacity** - containerd image filesystem showing 0 capacity indicates mount or permissions issues
+- **PLEG health** - Pod Lifecycle Event Generator becomes unhealthy when containerd filesystem is problematic
+
 ## Support Resources
 
 1. **Debug Logs**: Check `debug_logs/` directory for detailed failure information
