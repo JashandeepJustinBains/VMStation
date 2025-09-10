@@ -585,8 +585,8 @@
         dest: "/tmp/{{ item | basename }}"
         mode: '0755'
       loop:
-        - "../scripts/validate_join_prerequisites.sh"
-        - "../scripts/enhanced_kubeadm_join.sh"
+        - "../../scripts/validate_join_prerequisites.sh"
+        - "../../scripts/enhanced_kubeadm_join.sh"
       when: not kubelet_conf.stat.exists
 
     - name: "Enhanced kubeadm join with comprehensive validation"
