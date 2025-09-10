@@ -167,13 +167,43 @@
         path: /etc/kubernetes/admin.conf
       register: kubeconfig
 
+    - name: "Check if control plane was disrupted (admin.conf missing but other artifacts exist)"
+      stat:
+        path: /etc/kubernetes/manifests
+      register: manifests_dir
+    
+    - name: "Detect disrupted control plane state"
+      set_fact:
+        control_plane_disrupted: "{{ not kubeconfig.stat.exists and manifests_dir.stat.exists }}"
+    
+    - name: "Clean up disrupted control plane state"
+      block:
+        - name: "Reset disrupted control plane"
+          shell: kubeadm reset --force
+          failed_when: false
+        
+        - name: "Clean up remaining Kubernetes directories"
+          shell: |
+            rm -rf /etc/kubernetes/*
+            rm -rf /var/lib/kubelet/*
+            rm -rf /etc/cni/net.d/*
+          failed_when: false
+          
+        - name: "Reset systemd and restart containerd"
+          shell: |
+            systemctl daemon-reload
+            systemctl restart containerd
+          failed_when: false
+          
+      when: control_plane_disrupted
+
     - name: "Initialize cluster with secure authorization mode"
       command: >
         kubeadm init 
         --pod-network-cidr={{ pod_network_cidr }}
         --apiserver-advertise-address={{ ansible_default_ipv4.address }}
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
-      when: not kubeconfig.stat.exists
+      when: not kubeconfig.stat.exists or control_plane_disrupted
       register: kubeadm_init
       ignore_errors: "{{ enable_fallback | bool }}"
 
@@ -184,7 +214,7 @@
         --apiserver-advertise-address={{ ansible_default_ipv4.address }}
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
       when: 
-        - not kubeconfig.stat.exists
+        - (not kubeconfig.stat.exists or control_plane_disrupted)
         - enable_fallback | bool
         - kubeadm_init.failed | default(false)
       register: kubeadm_init_fallback
@@ -472,6 +502,20 @@
   vars:
     control_plane_ip: "{{ groups['monitoring_nodes'][0] }}"
   tasks:
+    - name: "Verify this is not a control plane node"
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: control_plane_check
+
+    - name: "Skip join if this is a control plane node"
+      debug:
+        msg: "Skipping join - this node appears to be a control plane (admin.conf exists)"
+      when: control_plane_check.stat.exists
+
+    - name: "End play for control plane nodes"
+      meta: end_host
+      when: control_plane_check.stat.exists
+
     - name: "Check if node is joined"
       stat:
         path: /etc/kubernetes/kubelet.conf
@@ -553,6 +597,27 @@
         port: 6443
         timeout: 60
       when: not kubelet_conf.stat.exists
+
+    - name: "Verify control plane health before join"
+      uri:
+        url: "https://{{ control_plane_ip }}:6443/healthz"
+        method: GET
+        validate_certs: no
+        timeout: 30
+      register: control_plane_health
+      failed_when: false
+      when: not kubelet_conf.stat.exists
+      
+    - name: "Fail if control plane is not healthy"
+      fail:
+        msg: |
+          Control plane health check failed!
+          Status: {{ control_plane_health.status | default('unknown') }}
+          This indicates the control plane at {{ control_plane_ip }} is not ready to accept joins.
+          Please check the control plane logs and ensure it's properly initialized.
+      when: 
+        - not kubelet_conf.stat.exists
+        - control_plane_health.status is not defined or control_plane_health.status != 200
 
     - name: "Copy join command from control plane"
       slurp:
@@ -700,12 +765,18 @@
       when: not kubelet_conf.stat.exists
 
     - name: "Join cluster with retry logic"
-      shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+      shell: |
+        set -e
+        echo "Starting kubeadm join at $(date)"
+        timeout 300 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+        echo "Join completed successfully at $(date)"
       register: join_result
       retries: 3
       delay: 30
       when: not kubelet_conf.stat.exists
       failed_when: false
+      async: 600
+      poll: 30
 
     - name: "Handle join failure with cleanup and retry"
       block:
@@ -793,9 +864,15 @@
             seconds: 60
 
         - name: "Retry join after thorough cleanup"
-          shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+          shell: |
+            set -e
+            echo "Starting retry join at $(date)"
+            timeout 300 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+            echo "Retry join completed successfully at $(date)"
           register: join_retry_result
           failed_when: join_retry_result.rc != 0
+          async: 600
+          poll: 30
 
       when: 
         - not kubelet_conf.stat.exists

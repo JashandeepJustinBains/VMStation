@@ -36,6 +36,30 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Check if this is a control plane node (should not run remediation on control plane)
+if [[ -f /etc/kubernetes/admin.conf ]] || [[ -f /etc/kubernetes/manifests/kube-apiserver.yaml ]]; then
+    log_error "ERROR: This appears to be a Kubernetes control plane node!"
+    log_error "Worker node remediation should NOT be run on control plane nodes."
+    log_error "This script is designed for worker nodes that need to join an existing cluster."
+    log_error ""
+    log_error "If you need to fix control plane issues, use appropriate control plane recovery tools."
+    log_error "Running this script on a control plane will break your cluster!"
+    exit 1
+fi
+
+# Check if this node is already properly joined to a cluster as a worker
+if [[ -f /etc/kubernetes/kubelet.conf ]] && systemctl is-active --quiet kubelet; then
+    log_warn "This node appears to already be joined to a Kubernetes cluster."
+    log_warn "kubelet.conf exists and kubelet service is active."
+    log_warn ""
+    read -p "Do you want to proceed anyway and reset this worker node? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Remediation cancelled - node appears to be working correctly"
+        exit 0
+    fi
+fi
+
 echo "=== Worker Node Join Remediation Script ==="
 echo "Timestamp: $(date)"
 echo "Hostname: $(hostname)"
