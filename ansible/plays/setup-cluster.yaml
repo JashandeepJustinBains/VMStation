@@ -127,6 +127,43 @@
             regexp: 'SystemdCgroup = false'
             replace: 'SystemdCgroup = true'
 
+        - name: "Create CNI directories before containerd starts"
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          loop:
+            - /opt/cni/bin
+            - /etc/cni/net.d
+            - /var/lib/cni/networks
+            - /run/flannel
+
+        - name: "Create placeholder CNI configuration before containerd starts"
+          copy:
+            content: |
+              {
+                "name": "cni0",
+                "cniVersion": "0.3.1",
+                "plugins": [
+                  {
+                    "type": "bridge",
+                    "bridge": "cni0",
+                    "isDefaultGateway": true,
+                    "ipMasq": true,
+                    "ipam": {
+                      "type": "host-local",
+                      "subnet": "10.244.0.0/16"
+                    }
+                  }
+                ]
+              }
+            dest: /etc/cni/net.d/00-placeholder.conflist
+            owner: root
+            group: root
+            mode: '0644'
+
         - name: "Start and enable containerd"
           systemd:
             name: containerd
@@ -312,14 +349,98 @@
       register: flannel_status
       failed_when: false
 
-    - name: "Display Flannel status"
+    - name: "Check CNI plugins availability"
+      shell: |
+        echo "=== CNI Plugins Status ==="
+        ls -la /opt/cni/bin/ | grep -E "(flannel|bridge|host-local|loopback)" || echo "CNI plugins not found"
+        echo ""
+        echo "=== CNI Configuration Directory ==="
+        ls -la /etc/cni/net.d/ || echo "CNI config directory not found"
+      register: cni_plugins_status
+      failed_when: false
+
+    - name: "Check containerd CNI configuration"
+      shell: |
+        echo "=== Containerd CNI Configuration ==="
+        if [ -f /etc/containerd/config.toml ]; then
+          grep -A5 -B5 "cni" /etc/containerd/config.toml || echo "No CNI config found in containerd.toml"
+        else
+          echo "containerd config.toml not found"
+        fi
+      register: containerd_cni_config
+      failed_when: false
+
+    - name: "Analyze CNI runtime status"
+      shell: |
+        # Check if CNI shows real network interfaces or just loopback
+        if ip link show 2>/dev/null | grep -q "cni0\|flannel\|veth"; then
+          echo "cni_has_real_network=true"
+        else
+          echo "cni_only_loopback=true"
+        fi
+      register: cni_runtime_analysis
+      failed_when: false
+
+    - name: "Apply Flannel remediation if needed"
+      block:
+        - name: "Reapply Flannel when CNI shows only loopback interface"
+          shell: |
+            echo "Detected CNI only showing loopback interface - reapplying Flannel"
+            kubectl delete -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml || true
+            sleep 10
+            kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: flannel_reapply
+          when: cni_runtime_analysis.stdout is defined and 'cni_only_loopback=true' in cni_runtime_analysis.stdout
+
+    - name: "Check Flannel DaemonSet status"
+      shell: |
+        echo "=== Flannel DaemonSet and Pod Status ==="
+        kubectl get daemonset,pods -n kube-flannel -l app=flannel -o wide
+        echo ""
+        echo "=== Flannel Readiness Check ==="
+        kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' || echo "0"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: flannel_ds_status
+      failed_when: false
+
+    - name: "Display comprehensive CNI readiness status"
       debug:
         msg: |
-          Flannel CNI Status:
+          === CNI Readiness Status ===
+          
+          Control Plane Flannel Status:
           {{ flannel_status.stdout }}
+          
+          CNI Plugins Status:
+          {{ cni_plugins_status.stdout }}
+          
+          Containerd CNI Configuration:
+          {{ containerd_cni_config.stdout }}
+          
+          CNI Runtime Analysis:
+          {{ cni_runtime_analysis.stdout }}
+          
+          Flannel DaemonSet Status:
+          {{ flannel_ds_status.stdout }}
+          
+          {% if cni_runtime_analysis.stdout is defined and 'cni_only_loopback=true' in cni_runtime_analysis.stdout %}
+          WARNING: CNI runtime only shows loopback interface!
+          This indicates that Flannel CNI is not properly configured or running.
+          
+          Recommended actions:
+          1. Check Flannel pod status: kubectl get pods -n kube-flannel
+          2. Check Flannel logs: kubectl logs -n kube-flannel -l app=flannel
+          3. Verify network configuration: kubectl get nodes -o wide
+          4. Manual Flannel reapplication has been attempted automatically
+          {% endif %}
           
           Note: Flannel pods may show CrashLoopBackOff until worker nodes join.
           This is expected behavior in a single-node control plane setup.
+          
+          CNI Configuration Ready: Worker nodes can now join the cluster.
 
     - name: "Wait for API server to be ready"
       wait_for:
@@ -785,72 +906,6 @@
               
       when: not kubelet_conf.stat.exists
 
-    - name: "Install CNI plugins and configuration on worker nodes (required for kubelet)"
-      block:
-        - name: "Create CNI directories on worker nodes"
-          file:
-            path: "{{ item }}"
-            state: directory
-            owner: root
-            group: root
-            mode: '0755'
-          loop:
-            - /opt/cni/bin
-            - /etc/cni/net.d
-            - /var/lib/cni/networks
-            - /var/lib/cni/results
-
-        - name: "Download and install Flannel CNI plugin binary on worker nodes"
-          get_url:
-            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
-            dest: /opt/cni/bin/flannel
-            mode: '0755'
-            timeout: 60
-          retries: 3
-
-        - name: "Download and install additional CNI plugins on worker nodes"
-          unarchive:
-            src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
-            dest: /opt/cni/bin
-            remote_src: yes
-            creates: /opt/cni/bin/bridge
-          retries: 3
-
-        - name: "Create basic CNI configuration for worker nodes"
-          copy:
-            content: |
-              {
-                "name": "cni0",
-                "cniVersion": "0.3.1",
-                "plugins": [
-                  {
-                    "type": "flannel",
-                    "delegate": {
-                      "hairpinMode": true,
-                      "isDefaultGateway": true
-                    }
-                  },
-                  {
-                    "type": "portmap",
-                    "capabilities": {
-                      "portMappings": true
-                    }
-                  }
-                ]
-              }
-            dest: /etc/cni/net.d/10-flannel.conflist
-            owner: root
-            group: root
-            mode: '0644'
-
-        - name: "Create Flannel subnet environment directory"
-          file:
-            path: /run/flannel
-            state: directory
-            mode: '0755'
-
-      when: not kubelet_conf.stat.exists
-
     - name: "Enhanced CNI readiness verification for worker nodes"
       block:
         - name: "Wait for Flannel DaemonSet to be ready on control plane"
@@ -925,9 +980,75 @@
           
       when: not kubelet_conf.stat.exists
       
+    - name: "Install CNI plugins and configuration on worker nodes (required for kubelet)"
+      block:
+        - name: "Create CNI directories on worker nodes"
+          file:
+            path: "{{ item }}"
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          loop:
+            - /opt/cni/bin
+            - /etc/cni/net.d
+            - /var/lib/cni/networks
+            - /var/lib/cni/results
+
+        - name: "Download and install Flannel CNI plugin binary on worker nodes"
+          get_url:
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
+            dest: /opt/cni/bin/flannel
+            mode: '0755'
+            timeout: 60
+          retries: 3
+
+        - name: "Download and install additional CNI plugins on worker nodes"
+          unarchive:
+            src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+            dest: /opt/cni/bin
+            remote_src: yes
+            creates: /opt/cni/bin/bridge
+          retries: 3
+
+        - name: "Create basic CNI configuration for worker nodes BEFORE containerd restart"
+          copy:
+            content: |
+              {
+                "name": "cni0",
+                "cniVersion": "0.3.1",
+                "plugins": [
+                  {
+                    "type": "flannel",
+                    "delegate": {
+                      "hairpinMode": true,
+                      "isDefaultGateway": true
+                    }
+                  },
+                  {
+                    "type": "portmap",
+                    "capabilities": {
+                      "portMappings": true
+                    }
+                  }
+                ]
+              }
+            dest: /etc/cni/net.d/10-flannel.conflist
+            owner: root
+            group: root
+            mode: '0644'
+
+        - name: "Create Flannel subnet environment directory"
+          file:
+            path: /run/flannel
+            state: directory
+            mode: '0755'
+
+      when: not kubelet_conf.stat.exists
+      
     - name: "Prepare containerd for kubelet join"
       block:
-        - name: "Restart containerd to ensure proper filesystem detection"
+        - name: "Restart containerd AFTER CNI configuration is ready"
           systemd:
             name: containerd
             state: restarted
