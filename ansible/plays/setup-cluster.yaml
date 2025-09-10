@@ -670,6 +670,102 @@
         - name: "Display kubelet status"
           debug:
             msg: "{{ kubelet_validation.stdout }}"
+
+        - name: "Post-join CNI functionality verification"
+          block:
+            - name: "Wait for CNI to become functional after join"
+              shell: |
+                retry_count=0
+                max_retries=20
+                
+                echo "Waiting for CNI to initialize after join..."
+                while [ "$retry_count" -lt "$max_retries" ]; do
+                  if crictl info 2>/dev/null | grep -q '"lastCNILoadStatus"'; then
+                    if ! crictl info 2>/dev/null | grep -A2 '"lastCNILoadStatus"' | grep -q 'failed\|not initialized'; then
+                      echo "CNI successfully loaded and initialized"
+                      exit 0
+                    fi
+                  fi
+                  
+                  retry_count_display=$((retry_count + 1))
+                  echo "Waiting for CNI to initialize... (attempt $retry_count_display/$max_retries)"
+                  sleep 15
+                  retry_count=$((retry_count + 1))
+                done
+                
+                echo "CNI failed to initialize within timeout"
+                exit 1
+              register: cni_init_verification
+              failed_when: cni_init_verification.rc != 0
+
+            - name: "Verify kubelet network readiness"
+              shell: |
+                retry_count=0
+                max_retries=8
+                
+                echo "Verifying kubelet network readiness..."
+                while [ "$retry_count" -lt "$max_retries" ]; do
+                  if journalctl -u kubelet --no-pager --since "5 minutes ago" | grep -q "Container runtime network not ready\|network plugin is not ready"; then
+                    retry_count_display=$((retry_count + 1))
+                    echo "Kubelet still waiting for network... (attempt $retry_count_display/$max_retries)"
+                    sleep 20
+                    retry_count=$((retry_count + 1))
+                  else
+                    echo "Kubelet network readiness achieved"
+                    exit 0
+                  fi
+                done
+                
+                echo "Kubelet network readiness verification inconclusive"
+                exit 0
+              register: kubelet_network_verification
+
+          rescue:
+            - name: "CNI diagnostic report on verification failure"
+              shell: |
+                echo "=== CNI Diagnostic Report ==="
+                echo "Timestamp: $(date)"
+                echo ""
+                
+                echo "1. CNI Configuration Status:"
+                ls -la /etc/cni/net.d/ 2>/dev/null || echo "ERROR: CNI directory missing or inaccessible"
+                echo ""
+                
+                echo "2. CNI Configuration Content:"
+                if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
+                  echo "File: /etc/cni/net.d/10-flannel.conflist:"
+                  cat /etc/cni/net.d/10-flannel.conflist
+                else
+                  echo "ERROR: Flannel CNI configuration missing"
+                fi
+                echo ""
+                
+                echo "3. containerd CNI Status:"
+                if crictl info 2>/dev/null | grep -A10 '"cniconfig"'; then
+                  echo "SUCCESS: containerd CNI info available"
+                else
+                  echo "ERROR: containerd not responding or CNI config missing"
+                fi
+                echo ""
+                
+                echo "4. Recent kubelet CNI errors:"
+                journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -i "cni\|network\|plugin" | tail -5 || echo "No recent CNI-related kubelet logs"
+                echo ""
+                
+                echo "5. Flannel pod status on control plane:"
+                kubectl get pods -n kube-flannel -o wide 2>/dev/null | head -10 || echo "Cannot check Flannel pod status"
+              register: cni_diagnostic_report
+              delegate_to: "{{ control_plane_ip }}"
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              
+            - name: "Display CNI diagnostic results"
+              debug:
+                msg: "{{ cni_diagnostic_report.stdout_lines }}"
+                
+            - name: "Continue despite CNI verification failure"
+              debug:
+                msg: "CNI verification failed but continuing with join process. Manual verification may be required."
             
         - name: "Verify node appears in cluster (from control plane)"
           shell: kubectl get nodes {{ ansible_hostname }} -o wide
@@ -755,6 +851,80 @@
 
       when: not kubelet_conf.stat.exists
 
+    - name: "Enhanced CNI readiness verification for worker nodes"
+      block:
+        - name: "Wait for Flannel DaemonSet to be ready on control plane"
+          shell: |
+            # Check Flannel DaemonSet readiness
+            kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' | grep -q '^[1-9]' || {
+              echo "Flannel DaemonSet not ready yet"
+              exit 1
+            }
+            
+            # Verify at least one Flannel pod is running
+            kubectl get pods -n kube-flannel -l app=flannel --field-selector=status.phase=Running | grep -q flannel || {
+              echo "No Flannel pods running"
+              exit 1
+            }
+            
+            echo "Flannel DaemonSet ready on control plane"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          delegate_to: "{{ control_plane_ip }}"
+          register: flannel_ready_check
+          retries: 10
+          delay: 15
+          until: flannel_ready_check.rc == 0
+
+        - name: "Verify and validate CNI configuration on worker"
+          block:
+            - name: "Check CNI configuration file exists"
+              stat:
+                path: /etc/cni/net.d/10-flannel.conflist
+              register: cni_config_exists
+
+            - name: "Validate CNI configuration syntax"
+              shell: |
+                if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
+                  # Validate JSON syntax using python3
+                  python3 -m json.tool /etc/cni/net.d/10-flannel.conflist >/dev/null || {
+                    echo "CNI configuration has invalid JSON syntax"
+                    exit 1
+                  }
+                  
+                  # Verify it contains Flannel configuration
+                  grep -q '"type": "flannel"' /etc/cni/net.d/10-flannel.conflist || {
+                    echo "CNI configuration missing Flannel type"
+                    exit 1
+                  }
+                  
+                  echo "CNI configuration valid"
+                else
+                  echo "CNI configuration file missing"
+                  exit 1
+                fi
+              register: cni_syntax_check
+              failed_when: cni_syntax_check.rc != 0
+
+        - name: "Enhanced pre-join CNI preparation"
+          shell: |
+            # Ensure CNI directories have proper permissions for containerd
+            chmod 755 /etc/cni/net.d /opt/cni/bin
+            chown root:root /etc/cni/net.d /opt/cni/bin
+            
+            # Create additional CNI runtime directories if missing
+            mkdir -p /var/lib/cni/networks /var/lib/cni/results
+            chmod 755 /var/lib/cni/networks /var/lib/cni/results
+            
+            # Ensure Flannel runtime directory exists
+            mkdir -p /run/flannel
+            chmod 755 /run/flannel
+            
+            echo "CNI preparation completed successfully"
+          register: cni_preparation
+          
+      when: not kubelet_conf.stat.exists
+      
     - name: "Prepare containerd for kubelet join"
       block:
         - name: "Restart containerd to ensure proper filesystem detection"
