@@ -36,22 +36,45 @@ echo ""
 check_kubelet_mode() {
     info "Checking kubelet operational mode..."
     
-    # Check kubelet logs for standalone mode indicators
-    if journalctl -u kubelet --no-pager -n 50 | grep -q "Standalone mode"; then
-        warn "kubelet is running in standalone mode"
-        warn "This means it's not connected to a Kubernetes cluster API server"
+    local standalone_indicators=0
+    
+    # Check for the specific patterns seen in the problem statement
+    if journalctl -u kubelet --no-pager -n 100 | grep -q "Kubelet is running in standalone mode"; then
+        warn "✗ kubelet is running in standalone mode"
+        ((standalone_indicators++))
+    fi
+    
+    if journalctl -u kubelet --no-pager -n 100 | grep -q "will skip API server sync"; then
+        warn "✗ kubelet is skipping API server sync"
+        ((standalone_indicators++))
+    fi
+    
+    if journalctl -u kubelet --no-pager -n 100 | grep -q "No API server defined - no node status update"; then
+        warn "✗ No API server defined for node status updates"
+        ((standalone_indicators++))
+    fi
+    
+    if journalctl -u kubelet --no-pager -n 100 | grep -q "Kubernetes client is nil"; then
+        warn "✗ Kubernetes client is nil - no cluster connection"
+        ((standalone_indicators++))
+    fi
+    
+    # Check for successful cluster mode indicators
+    if journalctl -u kubelet --no-pager -n 100 | grep -q "Successfully registered node"; then
+        info "✓ kubelet has successfully registered with cluster"
+        standalone_indicators=0
+    elif journalctl -u kubelet --no-pager -n 100 | grep -q "Node ready"; then
+        info "✓ kubelet reports node as ready"
+        standalone_indicators=0
+    fi
+    
+    if [ $standalone_indicators -gt 0 ]; then
+        error "kubelet is in standalone mode - detected $standalone_indicators issue patterns"
+        error "This means the node is not properly connected to the Kubernetes cluster"
         return 1
-    elif journalctl -u kubelet --no-pager -n 50 | grep -q "Started kubelet"; then
-        if journalctl -u kubelet --no-pager -n 50 | grep -q "No API server defined"; then
-            warn "kubelet started but no API server connection configured"
-            return 1
-        else
-            info "✓ kubelet appears to be in cluster mode"
-            return 0
-        fi
     else
-        warn "kubelet status unclear from logs"
-        return 1
+        info "✓ kubelet appears to be in cluster mode"
+        return 0
     fi
 }
 
@@ -207,6 +230,82 @@ check_node_type() {
     fi
 }
 
+# Function to diagnose missing kubelet.conf issue
+diagnose_missing_kubelet_conf() {
+    info "Diagnosing missing kubelet.conf issue..."
+    
+    # Check if kubelet.conf exists
+    if [ -f /etc/kubernetes/kubelet.conf ]; then
+        info "✓ kubelet.conf exists"
+        return 0
+    fi
+    
+    error "✗ /etc/kubernetes/kubelet.conf is missing"
+    warn "This indicates the node has not properly joined the cluster or the join failed"
+    
+    # Check for other kubernetes config files to assess join status
+    if [ -d /etc/kubernetes ]; then
+        info "Kubernetes directory exists, checking contents:"
+        ls -la /etc/kubernetes/ || true
+        
+        # Check for partial join artifacts
+        if [ -f /etc/kubernetes/pki/ca.crt ]; then
+            warn "Found ca.crt but no kubelet.conf - join may have partially failed"
+        fi
+        
+        if [ -f /etc/kubernetes/bootstrap-kubelet.conf ]; then
+            warn "Found bootstrap-kubelet.conf but no kubelet.conf - join process incomplete"
+        fi
+    else
+        warn "No /etc/kubernetes directory - node has never attempted to join cluster"
+    fi
+    
+    # Check kubelet service status for more clues
+    info "Checking kubelet service status:"
+    systemctl status kubelet --no-pager -l || true
+    
+    # Look for recent join attempts in logs
+    info "Checking for recent kubeadm join attempts in system logs:"
+    if journalctl --no-pager --since "1 hour ago" | grep -i "kubeadm.*join" | head -10; then
+        warn "Found recent join attempts - check if they completed successfully"
+    else
+        warn "No recent join attempts found in logs"
+    fi
+    
+    return 1
+}
+
+# Function to provide remediation steps for missing kubelet.conf
+suggest_kubelet_conf_remediation() {
+    error "=== REMEDIATION REQUIRED ==="
+    echo ""
+    error "The kubelet.conf file is missing, which means this node is not joined to the cluster."
+    error "To fix this issue, you need to re-join the node to the cluster."
+    echo ""
+    warn "STEP 1: Ensure the master node is accessible"
+    echo "  Test connectivity: nc -v <master-ip> 6443"
+    echo ""
+    warn "STEP 2: Get a fresh join command from the master node"
+    echo "  On master: kubeadm token create --print-join-command"
+    echo ""
+    warn "STEP 3: Reset this node completely (if needed)"
+    echo "  kubeadm reset --force"
+    echo "  systemctl stop kubelet containerd"
+    echo "  rm -rf /etc/kubernetes /var/lib/kubelet /etc/cni/net.d"
+    echo "  systemctl start containerd"
+    echo ""
+    warn "STEP 4: Re-join the node using the fresh command"
+    echo "  <join-command-from-step-2>"
+    echo ""
+    warn "STEP 5: Verify the join was successful"
+    echo "  ls -la /etc/kubernetes/kubelet.conf"
+    echo "  systemctl status kubelet"
+    echo "  # On master: kubectl get nodes"
+    echo ""
+    info "Alternatively, run the automated cluster setup:"
+    echo "  ansible-playbook -i inventory.txt ansible/plays/setup-cluster.yaml"
+}
+
 # Function to show diagnostics
 show_diagnostics() {
     info "Kubelet diagnostics:"
@@ -248,6 +347,12 @@ main() {
     else
         info "kubelet is in standalone mode - analyzing configuration..."
         
+        # First check for missing kubelet.conf - the main issue from the problem statement
+        if ! diagnose_missing_kubelet_conf; then
+            suggest_kubelet_conf_remediation
+            exit 1
+        fi
+        
         # Check configuration files
         if check_cluster_config_files; then
             info "Configuration files appear correct"
@@ -269,6 +374,7 @@ main() {
                 info "✓ SUCCESS: kubelet is now in cluster mode!"
             else
                 warn "kubelet still in standalone mode - may need cluster join"
+                warn "If kubelet.conf is missing, the node needs to be joined to the cluster"
             fi
         else
             error "Failed to fix kubelet configuration"
