@@ -21,6 +21,7 @@
           - ca-certificates
           - curl
           - gnupg
+          - netcat-traditional
         state: present
       when: ansible_os_family == 'Debian'
 
@@ -66,6 +67,7 @@
               - kubeadm
               - kubectl
               - containerd
+              - nc
             state: present
       when: ansible_os_family == 'RedHat'
 
@@ -699,132 +701,346 @@
       register: pre_join_containerd_check
       when: not kubelet_conf.stat.exists
 
-    - name: "Join cluster with retry logic"
-      shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
-      register: join_result
-      retries: 3
-      delay: 30
-      when: not kubelet_conf.stat.exists
-      failed_when: false
-
-    - name: "Handle join failure with cleanup and retry"
+    - name: "Join cluster with enhanced retry logic"
       block:
-        - name: "Capture kubelet logs for troubleshooting"
+        - name: "Attempt join with comprehensive error handling"
           shell: |
-            echo "=== Kubelet service status ==="
+            # Enhanced join with better timeout and progress monitoring
+            echo "=== Starting kubeadm join at $(date) ==="
+            
+            # Check connectivity first
+            echo "Testing API server connectivity..."
+            if ! nc -z -w 10 {{ control_plane_ip }} 6443; then
+              echo "ERROR: Cannot connect to API server at {{ control_plane_ip }}:6443"
+              exit 1
+            fi
+            
+            # Verify containerd is responding
+            echo "Verifying containerd..."
+            if ! timeout 10 ctr version >/dev/null 2>&1; then
+              echo "ERROR: containerd is not responding"
+              exit 1
+            fi
+            
+            # Execute join with longer timeout and progress monitoring
+            echo "Executing kubeadm join..."
+            timeout 900 /tmp/kubeadm-join.sh \
+              --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt,NumCPU,Mem \
+              --v=5 2>&1 | tee /tmp/join-output.log
+            
+            # Check if join was successful by looking for success indicators
+            if grep -q "This node has joined the cluster" /tmp/join-output.log; then
+              echo "=== Join completed successfully at $(date) ==="
+              exit 0
+            else
+              echo "=== Join failed or incomplete at $(date) ==="
+              exit 1
+            fi
+          register: join_attempt
+          retries: 5
+          delay: 45
+          until: join_attempt.rc == 0
+          when: not kubelet_conf.stat.exists
+          failed_when: false
+
+    - name: "Handle join failure with enhanced diagnostics and cleanup"
+      block:
+        - name: "Capture comprehensive failure diagnostics"
+          shell: |
+            echo "=== Comprehensive Join Failure Diagnostics ==="
+            echo "Timestamp: $(date)"
+            echo ""
+            
+            echo "=== Join Output Analysis ==="
+            if [ -f /tmp/join-output.log ]; then
+              echo "Last 50 lines of join output:"
+              tail -50 /tmp/join-output.log
+              echo ""
+              echo "Searching for specific error patterns:"
+              grep -E "(error|ERROR|failed|FAILED|timeout|TIMEOUT)" /tmp/join-output.log || echo "No obvious error patterns found"
+              echo ""
+            else
+              echo "No join output log found"
+            fi
+            
+            echo "=== System Service Status ==="
+            echo "Kubelet status:"
             systemctl status kubelet --no-pager -l || true
             echo ""
-            echo "=== Recent kubelet logs ==="
-            journalctl -u kubelet --no-pager -l --since "5 minutes ago" || true
-            echo ""
-            echo "=== Containerd status ==="
+            echo "Containerd status:"
             systemctl status containerd --no-pager -l || true
-          register: join_failure_logs
+            echo ""
+            
+            echo "=== Network Connectivity ==="
+            echo "Control plane connectivity test:"
+            nc -z -w 5 {{ control_plane_ip }} 6443 && echo "API server reachable" || echo "API server NOT reachable"
+            echo ""
+            echo "DNS resolution test:"
+            nslookup {{ control_plane_ip }} || echo "DNS resolution failed"
+            echo ""
+            
+            echo "=== Port Status ==="
+            echo "Port 10250 usage:"
+            ss -tulpn | grep :10250 || echo "Port 10250 not in use"
+            echo ""
+            
+            echo "=== Recent Kubelet Logs ==="
+            journalctl -u kubelet --no-pager -l --since "10 minutes ago" | tail -30 || true
+            echo ""
+            
+            echo "=== Containerd Health ==="
+            ctr version 2>&1 || echo "Containerd not responding"
+            echo ""
+            
+            echo "=== CNI Configuration ==="
+            ls -la /etc/cni/net.d/ || echo "CNI directory missing"
+            if [ -d /etc/cni/net.d/ ]; then
+              find /etc/cni/net.d/ -name "*.conf*" -exec echo "File: {}" \; -exec cat {} \;
+            fi
+            echo ""
+          register: comprehensive_diagnostics
           failed_when: false
 
-        - name: "Display failure diagnostics"
+        - name: "Display comprehensive diagnostics"
           debug:
             msg: |
-              === Join Failure Diagnostics ===
-              {{ join_failure_logs.stdout }}
+              === Join Failure Analysis ===
+              {{ comprehensive_diagnostics.stdout }}
               
-              === Join Command Output ===
-              {% if join_result.stdout is defined %}
-              STDOUT: {{ join_result.stdout }}
+              === Join Attempt Results ===
+              {% if join_attempt.attempts is defined %}
+              Total attempts: {{ join_attempt.attempts }}
               {% endif %}
-              {% if join_result.stderr is defined %}
-              STDERR: {{ join_result.stderr }}
+              {% if join_attempt.stdout is defined %}
+              Last attempt output: {{ join_attempt.stdout[-1000:] }}
               {% endif %}
-        - name: "Cleaning up after failed join"
-          shell: |
-            echo "=== Resetting node after failed join ==="
-            kubeadm reset --force --v=5
-          failed_when: false
+              {% if join_attempt.stderr is defined %}
+              Last attempt errors: {{ join_attempt.stderr[-1000:] }}
+              {% endif %}
 
-        - name: "Stop services for comprehensive cleanup"
+        - name: "Enhanced cleanup after join failure"
           shell: |
+            echo "=== Enhanced cleanup sequence ==="
+            
+            # Stop services gracefully
+            echo "Stopping services..."
             systemctl stop kubelet || true
             systemctl disable kubelet || true
-            systemctl stop containerd || true
-          failed_when: false
-
-        - name: "Clean up networking rules"
-          shell: iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X || true
-          failed_when: false
-
-        - name: "Remove Kubernetes state directories"
-          shell: |
+            
+            # Wait for processes to fully stop
+            sleep 5
+            
+            # Kill any remaining kubelet processes
+            pkill -f kubelet || true
+            
+            # Reset kubeadm state with verbose output
+            echo "Resetting kubeadm state..."
+            kubeadm reset --force --v=5 2>&1 | tee /tmp/reset-output.log
+            
+            # Comprehensive cleanup
+            echo "Cleaning up directories and configurations..."
             rm -rf /etc/cni/net.d/* || true
-            rm -rf /var/lib/cni/ || true
+            rm -rf /var/lib/cni/ || true  
             rm -rf /var/lib/kubelet/* || true
             rm -rf /etc/kubernetes/* || true
             rm -rf /var/lib/etcd/* || true
-          failed_when: false
-
-        - name: "Reset systemd services"
-          shell: |
+            rm -rf /run/flannel/* || true
+            
+            # Clean up iptables rules that might interfere
+            echo "Cleaning iptables rules..."
+            iptables -F || true
+            iptables -t nat -F || true
+            iptables -t mangle -F || true
+            iptables -X || true
+            
+            # Reset systemd state
+            echo "Resetting systemd state..."
             systemctl reset-failed kubelet || true
             systemctl reset-failed containerd || true
             systemctl daemon-reload
+            
+            # Restart containerd with verification
+            echo "Restarting containerd..."
+            systemctl restart containerd
+            sleep 10
+            
+            # Verify containerd is working
+            if ! timeout 15 ctr version >/dev/null 2>&1; then
+              echo "WARNING: containerd not responding after restart"
+              systemctl status containerd --no-pager
+              exit 1
+            fi
+            
+            # Re-enable kubelet
+            echo "Re-enabling kubelet..."
+            systemctl enable kubelet
+            
+            echo "Cleanup completed successfully"
+          register: enhanced_cleanup
           failed_when: false
 
-        - name: "Restart containerd and prepare for retry"
-          systemd:
-            name: containerd
-            state: started
-            enabled: yes
-
-        - name: "Wait for containerd to be fully ready"
+        - name: "Wait for system stabilization after cleanup"
           pause:
-            seconds: 10
+            seconds: 30
+            
+        - name: "Regenerate join command after cleanup"
+          block:
+            - name: "Get fresh join command from control plane"
+              shell: kubeadm token create --print-join-command
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: fresh_join_command
+              delegate_to: "{{ control_plane_ip }}"
+              retries: 3
+              delay: 10
+              until: fresh_join_command.rc == 0
+              
+            - name: "Update join command script"
+              copy:
+                content: |
+                  #!/bin/bash
+                  # Fresh kubeadm join command generated after cleanup
+                  {{ fresh_join_command.stdout }} "$@"
+                dest: /tmp/kubeadm-join.sh
+                mode: '0755'
+          when: enhanced_cleanup.rc == 0
 
-        - name: "Enable kubelet for kubeadm join"
-          systemd:
-            name: kubelet
-            enabled: yes
-
-        - name: "Verify containerd is running before retry"
-          command: systemctl is-active containerd
-          register: containerd_retry_check
-          failed_when: containerd_retry_check.stdout != "active"
-
-        - name: "Wait longer before retry to ensure system stability"
-          pause:
-            seconds: 60
-
-        - name: "Retry join after thorough cleanup"
-          shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
-          register: join_retry_result
-          failed_when: join_retry_result.rc != 0
+        - name: "Final retry attempt with fresh configuration"
+          shell: |
+            echo "=== Final retry attempt at $(date) ==="
+            
+            # Extra verification before final attempt
+            echo "Pre-retry system check..."
+            systemctl is-active containerd || exit 1
+            timeout 10 ctr version >/dev/null || exit 1
+            nc -z -w 10 {{ control_plane_ip }} 6443 || exit 1
+            
+            echo "Executing final join attempt..."
+            timeout 1200 /tmp/kubeadm-join.sh \
+              --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt,NumCPU,Mem,Swap \
+              --v=5 2>&1 | tee /tmp/final-join-output.log
+            
+            # Verify success
+            if grep -q "This node has joined the cluster" /tmp/final-join-output.log; then
+              echo "=== Final retry SUCCESSFUL at $(date) ==="
+              exit 0
+            else
+              echo "=== Final retry FAILED at $(date) ==="
+              exit 1
+            fi
+          register: final_join_attempt
+          failed_when: final_join_attempt.rc != 0
 
       when: 
         - not kubelet_conf.stat.exists
-        - join_result is defined
-        - (join_result.rc is defined and join_result.rc != 0) or (join_result.failed | default(false))
+        - join_attempt is defined
+        - (join_attempt.rc is defined and join_attempt.rc != 0) or (join_attempt.failed | default(false))
 
-    - name: "Display join result"
+    - name: "Display final join result"
       debug:
         msg: |
-          Join attempt result:
-          {% if join_result is defined and join_result.rc is defined %}
-          Initial join - Return code: {{ join_result.rc }}
-          {% if join_result.stderr is defined %}
-          Initial join error: {{ join_result.stderr }}
+          === Worker Node Join Summary ===
+          
+          {% if join_attempt is defined and join_attempt.rc == 0 %}
+          ✓ PRIMARY JOIN: SUCCESSFUL
+          Attempts: {{ join_attempt.attempts | default(1) }}
+          Join completed on attempt: {{ join_attempt.attempts | default(1) }}
+          {% elif join_attempt is defined %}
+          ✗ PRIMARY JOIN: FAILED
+          Attempts made: {{ join_attempt.attempts | default('unknown') }}
+          Return code: {{ join_attempt.rc | default('timeout/error') }}
           {% endif %}
-          {% elif join_result is defined %}
-          Initial join - Status: {{ join_result.get('msg', 'No return code available') }}
+          
+          {% if final_join_attempt is defined and final_join_attempt.rc == 0 %}
+          ✓ RETRY JOIN: SUCCESSFUL  
+          Node successfully joined after cleanup and retry
+          {% elif final_join_attempt is defined %}
+          ✗ RETRY JOIN: FAILED
+          Return code: {{ final_join_attempt.rc }}
           {% endif %}
-          {% if join_retry_result is defined and join_retry_result.rc is defined %}
-          Retry join - Return code: {{ join_retry_result.rc }}
-          {% if join_retry_result.stderr is defined %}
-          Retry join error: {{ join_retry_result.stderr }}
+          
+          {% if join_attempt is defined and join_attempt.rc == 0 %}
+          STATUS: Node joined successfully on primary attempt
+          {% elif final_join_attempt is defined and final_join_attempt.rc == 0 %}
+          STATUS: Node joined successfully after retry
+          {% else %}
+          STATUS: Node join failed - manual intervention required
           {% endif %}
-          {% elif join_retry_result is defined %}
-          Retry join - Status: {{ join_retry_result.get('msg', 'No return code available') }}
+          
+          {% if join_attempt is defined and join_attempt.rc != 0 and final_join_attempt is not defined %}
+          NOTE: Join failed but no cleanup/retry was attempted (check conditions)
           {% endif %}
       when: not kubelet_conf.stat.exists
 
-    - name: "Remove join command"
+    - name: "Verify successful node join"
+      block:
+        - name: "Wait for kubelet to stabilize"
+          pause:
+            seconds: 30
+            
+        - name: "Check kubelet service status"
+          systemd:
+            name: kubelet
+          register: kubelet_service_status
+          
+        - name: "Verify kubelet.conf was created"
+          stat:
+            path: /etc/kubernetes/kubelet.conf
+          register: final_kubelet_conf_check
+          
+        - name: "Check node registration from control plane"
+          shell: |
+            kubectl get nodes {{ ansible_hostname }} -o wide --no-headers 2>/dev/null | awk '{print $2}'
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: node_status_check
+          delegate_to: "{{ control_plane_ip }}"
+          retries: 10
+          delay: 15
+          until: node_status_check.stdout in ['Ready', 'NotReady']
+          failed_when: false
+          
+        - name: "Display node join verification"
+          debug:
+            msg: |
+              === Node Join Verification ===
+              
+              Kubelet service: {{ kubelet_service_status.status.ActiveState | default('unknown') }}
+              Kubelet config exists: {{ final_kubelet_conf_check.stat.exists | default(false) }}
+              
+              {% if node_status_check.stdout %}
+              Node status from control plane: {{ node_status_check.stdout }}
+              {% if node_status_check.stdout == 'Ready' %}
+              ✓ Node is fully ready and operational
+              {% elif node_status_check.stdout == 'NotReady' %}
+              ⚠ Node is registered but not ready (may take a few minutes for CNI setup)
+              {% endif %}
+              {% else %}
+              ✗ Node not visible from control plane yet
+              {% endif %}
+              
+              CNI Configuration:
+              {% if ansible_os_family == 'Debian' %}
+              To check CNI status: ls -la /etc/cni/net.d/
+              {% endif %}
+              
+              {% if final_kubelet_conf_check.stat.exists and kubelet_service_status.status.ActiveState == 'active' %}
+              RESULT: ✓ JOIN SUCCESSFUL - Node is properly configured
+              {% else %}
+              RESULT: ⚠ JOIN INCOMPLETE - Manual verification needed
+              {% endif %}
+              
+      when: 
+        - not kubelet_conf.stat.exists
+        - (join_attempt is defined and join_attempt.rc == 0) or (final_join_attempt is defined and final_join_attempt.rc == 0)
+
+    - name: "Clean up temporary join files"
       file:
-        path: /tmp/kubeadm-join.sh
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /tmp/kubeadm-join.sh
+        - /tmp/join-output.log
+        - /tmp/final-join-output.log
+        - /tmp/reset-output.log
+      failed_when: false
