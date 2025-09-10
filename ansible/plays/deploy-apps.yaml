@@ -243,6 +243,44 @@
       kubernetes.core.k8s:
         state: present
         src: https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+      
+    - name: "Patch Kubernetes Dashboard to run on monitoring node"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kubernetes-dashboard
+            namespace: kubernetes-dashboard
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+                  
+    - name: "Patch Dashboard Metrics Scraper to run on monitoring node"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: dashboard-metrics-scraper
+            namespace: kubernetes-dashboard
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
 
     - name: "Create Dashboard Admin User"
       kubernetes.core.k8s:

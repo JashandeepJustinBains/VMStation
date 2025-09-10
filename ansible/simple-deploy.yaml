@@ -19,9 +19,9 @@
           4. Additional applications (Dashboard, MongoDB, etc.)
           
           Target Infrastructure:
-          - Control plane: 192.168.4.63 (monitoring_nodes)
-          - Storage node: 192.168.4.61 (storage_nodes)  
-          - Compute node: 192.168.4.62 (compute_nodes)
+          - Control plane: {{ groups['monitoring_nodes'][0] }} (monitoring_nodes)
+          - Storage node: {{ groups['storage_nodes'][0] }} (storage_nodes)  
+          - Compute node: {{ groups['compute_nodes'][0] }} (compute_nodes)
 
 # Step 1: Setup Kubernetes cluster
 - import_playbook: plays/setup-cluster.yaml
@@ -89,6 +89,6 @@
           {% endif %}
           
           Access URLs:
-          - Grafana: http://192.168.4.63:30300  
-          - Prometheus: http://192.168.4.63:30090
-          - Jellyfin: http://192.168.4.61:30096
+          - Grafana: http://{{ groups['monitoring_nodes'][0] }}:30300  
+          - Prometheus: http://{{ groups['monitoring_nodes'][0] }}:30090
+          - Jellyfin: http://{{ groups['storage_nodes'][0] }}:30096
