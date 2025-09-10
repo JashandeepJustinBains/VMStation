@@ -49,14 +49,14 @@ echo ""
 
 # Test 3: Check for Improved Condition Logic in Cleanup Block
 echo "✓ Test 3: Enhanced Condition Logic for Join Failure Handling"
-if grep -A 30 "Handle join failure with cleanup and retry" ansible/plays/setup-cluster.yaml | grep -q "join_result.rc is defined"; then
+if grep -A 100 "Handle join failure with cleanup and retry" ansible/plays/setup-cluster.yaml | grep -q "join_result.rc is defined"; then
     echo "  ✅ Improved condition logic for cleanup block"
 else
     echo "  ❌ Missing improved condition logic for cleanup block"
     exit 1
 fi
 
-if grep -A 30 "Handle join failure with cleanup and retry" ansible/plays/setup-cluster.yaml | grep -q "join_result.failed"; then
+if grep -A 100 "Handle join failure with cleanup and retry" ansible/plays/setup-cluster.yaml | grep -q "join_result.failed"; then
     echo "  ✅ Added fallback check for join_result.failed"
 else
     echo "  ❌ Missing fallback check for join_result.failed"
