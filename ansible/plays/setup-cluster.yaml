@@ -567,23 +567,27 @@
       when: 
         - not kubelet_conf.stat.exists
         - join_result is defined
-        - join_result.rc != 0
+        - (join_result.rc is defined and join_result.rc != 0) or (join_result.failed | default(false))
 
     - name: "Display join result"
       debug:
         msg: |
           Join attempt result:
-          {% if join_result is defined %}
+          {% if join_result is defined and join_result.rc is defined %}
           Initial join - Return code: {{ join_result.rc }}
           {% if join_result.stderr is defined %}
           Initial join error: {{ join_result.stderr }}
           {% endif %}
+          {% elif join_result is defined %}
+          Initial join - Status: {{ join_result.get('msg', 'No return code available') }}
           {% endif %}
-          {% if join_retry_result is defined %}
+          {% if join_retry_result is defined and join_retry_result.rc is defined %}
           Retry join - Return code: {{ join_retry_result.rc }}
           {% if join_retry_result.stderr is defined %}
           Retry join error: {{ join_retry_result.stderr }}
           {% endif %}
+          {% elif join_retry_result is defined %}
+          Retry join - Status: {{ join_retry_result.get('msg', 'No return code available') }}
           {% endif %}
       when: not kubelet_conf.stat.exists
 
