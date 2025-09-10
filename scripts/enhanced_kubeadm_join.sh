@@ -19,8 +19,8 @@ debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 
 # Configuration
 MASTER_IP="${MASTER_IP:-192.168.4.63}"
-JOIN_TIMEOUT="${JOIN_TIMEOUT:-300}"
-MAX_RETRIES="${MAX_RETRIES:-3}"
+JOIN_TIMEOUT="${JOIN_TIMEOUT:-60}"
+MAX_RETRIES="${MAX_RETRIES:-2}"
 LOG_FILE="/tmp/kubeadm-join-$(date +%Y%m%d-%H%M%S).log"
 
 echo "=== VMStation Enhanced Kubeadm Join Process ==="
@@ -117,6 +117,41 @@ prepare_for_join() {
     # Ensure kubelet service is enabled
     systemctl enable kubelet
     
+    # Fix containerd filesystem issues before restart
+    info "Checking containerd filesystem health..."
+    
+    # Check if containerd directory exists and has proper permissions
+    if [ ! -d "/var/lib/containerd" ]; then
+        info "Creating missing containerd directory..."
+        mkdir -p /var/lib/containerd
+        chown root:root /var/lib/containerd
+        chmod 755 /var/lib/containerd
+    fi
+    
+    # Check for filesystem capacity issues that cause "invalid capacity 0"
+    local containerd_capacity
+    containerd_capacity=$(df -BG /var/lib/containerd 2>/dev/null | tail -1 | awk '{print $2}' | sed 's/G//' || echo "0")
+    
+    if [ "$containerd_capacity" = "0" ] || [ -z "$containerd_capacity" ]; then
+        warn "Containerd filesystem shows 0 capacity - fixing..."
+        
+        # Stop containerd for filesystem repair
+        systemctl stop containerd 2>/dev/null || true
+        sleep 3
+        
+        # Clear potentially corrupted containerd state that causes capacity issues
+        rm -rf /var/lib/containerd/io.containerd.* 2>/dev/null || true
+        
+        # Recreate containerd directory structure
+        mkdir -p /var/lib/containerd/{content,metadata,runtime,snapshots}
+        chown -R root:root /var/lib/containerd
+        chmod -R 755 /var/lib/containerd
+        
+        info "✓ Containerd filesystem repaired"
+    else
+        info "✓ Containerd filesystem capacity: ${containerd_capacity}G"
+    fi
+    
     # Restart containerd to ensure clean state
     info "Restarting containerd..."
     systemctl restart containerd
@@ -130,24 +165,53 @@ prepare_for_join() {
         return 1
     fi
     
+    # Ensure CNI configuration directory exists for network readiness
+    info "Preparing CNI network configuration..."
+    mkdir -p /etc/cni/net.d
+    mkdir -p /opt/cni/bin
+    
+    # Set proper CNI directory permissions
+    chmod 755 /etc/cni/net.d
+    chmod 755 /opt/cni/bin
+    
+    # Ensure kubelet has proper cgroup configuration to prevent TLS Bootstrap delays
+    info "Configuring kubelet for faster TLS Bootstrap..."
+    
+    # Create kubelet directory if missing
+    mkdir -p /var/lib/kubelet
+    
+    # Ensure proper permissions for kubelet directories
+    chown -R root:root /var/lib/kubelet
+    chmod 755 /var/lib/kubelet
+    
+    # Clear any stale kubelet PID files that could block startup
+    rm -f /var/run/kubelet.pid 2>/dev/null || true
+    
+    # Verify system is ready for kubelet to start properly
+    if ! systemctl is-enabled kubelet >/dev/null 2>&1; then
+        error "kubelet service is not enabled"
+        return 1
+    fi
+    
     info "✓ System prepared for join"
 }
 
 # Function to monitor kubelet during join
 monitor_kubelet_join() {
-    local timeout=${1:-300}
+    local timeout=${1:-60}
     info "Monitoring kubelet join process (timeout: ${timeout}s)..."
     
     local start_time=$(date +%s)
     local end_time=$((start_time + timeout))
+    local last_check=0
     
     while [ $(date +%s) -lt $end_time ]; do
         # Check if kubelet.conf was created (indicates successful bootstrap)
         if [ -f /etc/kubernetes/kubelet.conf ]; then
             info "✓ kubelet.conf created - TLS Bootstrap successful"
             
-            # Wait a bit more for kubelet to fully start
-            sleep 10
+            # Wait a bit for kubelet to fully start
+            sleep 5
             
             # Check if kubelet is running properly
             if systemctl is-active kubelet >/dev/null 2>&1; then
@@ -160,15 +224,38 @@ monitor_kubelet_join() {
             fi
         fi
         
-        # Check for specific error patterns
-        if journalctl -u kubelet --no-pager --since "2 minutes ago" | grep -q "timed out waiting for the condition"; then
-            warn "Detected TLS Bootstrap timeout in kubelet logs"
+        # Every 15 seconds, check for specific failure patterns for faster detection
+        local current_time=$(date +%s)
+        if [ $((current_time - last_check)) -ge 15 ]; then
+            last_check=$current_time
+            
+            # Check for TLS Bootstrap timeout (kubeadm's 40s internal timeout)
+            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "timed out waiting for the condition"; then
+                error "Detected kubeadm TLS Bootstrap timeout (40s limit exceeded)"
+                error "This indicates kubelet cannot complete TLS Bootstrap to API server"
+                return 1
+            fi
+            
+            # Check for containerd capacity issues
+            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
+                error "Detected containerd filesystem capacity issue"
+                return 1
+            fi
+            
+            # Check for API server connectivity issues
+            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "connection refused\|network is unreachable"; then
+                error "Detected API server connectivity issue"
+                return 1
+            fi
+            
+            info "TLS Bootstrap in progress... (${current_time}s elapsed)"
         fi
         
-        sleep 5
+        sleep 3
     done
     
     error "Kubelet join monitoring timed out after ${timeout}s"
+    error "This suggests the root cause was not fixed - check kubelet logs"
     return 1
 }
 
@@ -185,7 +272,7 @@ perform_join() {
     local monitor_pid=$!
     
     # Execute join command with enhanced parameters
-    local enhanced_command="timeout $((JOIN_TIMEOUT + 60)) $join_command --v=5"
+    local enhanced_command="timeout $((JOIN_TIMEOUT + 30)) $join_command --v=5"
     log_both "Enhanced command: $enhanced_command"
     
     # Execute join using bash -c to properly handle the command string
@@ -338,8 +425,8 @@ main() {
             warn "Cleaning up for retry..."
             cleanup_failed_join
             
-            # Wait before retry
-            local wait_time=$((attempt * 30))
+            # Shorter wait before retry for faster failure detection
+            local wait_time=15
             info "Waiting ${wait_time}s before retry..."
             sleep $wait_time
         fi
