@@ -133,6 +133,17 @@
             state: restarted
             enabled: yes
 
+        - name: "Wait for containerd to fully initialize"
+          pause:
+            seconds: 10
+
+        - name: "Verify containerd filesystem capacity detection"
+          shell: |
+            # Force containerd to properly detect filesystem capacity
+            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            sleep 5
+          failed_when: false
+
     - name: "Enable kubelet"
       systemd:
         name: kubelet
@@ -689,14 +700,37 @@
 
       when: not kubelet_conf.stat.exists
 
+    - name: "Prepare containerd for kubelet join"
+      block:
+        - name: "Restart containerd to ensure proper filesystem detection"
+          systemd:
+            name: containerd
+            state: restarted
+
+        - name: "Wait for containerd to fully initialize"
+          pause:
+            seconds: 15
+
+        - name: "Initialize containerd filesystem capacity detection"
+          shell: |
+            # Force containerd to detect filesystem capacity properly
+            ctr --namespace k8s.io version >/dev/null 2>&1 || true
+            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            sleep 5
+          failed_when: false
+
+        - name: "Verify containerd is ready for kubelet"
+          shell: systemctl is-active containerd
+          register: containerd_ready_check
+          retries: 3
+          delay: 5
+          until: containerd_ready_check.stdout == "active"
+
+      when: not kubelet_conf.stat.exists
+
     - name: "Starting kubeadm join process"
       debug:
         msg: "Initiating kubeadm join with enhanced retry logic"
-      when: not kubelet_conf.stat.exists
-
-    - name: "Verify containerd is active before join"
-      shell: systemctl is-active containerd
-      register: pre_join_containerd_check
       when: not kubelet_conf.stat.exists
 
     - name: "Join cluster with retry logic"
@@ -774,9 +808,57 @@
             state: started
             enabled: yes
 
-        - name: "Wait for containerd to be fully ready"
+        - name: "Wait for containerd to be fully ready after restart"
           pause:
-            seconds: 10
+            seconds: 20
+
+        - name: "Reinitialize containerd filesystem detection after cleanup"
+          shell: |
+            # Ensure containerd properly detects filesystem capacity
+            ctr --namespace k8s.io version >/dev/null 2>&1 || true
+            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            sleep 10
+          failed_when: false
+
+        - name: "Reinitialize CNI configuration after cleanup"
+          block:
+            - name: "Recreate CNI directories"
+              file:
+                path: "{{ item }}"
+                state: directory
+                owner: root
+                group: root
+                mode: '0755'
+              loop:
+                - /etc/cni/net.d
+                - /run/flannel
+
+            - name: "Recreate basic CNI configuration"
+              copy:
+                content: |
+                  {
+                    "name": "cni0",
+                    "cniVersion": "0.3.1",
+                    "plugins": [
+                      {
+                        "type": "flannel",
+                        "delegate": {
+                          "hairpinMode": true,
+                          "isDefaultGateway": true
+                        }
+                      },
+                      {
+                        "type": "portmap",
+                        "capabilities": {
+                          "portMappings": true
+                        }
+                      }
+                    ]
+                  }
+                dest: /etc/cni/net.d/10-flannel.conflist
+                owner: root
+                group: root
+                mode: '0644'
 
         - name: "Enable kubelet for kubeadm join"
           systemd:
