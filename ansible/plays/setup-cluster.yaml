@@ -595,7 +595,7 @@
           shell: |
             # Set environment variables for enhanced join
             export MASTER_IP="{{ control_plane_ip }}"
-            export JOIN_TIMEOUT=300
+            export JOIN_TIMEOUT=60
             export MAX_RETRIES=2
             
             # Extract base join command from script (remove "$@" placeholder)
@@ -624,7 +624,7 @@
       block:
         - name: "Wait for kubelet to stabilize after join"
           pause:
-            seconds: 30
+            seconds: 10
             
         - name: "Verify kubelet is running and not in standalone mode"
           shell: |
@@ -799,10 +799,10 @@
       when: not kubelet_conf.stat.exists
 
     - name: "Join cluster with retry logic"
-      shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+      shell: timeout 120 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
       register: join_result
-      retries: 3
-      delay: 30
+      retries: 2
+      delay: 15
       when: not kubelet_conf.stat.exists
       failed_when: false
 
@@ -875,7 +875,7 @@
 
         - name: "Wait for containerd to be fully ready after restart"
           pause:
-            seconds: 20
+            seconds: 10
 
         - name: "Reinitialize containerd filesystem detection after cleanup"
           shell: |
@@ -935,9 +935,9 @@
           register: containerd_retry_check
           failed_when: containerd_retry_check.stdout != "active"
 
-        - name: "Wait longer before retry to ensure system stability"
+        - name: "Wait before retry to ensure system stability"
           pause:
-            seconds: 60
+            seconds: 20
 
         - name: "Prepare kubelet for retry join (ensure clean state)"
           block:
@@ -958,7 +958,7 @@
                 seconds: 5
 
         - name: "Retry join after thorough cleanup"
-          shell: timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
+          shell: timeout 120 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
           register: join_retry_result
           failed_when: join_retry_result.rc != 0
 
