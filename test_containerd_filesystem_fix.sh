@@ -32,7 +32,7 @@ echo ""
 echo "Test 2: Containerd filesystem capacity detection"
 echo "Checking that containerd filesystem capacity is properly initialized..."
 
-if grep -A5 "containerd filesystem capacity" "$SETUP_CLUSTER_FILE" | grep -q "ctr.*images.*ls"; then
+if grep -A5 "containerd image filesystem\|image filesystem.*containerd" "$SETUP_CLUSTER_FILE" | grep -q "ctr.*images.*ls"; then
     echo "✓ PASS: Containerd filesystem capacity detection found"
 else
     echo "✗ FAIL: Containerd filesystem capacity detection missing"
@@ -56,7 +56,7 @@ echo ""
 echo "Test 4: Post-cleanup containerd reinitialization"
 echo "Checking that containerd is reinitialized after cleanup and before retry..."
 
-if grep -A10 "Reinitialize containerd filesystem detection" "$SETUP_CLUSTER_FILE" | grep -q "ctr.*namespace"; then
+if grep -A10 "Reinitialize containerd.*filesystem\|Reinitialize containerd image filesystem" "$SETUP_CLUSTER_FILE" | grep -q "ctr.*namespace"; then
     echo "✓ PASS: Post-cleanup containerd reinitialization found"
 else
     echo "✗ FAIL: Post-cleanup containerd reinitialization missing"

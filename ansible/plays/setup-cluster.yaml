@@ -137,11 +137,25 @@
           pause:
             seconds: 10
 
-        - name: "Verify containerd filesystem capacity detection"
+        - name: "Initialize containerd image filesystem"
           shell: |
-            # Force containerd to properly detect filesystem capacity
+            # Initialize the k8s.io namespace (used by kubelet)
+            ctr namespace create k8s.io 2>/dev/null || true
+            
+            # Force containerd to properly detect and initialize image filesystem capacity
+            # This prevents the "invalid capacity 0 on image filesystem" error
             ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
             sleep 5
+            
+            # Verify containerd image filesystem is properly initialized
+            if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+              echo "WARNING: containerd image filesystem not fully initialized"
+              # Try to reinitialize
+              systemctl restart containerd
+              sleep 10
+              ctr namespace create k8s.io 2>/dev/null || true
+              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            fi
           failed_when: false
 
     - name: "Enable kubelet"
@@ -752,13 +766,41 @@
           pause:
             seconds: 15
 
-        - name: "Initialize containerd filesystem capacity detection"
+        - name: "Initialize containerd image filesystem for kubelet"
           shell: |
-            # Force containerd to detect filesystem capacity properly
+            # Initialize the k8s.io namespace (used by kubelet)
+            ctr namespace create k8s.io 2>/dev/null || true
+            
+            # Force containerd to detect and initialize image filesystem capacity properly
+            # This prevents the "invalid capacity 0 on image filesystem" error during kubelet TLS Bootstrap
             ctr --namespace k8s.io version >/dev/null 2>&1 || true
             ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            
+            # Wait for image filesystem to be properly initialized
             sleep 5
+            
+            # Verify initialization was successful
+            if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+              echo "WARNING: containerd image filesystem not fully initialized, attempting recovery"
+              # Restart containerd and retry
+              systemctl restart containerd
+              sleep 10
+              ctr namespace create k8s.io 2>/dev/null || true
+              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            fi
+            
+            echo "containerd image filesystem initialization completed"
+          register: containerd_image_init
           failed_when: false
+
+        - name: "Display containerd image filesystem status"
+          debug:
+            msg: |
+              Containerd Image Filesystem Initialization:
+              {{ containerd_image_init.stdout }}
+              
+              This initialization prevents the 'invalid capacity 0 on image filesystem' 
+              error that causes kubelet TLS Bootstrap failures.
 
         - name: "Verify containerd is ready for kubelet"
           shell: systemctl is-active containerd
@@ -877,12 +919,28 @@
           pause:
             seconds: 10
 
-        - name: "Reinitialize containerd filesystem detection after cleanup"
+        - name: "Reinitialize containerd image filesystem after cleanup"
           shell: |
-            # Ensure containerd properly detects filesystem capacity
+            # Initialize the k8s.io namespace (used by kubelet) after cleanup
+            ctr namespace create k8s.io 2>/dev/null || true
+            
+            # Ensure containerd properly detects and initializes image filesystem capacity
+            # This is critical after cleanup to prevent repeated "invalid capacity 0" errors
             ctr --namespace k8s.io version >/dev/null 2>&1 || true
             ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            
+            # Extended wait after cleanup for filesystem detection
             sleep 10
+            
+            # Verify containerd image filesystem is ready for retry
+            if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+              echo "WARNING: containerd image filesystem still not ready after cleanup"
+              # Final attempt to initialize
+              ctr namespace create k8s.io 2>/dev/null || true
+              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            fi
+            
+            echo "containerd image filesystem reinitialized after cleanup"
           failed_when: false
 
         - name: "Reinitialize CNI configuration after cleanup"

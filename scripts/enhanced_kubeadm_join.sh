@@ -165,6 +165,38 @@ prepare_for_join() {
         return 1
     fi
     
+    # Force containerd to initialize its image filesystem properly
+    info "Initializing containerd image filesystem..."
+    
+    # Initialize the k8s.io namespace (used by kubelet)
+    ctr namespace create k8s.io 2>/dev/null || true
+    
+    # Force containerd to detect and initialize image filesystem capacity
+    # This prevents the "invalid capacity 0 on image filesystem" error
+    ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+    
+    # Wait for containerd image filesystem to fully initialize
+    sleep 5
+    
+    # Verify containerd image filesystem is properly initialized
+    local retry_count=0
+    local max_retries=5
+    while [ $retry_count -lt $max_retries ]; do
+        if ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+            info "✓ Containerd image filesystem initialized successfully"
+            break
+        else
+            warn "Containerd image filesystem not ready, retrying... ($((retry_count + 1))/$max_retries)"
+            sleep 3
+            ((retry_count++))
+        fi
+    done
+    
+    if [ $retry_count -eq $max_retries ]; then
+        error "Failed to initialize containerd image filesystem after $max_retries attempts"
+        return 1
+    fi
+    
     # Ensure CNI configuration directory exists for network readiness
     info "Preparing CNI network configuration..."
     mkdir -p /etc/cni/net.d
@@ -239,6 +271,17 @@ monitor_kubelet_join() {
             # Check for containerd capacity issues
             if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
                 error "Detected containerd filesystem capacity issue"
+                error "Kubelet logs show 'invalid capacity 0 on image filesystem'"
+                error "This indicates containerd image filesystem was not properly initialized"
+                
+                # Provide diagnostic information
+                warn "Diagnostic: Checking containerd image filesystem state..."
+                if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+                    error "  - containerd k8s.io namespace is not accessible"
+                else
+                    warn "  - containerd k8s.io namespace is accessible"
+                fi
+                
                 return 1
             fi
             
