@@ -138,6 +138,25 @@
         name: kubelet
         enabled: yes
 
+    - name: "Configure kubelet for cluster join"
+      copy:
+        content: |
+          Environment="KUBELET_EXTRA_ARGS=--cgroup-driver=systemd --container-runtime=remote --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
+        dest: /etc/systemd/system/kubelet.service.d/20-join-config.conf
+        mode: '0644'
+      notify: reload systemd
+
+    - name: "Ensure kubelet service directory exists"
+      file:
+        path: /etc/systemd/system/kubelet.service.d
+        state: directory
+        mode: '0755'
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+
 # Control plane initialization
 - name: "Initialize Kubernetes Control Plane"
   hosts: monitoring_nodes
@@ -532,6 +551,40 @@
         mode: '0755'
       when: not kubelet_conf.stat.exists
 
+    - name: "Prepare kubelet for join"
+      block:
+        - name: "Ensure kubelet service directory exists"
+          file:
+            path: /etc/systemd/system/kubelet.service.d
+            state: directory
+            mode: '0755'
+
+        - name: "Configure kubelet for cluster join"
+          copy:
+            content: |
+              Environment="KUBELET_EXTRA_ARGS=--cgroup-driver=systemd --container-runtime=remote --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
+            dest: /etc/systemd/system/kubelet.service.d/20-join-config.conf
+            mode: '0644'
+
+        - name: "Reload systemd daemon"
+          systemd:
+            daemon_reload: yes
+
+        - name: "Ensure containerd is running"
+          systemd:
+            name: containerd
+            state: started
+            enabled: yes
+
+        - name: "Verify kubelet can start (dry run)"
+          shell: |
+            systemctl stop kubelet || true
+            systemctl daemon-reload
+            systemctl reset-failed kubelet || true
+          failed_when: false
+
+      when: not kubelet_conf.stat.exists
+
     - name: "Join cluster with retry logic"
       shell: /tmp/kubeadm-join.sh
       register: join_result
@@ -553,6 +606,14 @@
             rm -rf /etc/cni/net.d/*
             rm -rf /var/lib/cni/
             rm -rf /var/lib/kubelet/*
+            systemctl stop kubelet || true
+            systemctl reset-failed kubelet || true
+          failed_when: false
+
+        - name: "Reconfigure kubelet before retry"
+          shell: |
+            systemctl daemon-reload
+            systemctl enable kubelet
           failed_when: false
 
         - name: "Wait before retry"
@@ -560,7 +621,7 @@
             seconds: 30
 
         - name: "Retry join after cleanup"
-          shell: /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt
+          shell: /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
           register: join_retry_result
           failed_when: join_retry_result.rc != 0
 
