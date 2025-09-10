@@ -3,7 +3,7 @@
 # ============================================================================
 # This deployment creates a minimal, copy-ready Jellyfin setup that:
 # - Uses a Pod (not Deployment) for simplicity
-# - Schedules explicitly on node "homelab" (IP 192.168.4.61)
+# - Schedules explicitly on node "storagenodet3500" (IP 192.168.4.61)
 # - Uses hostPath volumes by default (PVC templates available below)
 # - Exposes NodePort service for direct access
 # - Includes ServiceMonitor for Prometheus Operator integration
@@ -15,7 +15,7 @@
 #   kubectl logs -n jellyfin -l app=jellyfin --tail=200
 #
 # Prerequisites:
-#   - Node "homelab" exists in cluster
+#   - Node "storagenodet3500" exists in cluster
 #   - Host directories exist with correct permissions:
 #     - /srv/media (readable by UID 1000) - create with: mkdir -p /srv/media && chown 1000:1000 /srv/media
 #     - /var/lib/jellyfin (writable by UID 1000) - create with: mkdir -p /var/lib/jellyfin && chown 1000:1000 /var/lib/jellyfin
@@ -44,7 +44,7 @@ metadata:
 spec:
   # Use nodeSelector instead of nodeName for more flexibility
   nodeSelector:
-    kubernetes.io/hostname: homelab
+    kubernetes.io/hostname: storagenodet3500
   
   # OPTIONAL: Add tolerations if the target node has taints
   # tolerations:
