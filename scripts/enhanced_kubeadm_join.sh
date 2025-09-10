@@ -97,28 +97,9 @@ validate_prerequisites() {
     fi
 }
 
-# Function to prepare system for join
-prepare_for_join() {
-    info "Preparing system for join..."
-    
-    # Stop kubelet if running
-    info "Stopping kubelet service..."
-    systemctl stop kubelet 2>/dev/null || true
-    
-    # Wait for kubelet to stop
-    sleep 5
-    
-    # Clear any existing kubelet state
-    info "Cleaning existing kubelet state..."
-    rm -f /var/lib/kubelet/config.yaml 2>/dev/null || true
-    rm -f /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || true
-    rm -f /etc/kubernetes/bootstrap-kubelet.conf 2>/dev/null || true
-    
-    # Ensure kubelet service is enabled
-    systemctl enable kubelet
-    
-    # Fix containerd filesystem issues before restart
-    info "Checking containerd filesystem health..."
+# Function to fix containerd filesystem issues
+fix_containerd_filesystem() {
+    info "Fixing containerd filesystem issues..."
     
     # Check if containerd directory exists and has proper permissions
     if [ ! -d "/var/lib/containerd" ]; then
@@ -197,6 +178,36 @@ prepare_for_join() {
         return 1
     fi
     
+    return 0
+}
+
+# Function to prepare system for join
+prepare_for_join() {
+    info "Preparing system for join..."
+    
+    # Stop kubelet if running
+    info "Stopping kubelet service..."
+    systemctl stop kubelet 2>/dev/null || true
+    
+    # Wait for kubelet to stop
+    sleep 5
+    
+    # Clear any existing kubelet state
+    info "Cleaning existing kubelet state..."
+    rm -f /var/lib/kubelet/config.yaml 2>/dev/null || true
+    rm -f /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || true
+    rm -f /etc/kubernetes/bootstrap-kubelet.conf 2>/dev/null || true
+    
+    # Ensure kubelet service is enabled
+    systemctl enable kubelet
+    
+    # Fix containerd filesystem issues before restart
+    info "Checking containerd filesystem health..."
+    if ! fix_containerd_filesystem; then
+        error "Failed to fix containerd filesystem issues"
+        return 1
+    fi
+    
     # Ensure CNI configuration directory exists for network readiness
     info "Preparing CNI network configuration..."
     mkdir -p /etc/cni/net.d
@@ -268,21 +279,23 @@ monitor_kubelet_join() {
                 return 1
             fi
             
-            # Check for containerd capacity issues
+            # Check for containerd capacity issues and attempt to fix them
             if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
-                error "Detected containerd filesystem capacity issue"
-                error "Kubelet logs show 'invalid capacity 0 on image filesystem'"
-                error "This indicates containerd image filesystem was not properly initialized"
+                warn "Detected containerd filesystem capacity issue during join"
+                warn "Kubelet logs show 'invalid capacity 0 on image filesystem'"
+                warn "Attempting to fix containerd image filesystem during join..."
                 
-                # Provide diagnostic information
-                warn "Diagnostic: Checking containerd image filesystem state..."
-                if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
-                    error "  - containerd k8s.io namespace is not accessible"
+                # Attempt real-time fix of containerd filesystem
+                if fix_containerd_filesystem; then
+                    info "✓ Containerd filesystem fixed during join - continuing monitoring"
+                    # Reset last_check to avoid immediate re-detection
+                    last_check=$current_time
+                    continue
                 else
-                    warn "  - containerd k8s.io namespace is accessible"
+                    error "❌ Failed to fix containerd filesystem during join"
+                    error "This indicates a persistent containerd configuration issue"
+                    return 1
                 fi
-                
-                return 1
             fi
             
             # Check for API server connectivity issues
