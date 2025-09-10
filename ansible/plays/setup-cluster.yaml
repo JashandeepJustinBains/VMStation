@@ -620,6 +620,16 @@
 
       when: not kubelet_conf.stat.exists
 
+    - name: "Starting kubeadm join process"
+      debug:
+        msg: "Initiating kubeadm join with enhanced retry logic"
+      when: not kubelet_conf.stat.exists
+
+    - name: "Verify containerd is active before join"
+      shell: systemctl is-active containerd
+      register: pre_join_containerd_check
+      when: not kubelet_conf.stat.exists
+
     - name: "Join cluster with retry logic"
       shell: timeout 600 /tmp/kubeadm-join.sh --v=5
       register: join_result
@@ -657,7 +667,7 @@
               {% if join_result.stderr is defined %}
               STDERR: {{ join_result.stderr }}
               {% endif %}
-        - name: "Reset node after failed join"
+        - name: "Cleaning up after failed join"
           shell: |
             echo "=== Resetting node after failed join ==="
             kubeadm reset --force --v=5
@@ -690,7 +700,7 @@
             systemctl daemon-reload
           failed_when: false
 
-        - name: "Restart containerd after cleanup"
+        - name: "Restart containerd and prepare for retry"
           systemd:
             name: containerd
             state: started
