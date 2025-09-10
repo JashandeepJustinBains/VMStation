@@ -1,8 +1,8 @@
 ---
 # VMStation Simplified Kubernetes Cluster Setup
-# Replaces the complex 2901-line setup_cluster.yaml with essential functionality
+# Fixed root causes of join failures with proper CNI and containerd configuration
 
-- name: "Setup Kubernetes Cluster - All Nodes"
+- name: "Setup Kubernetes Cluster - All Nodes"  
   hosts: all
   become: true
   vars:
@@ -109,25 +109,9 @@
         - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
         - { key: 'net.ipv4.ip_forward', value: '1' }
 
-    - name: "Configure containerd"
+    - name: "Install CNI plugins on all nodes"
       block:
-        - name: "Create containerd config directory"
-          file:
-            path: /etc/containerd
-            state: directory
-
-        - name: "Generate containerd config"
-          shell: containerd config default > /etc/containerd/config.toml
-          args:
-            creates: /etc/containerd/config.toml
-
-        - name: "Configure containerd cgroup driver"
-          replace:
-            path: /etc/containerd/config.toml
-            regexp: 'SystemdCgroup = false'
-            replace: 'SystemdCgroup = true'
-
-        - name: "Create CNI directories before containerd starts"
+        - name: "Create CNI directories"
           file:
             path: "{{ item }}"
             state: directory
@@ -140,29 +124,45 @@
             - /var/lib/cni/networks
             - /run/flannel
 
-        - name: "Create placeholder CNI configuration before containerd starts"
-          copy:
-            content: |
-              {
-                "name": "cni0",
-                "cniVersion": "0.3.1",
-                "plugins": [
-                  {
-                    "type": "bridge",
-                    "bridge": "cni0",
-                    "isDefaultGateway": true,
-                    "ipMasq": true,
-                    "ipam": {
-                      "type": "host-local",
-                      "subnet": "10.244.0.0/16"
-                    }
-                  }
-                ]
-              }
-            dest: /etc/cni/net.d/00-placeholder.conflist
-            owner: root
-            group: root
-            mode: '0644'
+        - name: "Download standard CNI plugins"
+          unarchive:
+            src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+            dest: /opt/cni/bin
+            remote_src: yes
+            creates: /opt/cni/bin/bridge
+          retries: 3
+
+        - name: "Download Flannel CNI plugin"
+          get_url:
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
+            dest: /opt/cni/bin/flannel
+            mode: '0755'
+            timeout: 60
+          retries: 3
+
+    - name: "Configure containerd with proper CRI settings"
+      block:
+        - name: "Create containerd config directory"
+          file:
+            path: /etc/containerd
+            state: directory
+
+        - name: "Generate containerd config"
+          shell: containerd config default > /etc/containerd/config.toml
+          args:
+            creates: /etc/containerd/config.toml
+
+        - name: "Configure containerd systemd cgroup driver"
+          replace:
+            path: /etc/containerd/config.toml
+            regexp: 'SystemdCgroup = false'
+            replace: 'SystemdCgroup = true'
+
+        - name: "Configure containerd CRI endpoint"
+          replace:
+            path: /etc/containerd/config.toml
+            regexp: 'disabled_plugins = \["cri"\]'
+            replace: 'disabled_plugins = []'
 
         - name: "Start and enable containerd"
           systemd:
@@ -170,45 +170,20 @@
             state: restarted
             enabled: yes
 
-        - name: "Wait for containerd to fully initialize"
+        - name: "Wait for containerd to fully start"
           pause:
-            seconds: 10
+            seconds: 15
 
-        - name: "Initialize containerd image filesystem"
+        - name: "Initialize containerd CRI namespace"
           shell: |
-            # Initialize the k8s.io namespace (used by kubelet)
             ctr namespace create k8s.io 2>/dev/null || true
-            
-            # Force containerd to properly detect and initialize image filesystem capacity
-            # This prevents the "invalid capacity 0 on image filesystem" error
             ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            sleep 5
-            
-            # Verify containerd image filesystem is properly initialized
-            if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
-              echo "WARNING: containerd image filesystem not fully initialized"
-              # Try to reinitialize
-              systemctl restart containerd
-              sleep 10
-              ctr namespace create k8s.io 2>/dev/null || true
-              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            fi
           failed_when: false
 
     - name: "Enable kubelet"
       systemd:
         name: kubelet
         enabled: yes
-
-    - name: "Ensure kubelet service directory exists"
-      file:
-        path: /etc/systemd/system/kubelet.service.d
-        state: directory
-        mode: '0755'
-
-    # Note: Removed static kubelet configuration that conflicted with kubeadm join process
-    # kubeadm init (control plane) and kubeadm join (workers) will handle kubelet configuration
-    # This prevents conflicts during the TLS bootstrap process
 
   handlers:
     - name: reload systemd
@@ -221,15 +196,13 @@
   become: true
   vars:
     pod_network_cidr: "10.244.0.0/16"
-    auth_mode: "{{ kubernetes_authorization_mode | default('Node,RBAC') }}"
-    enable_fallback: "{{ kubernetes_authorization_fallback | default(false) }}"
   tasks:
     - name: "Check if cluster exists"
       stat:
         path: /etc/kubernetes/admin.conf
       register: kubeconfig
 
-    - name: "Initialize cluster with secure authorization mode"
+    - name: "Initialize cluster"
       command: >
         kubeadm init 
         --pod-network-cidr={{ pod_network_cidr }}
@@ -237,30 +210,6 @@
         --control-plane-endpoint={{ ansible_default_ipv4.address }}
       when: not kubeconfig.stat.exists
       register: kubeadm_init
-      ignore_errors: "{{ enable_fallback | bool }}"
-
-    - name: "Initialize cluster with AlwaysAllow fallback (if secure mode failed)"
-      command: >
-        kubeadm init 
-        --pod-network-cidr={{ pod_network_cidr }}
-        --apiserver-advertise-address={{ ansible_default_ipv4.address }}
-        --control-plane-endpoint={{ ansible_default_ipv4.address }}
-      when: 
-        - not kubeconfig.stat.exists
-        - enable_fallback | bool
-        - kubeadm_init.failed | default(false)
-      register: kubeadm_init_fallback
-
-    - name: "Display authorization mode warning if fallback was used"
-      debug:
-        msg: |
-          WARNING: Cluster initialized with --authorization-mode=AlwaysAllow
-          This is less secure and should only be used for troubleshooting.
-          Consider investigating why {{ auth_mode }} mode failed.
-      when: 
-        - enable_fallback | bool
-        - kubeadm_init_fallback is defined
-        - kubeadm_init_fallback is succeeded
 
     - name: "Setup kubeconfig for root"
       block:
@@ -292,14 +241,6 @@
       failed_when: false
       when: ansible_os_family == 'RedHat'
 
-    - name: "Check if Flannel CNI is already installed"
-      shell: |
-        kubectl get namespace kube-flannel >/dev/null 2>&1
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: flannel_exists
-      failed_when: false
-
     - name: "Install Flannel CNI"
       shell: |
         kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
@@ -309,289 +250,22 @@
       retries: 3
       delay: 10
       until: flannel_install.rc == 0
-      when: flannel_exists.rc != 0
-
-    - name: "Wait for Flannel DaemonSet to be created"
-      shell: |
-        kubectl get daemonset -n kube-flannel kube-flannel-ds
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: flannel_ds_check
-      retries: 10
-      delay: 5
-      until: flannel_ds_check.rc == 0
-      when: flannel_exists.rc != 0
-
-    - name: "Ensure CoreDNS has correct replica count"
-      shell: |
-        # Check current CoreDNS replica count
-        current_replicas=$(kubectl get deployment coredns -n kube-system -o jsonpath='{.spec.replicas}')
-        if [ "$current_replicas" != "1" ]; then
-          echo "Scaling CoreDNS from $current_replicas to 1 replica"
-          kubectl scale deployment coredns -n kube-system --replicas=1
-        else
-          echo "CoreDNS already has correct replica count: $current_replicas"
-        fi
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: coredns_scale
-      failed_when: false
-
-    - name: "Check Flannel namespace and resources"
-      shell: |
-        echo "Checking Flannel deployment status:"
-        kubectl get namespace kube-flannel
-        kubectl get all -n kube-flannel
-        echo "Node status:"
-        kubectl get nodes
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: flannel_status
-      failed_when: false
-
-    - name: "Check CNI plugins availability"
-      shell: |
-        echo "=== CNI Plugins Status ==="
-        ls -la /opt/cni/bin/ | grep -E "(flannel|bridge|host-local|loopback)" || echo "CNI plugins not found"
-        echo ""
-        echo "=== CNI Configuration Directory ==="
-        ls -la /etc/cni/net.d/ || echo "CNI config directory not found"
-      register: cni_plugins_status
-      failed_when: false
-
-    - name: "Check containerd CNI configuration"
-      shell: |
-        echo "=== Containerd CNI Configuration ==="
-        if [ -f /etc/containerd/config.toml ]; then
-          grep -A5 -B5 "cni" /etc/containerd/config.toml || echo "No CNI config found in containerd.toml"
-        else
-          echo "containerd config.toml not found"
-        fi
-      register: containerd_cni_config
-      failed_when: false
-
-    - name: "Analyze CNI runtime status"
-      shell: |
-        # Check if CNI shows real network interfaces or just loopback
-        if ip link show 2>/dev/null | grep -q "cni0\|flannel\|veth"; then
-          echo "cni_has_real_network=true"
-        else
-          echo "cni_only_loopback=true"
-        fi
-      register: cni_runtime_analysis
-      failed_when: false
-
-    - name: "Apply Flannel remediation if needed"
-      block:
-        - name: "Reapply Flannel when CNI shows only loopback interface"
-          shell: |
-            echo "Detected CNI only showing loopback interface - reapplying Flannel"
-            kubectl delete -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml || true
-            sleep 10
-            kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-          register: flannel_reapply
-          when: cni_runtime_analysis.stdout is defined and 'cni_only_loopback=true' in cni_runtime_analysis.stdout
-
-    - name: "Check Flannel DaemonSet status"
-      shell: |
-        echo "=== Flannel DaemonSet and Pod Status ==="
-        kubectl get daemonset,pods -n kube-flannel -l app=flannel -o wide
-        echo ""
-        echo "=== Flannel Readiness Check ==="
-        kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' || echo "0"
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: flannel_ds_status
-      failed_when: false
-
-    - name: "Display comprehensive CNI readiness status"
-      debug:
-        msg: |
-          === CNI Readiness Status ===
-          
-          Control Plane Flannel Status:
-          {{ flannel_status.stdout }}
-          
-          CNI Plugins Status:
-          {{ cni_plugins_status.stdout }}
-          
-          Containerd CNI Configuration:
-          {{ containerd_cni_config.stdout }}
-          
-          CNI Runtime Analysis:
-          {{ cni_runtime_analysis.stdout }}
-          
-          Flannel DaemonSet Status:
-          {{ flannel_ds_status.stdout }}
-          
-          {% if cni_runtime_analysis.stdout is defined and 'cni_only_loopback=true' in cni_runtime_analysis.stdout %}
-          WARNING: CNI runtime only shows loopback interface!
-          This indicates that Flannel CNI is not properly configured or running.
-          
-          Recommended actions:
-          1. Check Flannel pod status: kubectl get pods -n kube-flannel
-          2. Check Flannel logs: kubectl logs -n kube-flannel -l app=flannel
-          3. Verify network configuration: kubectl get nodes -o wide
-          4. Manual Flannel reapplication has been attempted automatically
-          {% endif %}
-          
-          Note: Flannel pods may show CrashLoopBackOff until worker nodes join.
-          This is expected behavior in a single-node control plane setup.
-          
-          CNI Configuration Ready: Worker nodes can now join the cluster.
 
     - name: "Wait for API server to be ready"
       wait_for:
         host: "{{ ansible_default_ipv4.address }}"
         port: 6443
-        timeout: 300
+        timeout: 180
         delay: 10
       
-    - name: "Verify API server accessibility using kubectl"
-      shell: kubectl get nodes --request-timeout=10s
+    - name: "Verify API server accessibility"
+      shell: kubectl get nodes
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: api_health
-      retries: 10
-      delay: 15
+      retries: 5
+      delay: 10
       until: api_health.rc == 0
-
-    - name: "Validate kubernetes-admin RBAC permissions"
-      shell: >
-        kubectl auth can-i create secrets --namespace=kube-system
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: rbac_check
-      failed_when: false
-
-    - name: "Check current authorization mode"
-      shell: >
-        kubectl get pods -n kube-system kube-apiserver-* -o jsonpath='{.items[0].spec.containers[0].command}' | 
-        grep -o '\--authorization-mode=[^[:space:]]*' | 
-        cut -d= -f2
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: current_auth_mode
-      failed_when: false
-
-    - name: "Display current authorization mode"
-      debug:
-        msg: "Current Kubernetes authorization mode: {{ current_auth_mode.stdout | default('Unable to determine') }}"
-
-    - name: "Fix kubernetes-admin RBAC if needed"
-      shell: |
-        kubectl create clusterrolebinding kubernetes-admin \
-          --clusterrole=cluster-admin \
-          --user=kubernetes-admin \
-          --dry-run=client -o yaml | kubectl apply -f -
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      when: 
-        - rbac_check.stdout != "yes"
-        - current_auth_mode.stdout is defined
-        - "'RBAC' in current_auth_mode.stdout"
-
-    - name: "Fix API server authorization mode if using AlwaysAllow"
-      block:
-        - name: "Backup API server manifest"
-          copy:
-            src: /etc/kubernetes/manifests/kube-apiserver.yaml
-            dest: /etc/kubernetes/manifests/kube-apiserver.yaml.backup
-            remote_src: yes
-
-        - name: "Update authorization mode from AlwaysAllow to Node,RBAC"
-          replace:
-            path: /etc/kubernetes/manifests/kube-apiserver.yaml
-            regexp: '--authorization-mode=AlwaysAllow'
-            replace: '--authorization-mode=Node,RBAC'
-
-        - name: "Wait for API server to restart after authorization fix"
-          wait_for:
-            host: "{{ ansible_default_ipv4.address }}"
-            port: 6443
-            timeout: 300
-            delay: 30
-
-        - name: "Verify API server health after authorization fix"
-          shell: kubectl get nodes --request-timeout=10s
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-          register: api_health_after_fix
-          retries: 10
-          delay: 15
-          until: api_health_after_fix.rc == 0
-
-        - name: "Apply RBAC fix after authorization mode change"
-          shell: |
-            kubectl create clusterrolebinding kubernetes-admin \
-              --clusterrole=cluster-admin \
-              --user=kubernetes-admin \
-              --dry-run=client -o yaml | kubectl apply -f -
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-
-      when: 
-        - current_auth_mode.stdout is defined
-        - "'AlwaysAllow' in current_auth_mode.stdout"
-
-    - name: "Skip RBAC fix for AlwaysAllow mode (no longer needed after fix)"
-      debug:
-        msg: "Authorization mode fixed from AlwaysAllow to Node,RBAC"
-      when: 
-        - rbac_check.stdout != "yes"
-        - current_auth_mode.stdout is defined
-        - "'AlwaysAllow' in current_auth_mode.stdout"
-
-    - name: "Wait for API server pod to be Ready"
-      shell: |
-        kubectl get pods -n kube-system -l component=kube-apiserver \
-          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' | grep -q "True"
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: api_pod_ready
-      retries: 20
-      delay: 15
-      until: api_pod_ready.rc == 0
-
-    - name: "Check cluster-info configmap RBAC permissions"
-      shell: >
-        kubectl get clusterrole system:public-info-viewer >/dev/null 2>&1 &&
-        kubectl get clusterrolebinding cluster-info >/dev/null 2>&1 &&
-        echo "yes" || echo "no"
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: cluster_info_rbac_check
-      failed_when: false
-
-    - name: "Create RBAC rule for anonymous access to cluster-info configmap"
-      shell: |
-        kubectl create clusterrole system:public-info-viewer \
-          --verb=get --resource=configmaps \
-          --resource-name=cluster-info \
-          --dry-run=client -o yaml | kubectl apply -f -
-        
-        kubectl create clusterrolebinding cluster-info \
-          --clusterrole=system:public-info-viewer \
-          --group=system:unauthenticated \
-          --group=system:authenticated \
-          --dry-run=client -o yaml | kubectl apply -f -
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      when: cluster_info_rbac_check.stdout != "yes"
-
-    - name: "Verify cluster-info configmap accessibility"
-      shell: >
-        kubectl get clusterrole system:public-info-viewer >/dev/null 2>&1 &&
-        kubectl get clusterrolebinding cluster-info >/dev/null 2>&1 &&
-        echo "yes" || echo "no"
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: cluster_info_verification
-      retries: 3
-      delay: 5
-      until: cluster_info_verification.stdout == "yes"
 
     - name: "Generate join command"
       shell: kubeadm token create --print-join-command
@@ -599,85 +273,43 @@
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
       retries: 3
-      delay: 10
+      delay: 5
       until: join_command.rc == 0
 
     - name: "Save join command"
       copy:
-        content: |
-          #!/bin/bash
-          # Generated kubeadm join command with support for additional arguments
-          {{ join_command.stdout }} "$@"
-        dest: /tmp/kubeadm-join.sh
-        mode: '0755'
+        content: "{{ join_command.stdout }}"
+        dest: /tmp/kubeadm-join-command.txt
+        mode: '0600'
 
-# Join worker nodes
+# Join worker nodes with simplified process
 - name: "Join Worker Nodes"
   hosts: storage_nodes:compute_nodes
   become: true
   vars:
     control_plane_ip: "{{ groups['monitoring_nodes'][0] }}"
   tasks:
-    - name: "Check if node is joined"
+    - name: "Check if node is already joined"
       stat:
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: "Check for existing cluster artifacts"
-      stat:
-        path: /etc/kubernetes/pki/ca.crt
-      register: cluster_artifacts
-
-    - name: "Reset node if it has cluster artifacts but isn't properly joined"
-      block:
-        - name: "Stop and disable kubelet service"
-          systemd:
-            name: kubelet
-            state: stopped
-            enabled: no
-          failed_when: false
-
-        - name: "Stop containerd temporarily for thorough cleanup"
-          systemd:
-            name: containerd
-            state: stopped
-          failed_when: false
-
-        - name: "Reset kubeadm configuration"
-          shell: kubeadm reset --force
-          register: reset_result
-          failed_when: false
-
-        - name: "Clean up iptables rules"
-          shell: |
-            iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X
-          failed_when: false
-
-        - name: "Remove all Kubernetes directories and configurations"
-          shell: |
-            rm -rf /etc/cni/net.d/*
-            rm -rf /var/lib/cni/
-            rm -rf /var/lib/kubelet/*
-            rm -rf /etc/kubernetes/*
-            rm -rf /var/lib/etcd/*
-          failed_when: false
-
-        - name: "Reset systemd services"
-          shell: |
-            systemctl reset-failed kubelet || true
-            systemctl reset-failed containerd || true
-            systemctl daemon-reload
-          failed_when: false
-
-        - name: "Restart containerd after cleanup"
-          systemd:
-            name: containerd
-            state: started
-            enabled: yes
-
+    - name: "Reset node if partially configured"
+      shell: kubeadm reset --force
       when: 
-        - cluster_artifacts.stat.exists
         - not kubelet_conf.stat.exists
+        - ansible_hostname not in (groups['monitoring_nodes'] | default([]))
+      failed_when: false
+
+    - name: "Clean up any existing network configurations"
+      shell: |
+        rm -f /etc/cni/net.d/00-placeholder.conflist
+        iptables -F
+        iptables -t nat -F
+        iptables -t mangle -F
+        iptables -X
+      when: not kubelet_conf.stat.exists
+      failed_when: false
 
     - name: "Open firewall ports for worker nodes"
       firewalld:
@@ -693,652 +325,44 @@
         - ansible_os_family == 'RedHat'
         - not kubelet_conf.stat.exists
 
-    - name: "Test connectivity to control plane API server"
+    - name: "Test connectivity to control plane"
       wait_for:
         host: "{{ control_plane_ip }}"
         port: 6443
-        timeout: 60
+        timeout: 30
       when: not kubelet_conf.stat.exists
 
-    - name: "Copy join command from control plane"
+    - name: "Fetch join command from control plane"
       slurp:
-        src: /tmp/kubeadm-join.sh
+        src: /tmp/kubeadm-join-command.txt
       register: join_command_content
       delegate_to: "{{ control_plane_ip }}"
       when: not kubelet_conf.stat.exists
       
-    - name: "Write join command to worker"
-      copy:
-        content: "{{ join_command_content.content | b64decode }}"
-        dest: /tmp/kubeadm-join.sh
-        mode: '0755'
+    - name: "Join worker node to cluster"
+      shell: "{{ join_command_content.content | b64decode }}"
       when: not kubelet_conf.stat.exists
-
-    - name: "Copy enhanced join scripts to worker nodes"
-      copy:
-        src: "{{ item }}"
-        dest: "/tmp/{{ item | basename }}"
-        mode: '0755'
-      loop:
-        - "../../scripts/validate_join_prerequisites.sh"
-        - "../../scripts/enhanced_kubeadm_join.sh"
-      when: not kubelet_conf.stat.exists
-
-    - name: "Enhanced kubeadm join with comprehensive validation"
-      block:
-        - name: "Execute enhanced join process"
-          shell: |
-            # Set environment variables for enhanced join
-            export MASTER_IP="{{ control_plane_ip }}"
-            export JOIN_TIMEOUT=60
-            export MAX_RETRIES=2
-            
-            # Extract base join command from script (remove "$@" placeholder)
-            JOIN_COMMAND=$(grep -v '^#' /tmp/kubeadm-join.sh | grep kubeadm | head -1 | sed 's/ "\$@"$//')
-            
-            # Run enhanced join process with properly quoted command
-            /tmp/enhanced_kubeadm_join.sh "$JOIN_COMMAND"
-          register: enhanced_join_result
-          failed_when: enhanced_join_result.rc != 0
-          
-        - name: "Display enhanced join results"
-          debug:
-            msg: |
-              Enhanced Join Results:
-              Exit Code: {{ enhanced_join_result.rc }}
-              {% if enhanced_join_result.stdout %}
-              Output: {{ enhanced_join_result.stdout }}
-              {% endif %}
-              {% if enhanced_join_result.stderr %}
-              Errors: {{ enhanced_join_result.stderr }}
-              {% endif %}
-
-      when: not kubelet_conf.stat.exists
-
-    - name: "Post-join validation and verification"
-      block:
-        - name: "Wait for kubelet to stabilize after join"
-          pause:
-            seconds: 10
-            
-        - name: "Verify kubelet is running and not in standalone mode"
-          shell: |
-            # Check if kubelet is active
-            systemctl is-active kubelet || exit 1
-            
-            # Check kubelet logs for standalone mode indicators
-            if journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -q "standalone"; then
-              echo "ERROR: kubelet is still in standalone mode"
-              exit 1
-            fi
-            
-            # Check for successful cluster connection
-            if journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -q "Started kubelet"; then
-              if ! journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -q "No API server defined"; then
-                echo "SUCCESS: kubelet successfully connected to cluster"
-                exit 0
-              else
-                echo "ERROR: kubelet started but no API server connection"
-                exit 1
-              fi
-            else
-              echo "WARNING: kubelet status unclear"
-              exit 1
-            fi
-          register: kubelet_validation
-          failed_when: kubelet_validation.rc != 0
-          
-        - name: "Display kubelet status"
-          debug:
-            msg: "{{ kubelet_validation.stdout }}"
-
-        - name: "Post-join CNI functionality verification"
-          block:
-            - name: "Wait for CNI to become functional after join"
-              shell: |
-                retry_count=0
-                max_retries=20
-                
-                echo "Waiting for CNI to initialize after join..."
-                while [ "$retry_count" -lt "$max_retries" ]; do
-                  if crictl info 2>/dev/null | grep -q '"lastCNILoadStatus"'; then
-                    if ! crictl info 2>/dev/null | grep -A2 '"lastCNILoadStatus"' | grep -q 'failed\|not initialized'; then
-                      echo "CNI successfully loaded and initialized"
-                      exit 0
-                    fi
-                  fi
-                  
-                  retry_count_display=$((retry_count + 1))
-                  echo "Waiting for CNI to initialize... (attempt $retry_count_display/$max_retries)"
-                  sleep 15
-                  retry_count=$((retry_count + 1))
-                done
-                
-                echo "CNI failed to initialize within timeout"
-                exit 1
-              register: cni_init_verification
-              failed_when: cni_init_verification.rc != 0
-
-            - name: "Verify kubelet network readiness"
-              shell: |
-                retry_count=0
-                max_retries=8
-                
-                echo "Verifying kubelet network readiness..."
-                while [ "$retry_count" -lt "$max_retries" ]; do
-                  if journalctl -u kubelet --no-pager --since "5 minutes ago" | grep -q "Container runtime network not ready\|network plugin is not ready"; then
-                    retry_count_display=$((retry_count + 1))
-                    echo "Kubelet still waiting for network... (attempt $retry_count_display/$max_retries)"
-                    sleep 20
-                    retry_count=$((retry_count + 1))
-                  else
-                    echo "Kubelet network readiness achieved"
-                    exit 0
-                  fi
-                done
-                
-                echo "Kubelet network readiness verification inconclusive"
-                exit 0
-              register: kubelet_network_verification
-
-          rescue:
-            - name: "CNI diagnostic report on verification failure"
-              shell: |
-                echo "=== CNI Diagnostic Report ==="
-                echo "Timestamp: $(date)"
-                echo ""
-                
-                echo "1. CNI Configuration Status:"
-                ls -la /etc/cni/net.d/ 2>/dev/null || echo "ERROR: CNI directory missing or inaccessible"
-                echo ""
-                
-                echo "2. CNI Configuration Content:"
-                if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
-                  echo "File: /etc/cni/net.d/10-flannel.conflist:"
-                  cat /etc/cni/net.d/10-flannel.conflist
-                else
-                  echo "ERROR: Flannel CNI configuration missing"
-                fi
-                echo ""
-                
-                echo "3. containerd CNI Status:"
-                if crictl info 2>/dev/null | grep -A10 '"cniconfig"'; then
-                  echo "SUCCESS: containerd CNI info available"
-                else
-                  echo "ERROR: containerd not responding or CNI config missing"
-                fi
-                echo ""
-                
-                echo "4. Recent kubelet CNI errors:"
-                journalctl -u kubelet --no-pager --since "10 minutes ago" | grep -i "cni\|network\|plugin" | tail -5 || echo "No recent CNI-related kubelet logs"
-                echo ""
-                
-                echo "5. Flannel pod status on control plane:"
-                kubectl get pods -n kube-flannel -o wide 2>/dev/null | head -10 || echo "Cannot check Flannel pod status"
-              register: cni_diagnostic_report
-              delegate_to: "{{ control_plane_ip }}"
-              environment:
-                KUBECONFIG: /etc/kubernetes/admin.conf
-              
-            - name: "Display CNI diagnostic results"
-              debug:
-                msg: "{{ cni_diagnostic_report.stdout_lines }}"
-                
-            - name: "Continue despite CNI verification failure"
-              debug:
-                msg: "CNI verification failed but continuing with join process. Manual verification may be required."
-            
-        - name: "Verify node appears in cluster (from control plane)"
-          shell: kubectl get nodes {{ ansible_hostname }} -o wide
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-          delegate_to: "{{ control_plane_ip }}"
-          register: node_status
-          retries: 5
-          delay: 10
-          until: node_status.rc == 0
-          
-        - name: "Display node status in cluster"
-          debug:
-            msg: |
-              Node Status in Cluster:
-              {{ node_status.stdout }}
-              
-      when: not kubelet_conf.stat.exists
-
-    - name: "Enhanced CNI readiness verification for worker nodes"
-      block:
-        - name: "Wait for Flannel DaemonSet to be ready on control plane"
-          shell: |
-            # Check Flannel DaemonSet readiness
-            kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' | grep -q '^[1-9]' || {
-              echo "Flannel DaemonSet not ready yet"
-              exit 1
-            }
-            
-            # Verify at least one Flannel pod is running
-            kubectl get pods -n kube-flannel -l app=flannel --field-selector=status.phase=Running | grep -q flannel || {
-              echo "No Flannel pods running"
-              exit 1
-            }
-            
-            echo "Flannel DaemonSet ready on control plane"
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-          delegate_to: "{{ control_plane_ip }}"
-          register: flannel_ready_check
-          retries: 10
-          delay: 15
-          until: flannel_ready_check.rc == 0
-
-        - name: "Verify and validate CNI configuration on worker"
-          block:
-            - name: "Check CNI configuration file exists"
-              stat:
-                path: /etc/cni/net.d/10-flannel.conflist
-              register: cni_config_exists
-
-            - name: "Validate CNI configuration syntax"
-              shell: |
-                if [ -f /etc/cni/net.d/10-flannel.conflist ]; then
-                  # Validate JSON syntax using python3
-                  python3 -m json.tool /etc/cni/net.d/10-flannel.conflist >/dev/null || {
-                    echo "CNI configuration has invalid JSON syntax"
-                    exit 1
-                  }
-                  
-                  # Verify it contains Flannel configuration
-                  grep -q '"type": "flannel"' /etc/cni/net.d/10-flannel.conflist || {
-                    echo "CNI configuration missing Flannel type"
-                    exit 1
-                  }
-                  
-                  echo "CNI configuration valid"
-                else
-                  echo "CNI configuration file missing"
-                  exit 1
-                fi
-              register: cni_syntax_check
-              failed_when: cni_syntax_check.rc != 0
-
-        - name: "Enhanced pre-join CNI preparation"
-          shell: |
-            # Ensure CNI directories have proper permissions for containerd
-            chmod 755 /etc/cni/net.d /opt/cni/bin
-            chown root:root /etc/cni/net.d /opt/cni/bin
-            
-            # Create additional CNI runtime directories if missing
-            mkdir -p /var/lib/cni/networks /var/lib/cni/results
-            chmod 755 /var/lib/cni/networks /var/lib/cni/results
-            
-            # Ensure Flannel runtime directory exists
-            mkdir -p /run/flannel
-            chmod 755 /run/flannel
-            
-            echo "CNI preparation completed successfully"
-          register: cni_preparation
-          
-      when: not kubelet_conf.stat.exists
-      
-    - name: "Install CNI plugins and configuration on worker nodes (required for kubelet)"
-      block:
-        - name: "Create CNI directories on worker nodes"
-          file:
-            path: "{{ item }}"
-            state: directory
-            owner: root
-            group: root
-            mode: '0755'
-          loop:
-            - /opt/cni/bin
-            - /etc/cni/net.d
-            - /var/lib/cni/networks
-            - /var/lib/cni/results
-
-        - name: "Download and install Flannel CNI plugin binary on worker nodes"
-          get_url:
-            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
-            dest: /opt/cni/bin/flannel
-            mode: '0755'
-            timeout: 60
-          retries: 3
-
-        - name: "Download and install additional CNI plugins on worker nodes"
-          unarchive:
-            src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
-            dest: /opt/cni/bin
-            remote_src: yes
-            creates: /opt/cni/bin/bridge
-          retries: 3
-
-        - name: "Create basic CNI configuration for worker nodes BEFORE containerd restart"
-          copy:
-            content: |
-              {
-                "name": "cni0",
-                "cniVersion": "0.3.1",
-                "plugins": [
-                  {
-                    "type": "flannel",
-                    "delegate": {
-                      "hairpinMode": true,
-                      "isDefaultGateway": true
-                    }
-                  },
-                  {
-                    "type": "portmap",
-                    "capabilities": {
-                      "portMappings": true
-                    }
-                  }
-                ]
-              }
-            dest: /etc/cni/net.d/10-flannel.conflist
-            owner: root
-            group: root
-            mode: '0644'
-
-        - name: "Create Flannel subnet environment directory"
-          file:
-            path: /run/flannel
-            state: directory
-            mode: '0755'
-
-      when: not kubelet_conf.stat.exists
-      
-    - name: "Prepare containerd for kubelet join"
-      block:
-        - name: "Restart containerd AFTER CNI configuration is ready"
-          systemd:
-            name: containerd
-            state: restarted
-
-        - name: "Wait for containerd to fully initialize"
-          pause:
-            seconds: 15
-
-        - name: "Initialize containerd image filesystem for kubelet"
-          shell: |
-            # Initialize the k8s.io namespace (used by kubelet)
-            ctr namespace create k8s.io 2>/dev/null || true
-            
-            # Force containerd to detect and initialize image filesystem capacity properly
-            # This prevents the "invalid capacity 0 on image filesystem" error during kubelet TLS Bootstrap
-            ctr --namespace k8s.io version >/dev/null 2>&1 || true
-            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            
-            # Wait for image filesystem to be properly initialized
-            sleep 5
-            
-            # Verify initialization was successful
-            if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
-              echo "WARNING: containerd image filesystem not fully initialized, attempting recovery"
-              # Restart containerd and retry
-              systemctl restart containerd
-              sleep 10
-              ctr namespace create k8s.io 2>/dev/null || true
-              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            fi
-            
-            echo "containerd image filesystem initialization completed"
-          register: containerd_image_init
-          failed_when: false
-
-        - name: "Display containerd image filesystem status"
-          debug:
-            msg: |
-              Containerd Image Filesystem Initialization:
-              {{ containerd_image_init.stdout }}
-              
-              This initialization prevents the 'invalid capacity 0 on image filesystem' 
-              error that causes kubelet TLS Bootstrap failures.
-
-        - name: "Verify containerd is ready for kubelet"
-          shell: systemctl is-active containerd
-          register: containerd_ready_check
-          retries: 3
-          delay: 5
-          until: containerd_ready_check.stdout == "active"
-
-      when: not kubelet_conf.stat.exists
-
-    - name: "Starting kubeadm join process"
-      debug:
-        msg: "Initiating kubeadm join with enhanced retry logic"
-      when: not kubelet_conf.stat.exists
-
-    - name: "Prepare kubelet for join (ensure clean state)"
-      block:
-        - name: "Stop kubelet service before join"
-          systemd:
-            name: kubelet
-            state: stopped
-          failed_when: false
-
-        - name: "Remove any stale kubelet configuration files"
-          shell: |
-            rm -f /var/lib/kubelet/config.yaml || true
-            rm -f /var/lib/kubelet/kubeadm-flags.env || true
-          failed_when: false
-
-        - name: "Ensure kubelet service is enabled for post-join management"
-          systemd:
-            name: kubelet
-            enabled: yes
-
-        - name: "Wait for kubelet to fully stop"
-          pause:
-            seconds: 5
-      when: not kubelet_conf.stat.exists
-
-    - name: "Join cluster with retry logic"
-      shell: timeout 120 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
       register: join_result
-      retries: 2
-      delay: 15
+      
+    - name: "Verify worker node joined successfully"
+      shell: kubectl get nodes {{ ansible_hostname }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      delegate_to: "{{ control_plane_ip }}"
+      register: node_status
+      retries: 3
+      delay: 10
+      until: node_status.rc == 0
       when: not kubelet_conf.stat.exists
-      failed_when: false
-
-    - name: "Handle join failure with cleanup and retry"
-      block:
-        - name: "Capture kubelet logs for troubleshooting"
-          shell: |
-            echo "=== Kubelet service status ==="
-            systemctl status kubelet --no-pager -l || true
-            echo ""
-            echo "=== Recent kubelet logs ==="
-            journalctl -u kubelet --no-pager -l --since "5 minutes ago" || true
-            echo ""
-            echo "=== Containerd status ==="
-            systemctl status containerd --no-pager -l || true
-          register: join_failure_logs
-          failed_when: false
-
-        - name: "Display failure diagnostics"
-          debug:
-            msg: |
-              === Join Failure Diagnostics ===
-              {{ join_failure_logs.stdout }}
-              
-              === Join Command Output ===
-              {% if join_result.stdout is defined %}
-              STDOUT: {{ join_result.stdout }}
-              {% endif %}
-              {% if join_result.stderr is defined %}
-              STDERR: {{ join_result.stderr }}
-              {% endif %}
-        - name: "Cleaning up after failed join"
-          shell: |
-            echo "=== Resetting node after failed join ==="
-            kubeadm reset --force --v=5
-          failed_when: false
-
-        - name: "Stop services for comprehensive cleanup"
-          shell: |
-            systemctl stop kubelet || true
-            systemctl disable kubelet || true
-            systemctl stop containerd || true
-          failed_when: false
-
-        - name: "Clean up networking rules"
-          shell: iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X || true
-          failed_when: false
-
-        - name: "Remove Kubernetes state directories"
-          shell: |
-            rm -rf /etc/cni/net.d/* || true
-            rm -rf /var/lib/cni/ || true
-            rm -rf /var/lib/kubelet/* || true
-            rm -rf /etc/kubernetes/* || true
-            rm -rf /var/lib/etcd/* || true
-          failed_when: false
-
-        - name: "Reset systemd services"
-          shell: |
-            systemctl reset-failed kubelet || true
-            systemctl reset-failed containerd || true
-            systemctl daemon-reload
-          failed_when: false
-
-        - name: "Restart containerd and prepare for retry"
-          systemd:
-            name: containerd
-            state: started
-            enabled: yes
-
-        - name: "Wait for containerd to be fully ready after restart"
-          pause:
-            seconds: 10
-
-        - name: "Reinitialize containerd image filesystem after cleanup"
-          shell: |
-            # Initialize the k8s.io namespace (used by kubelet) after cleanup
-            ctr namespace create k8s.io 2>/dev/null || true
-            
-            # Ensure containerd properly detects and initializes image filesystem capacity
-            # This is critical after cleanup to prevent repeated "invalid capacity 0" errors
-            ctr --namespace k8s.io version >/dev/null 2>&1 || true
-            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            
-            # Extended wait after cleanup for filesystem detection
-            sleep 10
-            
-            # Verify containerd image filesystem is ready for retry
-            if ! ctr --namespace k8s.io images ls >/dev/null 2>&1; then
-              echo "WARNING: containerd image filesystem still not ready after cleanup"
-              # Final attempt to initialize
-              ctr namespace create k8s.io 2>/dev/null || true
-              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            fi
-            
-            echo "containerd image filesystem reinitialized after cleanup"
-          failed_when: false
-
-        - name: "Reinitialize CNI configuration after cleanup"
-          block:
-            - name: "Recreate CNI directories"
-              file:
-                path: "{{ item }}"
-                state: directory
-                owner: root
-                group: root
-                mode: '0755'
-              loop:
-                - /etc/cni/net.d
-                - /run/flannel
-
-            - name: "Recreate basic CNI configuration"
-              copy:
-                content: |
-                  {
-                    "name": "cni0",
-                    "cniVersion": "0.3.1",
-                    "plugins": [
-                      {
-                        "type": "flannel",
-                        "delegate": {
-                          "hairpinMode": true,
-                          "isDefaultGateway": true
-                        }
-                      },
-                      {
-                        "type": "portmap",
-                        "capabilities": {
-                          "portMappings": true
-                        }
-                      }
-                    ]
-                  }
-                dest: /etc/cni/net.d/10-flannel.conflist
-                owner: root
-                group: root
-                mode: '0644'
-
-        - name: "Enable kubelet for kubeadm join"
-          systemd:
-            name: kubelet
-            enabled: yes
-
-        - name: "Verify containerd is running before retry"
-          command: systemctl is-active containerd
-          register: containerd_retry_check
-          failed_when: containerd_retry_check.stdout != "active"
-
-        - name: "Wait before retry to ensure system stability"
-          pause:
-            seconds: 20
-
-        - name: "Prepare kubelet for retry join (ensure clean state)"
-          block:
-            - name: "Stop kubelet service before retry"
-              systemd:
-                name: kubelet
-                state: stopped
-              failed_when: false
-
-            - name: "Remove any stale kubelet configuration files before retry"
-              shell: |
-                rm -f /var/lib/kubelet/config.yaml || true
-                rm -f /var/lib/kubelet/kubeadm-flags.env || true
-              failed_when: false
-
-            - name: "Wait for kubelet to fully stop before retry"
-              pause:
-                seconds: 5
-
-        - name: "Retry join after thorough cleanup"
-          shell: timeout 120 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
-          register: join_retry_result
-          failed_when: join_retry_result.rc != 0
-
-      when: 
-        - not kubelet_conf.stat.exists
-        - join_result is defined
-        - (join_result.rc is defined and join_result.rc != 0) or (join_result.failed | default(false))
-
-    - name: "Display join result"
+      
+    - name: "Display node status"
       debug:
-        msg: |
-          Join attempt result:
-          {% if join_result is defined and join_result.rc is defined %}
-          Initial join - Return code: {{ join_result.rc }}
-          {% if join_result.stderr is defined %}
-          Initial join error: {{ join_result.stderr }}
-          {% endif %}
-          {% elif join_result is defined %}
-          Initial join - Status: {{ join_result.get('msg', 'No return code available') }}
-          {% endif %}
-          {% if join_retry_result is defined and join_retry_result.rc is defined %}
-          Retry join - Return code: {{ join_retry_result.rc }}
-          {% if join_retry_result.stderr is defined %}
-          Retry join error: {{ join_retry_result.stderr }}
-          {% endif %}
-          {% elif join_retry_result is defined %}
-          Retry join - Status: {{ join_retry_result.get('msg', 'No return code available') }}
-          {% endif %}
+        msg: "Node {{ ansible_hostname }} successfully joined cluster"
       when: not kubelet_conf.stat.exists
 
-    - name: "Remove join command"
+    - name: "Clean up join command"
       file:
-        path: /tmp/kubeadm-join.sh
+        path: /tmp/kubeadm-join-command.txt
         state: absent
+      delegate_to: "{{ control_plane_ip }}"
+      run_once: true
