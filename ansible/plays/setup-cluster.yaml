@@ -138,6 +138,12 @@
         name: kubelet
         enabled: yes
 
+    - name: "Ensure kubelet service directory exists"
+      file:
+        path: /etc/systemd/system/kubelet.service.d
+        state: directory
+        mode: '0755'
+
     - name: "Configure kubelet for cluster join"
       copy:
         content: |
@@ -145,12 +151,6 @@
         dest: /etc/systemd/system/kubelet.service.d/20-join-config.conf
         mode: '0644'
       notify: reload systemd
-
-    - name: "Ensure kubelet service directory exists"
-      file:
-        path: /etc/systemd/system/kubelet.service.d
-        state: directory
-        mode: '0755'
 
   handlers:
     - name: reload systemd
