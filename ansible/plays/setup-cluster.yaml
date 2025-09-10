@@ -598,11 +598,11 @@
             export JOIN_TIMEOUT=300
             export MAX_RETRIES=2
             
-            # Extract base join command from script
-            JOIN_COMMAND=$(grep -v '^#' /tmp/kubeadm-join.sh | grep kubeadm | head -1)
+            # Extract base join command from script (remove "$@" placeholder)
+            JOIN_COMMAND=$(grep -v '^#' /tmp/kubeadm-join.sh | grep kubeadm | head -1 | sed 's/ "\$@"$//')
             
-            # Run enhanced join process
-            /tmp/enhanced_kubeadm_join.sh $JOIN_COMMAND
+            # Run enhanced join process with properly quoted command
+            /tmp/enhanced_kubeadm_join.sh "$JOIN_COMMAND"
           register: enhanced_join_result
           failed_when: enhanced_join_result.rc != 0
           

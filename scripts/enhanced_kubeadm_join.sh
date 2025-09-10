@@ -184,12 +184,12 @@ perform_join() {
     monitor_kubelet_join $JOIN_TIMEOUT &
     local monitor_pid=$!
     
-    # Execute join command with enhanced parameters (remove invalid --timeout flag)
+    # Execute join command with enhanced parameters
     local enhanced_command="timeout $((JOIN_TIMEOUT + 60)) $join_command --v=5"
     log_both "Enhanced command: $enhanced_command"
     
-    # Execute join
-    if eval "$enhanced_command" 2>&1 | tee -a "$LOG_FILE"; then
+    # Execute join using bash -c to properly handle the command string
+    if bash -c "$enhanced_command" 2>&1 | tee -a "$LOG_FILE"; then
         # Wait for monitor to complete
         wait $monitor_pid
         local monitor_result=$?
@@ -271,7 +271,14 @@ cleanup_failed_join() {
 
 # Main join process
 main() {
-    local join_command="$*"
+    # Handle join command passed as single quoted argument or multiple arguments
+    if [ $# -eq 1 ] && [[ "$1" == kubeadm* ]]; then
+        # Single argument containing the full command
+        local join_command="$1"
+    else
+        # Multiple arguments - concatenate them
+        local join_command="$*"
+    fi
     
     if [ -z "$join_command" ]; then
         error "Usage: $0 <kubeadm-join-command>"
