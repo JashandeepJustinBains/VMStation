@@ -1,601 +1,384 @@
-root@storagenodeT3500:~# ./worker_node_join_diagnosis.sh
-=== Worker Node Join Diagnostics Script ===
-Timestamp: Wed Sep 10 13:43:15 EDT 2025
-Hostname: storagenodeT3500
-IP Address: 192.168.4.61
 
-This script provides safe, read-only diagnostic commands to identify:
-  1. CNI configuration issues (no network config found in /etc/cni/net.d)
-  2. kubelet standalone mode conflicts (port 10250 in use)
-  3. containerd image filesystem capacity issues (invalid capacity 0)
-  4. PLEG health problems affecting node registration
-
-### 1. CNI AND KUBERNETES CONFIGURATION CHECKS ###
-
-=== CNI Directory Structure ===
-Command: ls -la /etc/cni/net.d/ 2>/dev/null || echo 'CNI directory does not exist'
-Output:
-total 12
-drwxr-xr-x 2 root root 4096 Sep 10 13:41 .
-drwxr-xr-x 3 root root 4096 Sep 10 10:38 ..
--rw-r--r-- 1 root root  292 Sep 10 13:41 10-flannel.conflist
-
-=== CNI Configuration Files Content ===
-Command: find /etc/cni -type f -exec echo 'File: {}' \; -exec cat {} \; 2>/dev/null || echo 'No CNI configuration files found'
-Output:
-File: /etc/cni/net.d/10-flannel.conflist
-{
-  "name": "cni0",
-  "cniVersion": "0.3.1",
-  "plugins": [
-    {
-      "type": "flannel",
-      "delegate": {
-        "hairpinMode": true,
-        "isDefaultGateway": true
-      }
-    },
-    {
-      "type": "portmap",
-      "capabilities": {
-        "portMappings": true
-      }
-    }
-  ]
-}
-
-=== CNI Binary Directory ===
-Command: ls -la /opt/cni/bin/ 2>/dev/null || echo 'CNI binary directory missing'
-Output:
-total 79492
-drwxr-xr-x 2 root root     4096 May  9  2023 .
-drwxr-xr-x 3 root root     4096 Sep 10 12:32 ..
--rwxr-xr-x 1 root root  4016001 May  9  2023 bandwidth
--rwxr-xr-x 1 root root  4531309 May  9  2023 bridge
--rwxr-xr-x 1 root root 10816051 May  9  2023 dhcp
--rwxr-xr-x 1 root root  4171248 May  9  2023 dummy
--rwxr-xr-x 1 root root  4649749 May  9  2023 firewall
--rwxr-xr-x 1 root root  2916136 Sep 10 13:00 flannel
--rwxr-xr-x 1 root root  4059321 May  9  2023 host-device
--rwxr-xr-x 1 root root  3444776 May  9  2023 host-local
--rwxr-xr-x 1 root root  4193323 May  9  2023 ipvlan
--rwxr-xr-x 1 root root  3514598 May  9  2023 loopback
--rwxr-xr-x 1 root root  4227193 May  9  2023 macvlan
--rwxr-xr-x 1 root root  3955775 May  9  2023 portmap
--rwxr-xr-x 1 root root  4348835 May  9  2023 ptp
--rwxr-xr-x 1 root root  3716095 May  9  2023 sbr
--rwxr-xr-x 1 root root  2984504 May  9  2023 static
--rwxr-xr-x 1 root root  4258344 May  9  2023 tap
--rwxr-xr-x 1 root root  3603365 May  9  2023 tuning
--rwxr-xr-x 1 root root  4187498 May  9  2023 vlan
--rwxr-xr-x 1 root root  3754911 May  9  2023 vrf
-
-=== Kubernetes Configuration Directory ===
-Command: ls -la /etc/kubernetes/ 2>/dev/null || echo 'Kubernetes config directory missing'
-Output:
-total 24
-drwxr-xr-x   3 root root  4096 Sep 10 13:41 .
-drwxr-xr-x 113 root root 12288 Sep 10 13:40 ..
--rw-------   1 root root  1891 Sep 10 13:41 bootstrap-kubelet.conf
-drwxr-xr-x   2 root root  4096 Sep 10 13:41 pki
-
-=== Kubelet Data Directory ===
-Command: ls -la /var/lib/kubelet/ 2>/dev/null || echo 'Kubelet data directory missing'
-Output:
-total 48
-drwx------  8 root root 4096 Sep 10 13:41 .
-drwxr-xr-x 41 root root 4096 Sep 10 13:41 ..
--rw-r--r--  1 root root 1021 Sep 10 13:41 config.yaml
--rw-------  1 root root   62 Sep 10 13:41 cpu_manager_state
-drwxr-xr-x  2 root root 4096 Sep 10 13:41 device-plugins
--rw-r--r--  1 root root  149 Sep 10 13:41 kubeadm-flags.env
--rw-------  1 root root   61 Sep 10 13:41 memory_manager_state
-drwxr-xr-x  2 root root 4096 Sep 10 13:41 pki
-drwxr-x---  2 root root 4096 Sep 10 13:41 plugins
-drwxr-x---  2 root root 4096 Sep 10 13:41 plugins_registry
-drwxr-x---  2 root root 4096 Sep 10 13:41 pod-resources
-drwxr-x---  2 root root 4096 Sep 10 13:41 pods
-
-=== kubeadm Flags Environment ===
-Command: cat /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || echo 'kubeadm-flags.env not found'
-Output:
-KUBELET_KUBEADM_ARGS="--container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9"
-
-=== Bootstrap Kubelet Configuration ===
-Command: ls -la /etc/kubernetes/bootstrap-kubelet.conf 2>/dev/null || echo 'Bootstrap kubelet config not found'
-Output:
--rw------- 1 root root 1891 Sep 10 13:41 /etc/kubernetes/bootstrap-kubelet.conf
-
-### 2. IMAGE FILESYSTEM AND MOUNT CHECKS ###
-
-=== Containerd Filesystem Capacity ===
-Command: df -h /var/lib/containerd 2>/dev/null || echo 'Cannot check containerd filesystem'
-Output:
-Filesystem                   Size  Used Avail Use% Mounted on
-/dev/mapper/debian--vg-root  456G  6.9G  426G   2% /
-
-=== Containerd Directory Contents ===
-Command: ls -la /var/lib/containerd/ 2>/dev/null || echo 'Containerd directory missing'
-Output:
-total 44
-drwx--x--x 11 root root 4096 Sep 10 13:39 .
-drwxr-xr-x 41 root root 4096 Sep 10 13:41 ..
-drwxr-xr-x  3 root root 4096 Sep 10 10:38 io.containerd.content.v1.content
-drwx------  2 root root 4096 Sep 10 13:39 io.containerd.grpc.v1.introspection
-drwx--x--x  2 root root 4096 Sep 10 10:38 io.containerd.metadata.v1.bolt
-drwx--x--x  2 root root 4096 Sep 10 10:38 io.containerd.runtime.v1.linux
-drwx--x--x  2 root root 4096 Sep 10 10:38 io.containerd.runtime.v2.task
-drwx------  2 root root 4096 Sep 10 10:38 io.containerd.snapshotter.v1.btrfs
-drwx------  3 root root 4096 Sep 10 10:38 io.containerd.snapshotter.v1.native
-drwx------  3 root root 4096 Sep 10 10:38 io.containerd.snapshotter.v1.overlayfs
-drwx------  2 root root 4096 Sep 10 10:38 tmpmounts
-
-=== Containerd Subdirectory Sizes ===
-Command: du -sh /var/lib/containerd/* 2>/dev/null || echo 'Cannot determine containerd directory sizes'
-Output:
-8.0K    /var/lib/containerd/io.containerd.content.v1.content
-8.0K    /var/lib/containerd/io.containerd.grpc.v1.introspection
-28K     /var/lib/containerd/io.containerd.metadata.v1.bolt
-4.0K    /var/lib/containerd/io.containerd.runtime.v1.linux
-4.0K    /var/lib/containerd/io.containerd.runtime.v2.task
-4.0K    /var/lib/containerd/io.containerd.snapshotter.v1.btrfs
-8.0K    /var/lib/containerd/io.containerd.snapshotter.v1.native
-8.0K    /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs
-4.0K    /var/lib/containerd/tmpmounts
-
-=== Relevant Mount Points ===
-Command: mount | grep -E '(containerd|kubelet|var/lib)' || echo 'No relevant mount points found'
-Output:
-No relevant mount points found
-
-=== Filesystem Capacity Overview ===
-Command: df -h | grep -E '(Filesystem|/var|tmpfs)'
-Output:
-Filesystem                   Size  Used Avail Use% Mounted on
-tmpfs                        794M  2.4M  791M   1% /run
-tmpfs                        3.9G   84K  3.9G   1% /dev/shm
-tmpfs                        5.0M     0  5.0M   0% /run/lock
-
-=== Containerd Filesystem Write Test ===
-Command: touch /var/lib/containerd/diagnostic_test 2>/dev/null && rm -f /var/lib/containerd/diagnostic_test && echo 'Filesystem is writable' || echo 'Filesystem is read-only or has permission issues'
-Output:
-Filesystem is writable
-
-### 3. CONTAINER RUNTIME INTERFACE (CRI) CHECKS ###
-
-=== Containerd Socket Status ===
-Command: ls -la /run/containerd/containerd.sock 2>/dev/null || echo 'Containerd socket missing'
-Output:
-srw-rw---- 1 root root 0 Sep 10 13:40 /run/containerd/containerd.sock
-
-=== Containerd Service Status ===
-Command: systemctl status containerd --no-pager -l 2>/dev/null || echo 'Cannot check containerd service status'
-Output:
-● containerd.service - containerd container runtime
-     Loaded: loaded (/lib/systemd/system/containerd.service; enabled; preset: enabled)
-     Active: active (running) since Wed 2025-09-10 13:40:54 EDT; 2min 20s ago
-       Docs: https://containerd.io
-   Main PID: 368489 (containerd)
-      Tasks: 13
-     Memory: 25.8M
-        CPU: 335ms
-     CGroup: /system.slice/containerd.service
-             └─368489 /usr/bin/containerd
-
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770068119-04:00" level=info msg="Start subscribing containerd event"
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770152535-04:00" level=info msg="Start recovering state"
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770180221-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770254739-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770258276-04:00" level=info msg="Start event monitor"
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770331695-04:00" level=info msg="containerd successfully booted in 0.035885s"
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770330052-04:00" level=info msg="Start snapshots syncer"
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770377717-04:00" level=info msg="Start cni network conf syncer for default"
-Sep 10 13:40:54 storagenodeT3500 containerd[368489]: time="2025-09-10T13:40:54.770394246-04:00" level=info msg="Start streaming server"
-Sep 10 13:40:54 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
-
-=== CRI Tool Version Check ===
-Command: which crictl >/dev/null 2>&1 && crictl version 2>/dev/null || echo 'crictl not available or not working'
-Output:
-Version:  0.1.0
-RuntimeName:  containerd
-RuntimeVersion:  1.6.20~ds1
-RuntimeApiVersion:  v1
-
-=== Container Tool Version Check ===
-Command: which ctr >/dev/null 2>&1 && ctr version 2>/dev/null || echo 'ctr not available or not working'
-Output:
-Client:
-  Version:  1.6.20~ds1
-  Revision: 1.6.20~ds1-1+deb12u1
-  Go version: go1.19.8
-
-Server:
-  Version:  1.6.20~ds1
-  Revision: 1.6.20~ds1-1+deb12u1
-  UUID: 80b478d2-670c-4f81-9a98-03b591a337d6
-
-=== Containerd CNI Configuration ===
-Command: grep -n cni /etc/containerd/config.toml 2>/dev/null || echo 'No CNI configuration found in containerd.toml'
-Output:
-71:    [plugins."io.containerd.grpc.v1.cri".cni]
-72:      bin_dir = "/opt/cni/bin"
-73:      conf_dir = "/etc/cni/net.d"
-88:        cni_conf_dir = ""
-89:        cni_max_conf_num = 0
-104:          cni_conf_dir = ""
-105:          cni_max_conf_num = 0
-129:        cni_conf_dir = ""
-130:        cni_max_conf_num = 0
-
-### 4. KUBELET SERVICE AND PORT STATUS ###
-
-=== kubelet Service Status ===
-Command: systemctl status kubelet --no-pager -l 2>/dev/null || echo 'Cannot check kubelet service status'
-Output:
-● kubelet.service - kubelet: The Kubernetes Node Agent
-     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; preset: enabled)
-     Active: active (running) since Wed 2025-09-10 13:41:27 EDT; 1min 47s ago
-       Docs: https://kubernetes.io/docs/
-   Main PID: 369269 (kubelet)
-      Tasks: 16 (limit: 9458)
-     Memory: 30.7M
-        CPU: 1.889s
-     CGroup: /system.slice/kubelet.service
-             └─369269 /usr/bin/kubelet
-
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: E0910 13:41:28.945065  369269 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.950265  369269 cpu_manager.go:214] "Starting CPU manager" policy="none"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.950295  369269 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.950320  369269 state_mem.go:36] "Initialized new in-memory state store"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.996606  369269 policy_none.go:49] "None policy: Start"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.997376  369269 memory_manager.go:170] "Starting memorymanager" policy="None"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.997419  369269 state_mem.go:35] "Initializing new in-memory state store"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.030025  369269 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.031747  369269 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.032191  369269 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
-
-=== kubelet Active State ===
-Command: systemctl is-active kubelet 2>/dev/null || echo 'kubelet service state unknown'
-Output:
-active
-
-=== kubelet Enabled State ===
-Command: systemctl is-enabled kubelet 2>/dev/null || echo 'kubelet service enabled state unknown'
-Output:
-enabled
-
-=== Port 10250 Usage (netstat) ===
-Command: netstat -tulpn 2>/dev/null | grep :10250 || echo 'Port 10250 not in use (netstat)'
-Output:
-Port 10250 not in use (netstat)
-
-=== Port 10250 Usage (ss) ===
-Command: ss -tulpn 2>/dev/null | grep :10250 || echo 'Port 10250 not in use (ss)'
-Output:
-tcp   LISTEN 0      4096               *:10250            *:*    users:(("kubelet",pid=369269,fd=14))
-
-=== Port 10250 Process Info ===
-Command: lsof -i :10250 2>/dev/null || echo 'lsof not available or port 10250 not in use'
-Output:
-COMMAND    PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
-kubelet 369269 root   14u  IPv6 934771      0t0  TCP *:10250 (LISTEN)
-
-=== Recent kubelet Logs ===
-Command: journalctl -u kubelet --no-pager -l --since='5 minutes ago' 2>/dev/null | tail -20 || echo 'Cannot retrieve kubelet logs'
-Output:
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.928875  369269 volume_manager.go:291] "Starting Kubelet Volume Manager"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.928945  369269 desired_state_of_world_populator.go:151] "Desired state populator starts to run"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.929041  369269 reconciler_new.go:29] "Reconciler: start to sync state"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.929774  369269 factory.go:221] Registration of the systemd container factory successfully
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.929912  369269 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: no such file or directory
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.931359  369269 factory.go:221] Registration of the containerd container factory successfully
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.943131  369269 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv4"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.944916  369269 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv6"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.944960  369269 status_manager.go:213] "Kubernetes client is nil, not starting status manager"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.944982  369269 kubelet.go:2347] "Starting kubelet main sync loop"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: E0910 13:41:28.945065  369269 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.950265  369269 cpu_manager.go:214] "Starting CPU manager" policy="none"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.950295  369269 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.950320  369269 state_mem.go:36] "Initialized new in-memory state store"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.996606  369269 policy_none.go:49] "None policy: Start"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.997376  369269 memory_manager.go:170] "Starting memorymanager" policy="None"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.997419  369269 state_mem.go:35] "Initializing new in-memory state store"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.030025  369269 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.031747  369269 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.032191  369269 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
-
-### 5. ADDITIONAL SYSTEM HEALTH CHECKS ###
-
-=== System Load and Memory ===
-Command: uptime && free -h
-Output:
- 13:43:15 up 2 days,  2:21,  2 users,  load average: 0.06, 0.08, 0.02
-               total        used        free      shared  buff/cache   available
-Mem:           7.7Gi       564Mi       6.1Gi       2.4Mi       1.3Gi       7.2Gi
-Swap:             0B          0B          0B
-
-=== Disk Space Overview ===
-Command: df -h | head -10
-Output:
-Filesystem                   Size  Used Avail Use% Mounted on
-udev                         3.9G     0  3.9G   0% /dev
-tmpfs                        794M  2.4M  791M   1% /run
-/dev/mapper/debian--vg-root  456G  6.9G  426G   2% /
-tmpfs                        3.9G   84K  3.9G   1% /dev/shm
-tmpfs                        5.0M     0  5.0M   0% /run/lock
-/dev/sda1                    1.8T  520G  1.2T  30% /srv/media
-/dev/sdb1                    455M  101M  330M  24% /boot
-192.168.4.61:/srv/media      1.8T  520G  1.2T  30% /mnt/media
-
-=== Network Interface Status ===
-Command: ip addr show | grep -E '^[0-9]+:|inet ' | head -10
-Output:
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
-    inet 127.0.0.1/8 scope host lo
-2: enp5s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
-    inet 192.168.4.61/24 brd 192.168.4.255 scope global enp5s0
-
-=== Systemd Failed Services ===
-Command: systemctl list-units --failed --no-pager || echo 'No failed systemd services found'
-Output:
-  UNIT                     LOAD      ACTIVE SUB    DESCRIPTION
-● fail2ban.service         loaded    failed failed Fail2Ban Service
-● monitoring-cleanup.timer not-found failed failed monitoring-cleanup.timer
-
-LOAD   = Reflects whether the unit definition was properly loaded.
-ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
-SUB    = The low-level unit activation state, values depend on unit type.
-2 loaded units listed.
-
-=== DIAGNOSTIC SUMMARY ===
-
-Review the output above for:
-  ❌ CNI configuration missing: Look for 'CNI directory does not exist' or empty /etc/cni/net.d/
-  ❌ Port 10250 conflicts: Look for kubelet or other processes using port 10250
-  ❌ Filesystem capacity 0: Look for 0G, 0B, or 'No space' in containerd filesystem checks
-  ❌ Containerd socket issues: Look for missing /run/containerd/containerd.sock
-  ❌ Service health problems: Look for failed/inactive states in systemctl status
-
-Copy the relevant sections above and provide them for analysis.
-This diagnostic information will help determine the exact remediation steps needed.
-root@storagenodeT3500:~# ./worker_node_join_remediation.sh
-=== Worker Node Join Remediation Script ===
-Timestamp: Wed Sep 10 13:43:21 EDT 2025
-Hostname: storagenodeT3500
-Target: Fix CNI config, kubelet conflicts, containerd filesystem issues
-
-[WARN] This script will:
-[WARN]   1. Stop and mask kubelet service
-[WARN]   2. Fix containerd image filesystem issues
-[WARN]   3. Reset Kubernetes state (preserves /mnt/media)
-[WARN]   4. Prepare for clean kubeadm join
-[WARN]
-[WARN] NOTE: This will NOT modify /mnt/media or any mounted storage
-Continue with remediation? (y/N): y
-
-[INFO] Starting remediation sequence...
-[INFO] === Phase 1: Stop Services and Clean State ===
-[INFO] Stopping kubelet service...
-[SUCCESS] kubelet stopped
-[INFO] Masking kubelet to prevent auto-start...
-Created symlink /etc/systemd/system/kubelet.service → /dev/null.
-
-[SUCCESS] kubelet masked
-[INFO] Checking port 10250 release...
-[SUCCESS] Port 10250 released successfully
-[INFO] === Phase 2: Fix Runtime and Filesystem Issues ===
-[INFO] Checking containerd image filesystem...
-[INFO] Containerd filesystem capacity: 456G
-[SUCCESS] Containerd filesystem capacity normal: 456G
-[INFO] Starting containerd service...
-[SUCCESS] Containerd service active
-[INFO] Testing containerd functionality...
-[SUCCESS] Containerd responding to API calls
-[INFO] === Phase 3: Reset Kubernetes State ===
-[INFO] Resetting kubeadm state (preserves /mnt/media)...
-[preflight] Running pre-flight checks
-W0910 13:43:28.061165  369475 removeetcdmember.go:106] [reset] No kubeadm config, using etcd pod spec to get data directory
-[reset] Deleted contents of the etcd data directory: /var/lib/etcd
-[reset] Stopping the kubelet service
-[reset] Unmounting mounted directories in "/var/lib/kubelet"
-[reset] Deleting contents of directories: [/etc/kubernetes/manifests /var/lib/kubelet /etc/kubernetes/pki]
-[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]
-
-The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
-
-The reset process does not reset or clean up iptables rules or IPVS tables.
-If you wish to reset iptables, you must do so manually by using the "iptables" command.
-
-If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
-to reset your system's IPVS tables.
-
-The reset process does not clean your kubeconfig files and you must remove them manually.
-Please, check the contents of the $HOME/.kube/config file.
-[INFO] Cleaning Kubernetes directories...
-[INFO] Cleaning kubeadm flags...
-[SUCCESS] Kubernetes state reset completed
-[INFO] === Phase 4: Prepare for Join ===
-[INFO] Unmasking kubelet service...
-Removed "/etc/systemd/system/kubelet.service".
-[SUCCESS] kubelet unmasked and systemd reloaded
-[INFO] Verifying prerequisites...
-[SUCCESS] ✓ containerd service is active
-[SUCCESS] ✓ No existing kubelet.conf (clean state)
-[SUCCESS] ✓ No existing CNI config (clean state)
-[INFO] === Phase 5: Ready for Join ===
-[SUCCESS] System prepared for kubeadm join!
-[INFO]
-[INFO] Next steps:
-[INFO] 1. Obtain join command from control plane:
-[INFO]    ssh <control-plane-ip> 'kubeadm token create --print-join-command'
-[INFO]
-[INFO] 2. Execute join with appropriate flags:
-[INFO]    kubeadm join <control-plane-ip>:6443 \
-[INFO]      --token <token> \
-[INFO]      --discovery-token-ca-cert-hash <hash> \
-[INFO]      --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt \
-[INFO]      --v=5
-[INFO]
-[INFO] 3. Monitor join progress:
-[INFO]    journalctl -u kubelet -f
-[INFO]
-[INFO] === Phase 6: Post-Join Verification (after join completes) ===
-[INFO]
-[INFO] After successful join, verify with these commands:
-[INFO]
-[INFO] # Wait for kubelet to stabilize
-[INFO] sleep 30
-[INFO]
-[INFO] # Check node registration (from control plane)
-[INFO] kubectl get nodes -o wide
-[INFO]
-[INFO] # Verify CNI configuration populated
-[INFO] ls -la /etc/cni/net.d/
-[INFO] cat /etc/cni/net.d/10-flannel.conflist
-[INFO]
-[INFO] # Check kubelet health
-[INFO] systemctl status kubelet
-[INFO] journalctl -u kubelet --since='2 minutes ago' | grep -v 'level=info'
-
-[SUCCESS] Remediation completed successfully!
-[INFO] System is ready for kubeadm join operation.
-
-[INFO] === Final System Status ===
-[INFO] kubelet: inactive (enabled)
-[INFO] containerd: active (enabled)
-[INFO] Port 10250: available
-[INFO] CNI config: 0 files
-[INFO] Containerd filesystem: 456G used: 6.9G
-
-[SUCCESS] Ready for kubeadm join!
-root@storagenodeT3500:~#
-root@storagenodeT3500:~# sudo journalctl -fu kubelet -u containerd -u kube-proxy
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.997376  369269 memory_manager.go:170] "Starting memorymanager" policy="None"
-Sep 10 13:41:28 storagenodeT3500 kubelet[369269]: I0910 13:41:28.997419  369269 state_mem.go:35] "Initializing new in-memory state store"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.030025  369269 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.031747  369269 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
-Sep 10 13:41:29 storagenodeT3500 kubelet[369269]: I0910 13:41:29.032191  369269 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
-Sep 10 13:43:22 storagenodeT3500 systemd[1]: Stopping kubelet.service - kubelet: The Kubernetes Node Agent...
-Sep 10 13:43:22 storagenodeT3500 systemd[1]: kubelet.service: Deactivated successfully.
-Sep 10 13:43:22 storagenodeT3500 systemd[1]: Stopped kubelet.service - kubelet: The Kubernetes Node Agent.
-Sep 10 13:43:22 storagenodeT3500 systemd[1]: kubelet.service: Consumed 1.935s CPU time.
-Sep 10 13:43:28 storagenodeT3500 containerd[368489]: time="2025-09-10T13:43:28.102254178-04:00" level=error msg="failed to reload cni configuration after receiving fs change event(REMOVE        \"/etc/cni/net.d/10-flannel.conflist\")" error="cni config load failed: no network config found in /etc/cni/net.d: cni plugin not initialized: failed to load cni config"
-Sep 10 13:44:15 storagenodeT3500 systemd[1]: Stopping containerd.service - containerd container runtime...
-Sep 10 13:44:15 storagenodeT3500 containerd[368489]: time="2025-09-10T13:44:15.962896429-04:00" level=info msg="Stop CRI service"
-Sep 10 13:44:15 storagenodeT3500 containerd[368489]: time="2025-09-10T13:44:15.969111349-04:00" level=info msg="Stop CRI service"
-Sep 10 13:44:15 storagenodeT3500 containerd[368489]: time="2025-09-10T13:44:15.969168288-04:00" level=info msg="Event monitor stopped"
-Sep 10 13:44:15 storagenodeT3500 containerd[368489]: time="2025-09-10T13:44:15.969199661-04:00" level=info msg="Stream server stopped"
-Sep 10 13:44:15 storagenodeT3500 systemd[1]: containerd.service: Deactivated successfully.
-Sep 10 13:44:15 storagenodeT3500 systemd[1]: Stopped containerd.service - containerd container runtime.
-Sep 10 13:44:16 storagenodeT3500 systemd[1]: Starting containerd.service - containerd container runtime...
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.046064276-04:00" level=info msg="starting containerd" revision="1.6.20~ds1-1+deb12u1" version="1.6.20~ds1"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.072190864-04:00" level=info msg="loading plugin \"io.containerd.content.v1.content\"..." type=io.containerd.content.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.072260896-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.aufs\"..." type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075405257-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.aufs\"..." error="aufs is not supported (modprobe aufs failed: exit status 1 \"modprobe: FATAL: Module aufs not found in directory /lib/modules/6.1.0-34-amd64\\n\"): skip plugin" type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075485870-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075709611-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.btrfs (ext4) must be a btrfs filesystem to be used with the btrfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075740536-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.devmapper\"..." type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075786092-04:00" level=warning msg="failed to load plugin io.containerd.snapshotter.v1.devmapper" error="devmapper not configured"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075807331-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.native\"..." type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.075851650-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.overlayfs\"..." type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076022349-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.zfs\"..." type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076210913-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.zfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.zfs must be a zfs filesystem to be used with the zfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076241513-04:00" level=info msg="loading plugin \"io.containerd.metadata.v1.bolt\"..." type=io.containerd.metadata.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076277857-04:00" level=warning msg="could not use snapshotter devmapper in metadata plugin" error="devmapper not configured"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076297901-04:00" level=info msg="metadata content store policy set" policy=shared
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076421954-04:00" level=info msg="loading plugin \"io.containerd.differ.v1.walking\"..." type=io.containerd.differ.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076454561-04:00" level=info msg="loading plugin \"io.containerd.event.v1.exchange\"..." type=io.containerd.event.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076477873-04:00" level=info msg="loading plugin \"io.containerd.gc.v1.scheduler\"..." type=io.containerd.gc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076551874-04:00" level=info msg="loading plugin \"io.containerd.service.v1.introspection-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076584136-04:00" level=info msg="loading plugin \"io.containerd.service.v1.containers-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076611079-04:00" level=info msg="loading plugin \"io.containerd.service.v1.content-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076635538-04:00" level=info msg="loading plugin \"io.containerd.service.v1.diff-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076677083-04:00" level=info msg="loading plugin \"io.containerd.service.v1.images-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076710474-04:00" level=info msg="loading plugin \"io.containerd.service.v1.leases-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076737500-04:00" level=info msg="loading plugin \"io.containerd.service.v1.namespaces-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076783498-04:00" level=info msg="loading plugin \"io.containerd.service.v1.snapshots-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076820080-04:00" level=info msg="loading plugin \"io.containerd.runtime.v1.linux\"..." type=io.containerd.runtime.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076905556-04:00" level=info msg="loading plugin \"io.containerd.runtime.v2.task\"..." type=io.containerd.runtime.v2
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.076986765-04:00" level=info msg="loading plugin \"io.containerd.monitor.v1.cgroups\"..." type=io.containerd.monitor.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.077891331-04:00" level=info msg="loading plugin \"io.containerd.service.v1.tasks-service\"..." type=io.containerd.service.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.077984745-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.introspection\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078149664-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.restart\"..." type=io.containerd.internal.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078267400-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.containers\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078302230-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.content\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078333521-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.diff\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078375905-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.events\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078416092-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.healthcheck\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078443401-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.images\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078466846-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.leases\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078489410-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.namespaces\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078516554-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.opt\"..." type=io.containerd.internal.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078582553-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.snapshots\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078611123-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.tasks\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078635647-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.version\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.078659876-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.cri\"..." type=io.containerd.grpc.v1
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.079053455-04:00" level=info msg="Start cri plugin with config {PluginConfig:{ContainerdConfig:{Snapshotter:overlayfs DefaultRuntimeName:runc DefaultRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} UntrustedWorkloadRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} Runtimes:map[runc:{Type:io.containerd.runc.v2 Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[BinaryName: CriuImagePath: CriuPath: CriuWorkPath: IoGid:0 IoUid:0 NoNewKeyring:false NoPivotRoot:false Root: ShimCgroup: SystemdCgroup:true] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0}] NoPivot:false DisableSnapshotAnnotations:true DiscardUnpackedLayers:false IgnoreRdtNotEnabledErrors:false} CniConfig:{NetworkPluginBinDir:/opt/cni/bin NetworkPluginConfDir:/etc/cni/net.d NetworkPluginMaxConfNum:1 NetworkPluginConfTemplate: IPPreference:} Registry:{ConfigPath: Mirrors:map[] Configs:map[] Auths:map[] Headers:map[]} ImageDecryption:{KeyModel:node} DisableTCPService:true StreamServerAddress:127.0.0.1 StreamServerPort:0 StreamIdleTimeout:4h0m0s EnableSelinux:false SelinuxCategoryRange:1024 SandboxImage:registry.k8s.io/pause:3.6 StatsCollectPeriod:10 SystemdCgroup:false EnableTLSStreaming:false X509KeyPairStreaming:{TLSCertFile: TLSKeyFile:} MaxContainerLogLineSize:16384 DisableCgroup:false DisableApparmor:false RestrictOOMScoreAdj:false MaxConcurrentDownloads:3 DisableProcMount:false UnsetSeccompProfile: TolerateMissingHugetlbController:true DisableHugetlbController:true DeviceOwnershipFromSecurityContext:false IgnoreImageDefinedVolumes:false NetNSMountsUnderStateDir:false EnableUnprivilegedPorts:false EnableUnprivilegedICMP:false} ContainerdRootDir:/var/lib/containerd ContainerdEndpoint:/run/containerd/containerd.sock RootDir:/var/lib/containerd/io.containerd.grpc.v1.cri StateDir:/run/containerd/io.containerd.grpc.v1.cri}"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.079173946-04:00" level=info msg="Connect containerd service"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.079245475-04:00" level=info msg="Get image filesystem path \"/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs\""
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.079866802-04:00" level=error msg="failed to load cni during init, please check CRI plugin status before setting up network for pods" error="cni config load failed: no network config found in /etc/cni/net.d: cni plugin not initialized: failed to load cni config"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080021216-04:00" level=info msg="Start subscribing containerd event"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080080716-04:00" level=info msg="Start recovering state"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080161880-04:00" level=info msg="Start event monitor"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080198273-04:00" level=info msg="Start snapshots syncer"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080217404-04:00" level=info msg="Start cni network conf syncer for default"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080231265-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080232466-04:00" level=info msg="Start streaming server"
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080333343-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
-Sep 10 13:44:16 storagenodeT3500 containerd[371096]: time="2025-09-10T13:44:16.080434543-04:00" level=info msg="containerd successfully booted in 0.036648s"
-Sep 10 13:44:16 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
-Sep 10 13:44:49 storagenodeT3500 systemd[1]: Started kubelet.service - kubelet: The Kubernetes Node Agent.
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.146777  371875 server.go:492] "Kubelet version" kubeletVersion="v1.29.15"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.146882  371875 server.go:494] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.147255  371875 server.go:655] "Standalone mode, no API client"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161019  371875 server.go:543] "No api server defined - no events will be sent to API server"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161057  371875 server.go:750] "--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161404  371875 container_manager_linux.go:265] "Container manager verified user specified cgroup-root exists" cgroupRoot=[]
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161604  371875 container_manager_linux.go:270] "Creating Container Manager object based on Node Config" nodeConfig={"RuntimeCgroupsName":"","SystemCgroupsName":"","KubeletCgroupsName":"","KubeletOOMScoreAdj":-999,"ContainerRuntime":"","CgroupsPerQOS":true,"CgroupRoot":"/","CgroupDriver":"cgroupfs","KubeletRootDir":"/var/lib/kubelet","ProtectKernelDefaults":false,"KubeReservedCgroupName":"","SystemReservedCgroupName":"","ReservedSystemCPUs":{},"EnforceNodeAllocatable":{"pods":{}},"KubeReserved":null,"SystemReserved":null,"HardEvictionThresholds":[],"QOSReserved":{},"CPUManagerPolicy":"none","CPUManagerPolicyOptions":null,"TopologyManagerScope":"container","CPUManagerReconcilePeriod":10000000000,"ExperimentalMemoryManagerPolicy":"None","ExperimentalMemoryManagerReservedMemory":null,"PodPidsLimit":-1,"EnforceCPULimits":true,"CPUCFSQuotaPeriod":100000000,"TopologyManagerPolicy":"none","TopologyManagerPolicyOptions":null}
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161644  371875 topology_manager.go:138] "Creating topology manager with none policy"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161661  371875 container_manager_linux.go:301] "Creating device plugin manager"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161775  371875 state_mem.go:36] "Initialized new in-memory state store"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.161865  371875 kubelet.go:402] "Kubelet is running in standalone mode, will skip API server sync"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.162454  371875 kuberuntime_manager.go:260] "Container runtime initialized" containerRuntime="containerd" version="1.6.20~ds1" apiVersion="v1"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.162711  371875 kubelet.go:809] "Not starting ClusterTrustBundle informer because we are in static kubelet mode"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.162736  371875 volume_host.go:77] "KubeClient is nil. Skip initialization of CSIDriverLister"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: W0910 13:44:50.162973  371875 csi_plugin.go:194] kubernetes.io/csi: kubeclient not set, assuming standalone kubelet
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: W0910 13:44:50.162993  371875 csi_plugin.go:271] Skipping CSINode initialization, kubelet running in standalone mode
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.163465  371875 server.go:1261] "Started kubelet"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.163495  371875 kubelet.go:1618] "No API server defined - no node status update will be sent"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.163583  371875 server.go:162] "Starting to listen" address="0.0.0.0" port=10250
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.163593  371875 server.go:194] "Starting to listen read-only" address="0.0.0.0" port=10255
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.163596  371875 ratelimit.go:55] "Setting rate limiting for endpoint" service="podresources" qps=100 burstTokens=10
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.163968  371875 server.go:233] "Starting to serve the podresources API" endpoint="unix:/var/lib/kubelet/pod-resources/kubelet.sock"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.165399  371875 server.go:450] "Adding debug handlers to kubelet server"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.165470  371875 fs_resource_analyzer.go:67] "Starting FS ResourceAnalyzer"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: E0910 13:44:50.165467  371875 kubelet.go:1462] "Image garbage collection failed once. Stats initialization may not have completed yet" err="invalid capacity 0 on image filesystem"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.165571  371875 volume_manager.go:291] "Starting Kubelet Volume Manager"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.165617  371875 desired_state_of_world_populator.go:151] "Desired state populator starts to run"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.165709  371875 reconciler_new.go:29] "Reconciler: start to sync state"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.166372  371875 factory.go:221] Registration of the systemd container factory successfully
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.166568  371875 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: no such file or directory
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.168100  371875 factory.go:221] Registration of the containerd container factory successfully
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.177892  371875 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv4"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.179339  371875 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv6"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.179368  371875 status_manager.go:213] "Kubernetes client is nil, not starting status manager"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.179386  371875 kubelet.go:2347] "Starting kubelet main sync loop"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: E0910 13:44:50.179453  371875 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.187615  371875 cpu_manager.go:214] "Starting CPU manager" policy="none"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.187647  371875 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.187676  371875 state_mem.go:36] "Initialized new in-memory state store"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.234864  371875 policy_none.go:49] "None policy: Start"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.235433  371875 memory_manager.go:170] "Starting memorymanager" policy="None"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.235464  371875 state_mem.go:35] "Initializing new in-memory state store"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.265732  371875 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.269602  371875 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
-Sep 10 13:44:50 storagenodeT3500 kubelet[371875]: I0910 13:44:50.269894  371875 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
-
-Error on masternode while attempting to run 'deploy.sh cluster'
 
 TASK [Retry join after thorough cleanup] ******************************************************************************************************************************************************
 skipping: [192.168.4.62]
-fatal: [192.168.4.61]: FAILED! => {"changed": true, "cmd": "timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5", "delta": "0:05:00.665815", "end": "2025-09-10 13:56:06.439421", "failed_when_result": true, "msg": "non-zero return code", "rc": 1, "start": "2025-09-10 13:51:05.773606", "stderr": "I0910 13:51:05.810822  372471 join.go:413] [preflight] found NodeName empty; using OS hostname as NodeName\nI0910 13:51:05.811052  372471 initconfiguration.go:122] detected and using CRI socket: unix:///var/run/containerd/containerd.sock\nI0910 13:51:05.811137  372471 preflight.go:93] [preflight] Running general checks\nI0910 13:51:05.811199  372471 checks.go:280] validating the existence of file /etc/kubernetes/kubelet.conf\nI0910 13:51:05.811215  372471 checks.go:280] validating the existence of file /etc/kubernetes/bootstrap-kubelet.conf\nI0910 13:51:05.811227  372471 checks.go:104] validating the container runtime\nI0910 13:51:05.838250  372471 checks.go:639] validating whether swap is enabled or not\nI0910 13:51:05.838342  372471 checks.go:370] validating the presence of executable crictl\nI0910 13:51:05.838380  372471 checks.go:370] validating the presence of executable conntrack\nI0910 13:51:05.838402  372471 checks.go:370] validating the presence of executable ip\nI0910 13:51:05.838428  372471 checks.go:370] validating the presence of executable iptables\nI0910 13:51:05.838451  372471 checks.go:370] validating the presence of executable mount\nI0910 13:51:05.838473  372471 checks.go:370] validating the presence of executable nsenter\nI0910 13:51:05.838494  372471 checks.go:370] validating the presence of executable ethtool\nI0910 13:51:05.838513  372471 checks.go:370] validating the presence of executable tc\nI0910 13:51:05.838545  372471 checks.go:370] validating the presence of executable touch\nI0910 13:51:05.838569  372471 checks.go:516] running all checks\nI0910 13:51:05.857600  372471 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost\nI0910 13:51:05.857923  372471 checks.go:605] validating kubelet version\nI0910 13:51:05.923210  372471 checks.go:130] validating if the \"kubelet\" service is enabled and active\nI0910 13:51:05.959863  372471 checks.go:203] validating availability of port 10250\nI0910 13:51:05.960125  372471 checks.go:280] validating the existence of file /etc/kubernetes/pki/ca.crt\nI0910 13:51:05.960151  372471 checks.go:430] validating if the connectivity type is via proxy or direct\nI0910 13:51:05.960209  372471 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables\nI0910 13:51:05.960286  372471 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward\nI0910 13:51:05.960338  372471 join.go:532] [preflight] Discovering cluster-info\nI0910 13:51:05.960366  372471 token.go:80] [discovery] Created cluster-info discovery client, requesting info from \"192.168.4.63:6443\"\nI0910 13:51:05.969646  372471 token.go:118] [discovery] Requesting info from \"192.168.4.63:6443\" again to validate TLS against the pinned public key\nI0910 13:51:05.977614  372471 token.go:135] [discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server \"192.168.4.63:6443\"\nI0910 13:51:05.977634  372471 discovery.go:52] [discovery] Using provided TLSBootstrapToken as authentication credentials for the join process\nI0910 13:51:05.977651  372471 join.go:546] [preflight] Fetching init configuration\nI0910 13:51:05.977660  372471 join.go:592] [preflight] Retrieving KubeConfig objects\nI0910 13:51:05.986790  372471 kubeproxy.go:55] attempting to download the KubeProxyConfiguration from ConfigMap \"kube-proxy\"\nI0910 13:51:05.991761  372471 kubelet.go:74] attempting to download the KubeletConfiguration from ConfigMap \"kubelet-config\"\nI0910 13:51:05.997004  372471 initconfiguration.go:114] skip CRI socket detection, fill with the default CRI socket unix:///var/run/containerd/containerd.sock\nI0910 13:51:05.997403  372471 interface.go:432] Looking for default routes with IPv4 addresses\nI0910 13:51:05.997425  372471 interface.go:437] Default route transits interface \"enp5s0\"\nI0910 13:51:05.997601  372471 interface.go:209] Interface enp5s0 is up\nI0910 13:51:05.997730  372471 interface.go:257] Interface \"enp5s0\" has 3 addresses :[192.168.4.61/24 fd91:176e:252c:1:baac:6fff:fe7e:6c9d/64 fe80::baac:6fff:fe7e:6c9d/64].\nI0910 13:51:05.997766  372471 interface.go:224] Checking addr  192.168.4.61/24.\nI0910 13:51:05.997791  372471 interface.go:231] IP found 192.168.4.61\nI0910 13:51:05.997817  372471 interface.go:263] Found valid IPv4 address 192.168.4.61 for interface \"enp5s0\".\nI0910 13:51:05.997841  372471 interface.go:443] Found active IP 192.168.4.61 \nI0910 13:51:06.009216  372471 preflight.go:104] [preflight] Running configuration dependant checks\nI0910 13:51:06.009249  372471 controlplaneprepare.go:225] [download-certs] Skipping certs download\nI0910 13:51:06.009289  372471 kubelet.go:121] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf\nI0910 13:51:06.010682  372471 kubelet.go:136] [kubelet-start] writing CA certificate at /etc/kubernetes/pki/ca.crt\nI0910 13:51:06.011741  372471 kubelet.go:157] [kubelet-start] Checking for an existing Node in the cluster with name \"storagenodet3500\" and status \"Ready\"\nI0910 13:51:06.014317  372471 kubelet.go:172] [kubelet-start] Stopping the kubelet\ntimed out waiting for the condition\nerror execution phase kubelet-start\nk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run.func1\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:260\nk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).visitAll\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:446\nk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:232\nk8s.io/kubernetes/cmd/kubeadm/app/cmd.newCmdJoin.func1\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/join.go:180\ngithub.com/spf13/cobra.(*Command).execute\n\tgithub.com/spf13/cobra@v1.7.0/command.go:940\ngithub.com/spf13/cobra.(*Command).ExecuteC\n\tgithub.com/spf13/cobra@v1.7.0/command.go:1068\ngithub.com/spf13/cobra.(*Command).Execute\n\tgithub.com/spf13/cobra@v1.7.0/command.go:992\nk8s.io/kubernetes/cmd/kubeadm/app.Run\n\tk8s.io/kubernetes/cmd/kubeadm/app/kubeadm.go:50\nmain.main\n\tk8s.io/kubernetes/cmd/kubeadm/kubeadm.go:25\nruntime.main\n\truntime/proc.go:272\nruntime.goexit\n\truntime/asm_amd64.s:1700", "stderr_lines": ["I0910 13:51:05.810822  372471 join.go:413] [preflight] found NodeName empty; using OS hostname as NodeName", "I0910 13:51:05.811052  372471 initconfiguration.go:122] detected and using CRI socket: unix:///var/run/containerd/containerd.sock", "I0910 13:51:05.811137  372471 preflight.go:93] [preflight] Running general checks", "I0910 13:51:05.811199  372471 checks.go:280] validating the existence of file /etc/kubernetes/kubelet.conf", "I0910 13:51:05.811215  372471 checks.go:280] validating the existence of file /etc/kubernetes/bootstrap-kubelet.conf", "I0910 13:51:05.811227  372471 checks.go:104] validating the container runtime", "I0910 13:51:05.838250  372471 checks.go:639] validating whether swap is enabled or not", "I0910 13:51:05.838342  372471 checks.go:370] validating the presence of executable crictl", "I0910 13:51:05.838380  372471 checks.go:370] validating the presence of executable conntrack", "I0910 13:51:05.838402  372471 checks.go:370] validating the presence of executable ip", "I0910 13:51:05.838428  372471 checks.go:370] validating the presence of executable iptables", "I0910 13:51:05.838451  372471 checks.go:370] validating the presence of executable mount", "I0910 13:51:05.838473  372471 checks.go:370] validating the presence of executable nsenter", "I0910 13:51:05.838494  372471 checks.go:370] validating the presence of executable ethtool", "I0910 13:51:05.838513  372471 checks.go:370] validating the presence of executable tc", "I0910 13:51:05.838545  372471 checks.go:370] validating the presence of executable touch", "I0910 13:51:05.838569  372471 checks.go:516] running all checks", "I0910 13:51:05.857600  372471 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost", "I0910 13:51:05.857923  372471 checks.go:605] validating kubelet version", "I0910 13:51:05.923210  372471 checks.go:130] validating if the \"kubelet\" service is enabled and active", "I0910 13:51:05.959863  372471 checks.go:203] validating availability of port 10250", "I0910 13:51:05.960125  372471 checks.go:280] validating the existence of file /etc/kubernetes/pki/ca.crt", "I0910 13:51:05.960151  372471 checks.go:430] validating if the connectivity type is via proxy or direct", "I0910 13:51:05.960209  372471 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables", "I0910 13:51:05.960286  372471 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward", "I0910 13:51:05.960338  372471 join.go:532] [preflight] Discovering cluster-info", "I0910 13:51:05.960366  372471 token.go:80] [discovery] Created cluster-info discovery client, requesting info from \"192.168.4.63:6443\"", "I0910 13:51:05.969646  372471 token.go:118] [discovery] Requesting info from \"192.168.4.63:6443\" again to validate TLS against the pinned public key", "I0910 13:51:05.977614  372471 token.go:135] [discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server \"192.168.4.63:6443\"", "I0910 13:51:05.977634  372471 discovery.go:52] [discovery] Using provided TLSBootstrapToken as authentication credentials for the join process", "I0910 13:51:05.977651  372471 join.go:546] [preflight] Fetching init configuration", "I0910 13:51:05.977660  372471 join.go:592] [preflight] Retrieving KubeConfig objects", "I0910 13:51:05.986790  372471 kubeproxy.go:55] attempting to download the KubeProxyConfiguration from ConfigMap \"kube-proxy\"", "I0910 13:51:05.991761  372471 kubelet.go:74] attempting to download the KubeletConfiguration from ConfigMap \"kubelet-config\"", "I0910 13:51:05.997004  372471 initconfiguration.go:114] skip CRI socket detection, fill with the default CRI socket unix:///var/run/containerd/containerd.sock", "I0910 13:51:05.997403  372471 interface.go:432] Looking for default routes with IPv4 addresses", "I0910 13:51:05.997425  372471 interface.go:437] Default route transits interface \"enp5s0\"", "I0910 13:51:05.997601  372471 interface.go:209] Interface enp5s0 is up", "I0910 13:51:05.997730  372471 interface.go:257] Interface \"enp5s0\" has 3 addresses :[192.168.4.61/24 fd91:176e:252c:1:baac:6fff:fe7e:6c9d/64 fe80::baac:6fff:fe7e:6c9d/64].", "I0910 13:51:05.997766  372471 interface.go:224] Checking addr  192.168.4.61/24.", "I0910 13:51:05.997791  372471 interface.go:231] IP found 192.168.4.61", "I0910 13:51:05.997817  372471 interface.go:263] Found valid IPv4 address 192.168.4.61 for interface \"enp5s0\".", "I0910 13:51:05.997841  372471 interface.go:443] Found active IP 192.168.4.61 ", "I0910 13:51:06.009216  372471 preflight.go:104] [preflight] Running configuration dependant checks", "I0910 13:51:06.009249  372471 controlplaneprepare.go:225] [download-certs] Skipping certs download", "I0910 13:51:06.009289  372471 kubelet.go:121] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf", "I0910 13:51:06.010682  372471 kubelet.go:136] [kubelet-start] writing CA certificate at /etc/kubernetes/pki/ca.crt", "I0910 13:51:06.011741  372471 kubelet.go:157] [kubelet-start] Checking for an existing Node in the cluster with name \"storagenodet3500\" and status \"Ready\"", "I0910 13:51:06.014317  372471 kubelet.go:172] [kubelet-start] Stopping the kubelet", "timed out waiting for the condition", "error execution phase kubelet-start", "k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run.func1", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:260", "k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).visitAll", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:446", "k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:232", "k8s.io/kubernetes/cmd/kubeadm/app/cmd.newCmdJoin.func1", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/join.go:180", "github.com/spf13/cobra.(*Command).execute", "\tgithub.com/spf13/cobra@v1.7.0/command.go:940", "github.com/spf13/cobra.(*Command).ExecuteC", "\tgithub.com/spf13/cobra@v1.7.0/command.go:1068", "github.com/spf13/cobra.(*Command).Execute", "\tgithub.com/spf13/cobra@v1.7.0/command.go:992", "k8s.io/kubernetes/cmd/kubeadm/app.Run", "\tk8s.io/kubernetes/cmd/kubeadm/app/kubeadm.go:50", "main.main", "\tk8s.io/kubernetes/cmd/kubeadm/kubeadm.go:25", "runtime.main", "\truntime/proc.go:272", "runtime.goexit", "\truntime/asm_amd64.s:1700"], "stdout": "[preflight] Running pre-flight checks\n[preflight] Reading configuration from the cluster...\n[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'\n[kubelet-start] Writing kubelet configuration to file \"/var/lib/kubelet/config.yaml\"\n[kubelet-start] Writing kubelet environment file with flags to file \"/var/lib/kubelet/kubeadm-flags.env\"\n[kubelet-start] Starting the kubelet\n[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...\n[kubelet-check] Initial timeout of 40s passed.\n\nUnfortunately, an error has occurred:\n\ttimed out waiting for the condition\n\nThis error is likely caused by:\n\t- The kubelet is not running\n\t- The kubelet is unhealthy due to a misconfiguration of the node in some way (required cgroups disabled)\n\nIf you are on a systemd-powered system, you can try to troubleshoot the error with the following commands:\n\t- 'systemctl status kubelet'\n\t- 'journalctl -xeu kubelet'", "stdout_lines": ["[preflight] Running pre-flight checks", "[preflight] Reading configuration from the cluster...", "[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'", "[kubelet-start] Writing kubelet configuration to file \"/var/lib/kubelet/config.yaml\"", "[kubelet-start] Writing kubelet environment file with flags to file \"/var/lib/kubelet/kubeadm-flags.env\"", "[kubelet-start] Starting the kubelet", "[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...", "[kubelet-check] Initial timeout of 40s passed.", "", "Unfortunately, an error has occurred:", "\ttimed out waiting for the condition", "", "This error is likely caused by:", "\t- The kubelet is not running", "\t- The kubelet is unhealthy due to a misconfiguration of the node in some way (required cgroups disabled)", "", "If you are on a systemd-powered system, you can try to troubleshoot the error with the following commands:", "\t- 'systemctl status kubelet'", "\t- 'journalctl -xeu kubelet'"]}
+fatal: [192.168.4.61]: FAILED! => {"changed": true, "cmd": "timeout 600 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5", "delta": "0:05:00.665110", "end": "2025-09-10 14:22:04.983338", "failed_when_result": true, "msg": "non-zero return code", "rc": 1, "start": "2025-09-10 14:17:04.318228", "stderr": "I0910 14:17:04.356157  376688 join.go:413] [preflight] found NodeName empty; using OS hostname as NodeName\nI0910 14:17:04.356392  376688 initconfiguration.go:122] detected and using CRI socket: unix:///var/run/containerd/containerd.sock\nI0910 14:17:04.356476  376688 preflight.go:93] [preflight] Running general checks\nI0910 14:17:04.356535  376688 checks.go:280] validating the existence of file /etc/kubernetes/kubelet.conf\nI0910 14:17:04.356554  376688 checks.go:280] validating the existence of file /etc/kubernetes/bootstrap-kubelet.conf\nI0910 14:17:04.356567  376688 checks.go:104] validating the container runtime\nI0910 14:17:04.386839  376688 checks.go:639] validating whether swap is enabled or not\nI0910 14:17:04.386931  376688 checks.go:370] validating the presence of executable crictl\nI0910 14:17:04.386969  376688 checks.go:370] validating the presence of executable conntrack\nI0910 14:17:04.386995  376688 checks.go:370] validating the presence of executable ip\nI0910 14:17:04.387020  376688 checks.go:370] validating the presence of executable iptables\nI0910 14:17:04.387044  376688 checks.go:370] validating the presence of executable mount\nI0910 14:17:04.387066  376688 checks.go:370] validating the presence of executable nsenter\nI0910 14:17:04.387088  376688 checks.go:370] validating the presence of executable ethtool\nI0910 14:17:04.387108  376688 checks.go:370] validating the presence of executable tc\nI0910 14:17:04.387128  376688 checks.go:370] validating the presence of executable touch\nI0910 14:17:04.387153  376688 checks.go:516] running all checks\nI0910 14:17:04.400162  376688 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost\nI0910 14:17:04.400409  376688 checks.go:605] validating kubelet version\nI0910 14:17:04.458446  376688 checks.go:130] validating if the \"kubelet\" service is enabled and active\nI0910 14:17:04.490147  376688 checks.go:203] validating availability of port 10250\nI0910 14:17:04.490423  376688 checks.go:280] validating the existence of file /etc/kubernetes/pki/ca.crt\nI0910 14:17:04.490449  376688 checks.go:430] validating if the connectivity type is via proxy or direct\nI0910 14:17:04.490504  376688 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables\nI0910 14:17:04.490577  376688 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward\nI0910 14:17:04.490629  376688 join.go:532] [preflight] Discovering cluster-info\nI0910 14:17:04.490658  376688 token.go:80] [discovery] Created cluster-info discovery client, requesting info from \"192.168.4.63:6443\"\nI0910 14:17:04.500134  376688 token.go:118] [discovery] Requesting info from \"192.168.4.63:6443\" again to validate TLS against the pinned public key\nI0910 14:17:04.508162  376688 token.go:135] [discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server \"192.168.4.63:6443\"\nI0910 14:17:04.508180  376688 discovery.go:52] [discovery] Using provided TLSBootstrapToken as authentication credentials for the join process\nI0910 14:17:04.508196  376688 join.go:546] [preflight] Fetching init configuration\nI0910 14:17:04.508203  376688 join.go:592] [preflight] Retrieving KubeConfig objects\nI0910 14:17:04.519784  376688 kubeproxy.go:55] attempting to download the KubeProxyConfiguration from ConfigMap \"kube-proxy\"\nI0910 14:17:04.524348  376688 kubelet.go:74] attempting to download the KubeletConfiguration from ConfigMap \"kubelet-config\"\nI0910 14:17:04.529698  376688 initconfiguration.go:114] skip CRI socket detection, fill with the default CRI socket unix:///var/run/containerd/containerd.sock\nI0910 14:17:04.529975  376688 interface.go:432] Looking for default routes with IPv4 addresses\nI0910 14:17:04.529994  376688 interface.go:437] Default route transits interface \"enp5s0\"\nI0910 14:17:04.530136  376688 interface.go:209] Interface enp5s0 is up\nI0910 14:17:04.530234  376688 interface.go:257] Interface \"enp5s0\" has 3 addresses :[192.168.4.61/24 fd91:176e:252c:1:baac:6fff:fe7e:6c9d/64 fe80::baac:6fff:fe7e:6c9d/64].\nI0910 14:17:04.530274  376688 interface.go:224] Checking addr  192.168.4.61/24.\nI0910 14:17:04.530297  376688 interface.go:231] IP found 192.168.4.61\nI0910 14:17:04.530316  376688 interface.go:263] Found valid IPv4 address 192.168.4.61 for interface \"enp5s0\".\nI0910 14:17:04.530333  376688 interface.go:443] Found active IP 192.168.4.61 \nI0910 14:17:04.541587  376688 preflight.go:104] [preflight] Running configuration dependant checks\nI0910 14:17:04.541618  376688 controlplaneprepare.go:225] [download-certs] Skipping certs download\nI0910 14:17:04.541640  376688 kubelet.go:121] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf\nI0910 14:17:04.542873  376688 kubelet.go:136] [kubelet-start] writing CA certificate at /etc/kubernetes/pki/ca.crt\nI0910 14:17:04.544085  376688 kubelet.go:157] [kubelet-start] Checking for an existing Node in the cluster with name \"storagenodet3500\" and status \"Ready\"\nI0910 14:17:04.546474  376688 kubelet.go:172] [kubelet-start] Stopping the kubelet\ntimed out waiting for the condition\nerror execution phase kubelet-start\nk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run.func1\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:260\nk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).visitAll\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:446\nk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:232\nk8s.io/kubernetes/cmd/kubeadm/app/cmd.newCmdJoin.func1\n\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/join.go:180\ngithub.com/spf13/cobra.(*Command).execute\n\tgithub.com/spf13/cobra@v1.7.0/command.go:940\ngithub.com/spf13/cobra.(*Command).ExecuteC\n\tgithub.com/spf13/cobra@v1.7.0/command.go:1068\ngithub.com/spf13/cobra.(*Command).Execute\n\tgithub.com/spf13/cobra@v1.7.0/command.go:992\nk8s.io/kubernetes/cmd/kubeadm/app.Run\n\tk8s.io/kubernetes/cmd/kubeadm/app/kubeadm.go:50\nmain.main\n\tk8s.io/kubernetes/cmd/kubeadm/kubeadm.go:25\nruntime.main\n\truntime/proc.go:272\nruntime.goexit\n\truntime/asm_amd64.s:1700", "stderr_lines": ["I0910 14:17:04.356157  376688 join.go:413] [preflight] found NodeName empty; using OS hostname as NodeName", "I0910 14:17:04.356392  376688 initconfiguration.go:122] detected and using CRI socket: unix:///var/run/containerd/containerd.sock", "I0910 14:17:04.356476  376688 preflight.go:93] [preflight] Running general checks", "I0910 14:17:04.356535  376688 checks.go:280] validating the existence of file /etc/kubernetes/kubelet.conf", "I0910 14:17:04.356554  376688 checks.go:280] validating the existence of file /etc/kubernetes/bootstrap-kubelet.conf", "I0910 14:17:04.356567  376688 checks.go:104] validating the container runtime", "I0910 14:17:04.386839  376688 checks.go:639] validating whether swap is enabled or not", "I0910 14:17:04.386931  376688 checks.go:370] validating the presence of executable crictl", "I0910 14:17:04.386969  376688 checks.go:370] validating the presence of executable conntrack", "I0910 14:17:04.386995  376688 checks.go:370] validating the presence of executable ip", "I0910 14:17:04.387020  376688 checks.go:370] validating the presence of executable iptables", "I0910 14:17:04.387044  376688 checks.go:370] validating the presence of executable mount", "I0910 14:17:04.387066  376688 checks.go:370] validating the presence of executable nsenter", "I0910 14:17:04.387088  376688 checks.go:370] validating the presence of executable ethtool", "I0910 14:17:04.387108  376688 checks.go:370] validating the presence of executable tc", "I0910 14:17:04.387128  376688 checks.go:370] validating the presence of executable touch", "I0910 14:17:04.387153  376688 checks.go:516] running all checks", "I0910 14:17:04.400162  376688 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost", "I0910 14:17:04.400409  376688 checks.go:605] validating kubelet version", "I0910 14:17:04.458446  376688 checks.go:130] validating if the \"kubelet\" service is enabled and active", "I0910 14:17:04.490147  376688 checks.go:203] validating availability of port 10250", "I0910 14:17:04.490423  376688 checks.go:280] validating the existence of file /etc/kubernetes/pki/ca.crt", "I0910 14:17:04.490449  376688 checks.go:430] validating if the connectivity type is via proxy or direct", "I0910 14:17:04.490504  376688 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables", "I0910 14:17:04.490577  376688 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward", "I0910 14:17:04.490629  376688 join.go:532] [preflight] Discovering cluster-info", "I0910 14:17:04.490658  376688 token.go:80] [discovery] Created cluster-info discovery client, requesting info from \"192.168.4.63:6443\"", "I0910 14:17:04.500134  376688 token.go:118] [discovery] Requesting info from \"192.168.4.63:6443\" again to validate TLS against the pinned public key", "I0910 14:17:04.508162  376688 token.go:135] [discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server \"192.168.4.63:6443\"", "I0910 14:17:04.508180  376688 discovery.go:52] [discovery] Using provided TLSBootstrapToken as authentication credentials for the join process", "I0910 14:17:04.508196  376688 join.go:546] [preflight] Fetching init configuration", "I0910 14:17:04.508203  376688 join.go:592] [preflight] Retrieving KubeConfig objects", "I0910 14:17:04.519784  376688 kubeproxy.go:55] attempting to download the KubeProxyConfiguration from ConfigMap \"kube-proxy\"", "I0910 14:17:04.524348  376688 kubelet.go:74] attempting to download the KubeletConfiguration from ConfigMap \"kubelet-config\"", "I0910 14:17:04.529698  376688 initconfiguration.go:114] skip CRI socket detection, fill with the default CRI socket unix:///var/run/containerd/containerd.sock", "I0910 14:17:04.529975  376688 interface.go:432] Looking for default routes with IPv4 addresses", "I0910 14:17:04.529994  376688 interface.go:437] Default route transits interface \"enp5s0\"", "I0910 14:17:04.530136  376688 interface.go:209] Interface enp5s0 is up", "I0910 14:17:04.530234  376688 interface.go:257] Interface \"enp5s0\" has 3 addresses :[192.168.4.61/24 fd91:176e:252c:1:baac:6fff:fe7e:6c9d/64 fe80::baac:6fff:fe7e:6c9d/64].", "I0910 14:17:04.530274  376688 interface.go:224] Checking addr  192.168.4.61/24.", "I0910 14:17:04.530297  376688 interface.go:231] IP found 192.168.4.61", "I0910 14:17:04.530316  376688 interface.go:263] Found valid IPv4 address 192.168.4.61 for interface \"enp5s0\".", "I0910 14:17:04.530333  376688 interface.go:443] Found active IP 192.168.4.61 ", "I0910 14:17:04.541587  376688 preflight.go:104] [preflight] Running configuration dependant checks", "I0910 14:17:04.541618  376688 controlplaneprepare.go:225] [download-certs] Skipping certs download", "I0910 14:17:04.541640  376688 kubelet.go:121] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf", "I0910 14:17:04.542873  376688 kubelet.go:136] [kubelet-start] writing CA certificate at /etc/kubernetes/pki/ca.crt", "I0910 14:17:04.544085  376688 kubelet.go:157] [kubelet-start] Checking for an existing Node in the cluster with name \"storagenodet3500\" and status \"Ready\"", "I0910 14:17:04.546474  376688 kubelet.go:172] [kubelet-start] Stopping the kubelet", "timed out waiting for the condition", "error execution phase kubelet-start", "k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run.func1", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:260", "k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).visitAll", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:446", "k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow.(*Runner).Run", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow/runner.go:232", "k8s.io/kubernetes/cmd/kubeadm/app/cmd.newCmdJoin.func1", "\tk8s.io/kubernetes/cmd/kubeadm/app/cmd/join.go:180", "github.com/spf13/cobra.(*Command).execute", "\tgithub.com/spf13/cobra@v1.7.0/command.go:940", "github.com/spf13/cobra.(*Command).ExecuteC", "\tgithub.com/spf13/cobra@v1.7.0/command.go:1068", "github.com/spf13/cobra.(*Command).Execute", "\tgithub.com/spf13/cobra@v1.7.0/command.go:992", "k8s.io/kubernetes/cmd/kubeadm/app.Run", "\tk8s.io/kubernetes/cmd/kubeadm/app/kubeadm.go:50", "main.main", "\tk8s.io/kubernetes/cmd/kubeadm/kubeadm.go:25", "runtime.main", "\truntime/proc.go:272", "runtime.goexit", "\truntime/asm_amd64.s:1700"], "stdout": "[preflight] Running pre-flight checks\n[preflight] Reading configuration from the cluster...\n[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'\n[kubelet-start] Writing kubelet configuration to file \"/var/lib/kubelet/config.yaml\"\n[kubelet-start] Writing kubelet environment file with flags to file \"/var/lib/kubelet/kubeadm-flags.env\"\n[kubelet-start] Starting the kubelet\n[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...\n[kubelet-check] Initial timeout of 40s passed.\n\nUnfortunately, an error has occurred:\n\ttimed out waiting for the condition\n\nThis error is likely caused by:\n\t- The kubelet is not running\n\t- The kubelet is unhealthy due to a misconfiguration of the node in some way (required cgroups disabled)\n\nIf you are on a systemd-powered system, you can try to troubleshoot the error with the following commands:\n\t- 'systemctl status kubelet'\n\t- 'journalctl -xeu kubelet'", "stdout_lines": ["[preflight] Running pre-flight checks", "[preflight] Reading configuration from the cluster...", "[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'", "[kubelet-start] Writing kubelet configuration to file \"/var/lib/kubelet/config.yaml\"", "[kubelet-start] Writing kubelet environment file with flags to file \"/var/lib/kubelet/kubeadm-flags.env\"", "[kubelet-start] Starting the kubelet", "[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...", "[kubelet-check] Initial timeout of 40s passed.", "", "Unfortunately, an error has occurred:", "\ttimed out waiting for the condition", "", "This error is likely caused by:", "\t- The kubelet is not running", "\t- The kubelet is unhealthy due to a misconfiguration of the node in some way (required cgroups disabled)", "", "If you are on a systemd-powered system, you can try to troubleshoot the error with the following commands:", "\t- 'systemctl status kubelet'", "\t- 'journalctl -xeu kubelet'"]}
+
+
+root@storagenodeT3500:~# sudo journalctl -fu kubelet -u containerd -u kube-proxy
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136387626-04:00" level=info msg="Start subscribing containerd event"
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136442035-04:00" level=info msg="Start recovering state"
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136517808-04:00" level=info msg="Start event monitor"
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136548707-04:00" level=info msg="Start snapshots syncer"
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136567637-04:00" level=info msg="Start cni network conf syncer for default"
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136582604-04:00" level=info msg="Start streaming server"
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136584193-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136731573-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
+Sep 10 13:55:27 storagenodeT3500 containerd[372761]: time="2025-09-10T13:55:27.136842409-04:00" level=info msg="containerd successfully booted in 0.037184s"
+Sep 10 13:55:27 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
+Sep 10 14:09:10 storagenodeT3500 systemd[1]: Stopping containerd.service - containerd container runtime...
+Sep 10 14:09:10 storagenodeT3500 containerd[372761]: time="2025-09-10T14:09:10.085936895-04:00" level=info msg="Stop CRI service"
+Sep 10 14:09:10 storagenodeT3500 containerd[372761]: time="2025-09-10T14:09:10.097041197-04:00" level=info msg="Stop CRI service"
+Sep 10 14:09:10 storagenodeT3500 systemd[1]: containerd.service: Deactivated successfully.
+Sep 10 14:09:10 storagenodeT3500 systemd[1]: Stopped containerd.service - containerd container runtime.
+Sep 10 14:09:10 storagenodeT3500 systemd[1]: containerd.service: Consumed 1.683s CPU time.
+Sep 10 14:09:10 storagenodeT3500 systemd[1]: Starting containerd.service - containerd container runtime...
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.158756193-04:00" level=info msg="starting containerd" revision="1.6.20~ds1-1+deb12u1" version="1.6.20~ds1"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.183880254-04:00" level=info msg="loading plugin \"io.containerd.content.v1.content\"..." type=io.containerd.content.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.183949863-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.aufs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.186996811-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.aufs\"..." error="aufs is not supported (modprobe aufs failed: exit status 1 \"modprobe: FATAL: Module aufs not found in directory /lib/modules/6.1.0-34-amd64\\n\"): skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187062983-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187345269-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.btrfs (ext4) must be a btrfs filesystem to be used with the btrfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187388628-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.devmapper\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187451205-04:00" level=warning msg="failed to load plugin io.containerd.snapshotter.v1.devmapper" error="devmapper not configured"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187482302-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.native\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187547334-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.overlayfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.187838932-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.zfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188100823-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.zfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.zfs must be a zfs filesystem to be used with the zfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188142918-04:00" level=info msg="loading plugin \"io.containerd.metadata.v1.bolt\"..." type=io.containerd.metadata.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188193133-04:00" level=warning msg="could not use snapshotter devmapper in metadata plugin" error="devmapper not configured"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188228651-04:00" level=info msg="metadata content store policy set" policy=shared
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188403875-04:00" level=info msg="loading plugin \"io.containerd.differ.v1.walking\"..." type=io.containerd.differ.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188451122-04:00" level=info msg="loading plugin \"io.containerd.event.v1.exchange\"..." type=io.containerd.event.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188508802-04:00" level=info msg="loading plugin \"io.containerd.gc.v1.scheduler\"..." type=io.containerd.gc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188601163-04:00" level=info msg="loading plugin \"io.containerd.service.v1.introspection-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188643103-04:00" level=info msg="loading plugin \"io.containerd.service.v1.containers-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188691456-04:00" level=info msg="loading plugin \"io.containerd.service.v1.content-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188732975-04:00" level=info msg="loading plugin \"io.containerd.service.v1.diff-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188797590-04:00" level=info msg="loading plugin \"io.containerd.service.v1.images-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188834987-04:00" level=info msg="loading plugin \"io.containerd.service.v1.leases-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188876925-04:00" level=info msg="loading plugin \"io.containerd.service.v1.namespaces-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188910068-04:00" level=info msg="loading plugin \"io.containerd.service.v1.snapshots-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.188946432-04:00" level=info msg="loading plugin \"io.containerd.runtime.v1.linux\"..." type=io.containerd.runtime.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189049010-04:00" level=info msg="loading plugin \"io.containerd.runtime.v2.task\"..." type=io.containerd.runtime.v2
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189151460-04:00" level=info msg="loading plugin \"io.containerd.monitor.v1.cgroups\"..." type=io.containerd.monitor.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189637429-04:00" level=info msg="loading plugin \"io.containerd.service.v1.tasks-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189713081-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.introspection\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189751685-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.restart\"..." type=io.containerd.internal.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189848458-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.containers\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189883608-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.content\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189922365-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.diff\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.189967434-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.events\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190004754-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.healthcheck\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190036766-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.images\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190066429-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.leases\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190096699-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.namespaces\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190130870-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.opt\"..." type=io.containerd.internal.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190210304-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.snapshots\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190256130-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.tasks\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190296263-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.version\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190327560-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.cri\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.190864374-04:00" level=info msg="Start cri plugin with config {PluginConfig:{ContainerdConfig:{Snapshotter:overlayfs DefaultRuntimeName:runc DefaultRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} UntrustedWorkloadRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} Runtimes:map[runc:{Type:io.containerd.runc.v2 Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[BinaryName: CriuImagePath: CriuPath: CriuWorkPath: IoGid:0 IoUid:0 NoNewKeyring:false NoPivotRoot:false Root: ShimCgroup: SystemdCgroup:true] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0}] NoPivot:false DisableSnapshotAnnotations:true DiscardUnpackedLayers:false IgnoreRdtNotEnabledErrors:false} CniConfig:{NetworkPluginBinDir:/opt/cni/bin NetworkPluginConfDir:/etc/cni/net.d NetworkPluginMaxConfNum:1 NetworkPluginConfTemplate: IPPreference:} Registry:{ConfigPath: Mirrors:map[] Configs:map[] Auths:map[] Headers:map[]} ImageDecryption:{KeyModel:node} DisableTCPService:true StreamServerAddress:127.0.0.1 StreamServerPort:0 StreamIdleTimeout:4h0m0s EnableSelinux:false SelinuxCategoryRange:1024 SandboxImage:registry.k8s.io/pause:3.6 StatsCollectPeriod:10 SystemdCgroup:false EnableTLSStreaming:false X509KeyPairStreaming:{TLSCertFile: TLSKeyFile:} MaxContainerLogLineSize:16384 DisableCgroup:false DisableApparmor:false RestrictOOMScoreAdj:false MaxConcurrentDownloads:3 DisableProcMount:false UnsetSeccompProfile: TolerateMissingHugetlbController:true DisableHugetlbController:true DeviceOwnershipFromSecurityContext:false IgnoreImageDefinedVolumes:false NetNSMountsUnderStateDir:false EnableUnprivilegedPorts:false EnableUnprivilegedICMP:false} ContainerdRootDir:/var/lib/containerd ContainerdEndpoint:/run/containerd/containerd.sock RootDir:/var/lib/containerd/io.containerd.grpc.v1.cri StateDir:/run/containerd/io.containerd.grpc.v1.cri}"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.191001887-04:00" level=info msg="Connect containerd service"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.191073432-04:00" level=info msg="Get image filesystem path \"/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs\""
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.191713084-04:00" level=error msg="failed to load cni during init, please check CRI plugin status before setting up network for pods" error="cni config load failed: no network config found in /etc/cni/net.d: cni plugin not initialized: failed to load cni config"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.191979994-04:00" level=info msg="Start subscribing containerd event"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192073276-04:00" level=info msg="Start recovering state"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192126368-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192179471-04:00" level=info msg="Start event monitor"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192231679-04:00" level=info msg="Start snapshots syncer"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192266735-04:00" level=info msg="Start cni network conf syncer for default"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192288139-04:00" level=info msg="Start streaming server"
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192240155-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
+Sep 10 14:09:10 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:10.192467381-04:00" level=info msg="containerd successfully booted in 0.036463s"
+Sep 10 14:09:10 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
+Sep 10 14:09:49 storagenodeT3500 systemd[1]: Stopping kubelet.service - kubelet: The Kubernetes Node Agent...
+Sep 10 14:09:49 storagenodeT3500 systemd[1]: kubelet.service: Deactivated successfully.
+Sep 10 14:09:49 storagenodeT3500 systemd[1]: Stopped kubelet.service - kubelet: The Kubernetes Node Agent.
+Sep 10 14:09:49 storagenodeT3500 systemd[1]: kubelet.service: Consumed 8.427s CPU time.
+Sep 10 14:09:50 storagenodeT3500 systemd[1]: Stopping containerd.service - containerd container runtime...
+Sep 10 14:09:50 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:50.384129238-04:00" level=info msg="Stop CRI service"
+Sep 10 14:09:50 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:50.384290102-04:00" level=info msg="Stop CRI service"
+Sep 10 14:09:50 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:50.384346381-04:00" level=info msg="Event monitor stopped"
+Sep 10 14:09:50 storagenodeT3500 containerd[374789]: time="2025-09-10T14:09:50.384392360-04:00" level=info msg="Stream server stopped"
+Sep 10 14:09:50 storagenodeT3500 systemd[1]: containerd.service: Deactivated successfully.
+Sep 10 14:09:50 storagenodeT3500 systemd[1]: Stopped containerd.service - containerd container runtime.
+Sep 10 14:09:53 storagenodeT3500 systemd[1]: Starting containerd.service - containerd container runtime...
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.110510489-04:00" level=info msg="starting containerd" revision="1.6.20~ds1-1+deb12u1" version="1.6.20~ds1"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.137252593-04:00" level=info msg="loading plugin \"io.containerd.content.v1.content\"..." type=io.containerd.content.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.137326703-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.aufs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.140981816-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.aufs\"..." error="aufs is not supported (modprobe aufs failed: exit status 1 \"modprobe: FATAL: Module aufs not found in directory /lib/modules/6.1.0-34-amd64\\n\"): skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141087784-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141374029-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.btrfs (ext4) must be a btrfs filesystem to be used with the btrfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141414560-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.devmapper\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141471706-04:00" level=warning msg="failed to load plugin io.containerd.snapshotter.v1.devmapper" error="devmapper not configured"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141499096-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.native\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141556798-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.overlayfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141750244-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.zfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.141959718-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.zfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.zfs must be a zfs filesystem to be used with the zfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142000038-04:00" level=info msg="loading plugin \"io.containerd.metadata.v1.bolt\"..." type=io.containerd.metadata.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142048377-04:00" level=warning msg="could not use snapshotter devmapper in metadata plugin" error="devmapper not configured"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142074277-04:00" level=info msg="metadata content store policy set" policy=shared
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142283082-04:00" level=info msg="loading plugin \"io.containerd.differ.v1.walking\"..." type=io.containerd.differ.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142320216-04:00" level=info msg="loading plugin \"io.containerd.event.v1.exchange\"..." type=io.containerd.event.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142346765-04:00" level=info msg="loading plugin \"io.containerd.gc.v1.scheduler\"..." type=io.containerd.gc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142420082-04:00" level=info msg="loading plugin \"io.containerd.service.v1.introspection-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142451869-04:00" level=info msg="loading plugin \"io.containerd.service.v1.containers-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142480409-04:00" level=info msg="loading plugin \"io.containerd.service.v1.content-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142509367-04:00" level=info msg="loading plugin \"io.containerd.service.v1.diff-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142546852-04:00" level=info msg="loading plugin \"io.containerd.service.v1.images-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142576972-04:00" level=info msg="loading plugin \"io.containerd.service.v1.leases-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142606107-04:00" level=info msg="loading plugin \"io.containerd.service.v1.namespaces-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142633542-04:00" level=info msg="loading plugin \"io.containerd.service.v1.snapshots-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142668348-04:00" level=info msg="loading plugin \"io.containerd.runtime.v1.linux\"..." type=io.containerd.runtime.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142755462-04:00" level=info msg="loading plugin \"io.containerd.runtime.v2.task\"..." type=io.containerd.runtime.v2
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.142845285-04:00" level=info msg="loading plugin \"io.containerd.monitor.v1.cgroups\"..." type=io.containerd.monitor.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143174871-04:00" level=info msg="loading plugin \"io.containerd.service.v1.tasks-service\"..." type=io.containerd.service.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143229217-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.introspection\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143261991-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.restart\"..." type=io.containerd.internal.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143346751-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.containers\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143378287-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.content\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143405875-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.diff\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143431790-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.events\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143458910-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.healthcheck\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143486402-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.images\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143513547-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.leases\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143541121-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.namespaces\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143570949-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.opt\"..." type=io.containerd.internal.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143645618-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.snapshots\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143678177-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.tasks\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143707240-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.version\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.143733528-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.cri\"..." type=io.containerd.grpc.v1
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.144181462-04:00" level=info msg="Start cri plugin with config {PluginConfig:{ContainerdConfig:{Snapshotter:overlayfs DefaultRuntimeName:runc DefaultRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} UntrustedWorkloadRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} Runtimes:map[runc:{Type:io.containerd.runc.v2 Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[BinaryName: CriuImagePath: CriuPath: CriuWorkPath: IoGid:0 IoUid:0 NoNewKeyring:false NoPivotRoot:false Root: ShimCgroup: SystemdCgroup:true] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0}] NoPivot:false DisableSnapshotAnnotations:true DiscardUnpackedLayers:false IgnoreRdtNotEnabledErrors:false} CniConfig:{NetworkPluginBinDir:/opt/cni/bin NetworkPluginConfDir:/etc/cni/net.d NetworkPluginMaxConfNum:1 NetworkPluginConfTemplate: IPPreference:} Registry:{ConfigPath: Mirrors:map[] Configs:map[] Auths:map[] Headers:map[]} ImageDecryption:{KeyModel:node} DisableTCPService:true StreamServerAddress:127.0.0.1 StreamServerPort:0 StreamIdleTimeout:4h0m0s EnableSelinux:false SelinuxCategoryRange:1024 SandboxImage:registry.k8s.io/pause:3.6 StatsCollectPeriod:10 SystemdCgroup:false EnableTLSStreaming:false X509KeyPairStreaming:{TLSCertFile: TLSKeyFile:} MaxContainerLogLineSize:16384 DisableCgroup:false DisableApparmor:false RestrictOOMScoreAdj:false MaxConcurrentDownloads:3 DisableProcMount:false UnsetSeccompProfile: TolerateMissingHugetlbController:true DisableHugetlbController:true DeviceOwnershipFromSecurityContext:false IgnoreImageDefinedVolumes:false NetNSMountsUnderStateDir:false EnableUnprivilegedPorts:false EnableUnprivilegedICMP:false} ContainerdRootDir:/var/lib/containerd ContainerdEndpoint:/run/containerd/containerd.sock RootDir:/var/lib/containerd/io.containerd.grpc.v1.cri StateDir:/run/containerd/io.containerd.grpc.v1.cri}"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.144303831-04:00" level=info msg="Connect containerd service"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.144361825-04:00" level=info msg="Get image filesystem path \"/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs\""
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145029022-04:00" level=error msg="failed to load cni during init, please check CRI plugin status before setting up network for pods" error="cni config load failed: no network config found in /etc/cni/net.d: cni plugin not initialized: failed to load cni config"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145256584-04:00" level=info msg="Start subscribing containerd event"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145334062-04:00" level=info msg="Start recovering state"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145383559-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145447900-04:00" level=info msg="Start event monitor"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145472875-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145491015-04:00" level=info msg="Start snapshots syncer"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145512987-04:00" level=info msg="Start cni network conf syncer for default"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145542123-04:00" level=info msg="Start streaming server"
+Sep 10 14:09:53 storagenodeT3500 containerd[375265]: time="2025-09-10T14:09:53.145549051-04:00" level=info msg="containerd successfully booted in 0.037636s"
+Sep 10 14:09:53 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
+Sep 10 14:10:03 storagenodeT3500 systemd[1]: Stopping containerd.service - containerd container runtime...
+Sep 10 14:10:03 storagenodeT3500 containerd[375265]: time="2025-09-10T14:10:03.722761799-04:00" level=info msg="Stop CRI service"
+Sep 10 14:10:03 storagenodeT3500 containerd[375265]: time="2025-09-10T14:10:03.722927832-04:00" level=info msg="Stop CRI service"
+Sep 10 14:10:03 storagenodeT3500 systemd[1]: containerd.service: Deactivated successfully.
+Sep 10 14:10:03 storagenodeT3500 systemd[1]: Stopped containerd.service - containerd container runtime.
+Sep 10 14:10:03 storagenodeT3500 systemd[1]: Starting containerd.service - containerd container runtime...
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.788001692-04:00" level=info msg="starting containerd" revision="1.6.20~ds1-1+deb12u1" version="1.6.20~ds1"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.807866788-04:00" level=info msg="loading plugin \"io.containerd.content.v1.content\"..." type=io.containerd.content.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.807950751-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.aufs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.812058922-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.aufs\"..." error="aufs is not supported (modprobe aufs failed: exit status 1 \"modprobe: FATAL: Module aufs not found in directory /lib/modules/6.1.0-34-amd64\\n\"): skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.812594279-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813027626-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.btrfs (ext4) must be a btrfs filesystem to be used with the btrfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813064387-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.devmapper\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813119328-04:00" level=warning msg="failed to load plugin io.containerd.snapshotter.v1.devmapper" error="devmapper not configured"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813141739-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.native\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813190547-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.overlayfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813373664-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.zfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813574154-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.zfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.zfs must be a zfs filesystem to be used with the zfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813608033-04:00" level=info msg="loading plugin \"io.containerd.metadata.v1.bolt\"..." type=io.containerd.metadata.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813648484-04:00" level=warning msg="could not use snapshotter devmapper in metadata plugin" error="devmapper not configured"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813670284-04:00" level=info msg="metadata content store policy set" policy=shared
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813798379-04:00" level=info msg="loading plugin \"io.containerd.differ.v1.walking\"..." type=io.containerd.differ.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813833654-04:00" level=info msg="loading plugin \"io.containerd.event.v1.exchange\"..." type=io.containerd.event.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813858710-04:00" level=info msg="loading plugin \"io.containerd.gc.v1.scheduler\"..." type=io.containerd.gc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813929051-04:00" level=info msg="loading plugin \"io.containerd.service.v1.introspection-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813958709-04:00" level=info msg="loading plugin \"io.containerd.service.v1.containers-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.813985097-04:00" level=info msg="loading plugin \"io.containerd.service.v1.content-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814011062-04:00" level=info msg="loading plugin \"io.containerd.service.v1.diff-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814046924-04:00" level=info msg="loading plugin \"io.containerd.service.v1.images-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814074729-04:00" level=info msg="loading plugin \"io.containerd.service.v1.leases-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814101606-04:00" level=info msg="loading plugin \"io.containerd.service.v1.namespaces-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814127850-04:00" level=info msg="loading plugin \"io.containerd.service.v1.snapshots-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814153396-04:00" level=info msg="loading plugin \"io.containerd.runtime.v1.linux\"..." type=io.containerd.runtime.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814231751-04:00" level=info msg="loading plugin \"io.containerd.runtime.v2.task\"..." type=io.containerd.runtime.v2
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814316426-04:00" level=info msg="loading plugin \"io.containerd.monitor.v1.cgroups\"..." type=io.containerd.monitor.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814680063-04:00" level=info msg="loading plugin \"io.containerd.service.v1.tasks-service\"..." type=io.containerd.service.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814742233-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.introspection\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814771215-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.restart\"..." type=io.containerd.internal.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814854094-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.containers\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814886023-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.content\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814910877-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.diff\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814942540-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.events\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814969130-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.healthcheck\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.814993291-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.images\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815017845-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.leases\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815041589-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.namespaces\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815069029-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.opt\"..." type=io.containerd.internal.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815142767-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.snapshots\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815171269-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.tasks\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815201254-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.version\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815224053-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.cri\"..." type=io.containerd.grpc.v1
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815636861-04:00" level=info msg="Start cri plugin with config {PluginConfig:{ContainerdConfig:{Snapshotter:overlayfs DefaultRuntimeName:runc DefaultRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} UntrustedWorkloadRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} Runtimes:map[runc:{Type:io.containerd.runc.v2 Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[BinaryName: CriuImagePath: CriuPath: CriuWorkPath: IoGid:0 IoUid:0 NoNewKeyring:false NoPivotRoot:false Root: ShimCgroup: SystemdCgroup:true] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0}] NoPivot:false DisableSnapshotAnnotations:true DiscardUnpackedLayers:false IgnoreRdtNotEnabledErrors:false} CniConfig:{NetworkPluginBinDir:/opt/cni/bin NetworkPluginConfDir:/etc/cni/net.d NetworkPluginMaxConfNum:1 NetworkPluginConfTemplate: IPPreference:} Registry:{ConfigPath: Mirrors:map[] Configs:map[] Auths:map[] Headers:map[]} ImageDecryption:{KeyModel:node} DisableTCPService:true StreamServerAddress:127.0.0.1 StreamServerPort:0 StreamIdleTimeout:4h0m0s EnableSelinux:false SelinuxCategoryRange:1024 SandboxImage:registry.k8s.io/pause:3.6 StatsCollectPeriod:10 SystemdCgroup:false EnableTLSStreaming:false X509KeyPairStreaming:{TLSCertFile: TLSKeyFile:} MaxContainerLogLineSize:16384 DisableCgroup:false DisableApparmor:false RestrictOOMScoreAdj:false MaxConcurrentDownloads:3 DisableProcMount:false UnsetSeccompProfile: TolerateMissingHugetlbController:true DisableHugetlbController:true DeviceOwnershipFromSecurityContext:false IgnoreImageDefinedVolumes:false NetNSMountsUnderStateDir:false EnableUnprivilegedPorts:false EnableUnprivilegedICMP:false} ContainerdRootDir:/var/lib/containerd ContainerdEndpoint:/run/containerd/containerd.sock RootDir:/var/lib/containerd/io.containerd.grpc.v1.cri StateDir:/run/containerd/io.containerd.grpc.v1.cri}"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815733917-04:00" level=info msg="Connect containerd service"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.815781170-04:00" level=info msg="Get image filesystem path \"/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs\""
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816551141-04:00" level=info msg="Start subscribing containerd event"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816639192-04:00" level=info msg="Start recovering state"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816712224-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816730206-04:00" level=info msg="Start event monitor"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816774739-04:00" level=info msg="Start snapshots syncer"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816804107-04:00" level=info msg="Start cni network conf syncer for default"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816816643-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816820889-04:00" level=info msg="Start streaming server"
+Sep 10 14:10:03 storagenodeT3500 containerd[375795]: time="2025-09-10T14:10:03.816932998-04:00" level=info msg="containerd successfully booted in 0.031167s"
+Sep 10 14:10:03 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
+Sep 10 14:10:25 storagenodeT3500 systemd[1]: Started kubelet.service - kubelet: The Kubernetes Node Agent.
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.797620  375950 server.go:492] "Kubelet version" kubeletVersion="v1.29.15"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.797684  375950 server.go:494] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.797942  375950 server.go:655] "Standalone mode, no API client"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.812512  375950 server.go:543] "No api server defined - no events will be sent to API server"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.812560  375950 server.go:750] "--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.812986  375950 container_manager_linux.go:265] "Container manager verified user specified cgroup-root exists" cgroupRoot=[]
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.813275  375950 container_manager_linux.go:270] "Creating Container Manager object based on Node Config" nodeConfig={"RuntimeCgroupsName":"","SystemCgroupsName":"","KubeletCgroupsName":"","KubeletOOMScoreAdj":-999,"ContainerRuntime":"","CgroupsPerQOS":true,"CgroupRoot":"/","CgroupDriver":"cgroupfs","KubeletRootDir":"/var/lib/kubelet","ProtectKernelDefaults":false,"KubeReservedCgroupName":"","SystemReservedCgroupName":"","ReservedSystemCPUs":{},"EnforceNodeAllocatable":{"pods":{}},"KubeReserved":null,"SystemReserved":null,"HardEvictionThresholds":[],"QOSReserved":{},"CPUManagerPolicy":"none","CPUManagerPolicyOptions":null,"TopologyManagerScope":"container","CPUManagerReconcilePeriod":10000000000,"ExperimentalMemoryManagerPolicy":"None","ExperimentalMemoryManagerReservedMemory":null,"PodPidsLimit":-1,"EnforceCPULimits":true,"CPUCFSQuotaPeriod":100000000,"TopologyManagerPolicy":"none","TopologyManagerPolicyOptions":null}
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.813334  375950 topology_manager.go:138] "Creating topology manager with none policy"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.813363  375950 container_manager_linux.go:301] "Creating device plugin manager"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.813522  375950 state_mem.go:36] "Initialized new in-memory state store"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.813650  375950 kubelet.go:402] "Kubelet is running in standalone mode, will skip API server sync"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.814487  375950 kuberuntime_manager.go:260] "Container runtime initialized" containerRuntime="containerd" version="1.6.20~ds1" apiVersion="v1"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.814800  375950 kubelet.go:809] "Not starting ClusterTrustBundle informer because we are in static kubelet mode"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.814819  375950 volume_host.go:77] "KubeClient is nil. Skip initialization of CSIDriverLister"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: W0910 14:10:26.815022  375950 csi_plugin.go:194] kubernetes.io/csi: kubeclient not set, assuming standalone kubelet
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: W0910 14:10:26.815039  375950 csi_plugin.go:271] Skipping CSINode initialization, kubelet running in standalone mode
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.815416  375950 server.go:1261] "Started kubelet"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.815430  375950 kubelet.go:1618] "No API server defined - no node status update will be sent"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.815495  375950 server.go:162] "Starting to listen" address="0.0.0.0" port=10250
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.815575  375950 ratelimit.go:55] "Setting rate limiting for endpoint" service="podresources" qps=100 burstTokens=10
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.815496  375950 server.go:194] "Starting to listen read-only" address="0.0.0.0" port=10255
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.815862  375950 server.go:233] "Starting to serve the podresources API" endpoint="unix:/var/lib/kubelet/pod-resources/kubelet.sock"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: E0910 14:10:26.817185  375950 kubelet.go:1462] "Image garbage collection failed once. Stats initialization may not have completed yet" err="invalid capacity 0 on image filesystem"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.817329  375950 fs_resource_analyzer.go:67] "Starting FS ResourceAnalyzer"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.817404  375950 server.go:450] "Adding debug handlers to kubelet server"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.817434  375950 desired_state_of_world_populator.go:151] "Desired state populator starts to run"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.817408  375950 volume_manager.go:291] "Starting Kubelet Volume Manager"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.817641  375950 reconciler_new.go:29] "Reconciler: start to sync state"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.818060  375950 factory.go:221] Registration of the systemd container factory successfully
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.818216  375950 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: no such file or directory
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.819297  375950 factory.go:221] Registration of the containerd container factory successfully
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.833531  375950 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv4"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.835061  375950 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv6"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.835100  375950 status_manager.go:213] "Kubernetes client is nil, not starting status manager"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.835126  375950 kubelet.go:2347] "Starting kubelet main sync loop"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: E0910 14:10:26.835214  375950 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.839278  375950 cpu_manager.go:214] "Starting CPU manager" policy="none"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.839339  375950 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.839380  375950 state_mem.go:36] "Initialized new in-memory state store"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.877748  375950 policy_none.go:49] "None policy: Start"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.878353  375950 memory_manager.go:170] "Starting memorymanager" policy="None"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.878385  375950 state_mem.go:35] "Initializing new in-memory state store"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.912453  375950 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.912747  375950 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
+Sep 10 14:10:26 storagenodeT3500 kubelet[375950]: I0910 14:10:26.917529  375950 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
+Sep 10 14:15:26 storagenodeT3500 systemd[1]: Stopping kubelet.service - kubelet: The Kubernetes Node Agent...
+Sep 10 14:15:26 storagenodeT3500 systemd[1]: kubelet.service: Deactivated successfully.
+Sep 10 14:15:26 storagenodeT3500 systemd[1]: Stopped kubelet.service - kubelet: The Kubernetes Node Agent.
+Sep 10 14:15:26 storagenodeT3500 systemd[1]: kubelet.service: Consumed 3.280s CPU time.
+Sep 10 14:15:27 storagenodeT3500 systemd[1]: Stopping containerd.service - containerd container runtime...
+Sep 10 14:15:27 storagenodeT3500 containerd[375795]: time="2025-09-10T14:15:27.571819011-04:00" level=info msg="Stop CRI service"
+Sep 10 14:15:27 storagenodeT3500 containerd[375795]: time="2025-09-10T14:15:27.589259064-04:00" level=info msg="Stop CRI service"
+Sep 10 14:15:27 storagenodeT3500 containerd[375795]: time="2025-09-10T14:15:27.589328846-04:00" level=info msg="Event monitor stopped"
+Sep 10 14:15:27 storagenodeT3500 containerd[375795]: time="2025-09-10T14:15:27.589355618-04:00" level=info msg="Stream server stopped"
+Sep 10 14:15:27 storagenodeT3500 systemd[1]: containerd.service: Deactivated successfully.
+Sep 10 14:15:27 storagenodeT3500 systemd[1]: Stopped containerd.service - containerd container runtime.
+Sep 10 14:15:29 storagenodeT3500 systemd[1]: Starting containerd.service - containerd container runtime...
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.944870237-04:00" level=info msg="starting containerd" revision="1.6.20~ds1-1+deb12u1" version="1.6.20~ds1"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.970493117-04:00" level=info msg="loading plugin \"io.containerd.content.v1.content\"..." type=io.containerd.content.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.970562752-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.aufs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.973768614-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.aufs\"..." error="aufs is not supported (modprobe aufs failed: exit status 1 \"modprobe: FATAL: Module aufs not found in directory /lib/modules/6.1.0-34-amd64\\n\"): skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.973858089-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974082465-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.btrfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.btrfs (ext4) must be a btrfs filesystem to be used with the btrfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974116826-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.devmapper\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974159907-04:00" level=warning msg="failed to load plugin io.containerd.snapshotter.v1.devmapper" error="devmapper not configured"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974181852-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.native\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974225686-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.overlayfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974418060-04:00" level=info msg="loading plugin \"io.containerd.snapshotter.v1.zfs\"..." type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974623670-04:00" level=info msg="skip loading plugin \"io.containerd.snapshotter.v1.zfs\"..." error="path /var/lib/containerd/io.containerd.snapshotter.v1.zfs must be a zfs filesystem to be used with the zfs snapshotter: skip plugin" type=io.containerd.snapshotter.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974655399-04:00" level=info msg="loading plugin \"io.containerd.metadata.v1.bolt\"..." type=io.containerd.metadata.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974691102-04:00" level=warning msg="could not use snapshotter devmapper in metadata plugin" error="devmapper not configured"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974712994-04:00" level=info msg="metadata content store policy set" policy=shared
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974834905-04:00" level=info msg="loading plugin \"io.containerd.differ.v1.walking\"..." type=io.containerd.differ.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974866683-04:00" level=info msg="loading plugin \"io.containerd.event.v1.exchange\"..." type=io.containerd.event.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974889587-04:00" level=info msg="loading plugin \"io.containerd.gc.v1.scheduler\"..." type=io.containerd.gc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.974970228-04:00" level=info msg="loading plugin \"io.containerd.service.v1.introspection-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975002191-04:00" level=info msg="loading plugin \"io.containerd.service.v1.containers-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975027396-04:00" level=info msg="loading plugin \"io.containerd.service.v1.content-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975051121-04:00" level=info msg="loading plugin \"io.containerd.service.v1.diff-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975084667-04:00" level=info msg="loading plugin \"io.containerd.service.v1.images-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975112465-04:00" level=info msg="loading plugin \"io.containerd.service.v1.leases-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975148931-04:00" level=info msg="loading plugin \"io.containerd.service.v1.namespaces-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975173263-04:00" level=info msg="loading plugin \"io.containerd.service.v1.snapshots-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975197417-04:00" level=info msg="loading plugin \"io.containerd.runtime.v1.linux\"..." type=io.containerd.runtime.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975277177-04:00" level=info msg="loading plugin \"io.containerd.runtime.v2.task\"..." type=io.containerd.runtime.v2
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975373560-04:00" level=info msg="loading plugin \"io.containerd.monitor.v1.cgroups\"..." type=io.containerd.monitor.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975714074-04:00" level=info msg="loading plugin \"io.containerd.service.v1.tasks-service\"..." type=io.containerd.service.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975778240-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.introspection\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975809979-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.restart\"..." type=io.containerd.internal.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975892117-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.containers\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975921624-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.content\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975946344-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.diff\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.975971703-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.events\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.976574506-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.healthcheck\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.976713945-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.images\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.976881541-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.leases\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.976993182-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.namespaces\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977167151-04:00" level=info msg="loading plugin \"io.containerd.internal.v1.opt\"..." type=io.containerd.internal.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977266363-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.snapshots\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977299277-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.tasks\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977325105-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.version\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977348882-04:00" level=info msg="loading plugin \"io.containerd.grpc.v1.cri\"..." type=io.containerd.grpc.v1
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977768966-04:00" level=info msg="Start cri plugin with config {PluginConfig:{ContainerdConfig:{Snapshotter:overlayfs DefaultRuntimeName:runc DefaultRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} UntrustedWorkloadRuntime:{Type: Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0} Runtimes:map[runc:{Type:io.containerd.runc.v2 Path: Engine: PodAnnotations:[] ContainerAnnotations:[] Root: Options:map[BinaryName: CriuImagePath: CriuPath: CriuWorkPath: IoGid:0 IoUid:0 NoNewKeyring:false NoPivotRoot:false Root: ShimCgroup: SystemdCgroup:true] PrivilegedWithoutHostDevices:false BaseRuntimeSpec: NetworkPluginConfDir: NetworkPluginMaxConfNum:0}] NoPivot:false DisableSnapshotAnnotations:true DiscardUnpackedLayers:false IgnoreRdtNotEnabledErrors:false} CniConfig:{NetworkPluginBinDir:/opt/cni/bin NetworkPluginConfDir:/etc/cni/net.d NetworkPluginMaxConfNum:1 NetworkPluginConfTemplate: IPPreference:} Registry:{ConfigPath: Mirrors:map[] Configs:map[] Auths:map[] Headers:map[]} ImageDecryption:{KeyModel:node} DisableTCPService:true StreamServerAddress:127.0.0.1 StreamServerPort:0 StreamIdleTimeout:4h0m0s EnableSelinux:false SelinuxCategoryRange:1024 SandboxImage:registry.k8s.io/pause:3.6 StatsCollectPeriod:10 SystemdCgroup:false EnableTLSStreaming:false X509KeyPairStreaming:{TLSCertFile: TLSKeyFile:} MaxContainerLogLineSize:16384 DisableCgroup:false DisableApparmor:false RestrictOOMScoreAdj:false MaxConcurrentDownloads:3 DisableProcMount:false UnsetSeccompProfile: TolerateMissingHugetlbController:true DisableHugetlbController:true DeviceOwnershipFromSecurityContext:false IgnoreImageDefinedVolumes:false NetNSMountsUnderStateDir:false EnableUnprivilegedPorts:false EnableUnprivilegedICMP:false} ContainerdRootDir:/var/lib/containerd ContainerdEndpoint:/run/containerd/containerd.sock RootDir:/var/lib/containerd/io.containerd.grpc.v1.cri StateDir:/run/containerd/io.containerd.grpc.v1.cri}"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977865854-04:00" level=info msg="Connect containerd service"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.977916079-04:00" level=info msg="Get image filesystem path \"/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs\""
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978529463-04:00" level=error msg="failed to load cni during init, please check CRI plugin status before setting up network for pods" error="cni config load failed: no network config found in /etc/cni/net.d: cni plugin not initialized: failed to load cni config"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978713666-04:00" level=info msg="Start subscribing containerd event"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978808163-04:00" level=info msg="Start recovering state"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978889849-04:00" level=info msg="Start event monitor"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978905463-04:00" level=info msg=serving... address=/run/containerd/containerd.sock.ttrpc
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978921311-04:00" level=info msg="Start snapshots syncer"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978980669-04:00" level=info msg="Start cni network conf syncer for default"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978993037-04:00" level=info msg=serving... address=/run/containerd/containerd.sock
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.978997915-04:00" level=info msg="Start streaming server"
+Sep 10 14:15:29 storagenodeT3500 containerd[376411]: time="2025-09-10T14:15:29.979081578-04:00" level=info msg="containerd successfully booted in 0.036610s"
+Sep 10 14:15:29 storagenodeT3500 systemd[1]: Started containerd.service - containerd container runtime.
+Sep 10 14:17:04 storagenodeT3500 systemd[1]: Started kubelet.service - kubelet: The Kubernetes Node Agent.
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.535463  376746 server.go:492] "Kubelet version" kubeletVersion="v1.29.15"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.535528  376746 server.go:494] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.535784  376746 server.go:655] "Standalone mode, no API client"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.548932  376746 server.go:543] "No api server defined - no events will be sent to API server"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.548972  376746 server.go:750] "--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.549509  376746 container_manager_linux.go:265] "Container manager verified user specified cgroup-root exists" cgroupRoot=[]
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.549791  376746 container_manager_linux.go:270] "Creating Container Manager object based on Node Config" nodeConfig={"RuntimeCgroupsName":"","SystemCgroupsName":"","KubeletCgroupsName":"","KubeletOOMScoreAdj":-999,"ContainerRuntime":"","CgroupsPerQOS":true,"CgroupRoot":"/","CgroupDriver":"cgroupfs","KubeletRootDir":"/var/lib/kubelet","ProtectKernelDefaults":false,"KubeReservedCgroupName":"","SystemReservedCgroupName":"","ReservedSystemCPUs":{},"EnforceNodeAllocatable":{"pods":{}},"KubeReserved":null,"SystemReserved":null,"HardEvictionThresholds":[],"QOSReserved":{},"CPUManagerPolicy":"none","CPUManagerPolicyOptions":null,"TopologyManagerScope":"container","CPUManagerReconcilePeriod":10000000000,"ExperimentalMemoryManagerPolicy":"None","ExperimentalMemoryManagerReservedMemory":null,"PodPidsLimit":-1,"EnforceCPULimits":true,"CPUCFSQuotaPeriod":100000000,"TopologyManagerPolicy":"none","TopologyManagerPolicyOptions":null}
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.549849  376746 topology_manager.go:138] "Creating topology manager with none policy"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.549876  376746 container_manager_linux.go:301] "Creating device plugin manager"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.550030  376746 state_mem.go:36] "Initialized new in-memory state store"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.550152  376746 kubelet.go:402] "Kubelet is running in standalone mode, will skip API server sync"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.550677  376746 kuberuntime_manager.go:260] "Container runtime initialized" containerRuntime="containerd" version="1.6.20~ds1" apiVersion="v1"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.551070  376746 kubelet.go:809] "Not starting ClusterTrustBundle informer because we are in static kubelet mode"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.551099  376746 volume_host.go:77] "KubeClient is nil. Skip initialization of CSIDriverLister"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: W0910 14:17:05.551448  376746 csi_plugin.go:194] kubernetes.io/csi: kubeclient not set, assuming standalone kubelet
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: W0910 14:17:05.551474  376746 csi_plugin.go:271] Skipping CSINode initialization, kubelet running in standalone mode
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.552025  376746 server.go:1261] "Started kubelet"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.552107  376746 server.go:162] "Starting to listen" address="0.0.0.0" port=10250
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.552175  376746 server.go:194] "Starting to listen read-only" address="0.0.0.0" port=10255
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.552206  376746 ratelimit.go:55] "Setting rate limiting for endpoint" service="podresources" qps=100 burstTokens=10
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.552072  376746 kubelet.go:1618] "No API server defined - no node status update will be sent"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.553297  376746 server.go:233] "Starting to serve the podresources API" endpoint="unix:/var/lib/kubelet/pod-resources/kubelet.sock"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.555608  376746 server.go:450] "Adding debug handlers to kubelet server"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.555816  376746 fs_resource_analyzer.go:67] "Starting FS ResourceAnalyzer"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.556584  376746 volume_manager.go:291] "Starting Kubelet Volume Manager"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: E0910 14:17:05.556591  376746 kubelet.go:1462] "Image garbage collection failed once. Stats initialization may not have completed yet" err="invalid capacity 0 on image filesystem"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.556806  376746 desired_state_of_world_populator.go:151] "Desired state populator starts to run"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.557376  376746 reconciler_new.go:29] "Reconciler: start to sync state"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.558051  376746 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: no such file or directory
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.560419  376746 factory.go:221] Registration of the containerd container factory successfully
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.560444  376746 factory.go:221] Registration of the systemd container factory successfully
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.574136  376746 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv4"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.576051  376746 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv6"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.576104  376746 status_manager.go:213] "Kubernetes client is nil, not starting status manager"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.576141  376746 kubelet.go:2347] "Starting kubelet main sync loop"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: E0910 14:17:05.576259  376746 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.578288  376746 cpu_manager.go:214] "Starting CPU manager" policy="none"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.578318  376746 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.578353  376746 state_mem.go:36] "Initialized new in-memory state store"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.615355  376746 policy_none.go:49] "None policy: Start"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.615977  376746 memory_manager.go:170] "Starting memorymanager" policy="None"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.616012  376746 state_mem.go:35] "Initializing new in-memory state store"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.657987  376746 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.658473  376746 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
+Sep 10 14:17:05 storagenodeT3500 kubelet[376746]: I0910 14:17:05.658760  376746 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
+^C
+root@storagenodeT3500:~#
