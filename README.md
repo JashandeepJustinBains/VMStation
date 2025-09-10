@@ -263,17 +263,47 @@ kubectl get pods -n monitoring
 ### Worker Node Join Issues Fix
 If worker nodes fail to join the cluster with kubelet errors:
 
+#### Integrated Troubleshooting Workflow (Recommended)
 ```bash
-# On any node, run the diagnostic script
-sudo ./troubleshoot_kubelet_join.sh
+# Run the integrated troubleshooting workflow
+sudo ./worker_node_troubleshoot_integration.sh
 
-# On control plane, generate fresh join command
+# This will:
+# 1. Run diagnostics to identify issues
+# 2. Optionally run remediation steps
+# 3. Collect logs and system status
+# 4. Generate comprehensive output file
+```
+
+#### Manual Troubleshooting Steps
+```bash
+# Step 1: Run diagnostics only
+sudo ./worker_node_join_diagnostics.sh
+
+# Step 2: Run remediation (if needed)
+sudo ./worker_node_join_remediation.sh
+
+# Step 3: On control plane, generate fresh join command
 ./generate_join_command.sh
 
 # Common issues resolved:
 # - Missing /etc/kubernetes/kubelet.conf
 # - Missing /var/lib/kubelet/config.yaml  
 # - Deprecated --network-plugin flags
+# - CNI configuration problems
+# - Port 10250 conflicts
+# - Containerd filesystem issues
+```
+
+#### Enhanced Cluster Deployment with Logging
+When deploying the cluster, logs are automatically collected:
+
+```bash
+# Deploy cluster with automatic log collection
+./deploy.sh cluster
+
+# Logs are saved to: deployment_logs_YYYYMMDD_HHMMSS.txt
+# Contains: kubelet logs, containerd logs, cluster status
 ```
 
 **Manual Recovery Steps (if automated join fails)**:

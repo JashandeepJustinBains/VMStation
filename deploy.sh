@@ -51,11 +51,61 @@ if [ ! -f "$INVENTORY" ]; then
     exit 1
 fi
 
+# Function to collect deployment logs
+collect_deployment_logs() {
+    local operation="$1"
+    local log_file="deployment_logs_$(date +%Y%m%d_%H%M%S).txt"
+    
+    info "Collecting deployment logs for $operation..."
+    echo "=== VMStation Deployment Logs ===" > "$log_file"
+    echo "Operation: $operation" >> "$log_file"
+    echo "Timestamp: $(date)" >> "$log_file"
+    echo "Hostname: $(hostname)" >> "$log_file"
+    echo "" >> "$log_file"
+    
+    # Collect system and Kubernetes service logs
+    echo "=== System Service Logs ===" >> "$log_file"
+    for service in kubelet containerd; do
+        echo "--- $service logs (last 50 lines) ---" >> "$log_file"
+        if systemctl is-active --quiet "$service" 2>/dev/null; then
+            journalctl -u "$service" --no-pager -l --since='5 minutes ago' 2>/dev/null | tail -50 >> "$log_file" || echo "Could not retrieve $service logs" >> "$log_file"
+        else
+            echo "$service service not active" >> "$log_file"
+        fi
+        echo "" >> "$log_file"
+    done
+    
+    # Collect cluster status if available
+    echo "=== Cluster Status ===" >> "$log_file"
+    if command -v kubectl >/dev/null 2>&1; then
+        kubectl cluster-info 2>/dev/null >> "$log_file" || echo "Cluster info not available" >> "$log_file"
+        echo "" >> "$log_file"
+        kubectl get nodes -o wide 2>/dev/null >> "$log_file" || echo "Node information not available" >> "$log_file"
+        echo "" >> "$log_file"
+    else
+        echo "kubectl not available" >> "$log_file"
+    fi
+    
+    info "Deployment logs saved to: $log_file"
+}
+
 # Deployment options
 case "${1:-full}" in
     "cluster")
         info "Deploying Kubernetes cluster only..."
+        
+        # Start log collection in background if on control plane
+        if [[ $(hostname -I | awk '{print $1}') =~ ^192\.168\.4\.(63|61|62)$ ]]; then
+            collect_deployment_logs "cluster" &
+            LOG_PID=$!
+        fi
+        
         ansible-playbook -i "$INVENTORY" ansible/plays/setup-cluster.yaml
+        
+        # Wait for log collection to complete
+        if [ ! -z "$LOG_PID" ]; then
+            wait $LOG_PID
+        fi
         ;;
     "apps")
         info "Deploying applications only..."
