@@ -638,7 +638,6 @@
       register: join_result
       retries: 3
       delay: 30
-      until: join_result.rc == 0
       when: not kubelet_conf.stat.exists
       failed_when: false
 
