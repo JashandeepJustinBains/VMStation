@@ -640,7 +640,7 @@
 
         - name: "Download and install Flannel CNI plugin binary on worker nodes"
           get_url:
-            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1/flanneld-amd64"
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
             dest: /opt/cni/bin/flannel
             mode: '0755'
             timeout: 60
