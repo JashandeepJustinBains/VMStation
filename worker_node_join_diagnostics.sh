@@ -4,17 +4,50 @@
 # Provides immediate read-only checks for troubleshooting join failures
 # Based on problem statement requirements for quick diagnosis
 
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+
 echo "=== Worker Node Join Diagnostics Script ==="
 echo "Timestamp: $(date)"
 echo "Hostname: $(hostname)"
 echo "IP Address: $(hostname -I | awk '{print $1}')"
 echo ""
 
+# Validate execution context
+log_warn "IMPORTANT: This script should be run on the WORKER NODE having join issues"
+log_warn "Running on the control plane provides limited diagnostic value for worker problems"
+echo ""
+
+# Check if this appears to be a control plane node
+if kubectl get nodes >/dev/null 2>&1; then
+    log_error "WARNING: kubectl is accessible - this appears to be a CONTROL PLANE node"
+    log_error "For worker node join issues, run this script on the WORKER NODE instead"
+    echo ""
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Script cancelled. Please run on the worker node having join issues."
+        exit 0
+    fi
+fi
+
+echo ""
 echo "This script provides safe, read-only diagnostic commands to identify:"
 echo "  1. CNI configuration issues (no network config found in /etc/cni/net.d)"
 echo "  2. kubelet standalone mode conflicts (port 10250 in use)"  
 echo "  3. containerd image filesystem capacity issues (invalid capacity 0)"
 echo "  4. PLEG health problems affecting node registration"
+echo "  5. Network connectivity and system health issues"
 echo ""
 
 # Function to run command safely and capture output
@@ -115,6 +148,33 @@ echo "  ❌ Port 10250 conflicts: Look for kubelet or other processes using port
 echo "  ❌ Filesystem capacity 0: Look for 0G, 0B, or 'No space' in containerd filesystem checks"
 echo "  ❌ Containerd socket issues: Look for missing /run/containerd/containerd.sock"
 echo "  ❌ Service health problems: Look for failed/inactive states in systemctl status"
+echo ""
+echo "=== NEXT STEPS ==="
+echo ""
+log_info "Based on diagnostic results, choose appropriate action:"
+echo ""
+echo "1. IF ISSUES FOUND: Address specific problems before attempting join"
+echo "   - Fix CNI configuration issues"
+echo "   - Resolve port conflicts"
+echo "   - Fix containerd problems"
+echo "   - Address network connectivity issues"
+echo ""
+echo "2. IF SYSTEM APPEARS HEALTHY: Proceed with join attempt"
+echo "   - Get fresh join command: kubeadm token create --print-join-command"
+echo "   - Run join with verbose logging: kubeadm join ... --v=5"
+echo "   - Monitor logs: journalctl -u kubelet -f"
+echo ""
+echo "3. IF JOIN FAILS: Capture and analyze logs"
+echo "   - Save join command output"
+echo "   - Save kubelet logs during join attempt"
+echo "   - Use analyze_worker_join_logs.sh for detailed analysis"
+echo ""
+echo "4. FOR PERSISTENT ISSUES: Run remediation"
+echo "   - Use worker_node_join_remediation.sh for complete cleanup"
+echo "   - Re-run diagnostics after remediation"
+echo ""
+log_warn "REMEMBER: Always run diagnostics on the actual WORKER NODE having problems"
+log_info "For comprehensive analysis, use enhanced_worker_join_troubleshooter.sh"
 echo ""
 echo "Copy the relevant sections above and provide them for analysis."
 echo "This diagnostic information will help determine the exact remediation steps needed."
