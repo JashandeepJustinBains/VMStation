@@ -458,7 +458,10 @@
 
     - name: "Save join command"
       copy:
-        content: "{{ join_command.stdout }}"
+        content: |
+          #!/bin/bash
+          # Generated kubeadm join command with support for additional arguments
+          {{ join_command.stdout }} "$@"
         dest: /tmp/kubeadm-join.sh
         mode: '0755'
 
