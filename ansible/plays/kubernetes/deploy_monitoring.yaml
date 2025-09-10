@@ -29,11 +29,30 @@
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
-    # Simplified targeting - rely on Ansible hosts field for deployment targeting
-    # No nodeSelector or complex node labeling needed since Ansible handles deployment location
-    - name: Set monitoring node selector to empty (use Ansible hosts-based targeting)
+    # Configure monitoring node selector based on scheduling mode
+    - name: Set monitoring node selector based on scheduling mode
       ansible.builtin.set_fact:
-        monitoring_node_selector: {}
+        monitoring_node_selector: >-
+          {%- if (monitoring_scheduling_mode | default('flexible')) == 'flexible' -%}
+          {"node-role.vmstation.io/monitoring": "true"}
+          {%- elif (monitoring_scheduling_mode | default('flexible')) == 'strict' -%}
+          {"kubernetes.io/hostname": "{{ ansible_nodename | default(inventory_hostname) }}"}
+          {%- else -%}
+          {}
+          {%- endif -%}
+
+    # Ensure monitoring node labels are set up for flexible mode
+    - name: Set up monitoring node labels for flexible scheduling
+      shell: |
+        # Label the monitoring node (masternode)
+        kubectl label node masternode node-role.vmstation.io/monitoring=true --overwrite || true
+        # Remove monitoring labels from other nodes
+        kubectl get nodes -o jsonpath='{.items[?(@.metadata.name!="masternode")].metadata.name}' | tr ' ' '\n' | while read node; do
+          if [[ -n "$node" ]]; then
+            kubectl label node "$node" node-role.vmstation.io/monitoring- 2>/dev/null || true
+          fi
+        done
+      when: (monitoring_scheduling_mode | default('flexible')) == 'flexible'
 
     - name: Install kube-prometheus-stack (Prometheus + Grafana)
       kubernetes.core.helm:

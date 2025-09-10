@@ -42,9 +42,9 @@ metadata:
     app: jellyfin
     component: media-server
 spec:
-  # Use nodeSelector instead of nodeName for more flexibility
+  # Use nodeSelector to target the storage node
   nodeSelector:
-    kubernetes.io/hostname: homelab
+    kubernetes.io/hostname: storagenodet3500
   
   # OPTIONAL: Add tolerations if the target node has taints
   # tolerations:

@@ -12,6 +12,30 @@
     loki_nodeport: 31100
     alertmanager_nodeport: 30903
   tasks:
+    - name: "Set up monitoring node labels for proper targeting"
+      shell: |
+        # Label the monitoring node (masternode)
+        kubectl label node masternode node-role.vmstation.io/monitoring=true --overwrite || true
+        # Remove monitoring labels from other nodes to ensure exclusive targeting
+        kubectl get nodes -o jsonpath='{.items[?(@.metadata.name!="masternode")].metadata.name}' | tr ' ' '\n' | while read node; do
+          if [[ -n "$node" ]]; then
+            kubectl label node "$node" node-role.vmstation.io/monitoring- 2>/dev/null || true
+          fi
+        done
+        
+        # Also label storage node for Jellyfin targeting if it exists
+        if kubectl get node storagenodet3500 >/dev/null 2>&1; then
+          kubectl label node storagenodet3500 node-role.vmstation.io/storage=true --overwrite || true
+        elif kubectl get nodes -o jsonpath='{.items[*].metadata.name}' | grep -q "192.168.4.61"; then
+          # Find storage node by IP if name differs
+          STORAGE_NODE=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' | grep "192.168.4.61" | cut -f1)
+          if [[ -n "$STORAGE_NODE" ]]; then
+            kubectl label node "$STORAGE_NODE" node-role.vmstation.io/storage=true --overwrite || true
+          fi
+        fi
+      when: (monitoring_scheduling_mode | default('flexible')) == 'flexible'
+      ignore_errors: yes
+
     - name: "Create monitoring namespace"
       kubernetes.core.k8s:
         name: "{{ monitoring_namespace }}"
@@ -41,7 +65,7 @@
                   app.kubernetes.io/name: prometheus
               spec:
                 nodeSelector:
-                  node-role.kubernetes.io/control-plane: ""
+                  node-role.vmstation.io/monitoring: "true"
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -142,7 +166,7 @@
                   app.kubernetes.io/name: grafana
               spec:
                 nodeSelector:
-                  node-role.kubernetes.io/control-plane: ""
+                  node-role.vmstation.io/monitoring: "true"
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -202,7 +226,7 @@
                   app.kubernetes.io/name: loki
               spec:
                 nodeSelector:
-                  node-role.kubernetes.io/control-plane: ""
+                  node-role.vmstation.io/monitoring: "true"
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -243,6 +267,44 @@
       kubernetes.core.k8s:
         state: present
         src: https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+    - name: "Patch Kubernetes Dashboard deployment for monitoring node targeting"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: kubernetes-dashboard
+            namespace: kubernetes-dashboard
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  node-role.vmstation.io/monitoring: "true"
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+
+    - name: "Patch Dashboard metrics scraper deployment for monitoring node targeting"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment  
+          metadata:
+            name: dashboard-metrics-scraper
+            namespace: kubernetes-dashboard
+          spec:
+            template:
+              spec:
+                nodeSelector:
+                  node-role.vmstation.io/monitoring: "true"
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
 
     - name: "Create Dashboard Admin User"
       kubernetes.core.k8s:

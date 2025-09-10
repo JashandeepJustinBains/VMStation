@@ -40,6 +40,16 @@ if [ ! -f "$CONFIG_FILE" ]; then
     fi
 fi
 
+# Setup monitoring node labels if cluster exists and labeling script is available
+if [ -f "scripts/setup_monitoring_node_labels.sh" ] && command -v kubectl >/dev/null 2>&1; then
+    if kubectl get nodes >/dev/null 2>&1; then
+        info "Setting up monitoring node labels..."
+        ./scripts/setup_monitoring_node_labels.sh || warn "Node labeling failed, continuing anyway..."
+    else
+        warn "Kubernetes cluster not accessible, skipping node labeling (will be done during deployment)"
+    fi
+fi
+
 # Check basic requirements
 if ! command -v ansible-playbook >/dev/null 2>&1; then
     error "ansible-playbook not found. Please install Ansible."

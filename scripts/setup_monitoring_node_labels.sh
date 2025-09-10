@@ -47,10 +47,15 @@ fi
 
 info "Connected to Kubernetes cluster successfully"
 
-# Define the expected monitoring node IP (masternode)
+# Define the expected node IPs and names
 MONITORING_NODE_IP="192.168.4.63"
 HOMELAB_NODE_IP="192.168.4.62"
 STORAGE_NODE_IP="192.168.4.61"
+
+# Expected node names (will be verified against cluster)
+EXPECTED_MONITORING_NODE="masternode"
+EXPECTED_HOMELAB_NODE="homelab"
+EXPECTED_STORAGE_NODE="storagenodet3500"
 
 echo ""
 info "Current cluster nodes:"
