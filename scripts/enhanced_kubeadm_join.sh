@@ -184,8 +184,8 @@ perform_join() {
     monitor_kubelet_join $JOIN_TIMEOUT &
     local monitor_pid=$!
     
-    # Execute join command with enhanced parameters
-    local enhanced_command="timeout $((JOIN_TIMEOUT + 60)) $join_command --timeout=${JOIN_TIMEOUT}s --v=5"
+    # Execute join command with enhanced parameters (remove invalid --timeout flag)
+    local enhanced_command="timeout $((JOIN_TIMEOUT + 60)) $join_command --v=5"
     log_both "Enhanced command: $enhanced_command"
     
     # Execute join

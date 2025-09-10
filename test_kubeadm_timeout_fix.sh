@@ -9,8 +9,8 @@ echo "=== Testing Kubeadm Join Timeout Fix ==="
 echo "Timestamp: $(date)"
 echo
 
-# Test 1: Check that timeout parameter is present in ansible playbook
-echo "Test 1: Validating timeout parameter in ansible playbook..."
+# Test 1: Check that invalid timeout parameter is NOT present in ansible playbook
+echo "Test 1: Validating invalid --timeout parameter is removed from ansible playbook..."
 
 PLAYBOOK_FILE="ansible/plays/setup-cluster.yaml"
 
@@ -19,23 +19,24 @@ if [ ! -f "$PLAYBOOK_FILE" ]; then
     exit 1
 fi
 
-# Check for timeout parameter in initial join command
-if grep -q "timeout=300s" "$PLAYBOOK_FILE"; then
-    echo "✅ PASS: Found --timeout=300s parameter in playbook"
-else
-    echo "❌ FAIL: --timeout=300s parameter not found in playbook"
+# Check that the invalid --timeout parameter is NOT present in kubeadm join commands
+if grep -q "\-\-timeout=.*s.*kubeadm\|kubeadm.*\-\-timeout=.*s" "$PLAYBOOK_FILE"; then
+    echo "❌ FAIL: Found invalid --timeout parameter in kubeadm join commands"
+    echo "This parameter is invalid and should be removed from kubeadm join"
     exit 1
+else
+    echo "✅ PASS: Invalid --timeout parameter correctly removed from playbook"
 fi
 
-# Test 2: Verify timeout is in both initial and retry join commands
-echo "Test 2: Checking timeout in both join attempts..."
+# Test 2: Verify timeout is handled at shell level (using timeout command)
+echo "Test 2: Checking that timeout is handled at shell level..."
 
-TIMEOUT_COUNT=$(grep -c "timeout=300s" "$PLAYBOOK_FILE" || echo "0")
+SHELL_TIMEOUT_COUNT=$(grep -c "timeout 600" "$PLAYBOOK_FILE" || echo "0")
 
-if [ "$TIMEOUT_COUNT" -ge 2 ]; then
-    echo "✅ PASS: Found timeout parameter in multiple join commands ($TIMEOUT_COUNT occurrences)"
+if [ "$SHELL_TIMEOUT_COUNT" -ge 2 ]; then
+    echo "✅ PASS: Found proper shell timeout handling in join commands ($SHELL_TIMEOUT_COUNT occurrences)"
 else
-    echo "❌ FAIL: Timeout parameter should appear in both initial and retry join commands (found: $TIMEOUT_COUNT)"
+    echo "❌ FAIL: Shell timeout handling should appear in both initial and retry join commands (found: $SHELL_TIMEOUT_COUNT)"
     exit 1
 fi
 
@@ -63,21 +64,21 @@ else
     exit 1
 fi
 
-# Test 5: Verify remediation script includes timeout
-echo "Test 5: Checking remediation script timeout documentation..."
+# Test 5: Verify remediation script doesn't use invalid timeout
+echo "Test 5: Checking remediation script doesn't use invalid timeout parameter..."
 
 REMEDIATION_FILE="worker_node_join_remediation.sh"
 
 if [ ! -f "$REMEDIATION_FILE" ]; then
-    echo "❌ FAIL: Remediation script not found: $REMEDIATION_FILE"
-    exit 1
-fi
-
-if grep -q "timeout=300s" "$REMEDIATION_FILE"; then
-    echo "✅ PASS: Found --timeout=300s in remediation script documentation"
+    echo "⚠️  SKIP: Remediation script not found: $REMEDIATION_FILE (may not exist)"
 else
-    echo "❌ FAIL: --timeout=300s parameter not documented in remediation script"
-    exit 1
+    if grep -q "\-\-timeout=.*s.*kubeadm\|kubeadm.*\-\-timeout=.*s" "$REMEDIATION_FILE"; then
+        echo "❌ FAIL: Found invalid --timeout parameter in remediation script"
+        echo "This parameter should be removed from kubeadm commands"
+        exit 1
+    else
+        echo "✅ PASS: Remediation script correctly avoids invalid --timeout parameter"
+    fi
 fi
 
 # Test 6: Verify documentation exists

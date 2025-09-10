@@ -272,7 +272,9 @@ check_system_resources() {
     
     # Check load average
     local load=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
-    if (( $(echo "$load < 2.0" | bc -l) )); then
+    # Convert load to integer for comparison (multiply by 100 to handle decimals)
+    local load_int=$(echo "$load" | awk '{printf "%.0f", $1 * 100}')
+    if (( load_int < 200 )); then  # 200 = 2.0 * 100
         info "✓ System load: $load"
     else
         warn "High system load: $load"
@@ -281,7 +283,9 @@ check_system_resources() {
     # Check if kubelet is consuming excessive resources
     if pgrep kubelet >/dev/null; then
         local kubelet_cpu=$(ps -p $(pgrep kubelet) -o %cpu --no-headers 2>/dev/null || echo "0")
-        if (( $(echo "$kubelet_cpu < 50" | bc -l) )); then
+        # Convert CPU percentage to integer for comparison (remove decimal point)
+        local kubelet_cpu_int=$(echo "$kubelet_cpu" | awk '{printf "%.0f", $1}')
+        if (( kubelet_cpu_int < 50 )); then
             info "✓ kubelet CPU usage: ${kubelet_cpu}%"
         else
             warn "High kubelet CPU usage: ${kubelet_cpu}%"
