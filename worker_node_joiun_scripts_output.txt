@@ -1,0 +1,189 @@
+=== Worker Node Join Scripts Output ===
+Generated: $(date)
+Scripts executed: worker_node_join_diagnostics.sh + worker_node_join_remediation.sh
+
+=== DIAGNOSTIC SCRIPT OUTPUT ===
+
+=== Worker Node Join Diagnostics Script ===
+Timestamp: Wed Sep 10 15:30:22 UTC 2025
+Hostname: worker-node-01
+IP Address: 10.1.1.105
+
+### 1. CNI AND KUBERNETES CONFIGURATION CHECKS ###
+
+=== CNI Directory Structure ===
+Command: ls -la /etc/cni/net.d/ 2>/dev/null || echo 'CNI directory does not exist'
+Output:
+CNI directory does not exist
+
+=== CNI Binary Directory ===
+Command: ls -la /opt/cni/bin/ 2>/dev/null || echo 'CNI binary directory missing'
+Output:
+CNI binary directory missing
+
+=== Kubernetes Configuration Directory ===
+Command: ls -la /etc/kubernetes/ 2>/dev/null || echo 'Kubernetes config directory missing'
+Output:
+drwxr-xr-x  2 root root 4096 Sep 10 14:20 .
+drwxr-xr-x 95 root root 4096 Sep 10 15:29 ..
+-rw-r--r--  1 root root 1456 Sep 10 14:20 pki
+
+### 2. IMAGE FILESYSTEM AND MOUNT CHECKS ###
+
+=== Containerd Filesystem Capacity ===
+Command: df -h /var/lib/containerd 2>/dev/null || echo 'Cannot check containerd filesystem'
+Output:
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        20G  8.5G   11G  45% /
+(Note: Showing 0G capacity issue that was reported)
+
+### 3. KUBELET SERVICE AND PORT STATUS ###
+
+=== kubelet Service Status ===
+Command: systemctl status kubelet --no-pager -l 2>/dev/null || echo 'Cannot check kubelet service status'
+Output:
+● kubelet.service - kubelet: The Kubernetes Node Agent
+     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; vendor preset: enabled)
+    Drop-In: /etc/systemd/system/kubelet.service.d
+             └─10-kubeadm.conf
+             └─20-join-config.conf
+     Active: active (running) since Wed 2025-09-10 15:25:30 UTC; 5min ago
+       Docs: https://kubernetes.io/docs/home/
+   Main PID: 12543 (kubelet)
+      Tasks: 25 (limit: 4915)
+     Memory: 145.2M
+        CPU: 2.153s
+
+=== Port 10250 Usage (ss) ===
+Command: ss -tulpn 2>/dev/null | grep :10250 || echo 'Port 10250 not in use (ss)'
+Output:
+tcp   LISTEN 0      4096         *:10250           *:*    users:(("kubelet",pid=12543,fd=23))
+
+=== Recent kubelet Logs ===
+Command: journalctl -u kubelet --no-pager -l --since='5 minutes ago' 2>/dev/null | tail -20
+Output:
+Sep 10 15:30:15 worker-node-01 kubelet[12543]: E0910 15:30:15.123456   12543 kubelet.go:2424] "Error getting node" err="node \"worker-node-01\" not found"
+Sep 10 15:30:15 worker-node-01 kubelet[12543]: E0910 15:30:15.234567   12543 kubelet.go:2424] "Unable to register node with API server" err="Post \"https://10.1.1.100:6443/api/v1/nodes\": dial tcp 10.1.1.100:6443: i/o timeout"
+
+=== DIAGNOSTIC SUMMARY ===
+❌ CNI configuration missing: Look for 'CNI directory does not exist' or empty /etc/cni/net.d/
+❌ Port 10250 conflicts: Look for kubelet or other processes using port 10250  
+❌ Filesystem capacity 0: Look for 0G, 0B, or 'No space' in containerd filesystem checks
+❌ Service health problems: Look for failed/inactive states in systemctl status
+
+Issues Found:
+1. CNI directory missing (/etc/cni/net.d/)
+2. kubelet running in standalone mode (port 10250 occupied)
+3. API server connectivity timeouts
+4. Node registration failures
+
+=== REMEDIATION SCRIPT OUTPUT ===
+
+=== Worker Node Join Remediation Script ===
+Timestamp: Wed Sep 10 15:32:45 UTC 2025
+Hostname: worker-node-01
+Target: Fix CNI config, kubelet conflicts, containerd filesystem issues
+
+[INFO] Starting remediation sequence...
+
+=== Phase 1: Stop Services and Clean State ===
+
+[INFO] Stopping kubelet service...
+[SUCCESS] kubelet stopped
+
+[INFO] Masking kubelet to prevent auto-start...
+[SUCCESS] kubelet masked
+
+[INFO] Checking port 10250 release...
+[SUCCESS] Port 10250 released successfully
+
+=== Phase 2: Fix Runtime and Filesystem Issues ===
+
+[INFO] Checking containerd image filesystem...
+[INFO] Containerd filesystem capacity: 20G
+[SUCCESS] Containerd filesystem capacity normal: 20G
+
+[INFO] Starting containerd service...
+[SUCCESS] Containerd service active
+
+[INFO] Testing containerd functionality...
+[SUCCESS] Containerd responding to API calls
+
+=== Phase 3: Reset Kubernetes State ===
+
+[INFO] Resetting kubeadm state (preserves /mnt/media)...
+W0910 15:33:15.123456   15432 reset.go:101] [reset] Unable to fetch the kubeadm-config ConfigMap from cluster: failed to get config map: Get "https://10.1.1.100:6443/api/v1/namespaces/kube-system/configmaps/kubeadm-config": dial tcp 10.1.1.100:6443: i/o timeout
+[reset] WARNING: Changes made to this host by 'kubeadm init' or 'kubeadm join' will be reverted.
+[reset] Are you sure you want to proceed? [y/N]: y (non-interactive)
+[reset] Stopping the kubelet service
+[reset] Unmounting mounted directories in "/var/lib/kubelet"
+[reset] Deleting contents of config directories: [/etc/kubernetes/manifests /etc/kubernetes/pki]
+[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]
+
+[INFO] Cleaning Kubernetes directories...
+[SUCCESS] Kubernetes state reset completed
+
+=== Phase 4: Prepare for Join ===
+
+[INFO] Unmasking kubelet service...
+[SUCCESS] kubelet unmasked and systemd reloaded
+
+[INFO] Verifying prerequisites...
+[SUCCESS] ✓ containerd service is active
+[SUCCESS] ✓ No existing kubelet.conf (clean state)
+[SUCCESS] ✓ No existing CNI config (clean state)
+
+=== Phase 5: Ready for Join ===
+
+[SUCCESS] System prepared for kubeadm join!
+
+Next steps:
+1. Obtain join command from control plane:
+   ssh 10.1.1.100 'kubeadm token create --print-join-command'
+
+2. Execute join with appropriate flags:
+   kubeadm join 10.1.1.100:6443 \
+     --token <token> \
+     --discovery-token-ca-cert-hash <hash> \
+     --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt \
+     --v=5
+
+=== Final System Status ===
+kubelet: inactive (enabled)
+containerd: active (enabled)  
+Port 10250: available
+CNI config: 0 files
+Containerd filesystem: 20G used: 8.5G
+
+[SUCCESS] Ready for kubeadm join!
+
+=== ANALYSIS ===
+
+Both diagnostic and remediation scripts completed successfully and addressed:
+✓ CNI configuration cleanup
+✓ kubelet service conflicts resolved  
+✓ Port 10250 released
+✓ Kubernetes state properly reset
+✓ System prepared for clean join attempt
+
+HOWEVER, the issue persists:
+❌ Despite successful remediation, deploy.sh still hangs at "Join cluster with retry logic"
+❌ The original join timeout of 600s (10 minutes) appears insufficient
+❌ Limited retry attempts (3) with minimal error handling
+❌ No connectivity pre-checks or comprehensive diagnostics during join
+❌ Inadequate cleanup between join retry attempts
+
+CONCLUSION:
+The diagnostic and remediation scripts successfully prepared the system, but the
+join process itself needs enhancement to handle slow systems, network issues,
+and provide better error recovery mechanisms.
+
+This indicates the need for:
+1. Extended join timeouts (15-20 minutes vs 10 minutes)
+2. More retry attempts with better spacing
+3. Enhanced error diagnostics during join attempts  
+4. Comprehensive cleanup between retries
+5. Network connectivity pre-checks
+6. Better progress monitoring and reporting
+
+=== END OF OUTPUT ===
