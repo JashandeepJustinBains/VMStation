@@ -333,21 +333,33 @@ perform_join() {
     
     # Execute join using bash -c to properly handle the command string
     if bash -c "$enhanced_command" 2>&1 | tee -a "$LOG_FILE"; then
-        # Wait for monitor to complete
-        wait $monitor_pid
-        local monitor_result=$?
+        # Wait for monitor to complete with timeout to prevent hanging
+        local wait_timeout=30
+        info "Waiting up to ${wait_timeout}s for kubelet monitoring to complete..."
         
-        if [ $monitor_result -eq 0 ]; then
-            info "✅ kubeadm join completed successfully!"
-            return 0
+        # Use timeout to prevent indefinite waiting
+        if timeout $wait_timeout bash -c "wait $monitor_pid"; then
+            local monitor_result=$?
+            if [ $monitor_result -eq 0 ]; then
+                info "✅ kubeadm join completed successfully!"
+                return 0
+            else
+                warn "kubeadm join command succeeded but kubelet monitoring failed"
+                # Kill monitor process to prevent hanging
+                kill $monitor_pid 2>/dev/null || true
+                return 1
+            fi
         else
-            warn "kubeadm join command succeeded but kubelet monitoring failed"
+            warn "Kubelet monitoring timed out after ${wait_timeout}s - cleaning up monitor process"
+            # Kill the hanging monitor process
+            kill $monitor_pid 2>/dev/null || true
+            warn "kubeadm join command succeeded but monitoring didn't complete in time"
             return 1
         fi
     else
         local join_result=$?
         
-        # Kill monitoring process
+        # Kill monitoring process immediately on join failure
         kill $monitor_pid 2>/dev/null || true
         
         error "kubeadm join command failed with exit code: $join_result"
