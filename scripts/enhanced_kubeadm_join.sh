@@ -19,7 +19,7 @@ debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 
 # Configuration
 MASTER_IP="${MASTER_IP:-192.168.4.63}"
-JOIN_TIMEOUT="${JOIN_TIMEOUT:-60}"
+JOIN_TIMEOUT="${JOIN_TIMEOUT:-90}"
 MAX_RETRIES="${MAX_RETRIES:-2}"
 LOG_FILE="/tmp/kubeadm-join-$(date +%Y%m%d-%H%M%S).log"
 
@@ -137,11 +137,23 @@ fix_containerd_filesystem() {
     info "Restarting containerd for clean image filesystem initialization..."
     systemctl restart containerd
     
-    # Wait for containerd to be ready
-    sleep 10
+    # Wait for containerd to be ready - increased wait time for proper initialization
+    sleep 15
     
-    # Verify containerd is working
-    if ! ctr version >/dev/null 2>&1; then
+    # Verify containerd is working with retry logic
+    local retry_count=0
+    local max_retries=3
+    while [ $retry_count -lt $max_retries ]; do
+        if ctr version >/dev/null 2>&1; then
+            break
+        else
+            warn "containerd not ready yet, waiting... ($((retry_count + 1))/$max_retries)"
+            sleep 5
+            ((retry_count++))
+        fi
+    done
+    
+    if [ $retry_count -eq $max_retries ]; then
         error "containerd is not responding after restart"
         return 1
     fi
@@ -264,12 +276,13 @@ prepare_for_join() {
 
 # Function to monitor kubelet during join
 monitor_kubelet_join() {
-    local timeout=${1:-60}
+    local timeout=${1:-90}  # Increased default timeout to account for containerd restarts
     info "Monitoring kubelet join process (timeout: ${timeout}s)..."
     
     local start_time=$(date +%s)
     local end_time=$((start_time + timeout))
     local last_check=0
+    local containerd_fix_attempted=false  # Flag to prevent repeated containerd fixes
     
     while [ $(date +%s) -lt $end_time ]; do
         # Check if kubelet.conf was created (indicates successful bootstrap)
@@ -290,9 +303,9 @@ monitor_kubelet_join() {
             fi
         fi
         
-        # Every 15 seconds, check for specific failure patterns for faster detection
+        # Every 20 seconds, check for specific failure patterns for faster detection
         local current_time=$(date +%s)
-        if [ $((current_time - last_check)) -ge 15 ]; then
+        if [ $((current_time - last_check)) -ge 20 ]; then
             last_check=$current_time
             
             # Check for TLS Bootstrap timeout (kubeadm's 40s internal timeout)
@@ -302,17 +315,21 @@ monitor_kubelet_join() {
                 return 1
             fi
             
-            # Check for containerd capacity issues and attempt to fix them
-            if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
+            # Check for containerd capacity issues and attempt to fix them (only once per join attempt)
+            if [ "$containerd_fix_attempted" = "false" ] && journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
                 warn "Detected containerd filesystem capacity issue during join"
                 warn "Kubelet logs show 'invalid capacity 0 on image filesystem'"
                 warn "This indicates containerd image filesystem was not properly initialized"
-                warn "Check if containerd namespace is accessible and filesystem is writable"
                 warn "Attempting to fix containerd image filesystem during join..."
+                
+                containerd_fix_attempted=true  # Set flag to prevent repeated attempts
                 
                 # Attempt real-time fix of containerd filesystem
                 if fix_containerd_filesystem; then
                     info "✓ Containerd filesystem fixed during join - continuing monitoring"
+                    # Extend timeout to account for containerd restart time
+                    end_time=$((end_time + 30))
+                    info "Extended monitoring timeout by 30s to account for containerd restart"
                     # Reset last_check to avoid immediate re-detection
                     last_check=$current_time
                     continue
@@ -329,7 +346,7 @@ monitor_kubelet_join() {
                 return 1
             fi
             
-            info "TLS Bootstrap in progress... (${current_time}s elapsed)"
+            info "TLS Bootstrap in progress... ($((current_time - start_time))s elapsed)"
         fi
         
         sleep 3
@@ -352,8 +369,8 @@ perform_join() {
     monitor_kubelet_join $JOIN_TIMEOUT &
     local monitor_pid=$!
     
-    # Execute join command with enhanced parameters
-    local enhanced_command="timeout $((JOIN_TIMEOUT + 30)) $join_command --v=5"
+    # Execute join command with enhanced parameters - increased timeout for containerd restarts
+    local enhanced_command="timeout $((JOIN_TIMEOUT + 60)) $join_command --v=5"
     log_both "Enhanced command: $enhanced_command"
     
     # Execute join using bash -c to properly handle the command string

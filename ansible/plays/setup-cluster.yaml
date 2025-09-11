@@ -730,7 +730,7 @@
           shell: |
             # Set environment variables for enhanced join
             export MASTER_IP="{{ control_plane_ip }}"
-            export JOIN_TIMEOUT=60
+            export JOIN_TIMEOUT=90
             export MAX_RETRIES=2
             
             # Extract base join command from script (remove "$@" placeholder)
