@@ -337,30 +337,53 @@ perform_join() {
         local wait_timeout=30
         info "Waiting up to ${wait_timeout}s for kubelet monitoring to complete..."
         
-        # Use timeout to prevent indefinite waiting
-        if timeout $wait_timeout bash -c "wait $monitor_pid"; then
-            local monitor_result=$?
-            if [ $monitor_result -eq 0 ]; then
-                info "✅ kubeadm join completed successfully!"
-                return 0
-            else
-                warn "kubeadm join command succeeded but kubelet monitoring failed"
-                # Kill monitor process to prevent hanging
-                kill $monitor_pid 2>/dev/null || true
-                return 1
+        # Poll for monitor process completion instead of using problematic wait
+        local start_time=$(date +%s)
+        local end_time=$((start_time + wait_timeout))
+        local monitor_result=1
+        
+        while [ $(date +%s) -lt $end_time ]; do
+            # Check if monitor process is still running
+            if ! kill -0 $monitor_pid 2>/dev/null; then
+                # Process has finished, get its exit status by waiting
+                wait $monitor_pid 2>/dev/null
+                monitor_result=$?
+                break
             fi
-        else
+            sleep 1
+        done
+        
+        # If we exited the loop because of timeout, kill the monitor process
+        if kill -0 $monitor_pid 2>/dev/null; then
             warn "Kubelet monitoring timed out after ${wait_timeout}s - cleaning up monitor process"
-            # Kill the hanging monitor process
             kill $monitor_pid 2>/dev/null || true
+            # Wait briefly for process to be killed
+            sleep 2
+            # Force kill if still running
+            kill -9 $monitor_pid 2>/dev/null || true
             warn "kubeadm join command succeeded but monitoring didn't complete in time"
+            return 1
+        fi
+        
+        # Check monitor result
+        if [ $monitor_result -eq 0 ]; then
+            info "✅ kubeadm join completed successfully!"
+            return 0
+        else
+            warn "kubeadm join command succeeded but kubelet monitoring failed"
             return 1
         fi
     else
         local join_result=$?
         
         # Kill monitoring process immediately on join failure
-        kill $monitor_pid 2>/dev/null || true
+        if kill -0 $monitor_pid 2>/dev/null; then
+            kill $monitor_pid 2>/dev/null || true
+            # Wait briefly for process to be killed
+            sleep 2
+            # Force kill if still running
+            kill -9 $monitor_pid 2>/dev/null || true
+        fi
         
         error "kubeadm join command failed with exit code: $join_result"
         return $join_result
