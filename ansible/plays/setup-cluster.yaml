@@ -410,7 +410,7 @@
       block:
         - name: "Download and install Flannel CNI plugin binary"
           get_url:
-            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64"
             dest: /opt/cni/bin/flannel
             mode: '0755'
             timeout: 60
@@ -424,21 +424,39 @@
 
         - name: "Fallback: Download Flannel CNI plugin with curl"
           shell: |
-            curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64" \
+            curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
               -o /opt/cni/bin/flannel --retry 3 --retry-delay 10
             chmod 755 /opt/cni/bin/flannel
-          when: flannel_download.failed and ('cert_file' in flannel_download.msg or 'urllib3' in flannel_download.msg)
+          when: flannel_download.failed and ('cert_file' in flannel_download.msg or 'urllib3' in flannel_download.msg or 'ssl' in flannel_download.msg or 'certificate' in flannel_download.msg)
           register: flannel_curl_download
+
+        - name: "Enhanced fallback: Download Flannel CNI plugin with wget"
+          shell: |
+            wget -O /opt/cni/bin/flannel "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
+              --no-check-certificate --retry-connrefused --tries=3
+            chmod 755 /opt/cni/bin/flannel
+          when: 
+            - flannel_download.failed 
+            - flannel_curl_download is defined and flannel_curl_download.failed
+          register: flannel_wget_download
+          failed_when: false
 
         - name: "Verify Flannel CNI plugin download succeeded"
           fail:
             msg: |
-              Failed to download Flannel CNI plugin using both get_url and curl methods.
+              Failed to download Flannel CNI plugin using all available methods.
               get_url result: {{ flannel_download.msg | default('Unknown error') }}
               curl result: {{ flannel_curl_download.msg | default('Not attempted') }}
+              wget result: {{ flannel_wget_download.msg | default('Not attempted') }}
           when: 
             - flannel_download.failed 
-            - flannel_curl_download is not defined or flannel_curl_download.failed
+            - (flannel_curl_download is not defined or flannel_curl_download.failed)
+            - (flannel_wget_download is not defined or flannel_wget_download.failed)
+
+        - name: "Post-download verification: Ensure flannel binary is executable and valid"
+          command: test -x /opt/cni/bin/flannel
+          register: flannel_binary_verification
+          failed_when: flannel_binary_verification.rc != 0
 
         - name: "Download and install additional CNI plugins"
           unarchive:
@@ -1565,7 +1583,7 @@
 
         - name: "Download and install Flannel CNI plugin binary on worker nodes"
           get_url:
-            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64"
             dest: /opt/cni/bin/flannel
             mode: '0755'
             timeout: 60
@@ -1579,21 +1597,39 @@
 
         - name: "Fallback: Download Flannel CNI plugin with curl on worker nodes"
           shell: |
-            curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64" \
+            curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
               -o /opt/cni/bin/flannel --retry 3 --retry-delay 10
             chmod 755 /opt/cni/bin/flannel
-          when: flannel_download_worker.failed and ('cert_file' in flannel_download_worker.msg or 'urllib3' in flannel_download_worker.msg)
+          when: flannel_download_worker.failed and ('cert_file' in flannel_download_worker.msg or 'urllib3' in flannel_download_worker.msg or 'ssl' in flannel_download_worker.msg or 'certificate' in flannel_download_worker.msg)
           register: flannel_curl_download_worker
+
+        - name: "Enhanced fallback: Download Flannel CNI plugin with wget on worker nodes"
+          shell: |
+            wget -O /opt/cni/bin/flannel "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
+              --no-check-certificate --retry-connrefused --tries=3
+            chmod 755 /opt/cni/bin/flannel
+          when: 
+            - flannel_download_worker.failed 
+            - flannel_curl_download_worker is defined and flannel_curl_download_worker.failed
+          register: flannel_wget_download_worker
+          failed_when: false
 
         - name: "Verify Flannel CNI plugin download succeeded on worker nodes"
           fail:
             msg: |
-              Failed to download Flannel CNI plugin on worker node using both get_url and curl methods.
+              Failed to download Flannel CNI plugin on worker node using all available methods.
               get_url result: {{ flannel_download_worker.msg | default('Unknown error') }}
               curl result: {{ flannel_curl_download_worker.msg | default('Not attempted') }}
+              wget result: {{ flannel_wget_download_worker.msg | default('Not attempted') }}
           when: 
             - flannel_download_worker.failed 
-            - flannel_curl_download_worker is not defined or flannel_curl_download_worker.failed
+            - (flannel_curl_download_worker is not defined or flannel_curl_download_worker.failed)
+            - (flannel_wget_download_worker is not defined or flannel_wget_download_worker.failed)
+
+        - name: "Post-download verification: Ensure flannel binary is executable and valid on worker nodes"
+          command: test -x /opt/cni/bin/flannel
+          register: flannel_binary_verification_worker
+          failed_when: flannel_binary_verification_worker.rc != 0
 
         - name: "Download and install additional CNI plugins on worker nodes"
           unarchive:
