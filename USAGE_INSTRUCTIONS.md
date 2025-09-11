@@ -1,4 +1,32 @@
-# VMStation API Server Fix - Usage Instructions
+# VMStation Usage Instructions
+
+## Post-Wipe Worker Recovery (New Feature)
+
+If you have aggressively wiped your worker nodes (using `aggressive_worker_wipe_preserve_storage.sh` or similar), VMStation now includes enhanced support for clean worker joins.
+
+### Quick Post-Wipe Recovery
+
+```bash
+# From the master node (control-plane), run:
+./deploy.sh cluster
+```
+
+This will:
+1. ✅ Automatically detect post-wipe worker states
+2. ✅ Validate control-plane readiness  
+3. ✅ Generate fresh join tokens (2h TTL)
+4. ✅ Execute enhanced join process with retry logic
+5. ✅ Ensure workers join control-plane (NOT standalone mode)
+6. ✅ Verify cluster integration and TLS certificate management
+
+For complete deployment including applications:
+```bash
+./deploy.sh full
+```
+
+See [Post-Wipe Worker Join Documentation](docs/POST_WIPE_WORKER_JOIN.md) for detailed information.
+
+## API Server Fix - Usage Instructions
 
 ## Quick Fix for Immediate Resolution
 
