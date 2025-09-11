@@ -124,25 +124,86 @@ check_container_runtime() {
         warn "containerd client connection failed"
     fi
     
-    # Check crictl configuration
-    if crictl version >/dev/null 2>&1; then
-        info "✓ crictl can connect to runtime"
-    else
-        warn "crictl connection issues - will attempt to fix"
-        # Create proper crictl config
-        mkdir -p /etc
-        cat > /etc/crictl.yaml << EOF
+    # Check crictl configuration with proper permissions
+    info "Checking crictl runtime connection..."
+    
+    # Ensure crictl config exists with correct settings
+    mkdir -p /etc
+    cat > /etc/crictl.yaml << EOF
 runtime-endpoint: unix:///run/containerd/containerd.sock
 image-endpoint: unix:///run/containerd/containerd.sock
 timeout: 10
 debug: false
 EOF
-        if crictl version >/dev/null 2>&1; then
-            info "✓ crictl configuration fixed"
-        else
-            error "Failed to fix crictl configuration"
-            fail_check
+    info "✓ crictl configuration updated"
+    
+    # Check containerd socket permissions and fix if needed
+    if [ -S /run/containerd/containerd.sock ]; then
+        local socket_perms=$(stat -c "%a" /run/containerd/containerd.sock 2>/dev/null)
+        local socket_owner=$(stat -c "%U:%G" /run/containerd/containerd.sock 2>/dev/null)
+        info "Containerd socket permissions: ${socket_perms} (${socket_owner})"
+        
+        # If socket is restrictive (660) and we're not root, ensure we can access it
+        if [ "$socket_perms" = "660" ] && [ "$(id -u)" != "0" ]; then
+            warn "Socket has restrictive permissions and current user is not root"
+            info "Attempting to add current user to appropriate group for containerd access..."
+            
+            # Try to create containerd group if it doesn't exist
+            if ! getent group containerd >/dev/null 2>&1; then
+                info "Creating containerd group..."
+                groupadd containerd 2>/dev/null || true
+            fi
+            
+            # Add current user to containerd group
+            usermod -a -G containerd $(whoami) 2>/dev/null || true
+            
+            # Change socket group to containerd for access
+            chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
         fi
+    else
+        error "Containerd socket not found at /run/containerd/containerd.sock"
+        fail_check
+        return
+    fi
+    
+    # Test crictl connection - use appropriate execution context
+    local crictl_test_failed=false
+    if [ "$(id -u)" = "0" ]; then
+        # Running as root - direct execution
+        if crictl version >/dev/null 2>&1; then
+            info "✓ crictl can connect to runtime (as root)"
+        else
+            crictl_test_failed=true
+        fi
+    else
+        # Running as non-root - try with current permissions first, then with sudo
+        if crictl version >/dev/null 2>&1; then
+            info "✓ crictl can connect to runtime (current user)"
+        elif command -v sudo >/dev/null 2>&1 && sudo -n crictl version >/dev/null 2>&1; then
+            info "✓ crictl can connect to runtime (with sudo)"
+        else
+            crictl_test_failed=true
+        fi
+    fi
+    
+    if [ "$crictl_test_failed" = "true" ]; then
+        error "Failed to establish crictl connection to containerd"
+        error "This indicates a permissions or configuration issue with the containerd socket"
+        
+        # Provide diagnostic information
+        if [ -S /run/containerd/containerd.sock ]; then
+            error "Socket exists but is not accessible:"
+            ls -la /run/containerd/containerd.sock
+            error "Current user: $(whoami) (UID: $(id -u))"
+            error "Current groups: $(groups)"
+        fi
+        
+        error "Possible fixes:"
+        error "1. Run this script as root: sudo $0"
+        error "2. Add user to containerd group and restart containerd"
+        error "3. Check containerd service status and logs"
+        
+        fail_check
     fi
 }
 
