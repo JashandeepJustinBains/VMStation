@@ -160,16 +160,63 @@
             - not (kubelet_service_unit_alt.stat.exists | default(false))
             - not (kubelet_service_unit_etc.stat.exists | default(false))
 
-        - name: "Verify kubelet service unit was found"
-          fail:
-            msg: |
-              kubelet.service unit file not found in expected locations:
-              - /lib/systemd/system/kubelet.service
-              - /usr/lib/systemd/system/kubelet.service
-              - /etc/systemd/system/kubelet.service
-              Search result: {{ kubelet_service_search.stdout | default('No kubelet.service found') }}
-              This indicates a failed kubelet package installation.
-              Please check if kubelet package was properly installed.
+        - name: "Remediate missing kubelet service unit"
+          block:
+            - name: "Attempt to reinstall kubelet package when service unit missing"
+              apt:
+                name:
+                  - kubelet
+                  - kubeadm
+                  - kubectl
+                state: present
+                update_cache: yes
+                force_apt_get: yes
+              when: ansible_os_family == 'Debian'
+              register: kubelet_reinstall
+              retries: 2
+              delay: 15
+              until: kubelet_reinstall is succeeded
+              
+            - name: "Attempt to reinstall kubelet package when service unit missing (RHEL/CentOS)"
+              package:
+                name:
+                  - kubelet
+                  - kubeadm
+                  - kubectl
+                state: present
+              when: ansible_os_family == 'RedHat'
+              register: kubelet_reinstall_rhel
+              retries: 2
+              delay: 15
+              until: kubelet_reinstall_rhel is succeeded
+              
+            - name: "Reload systemd daemon after package reinstallation"
+              systemd:
+                daemon_reload: yes
+                
+            - name: "Re-verify kubelet service unit after remediation"
+              stat:
+                path: /lib/systemd/system/kubelet.service
+              register: kubelet_service_recheck
+              
+            - name: "Alternative kubelet service unit location re-check"
+              stat:
+                path: /usr/lib/systemd/system/kubelet.service
+              register: kubelet_service_recheck_alt
+              when: not kubelet_service_recheck.stat.exists
+              
+            - name: "Final kubelet service unit verification after remediation"
+              fail:
+                msg: |
+                  kubelet.service unit file still not found after remediation attempt:
+                  - Package reinstallation result: {{ kubelet_reinstall.changed | default(kubelet_reinstall_rhel.changed | default('unknown')) }}
+                  - Systemd daemon reloaded: yes
+                  - Locations checked: /lib/systemd/system/kubelet.service, /usr/lib/systemd/system/kubelet.service
+                  This indicates a persistent package installation issue that requires manual intervention.
+              when: 
+                - not kubelet_service_recheck.stat.exists
+                - not (kubelet_service_recheck_alt.stat.exists | default(false))
+                
           when: 
             - not kubelet_service_unit.stat.exists
             - not (kubelet_service_unit_alt.stat.exists | default(false))
@@ -456,7 +503,59 @@
         - name: "Post-download verification: Ensure flannel binary is executable and valid"
           command: test -x /opt/cni/bin/flannel
           register: flannel_binary_verification
-          failed_when: flannel_binary_verification.rc != 0
+          failed_when: false
+
+        - name: "Remediate flannel binary verification failure"
+          block:
+            - name: "Diagnose flannel binary issue"
+              shell: |
+                echo "=== Flannel Binary Diagnostics ==="
+                if [ -f /opt/cni/bin/flannel ]; then
+                  echo "File exists: YES"
+                  echo "File size: $(stat -c%s /opt/cni/bin/flannel 2>/dev/null || echo 'unknown')"
+                  echo "File permissions: $(ls -la /opt/cni/bin/flannel 2>/dev/null || echo 'unknown')"
+                  echo "File type: $(file /opt/cni/bin/flannel 2>/dev/null || echo 'unknown')"
+                else
+                  echo "File exists: NO"
+                fi
+              register: flannel_diagnostics
+              
+            - name: "Attempt to fix flannel binary permissions"
+              file:
+                path: /opt/cni/bin/flannel
+                mode: '0755'
+                owner: root
+                group: root
+              when: flannel_diagnostics.stdout is search("File exists. YES")
+              register: flannel_permission_fix
+              
+            - name: "Retry flannel download when file missing or corrupted"
+              shell: |
+                rm -f /opt/cni/bin/flannel
+                curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
+                  -o /opt/cni/bin/flannel --retry 2 --retry-delay 5
+                chmod 755 /opt/cni/bin/flannel
+              when: >
+                flannel_diagnostics.stdout is search("File exists. NO") or 
+                flannel_diagnostics.stdout is search("File size. 0") or
+                flannel_diagnostics.stdout is search("ASCII text")
+              register: flannel_redownload
+              
+            - name: "Final flannel binary verification after remediation"
+              command: test -x /opt/cni/bin/flannel
+              register: flannel_final_verification
+              failed_when: flannel_final_verification.rc != 0
+              
+            - name: "Display flannel remediation results"
+              debug:
+                msg: |
+                  Flannel Binary Remediation Results:
+                  {{ flannel_diagnostics.stdout }}
+                  Permission fix applied: {{ flannel_permission_fix.changed | default('not needed') }}
+                  Redownload performed: {{ flannel_redownload.changed | default('not needed') }}
+                  Final verification: {{ 'PASSED' if flannel_final_verification.rc == 0 else 'FAILED' }}
+                  
+          when: flannel_binary_verification.rc != 0
 
         - name: "Download and install additional CNI plugins"
           unarchive:
