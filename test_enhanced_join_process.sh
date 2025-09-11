@@ -156,8 +156,8 @@ test_configuration() {
         warn "⚠ Master IP configuration may be inconsistent"
     fi
     
-    if grep -q "JOIN_TIMEOUT.*300" "$join_script"; then
-        info "✓ Join timeout configured (300s)"
+    if grep -q "JOIN_TIMEOUT.*90" "$join_script"; then
+        info "✓ Join timeout configured (90s)"
     else
         error "✗ Join timeout not properly configured"
         ((TEST_RESULTS++))
