@@ -143,16 +143,38 @@
           register: kubelet_service_unit_alt
           when: not kubelet_service_unit.stat.exists
 
+        - name: "Third alternative kubelet service unit location check"
+          stat:
+            path: /etc/systemd/system/kubelet.service
+          register: kubelet_service_unit_etc
+          when: 
+            - not kubelet_service_unit.stat.exists
+            - not (kubelet_service_unit_alt.stat.exists | default(false))
+
+        - name: "Search for kubelet service unit in all locations"
+          shell: |
+            find /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system -name "kubelet.service" 2>/dev/null | head -1
+          register: kubelet_service_search
+          when: 
+            - not kubelet_service_unit.stat.exists
+            - not (kubelet_service_unit_alt.stat.exists | default(false))
+            - not (kubelet_service_unit_etc.stat.exists | default(false))
+
         - name: "Verify kubelet service unit was found"
           fail:
             msg: |
               kubelet.service unit file not found in expected locations:
               - /lib/systemd/system/kubelet.service
               - /usr/lib/systemd/system/kubelet.service
+              - /etc/systemd/system/kubelet.service
+              Search result: {{ kubelet_service_search.stdout | default('No kubelet.service found') }}
               This indicates a failed kubelet package installation.
+              Please check if kubelet package was properly installed.
           when: 
             - not kubelet_service_unit.stat.exists
             - not (kubelet_service_unit_alt.stat.exists | default(false))
+            - not (kubelet_service_unit_etc.stat.exists | default(false))
+            - (kubelet_service_search.stdout | default('')) == ''
 
         - name: "Display kubelet service unit location"
           debug:
@@ -162,7 +184,16 @@
               /lib/systemd/system/kubelet.service
               {% elif kubelet_service_unit_alt.stat.exists | default(false) %}
               /usr/lib/systemd/system/kubelet.service
+              {% elif kubelet_service_unit_etc.stat.exists | default(false) %}
+              /etc/systemd/system/kubelet.service
+              {% elif kubelet_service_search.stdout | default('') != '' %}
+              {{ kubelet_service_search.stdout }}
               {% endif %}
+          when: >
+            kubelet_service_unit.stat.exists or 
+            (kubelet_service_unit_alt.stat.exists | default(false)) or
+            (kubelet_service_unit_etc.stat.exists | default(false)) or
+            (kubelet_service_search.stdout | default('')) != ''
 
         - name: "Verify containerd systemd service unit exists"
           stat:
@@ -175,16 +206,28 @@
           register: containerd_service_unit_alt
           when: not containerd_service_unit.stat.exists
 
+        - name: "Search for containerd service unit in all locations"
+          shell: |
+            find /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system -name "containerd.service" 2>/dev/null | head -1
+          register: containerd_service_search
+          when: 
+            - not containerd_service_unit.stat.exists
+            - not (containerd_service_unit_alt.stat.exists | default(false))
+
         - name: "Verify containerd service unit was found"
           fail:
             msg: |
               containerd.service unit file not found in expected locations:
               - /lib/systemd/system/containerd.service  
               - /usr/lib/systemd/system/containerd.service
+              - /etc/systemd/system/containerd.service
+              Search result: {{ containerd_service_search.stdout | default('No containerd.service found') }}
               This indicates a failed containerd package installation.
+              Please check if containerd package was properly installed.
           when:
             - not containerd_service_unit.stat.exists
             - not (containerd_service_unit_alt.stat.exists | default(false))
+            - (containerd_service_search.stdout | default('')) == ''
 
     - name: "Disable swap"
       shell: |
@@ -371,10 +414,31 @@
             dest: /opt/cni/bin/flannel
             mode: '0755'
             timeout: 60
+            validate_certs: false
+            use_proxy: false
           retries: 3
           delay: 10
           until: flannel_download is succeeded
           register: flannel_download
+          failed_when: false
+
+        - name: "Fallback: Download Flannel CNI plugin with curl"
+          shell: |
+            curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64" \
+              -o /opt/cni/bin/flannel --retry 3 --retry-delay 10
+            chmod 755 /opt/cni/bin/flannel
+          when: flannel_download.failed and ('cert_file' in flannel_download.msg or 'urllib3' in flannel_download.msg)
+          register: flannel_curl_download
+
+        - name: "Verify Flannel CNI plugin download succeeded"
+          fail:
+            msg: |
+              Failed to download Flannel CNI plugin using both get_url and curl methods.
+              get_url result: {{ flannel_download.msg | default('Unknown error') }}
+              curl result: {{ flannel_curl_download.msg | default('Not attempted') }}
+          when: 
+            - flannel_download.failed 
+            - flannel_curl_download is not defined or flannel_curl_download.failed
 
         - name: "Download and install additional CNI plugins"
           unarchive:
@@ -392,6 +456,7 @@
 
         - name: "Verify essential CNI plugins are installed"
           shell: |
+            #!/bin/bash
             echo "=== Verifying CNI Plugin Installation ==="
             required_plugins=("bridge" "host-local" "loopback" "flannel")
             all_found=true
@@ -416,6 +481,8 @@
             echo ""
             echo "All installed CNI plugins:"
             ls -la /opt/cni/bin/
+          args:
+            executable: /bin/bash
           register: cni_verification
           failed_when: cni_verification.rc != 0
 
