@@ -19,7 +19,7 @@ debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 
 # Configuration
 MASTER_IP="${MASTER_IP:-192.168.4.63}"
-JOIN_TIMEOUT="${JOIN_TIMEOUT:-60}"
+JOIN_TIMEOUT="${JOIN_TIMEOUT:-120}"
 MAX_RETRIES="${MAX_RETRIES:-2}"
 LOG_FILE="/tmp/kubeadm-join-$(date +%Y%m%d-%H%M%S).log"
 
@@ -156,19 +156,26 @@ fix_containerd_filesystem() {
     # This prevents the "invalid capacity 0 on image filesystem" error
     ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
     
+    # Additional commands to force filesystem capacity detection
+    ctr --namespace k8s.io version >/dev/null 2>&1 || true
+    ctr content ls >/dev/null 2>&1 || true
+    
     # Wait for containerd image filesystem to fully initialize
-    sleep 5
+    sleep 8
     
     # Verify containerd image filesystem is properly initialized
     local retry_count=0
-    local max_retries=5
+    local max_retries=8
     while [ $retry_count -lt $max_retries ]; do
-        if ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+        # Multiple checks to ensure containerd is fully ready
+        if ctr --namespace k8s.io images ls >/dev/null 2>&1 && \
+           ctr --namespace k8s.io version >/dev/null 2>&1 && \
+           [ -S /var/run/containerd/containerd.sock ]; then
             info "✓ Containerd image filesystem initialized successfully"
             break
         else
             warn "Containerd image filesystem not ready, retrying... ($((retry_count + 1))/$max_retries)"
-            sleep 3
+            sleep 5
             ((retry_count++))
         fi
     done
@@ -267,9 +274,9 @@ monitor_kubelet_join() {
             fi
         fi
         
-        # Every 15 seconds, check for specific failure patterns for faster detection
+        # Every 20 seconds, check for specific failure patterns for faster detection
         local current_time=$(date +%s)
-        if [ $((current_time - last_check)) -ge 15 ]; then
+        if [ $((current_time - last_check)) -ge 20 ]; then
             last_check=$current_time
             
             # Check for TLS Bootstrap timeout (kubeadm's 40s internal timeout)
@@ -279,7 +286,7 @@ monitor_kubelet_join() {
                 return 1
             fi
             
-            # Check for containerd capacity issues and attempt to fix them
+            # Check for containerd capacity issues and attempt to fix them (less frequent)
             if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
                 warn "Detected containerd filesystem capacity issue during join"
                 warn "Kubelet logs show 'invalid capacity 0 on image filesystem'"
@@ -288,8 +295,9 @@ monitor_kubelet_join() {
                 # Attempt real-time fix of containerd filesystem
                 if fix_containerd_filesystem; then
                     info "✓ Containerd filesystem fixed during join - continuing monitoring"
-                    # Reset last_check to avoid immediate re-detection
-                    last_check=$current_time
+                    # Add extra delay to prevent immediate re-detection
+                    last_check=$((current_time + 30))
+                    sleep 10
                     continue
                 else
                     error "❌ Failed to fix containerd filesystem during join"
@@ -304,7 +312,8 @@ monitor_kubelet_join() {
                 return 1
             fi
             
-            info "TLS Bootstrap in progress... (${current_time}s elapsed)"
+            local elapsed_time=$((current_time - start_time))
+            info "TLS Bootstrap in progress... (${elapsed_time}s elapsed)"
         fi
         
         sleep 3
