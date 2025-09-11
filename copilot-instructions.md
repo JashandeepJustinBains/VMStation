@@ -34,6 +34,17 @@ Local monitoring node context (important)
 - The repository owner runs playbooks and many commands directly on the monitoring node, which is on a local subnet (LAN). When the user refers to "monitoring node" or runs validation commands, prefer examples that target the monitoring host IP (e.g. `192.168.x.x`) or `localhost` on that machine.
 - When providing SSH/scp examples from the control host, clearly indicate replacing the host/IP with the monitoring node address or use the inventory group `monitoring_nodes`.
 
+Kubernetes cluster architecture (important)
+- This Kubernetes cluster consists of 3 nodes:
+  1. masternode (control-plane) - the monitoring_nodes group (192.168.4.63)
+  2. storagenodet3500 (storage_nodes) - worker node (192.168.4.61)  
+  3. homelab (compute_nodes) - worker node (192.168.4.62)
+- All commands are executed on the masternode only. The other nodes do not have the git repo cloned to them.
+- The masternode handles setting up and controlling Kubernetes and related apps/programs/configs for communication and workflow.
+- If a script needs to exist on another node, it must be copied to that node and executed, or use `remote_src`.
+- The masternode has SSH tokens for the worker nodes, but worker nodes might not have SSH tokens into the masternode.
+- The repository is located at `/srv/monitoring_data/VMStation/` on the masternode in production deployments.
+
 Hidden `ansible/group_vars/all.yml` entries (do NOT add secrets here)
 The user keeps several variables in `ansible/group_vars/all.yml` but hides secret values for safety. An agent should treat these keys as sensitive and never print their values in plaintext. Common keys present in the file include:
 - monit_root
