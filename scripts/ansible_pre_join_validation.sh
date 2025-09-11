@@ -45,10 +45,19 @@ if [ -S /run/containerd/containerd.sock ]; then
   if ! getent group containerd >/dev/null 2>&1; then
     echo "Creating containerd group for socket access..."
     groupadd containerd 2>/dev/null || true
-    # Change socket group to containerd for better access control
-    chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
-    echo "✓ containerd group created and socket permissions updated"
   fi
+  
+  # Ensure current user is in containerd group for socket access
+  current_user=$(whoami)
+  if ! groups "$current_user" | grep -q "containerd"; then
+    echo "Adding user $current_user to containerd group..."
+    usermod -a -G containerd "$current_user" 2>/dev/null || true
+  fi
+  
+  # Set appropriate socket permissions for group access
+  chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+  chmod 666 /run/containerd/containerd.sock 2>/dev/null || true
+  echo "✓ containerd group created and socket permissions updated"
 fi
 
 # Test crictl communication with containerd with timeout protection
@@ -73,12 +82,19 @@ if [ ! -S /run/containerd/containerd.sock ]; then
     systemctl status containerd --no-pager || true
     exit 1
   fi
+  
+  # Set proper permissions on the newly created socket
+  chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+  chmod 666 /run/containerd/containerd.sock 2>/dev/null || true
   echo "✓ containerd socket created"
 fi
 
 # Use timeout command to prevent crictl from hanging indefinitely  
 # Run crictl with proper error handling for permission issues
-if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
+# Try with sg (switch group) first to ensure containerd group access
+if timeout $crictl_timeout sg containerd -c "crictl info" >/dev/null 2>&1; then
+  echo "✓ crictl communication working (with containerd group)"
+elif timeout $crictl_timeout crictl info >/dev/null 2>&1; then
   echo "✓ crictl communication working"
 else
   echo "WARNING: crictl cannot communicate with containerd within ${crictl_timeout}s"
@@ -104,6 +120,13 @@ else
   systemctl start containerd
   sleep 15  # Allow time for full initialization
   
+  # Ensure current user can access containerd socket
+  # Add current user to containerd group if not already a member
+  current_user=$(whoami)
+  if ! groups "$current_user" | grep -q "containerd"; then
+    usermod -a -G containerd "$current_user" 2>/dev/null || true
+  fi
+  
   # Initialize containerd image filesystem to prevent communication issues
   echo "Initializing containerd image filesystem..."
   ctr namespace create k8s.io 2>/dev/null || true
@@ -116,10 +139,16 @@ else
   while [ $retry_count -lt $max_retries ]; do
     # Ensure containerd socket has proper permissions before each retry
     if [ -S /run/containerd/containerd.sock ]; then
+      # Set both group ownership and more permissive permissions
       chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+      chmod 666 /run/containerd/containerd.sock 2>/dev/null || true
     fi
     
-    if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
+    # Try crictl with a fresh session to pickup new group membership
+    if timeout $crictl_timeout sg containerd -c "crictl info" >/dev/null 2>&1; then
+      echo "✓ crictl communication restored after enhanced restart (attempt $((retry_count + 1)))"
+      break
+    elif timeout $crictl_timeout crictl info >/dev/null 2>&1; then
       echo "✓ crictl communication restored after enhanced restart (attempt $((retry_count + 1)))"
       break
     else
@@ -151,7 +180,10 @@ echo "Initializing containerd image filesystem..."
 ctr namespace create k8s.io 2>/dev/null || true
 
 # Use timeout for ctr operations to prevent hanging
-if timeout 15 ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+# Try with sg containerd first for proper permissions
+if timeout 15 sg containerd -c "ctr --namespace k8s.io images ls" >/dev/null 2>&1; then
+  echo "✓ containerd image filesystem initialized (with containerd group)"
+elif timeout 15 ctr --namespace k8s.io images ls >/dev/null 2>&1; then
   echo "✓ containerd image filesystem initialized"
 else
   echo "WARNING: containerd image filesystem initialization timed out"
