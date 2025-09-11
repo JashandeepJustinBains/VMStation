@@ -28,15 +28,33 @@ run_crictl() {
         if ! getent group containerd >/dev/null 2>&1; then
             groupadd containerd 2>/dev/null || true
         fi
-        # Ensure socket has appropriate group ownership for access
+        
+        # Ensure current user is in containerd group
+        current_user=$(whoami)
+        if ! groups "$current_user" | grep -q "containerd"; then
+            usermod -a -G containerd "$current_user" 2>/dev/null || true
+        fi
+        
+        # Set appropriate socket permissions for group access
         chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+        chmod 666 /run/containerd/containerd.sock 2>/dev/null || true
     fi
     
-    # Execute crictl command with error handling
+    # Execute crictl command with error handling - try with containerd group first
     if [ "$suppress_output" = "true" ]; then
-        crictl $cmd >/dev/null 2>&1
+        # Try with sg containerd first for proper group access
+        if sg containerd -c "crictl $cmd" >/dev/null 2>&1; then
+            return 0
+        else
+            crictl $cmd >/dev/null 2>&1
+        fi
     else
-        crictl $cmd
+        # Try with sg containerd first for proper group access
+        if sg containerd -c "crictl $cmd" 2>/dev/null; then
+            return 0
+        else
+            crictl $cmd
+        fi
     fi
 }
 
