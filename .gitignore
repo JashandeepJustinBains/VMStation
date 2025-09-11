@@ -158,6 +158,7 @@ demo_*.sh
 !/scripts/worker_node_join_remediation.sh
 !/scripts/validate_join_prerequisites.sh
 !/scripts/enhanced_kubeadm_join.sh
+!/scripts/test_worker_setup_fixes.sh
 
 # Block temporary testing/fix scripts (use /tmp for these)
 /tmp/test_*.sh
