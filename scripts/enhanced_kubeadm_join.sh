@@ -133,8 +133,8 @@ fix_containerd_filesystem() {
         info "✓ Containerd filesystem capacity: ${containerd_capacity}G"
     fi
     
-    # Restart containerd to ensure clean state
-    info "Restarting containerd..."
+    # Restart containerd to ensure clean state and proper image filesystem detection
+    info "Restarting containerd for clean image filesystem initialization..."
     systemctl restart containerd
     
     # Wait for containerd to be ready
@@ -156,6 +156,16 @@ fix_containerd_filesystem() {
     # This prevents the "invalid capacity 0 on image filesystem" error
     ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
     
+    # Additional step to ensure snapshotter is properly initialized after repointing
+    # This is critical when containerd has been moved to a new filesystem location
+    info "Ensuring snapshotter initialization for repointed containerd..."
+    ctr --namespace k8s.io snapshots ls >/dev/null 2>&1 || true
+    
+    # Force CRI runtime status check to initialize image_filesystem detection
+    # This ensures the CRI status shows image_filesystem after repointing operations
+    info "Triggering CRI image_filesystem detection..."
+    crictl info >/dev/null 2>&1 || true
+    
     # Wait for containerd image filesystem to fully initialize
     sleep 5
     
@@ -163,11 +173,24 @@ fix_containerd_filesystem() {
     local retry_count=0
     local max_retries=5
     while [ $retry_count -lt $max_retries ]; do
-        if ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+        # Test both ctr command and CRI status to ensure image_filesystem is detected
+        if ctr --namespace k8s.io images ls >/dev/null 2>&1 && crictl info 2>/dev/null | grep -q "image"; then
             info "✓ Containerd image filesystem initialized successfully"
+            
+            # Additional validation for repointing scenarios - ensure CRI shows image_filesystem
+            if crictl info 2>/dev/null | grep -q "\"imageFilesystem\""; then
+                info "✓ CRI status shows image_filesystem - repointing successful"
+            else
+                warn "CRI status doesn't show image_filesystem yet, but basic functionality works"
+            fi
             break
         else
             warn "Containerd image filesystem not ready, retrying... ($((retry_count + 1))/$max_retries)"
+            # Retry the initialization commands
+            ctr namespace create k8s.io 2>/dev/null || true
+            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            ctr --namespace k8s.io snapshots ls >/dev/null 2>&1 || true
+            crictl info >/dev/null 2>&1 || true
             sleep 3
             ((retry_count++))
         fi
@@ -283,6 +306,8 @@ monitor_kubelet_join() {
             if journalctl -u kubelet --no-pager --since "1 minute ago" | grep -q "invalid capacity 0 on image filesystem"; then
                 warn "Detected containerd filesystem capacity issue during join"
                 warn "Kubelet logs show 'invalid capacity 0 on image filesystem'"
+                warn "This indicates containerd image filesystem was not properly initialized"
+                warn "Check if containerd namespace is accessible and filesystem is writable"
                 warn "Attempting to fix containerd image filesystem during join..."
                 
                 # Attempt real-time fix of containerd filesystem

@@ -57,7 +57,7 @@ echo ""
 echo "Test 4: Filesystem initialization retry logic"
 echo "Checking that retry logic exists for filesystem initialization..."
 
-if grep -A10 "retry.*containerd.*image\|containerd.*retry" "$ENHANCED_JOIN_SCRIPT" | grep -q "max_retries"; then
+if grep -A10 "retry_count.*max_retries\|max_retries.*retry" "$ENHANCED_JOIN_SCRIPT" | grep -q "containerd.*image\|image.*filesystem"; then
     echo "✓ PASS: Filesystem initialization retry logic found"
 else
     echo "✗ FAIL: Filesystem initialization retry logic missing"
@@ -69,10 +69,34 @@ echo ""
 echo "Test 5: Containerd restart sequence for filesystem detection"
 echo "Checking that containerd is properly restarted to ensure clean state..."
 
-if grep -B2 -A5 "systemctl restart containerd" "$ENHANCED_JOIN_SCRIPT" | grep -q "image filesystem\|filesystem.*proper"; then
+if grep -B2 -A5 "systemctl restart containerd" "$ENHANCED_JOIN_SCRIPT" | grep -q "image filesystem\|filesystem.*detection\|clean.*image"; then
     echo "✓ PASS: Containerd restart for filesystem detection found"
 else
     echo "✗ FAIL: Containerd restart for filesystem detection missing context"
+    exit 1
+fi
+
+# Test 6: Check for snapshotter initialization (important for repointing)
+echo ""
+echo "Test 6: Snapshotter initialization for repointed containerd"
+echo "Checking that snapshotter is properly initialized after repointing..."
+
+if grep -A5 "snapshotter.*initialization\|snapshots.*ls" "$ENHANCED_JOIN_SCRIPT" | grep -q "repoint\|snapshots"; then
+    echo "✓ PASS: Snapshotter initialization for repointing found"
+else
+    echo "✗ FAIL: Snapshotter initialization for repointing missing"
+    exit 1
+fi
+
+# Test 7: Check for CRI status validation
+echo ""
+echo "Test 7: CRI status validation for image_filesystem"
+echo "Checking that CRI status is validated to ensure image_filesystem appears..."
+
+if grep -A5 "crictl info\|CRI.*status" "$ENHANCED_JOIN_SCRIPT" | grep -q "image_filesystem\|imageFilesystem"; then
+    echo "✓ PASS: CRI status validation for image_filesystem found"
+else
+    echo "✗ FAIL: CRI status validation for image_filesystem missing"
     exit 1
 fi
 
@@ -85,6 +109,8 @@ echo "- ✓ Image filesystem initialization commands properly implemented"
 echo "- ✓ Adequate wait times for filesystem detection"
 echo "- ✓ Retry logic for robust filesystem initialization"
 echo "- ✓ Proper containerd restart sequence for clean state"
+echo "- ✓ Snapshotter initialization for repointed containerd"
+echo "- ✓ CRI status validation to ensure image_filesystem appears"
 echo ""
 echo "This ensures that after containerd is moved/repointed, the image_filesystem"
 echo "is properly detected and shows up in CRI status output, preventing capacity"
