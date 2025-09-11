@@ -541,27 +541,223 @@ validate_join_success() {
     return 1
 }
 
-# Function to clean up after failed join
+# Function to perform aggressive cleanup for naughty nodes
+aggressive_node_reset() {
+    info "🔧 Performing aggressive node reset for stubborn naughty nodes..."
+    info "This will completely reset kubectl, containerd, CNI, flannel, etc."
+    info "Preserving /srv/media and /mnt/media directories as requested"
+    
+    # Stop all Kubernetes and container services first
+    info "Stopping Kubernetes and container services..."
+    systemctl stop kubelet 2>/dev/null || true
+    systemctl stop containerd 2>/dev/null || true
+    systemctl stop docker 2>/dev/null || true
+    
+    # Force kill any remaining Kubernetes processes
+    info "Force killing any remaining Kubernetes processes..."
+    pkill -f "kube-apiserver" 2>/dev/null || true
+    pkill -f "kube-controller-manager" 2>/dev/null || true
+    pkill -f "kube-scheduler" 2>/dev/null || true
+    pkill -f "etcd" 2>/dev/null || true
+    pkill -f "kubelet" 2>/dev/null || true
+    pkill -f "flannel" 2>/dev/null || true
+    
+    # Clean up CNI network interfaces (especially flannel.1 which causes issues)
+    info "Cleaning up CNI and Flannel network interfaces..."
+    ip link set cni0 down 2>/dev/null || true
+    ip link delete cni0 2>/dev/null || true
+    ip link set cbr0 down 2>/dev/null || true  
+    ip link delete cbr0 2>/dev/null || true
+    ip link set flannel.1 down 2>/dev/null || true
+    ip link delete flannel.1 2>/dev/null || true
+    
+    # Remove any vxlan interfaces that might be leftover
+    for iface in $(ip link show 2>/dev/null | grep vxlan | cut -d: -f2 | tr -d ' ' || true); do
+        if [ -n "$iface" ]; then
+            info "Removing vxlan interface: $iface"
+            ip link set "$iface" down 2>/dev/null || true
+            ip link delete "$iface" 2>/dev/null || true
+        fi
+    done
+    
+    # Clean up iptables rules related to Kubernetes and CNI
+    info "Cleaning up iptables rules..."
+    iptables -t nat -F KUBE-SERVICES 2>/dev/null || true
+    iptables -t nat -X KUBE-SERVICES 2>/dev/null || true
+    iptables -t nat -F KUBE-NODEPORTS 2>/dev/null || true
+    iptables -t nat -X KUBE-NODEPORTS 2>/dev/null || true
+    iptables -t nat -F KUBE-POSTROUTING 2>/dev/null || true
+    iptables -t nat -X KUBE-POSTROUTING 2>/dev/null || true
+    iptables -t filter -F KUBE-FORWARD 2>/dev/null || true
+    iptables -t filter -X KUBE-FORWARD 2>/dev/null || true
+    iptables -t filter -F KUBE-FIREWALL 2>/dev/null || true
+    iptables -t filter -X KUBE-FIREWALL 2>/dev/null || true
+    
+    # Clean up FLANNEL iptables chains
+    iptables -t nat -F FLANNEL 2>/dev/null || true
+    iptables -t nat -X FLANNEL 2>/dev/null || true
+    iptables -t filter -F FLANNEL 2>/dev/null || true
+    iptables -t filter -X FLANNEL 2>/dev/null || true
+    
+    # Reset kubeadm state completely
+    info "Resetting kubeadm state..."
+    kubeadm reset --force 2>/dev/null || true
+    
+    # Completely remove Kubernetes configurations and state
+    info "Removing Kubernetes configurations and state..."
+    rm -rf /etc/kubernetes/* 2>/dev/null || true
+    rm -rf /var/lib/kubelet/* 2>/dev/null || true
+    rm -rf /var/lib/etcd/* 2>/dev/null || true
+    
+    # Completely remove and recreate CNI configuration
+    info "Completely resetting CNI configuration..."
+    rm -rf /etc/cni/net.d/* 2>/dev/null || true
+    rm -rf /var/lib/cni/* 2>/dev/null || true
+    rm -rf /run/flannel/* 2>/dev/null || true
+    
+    # Recreate essential CNI directories with proper permissions
+    mkdir -p /etc/cni/net.d
+    mkdir -p /opt/cni/bin
+    mkdir -p /var/lib/cni/networks
+    mkdir -p /run/flannel
+    chmod 755 /etc/cni/net.d
+    chmod 755 /opt/cni/bin
+    chmod 755 /var/lib/cni/networks
+    chmod 755 /run/flannel
+    
+    # Completely reset containerd state and configuration
+    info "Completely resetting containerd..."
+    systemctl stop containerd 2>/dev/null || true
+    
+    # Remove containerd configuration and regenerate it
+    rm -f /etc/containerd/config.toml 2>/dev/null || true
+    
+    # Completely remove containerd state (this is the key for fixing filesystem issues)
+    rm -rf /var/lib/containerd/* 2>/dev/null || true
+    rm -rf /run/containerd/* 2>/dev/null || true
+    
+    # Recreate containerd directory structure with proper permissions
+    mkdir -p /var/lib/containerd/{content,metadata,runtime,snapshots}
+    mkdir -p /run/containerd
+    chown -R root:root /var/lib/containerd
+    chmod -R 755 /var/lib/containerd
+    chown -R root:root /run/containerd
+    chmod 755 /run/containerd
+    
+    # Regenerate containerd configuration
+    info "Regenerating containerd configuration..."
+    mkdir -p /etc/containerd
+    containerd config default > /etc/containerd/config.toml
+    
+    # Configure containerd cgroup driver to match kubelet
+    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+    
+    # Clean up systemd state
+    info "Resetting systemd state..."
+    systemctl daemon-reload
+    systemctl reset-failed kubelet 2>/dev/null || true
+    systemctl reset-failed containerd 2>/dev/null || true
+    systemctl reset-failed docker 2>/dev/null || true
+    
+    # Remove systemd drop-in directories that might cause conflicts
+    rm -rf /etc/systemd/system/kubelet.service.d/* 2>/dev/null || true
+    rm -rf /etc/systemd/system/containerd.service.d/* 2>/dev/null || true
+    
+    # Clean up any leftover container state
+    info "Cleaning up container state..."
+    rm -rf /var/lib/containers/storage/overlay* 2>/dev/null || true
+    rm -rf /var/lib/containers/storage/vfs* 2>/dev/null || true
+    
+    # Unmount any overlay filesystems that might be stuck
+    mount | grep overlay | awk '{print $3}' | xargs -r umount -l 2>/dev/null || true
+    
+    # Clean up IP routes that might interfere with new cluster join
+    info "Cleaning up IP routes..."
+    ip route del 10.244.0.0/16 2>/dev/null || true
+    ip route show | grep -E "(cni0|cbr0|flannel)" | while read route; do
+        ip route del $route 2>/dev/null || true
+    done
+    
+    # Clean up kubectl configuration
+    info "Cleaning up kubectl configuration..."
+    rm -rf /root/.kube/* 2>/dev/null || true
+    
+    # Clean up temporary files related to Kubernetes
+    info "Cleaning up temporary files..."
+    rm -rf /tmp/kubeadm-* 2>/dev/null || true
+    rm -rf /tmp/k8s-* 2>/dev/null || true
+    rm -rf /tmp/kube-* 2>/dev/null || true
+    rm -rf /tmp/flannel-* 2>/dev/null || true
+    
+    # Re-enable and restart services in clean state
+    info "Restarting services in clean state..."
+    systemctl enable containerd
+    systemctl start containerd
+    
+    # Wait for containerd to start and verify it's working
+    sleep 15
+    local retry_count=0
+    local max_retries=5
+    while [ $retry_count -lt $max_retries ]; do
+        if ctr version >/dev/null 2>&1; then
+            info "✓ containerd restarted successfully"
+            break
+        else
+            warn "containerd not ready yet, waiting... ($((retry_count + 1))/$max_retries)"
+            sleep 5
+            ((retry_count++))
+        fi
+    done
+    
+    if [ $retry_count -eq $max_retries ]; then
+        error "containerd failed to start after aggressive reset"
+        return 1
+    fi
+    
+    # Enable kubelet (but don't start it yet - kubeadm join will handle that)
+    systemctl enable kubelet
+    
+    info "✅ Aggressive node reset completed successfully"
+    info "Node has been completely reset and is ready for kubeadm join"
+    
+    return 0
+}
+
+# Function to clean up after failed join (now uses aggressive reset for stubborn nodes)
 cleanup_failed_join() {
     info "Cleaning up after failed join..."
     
-    # Reset kubeadm state
-    kubeadm reset --force 2>/dev/null || true
+    # For the first retry, try gentle cleanup
+    if [ "${attempt:-1}" -eq 1 ]; then
+        info "Attempting gentle cleanup first..."
+        
+        # Reset kubeadm state
+        kubeadm reset --force 2>/dev/null || true
+        
+        # Clean up directories
+        rm -rf /etc/kubernetes/* 2>/dev/null || true
+        rm -rf /var/lib/kubelet/* 2>/dev/null || true
+        rm -rf /etc/cni/net.d/* 2>/dev/null || true
+        
+        # Reset systemd
+        systemctl daemon-reload
+        systemctl reset-failed kubelet 2>/dev/null || true
+        
+        # Restart containerd
+        systemctl restart containerd
+        sleep 10
+        
+        info "✓ Gentle cleanup completed"
+    else
+        # For subsequent retries, use aggressive reset for naughty nodes
+        warn "Previous gentle cleanup failed - using aggressive reset for naughty node"
+        if ! aggressive_node_reset; then
+            error "Aggressive node reset failed"
+            return 1
+        fi
+    fi
     
-    # Clean up directories
-    rm -rf /etc/kubernetes/* 2>/dev/null || true
-    rm -rf /var/lib/kubelet/* 2>/dev/null || true
-    rm -rf /etc/cni/net.d/* 2>/dev/null || true
-    
-    # Reset systemd
-    systemctl daemon-reload
-    systemctl reset-failed kubelet 2>/dev/null || true
-    
-    # Restart containerd
-    systemctl restart containerd
-    sleep 10
-    
-    info "✓ Cleanup completed"
+    return 0
 }
 
 # Main join process
@@ -631,7 +827,11 @@ main() {
         # Clean up for retry
         if [ $attempt -lt $MAX_RETRIES ]; then
             warn "Cleaning up for retry..."
-            cleanup_failed_join
+            # Pass attempt number to cleanup function so it knows when to be aggressive
+            if ! cleanup_failed_join; then
+                error "Cleanup failed - cannot retry"
+                break
+            fi
             
             # Shorter wait before retry for faster failure detection
             local wait_time=15
