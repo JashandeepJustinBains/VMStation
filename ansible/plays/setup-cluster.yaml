@@ -1380,18 +1380,55 @@
             
             # Test crictl communication with containerd with timeout protection
             echo "Testing crictl communication with containerd..."
-            crictl_timeout=60  # 60 second timeout for crictl operations (increased from 30s)
+            crictl_timeout=30  # Reduced timeout for faster detection
+            
+            # Check if containerd socket exists first
+            if [ ! -S /run/containerd/containerd.sock ]; then
+              echo "WARNING: containerd socket not found, ensuring containerd is properly started..."
+              systemctl stop containerd 2>/dev/null || true
+              sleep 2
+              systemctl start containerd
+              # Wait for socket to be created
+              socket_wait=0
+              while [ $socket_wait -lt 30 ] && [ ! -S /run/containerd/containerd.sock ]; do
+                sleep 1
+                socket_wait=$((socket_wait + 1))
+              done
+              
+              if [ ! -S /run/containerd/containerd.sock ]; then
+                echo "ERROR: containerd socket still not available after restart"
+                systemctl status containerd --no-pager || true
+                exit 1
+              fi
+              echo "✓ containerd socket created"
+            fi
             
             # Use timeout command to prevent crictl from hanging indefinitely
             if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
               echo "✓ crictl communication working"
             else
               echo "WARNING: crictl cannot communicate with containerd within ${crictl_timeout}s"
-              echo "Attempting containerd restart..."
+              echo "Attempting enhanced containerd restart and initialization..."
               
-              # Try restarting containerd and wait for it to be ready
-              systemctl restart containerd
-              sleep 20  # Increased wait time from 10s to 20s for better initialization
+              # Stop containerd completely first
+              systemctl stop containerd 2>/dev/null || true
+              sleep 3
+              
+              # Clean any stale containerd state that might block communication
+              rm -rf /run/containerd/* 2>/dev/null || true
+              
+              # Ensure containerd config exists and is valid
+              if [ ! -f /etc/containerd/config.toml ]; then
+                echo "Creating containerd configuration..."
+                mkdir -p /etc/containerd
+                containerd config default > /etc/containerd/config.toml
+                # Enable systemd cgroup driver for Kubernetes compatibility
+                sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+              fi
+              
+              # Start containerd and wait for proper initialization
+              systemctl start containerd
+              sleep 15  # Allow time for full initialization
               
               # Initialize containerd image filesystem to prevent communication issues
               echo "Initializing containerd image filesystem..."
@@ -1399,26 +1436,33 @@
               ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
               sleep 5
               
-              # Retry crictl communication with timeout and improved backoff
+              # Retry crictl communication with exponential backoff
               retry_count=0
-              max_retries=5  # Increased from 3 to 5 retries
+              max_retries=6  # Increased to 6 retries for better reliability
               while [ $retry_count -lt $max_retries ]; do
                 if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
-                  echo "✓ crictl communication restored after restart (attempt $((retry_count + 1)))"
+                  echo "✓ crictl communication restored after enhanced restart (attempt $((retry_count + 1)))"
                   break
                 else
-                  echo "  Waiting for containerd... ($((retry_count + 1))/$max_retries)"
-                  # Progressive backoff: 8s, 12s, 16s, 20s
-                  sleep_time=$((8 + retry_count * 4))
+                  echo "  Waiting for containerd initialization... ($((retry_count + 1))/$max_retries)"
+                  # Exponential backoff: 5s, 10s, 15s, 20s, 25s, 30s
+                  sleep_time=$((5 + retry_count * 5))
                   sleep $sleep_time
                   retry_count=$((retry_count + 1))
                 fi
               done
               
               if [ $retry_count -eq $max_retries ]; then
-                echo "ERROR: crictl still cannot communicate with containerd after restart"
+                echo "ERROR: crictl still cannot communicate with containerd after enhanced restart"
                 echo "This indicates a persistent containerd configuration issue"
+                echo "Containerd status:"
                 systemctl status containerd --no-pager || true
+                echo ""
+                echo "Socket status:"
+                ls -la /run/containerd/ 2>/dev/null || echo "No containerd runtime directory"
+                echo ""
+                echo "Containerd logs (last 20 lines):"
+                journalctl -u containerd --no-pager -n 20 || true
                 exit 1
               fi
             fi

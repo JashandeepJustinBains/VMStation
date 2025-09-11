@@ -365,11 +365,14 @@ fix_containerd_filesystem() {
 prepare_for_join() {
     info "Preparing system for join..."
     
-    # Stop kubelet if running
-    info "Stopping kubelet service..."
+    # Stop kubelet if running and prevent auto-restart during join
+    info "Stopping kubelet service and preventing auto-restart during join..."
     systemctl stop kubelet 2>/dev/null || true
     
-    # Wait for kubelet to stop
+    # Mask kubelet temporarily to prevent systemd from auto-restarting it during join
+    systemctl mask kubelet 2>/dev/null || true
+    
+    # Wait for kubelet to stop completely
     sleep 5
     
     # Clear any existing kubelet state
@@ -378,7 +381,11 @@ prepare_for_join() {
     rm -f /var/lib/kubelet/kubeadm-flags.env 2>/dev/null || true
     rm -f /etc/kubernetes/bootstrap-kubelet.conf 2>/dev/null || true
     
-    # Ensure kubelet service is enabled
+    # Reset failed kubelet attempts
+    systemctl reset-failed kubelet 2>/dev/null || true
+    
+    # Ensure kubelet service is enabled but not started yet
+    systemctl unmask kubelet 2>/dev/null || true
     systemctl enable kubelet
     
     # Fix containerd filesystem issues before restart
@@ -416,7 +423,60 @@ prepare_for_join() {
         return 1
     fi
     
-    info "✓ System prepared for join"
+    # Create a temporary kubelet systemd drop-in for bootstrap mode
+    # This prevents the "config.yaml not found" error during join
+    info "Creating temporary kubelet bootstrap configuration..."
+    local kubelet_dropin_dir="/etc/systemd/system/kubelet.service.d"
+    mkdir -p "$kubelet_dropin_dir"
+    
+    # Create a bootstrap kubelet configuration that doesn't require config.yaml
+    cat > "$kubelet_dropin_dir/20-bootstrap-kubeadm.conf" << 'EOF'
+[Service]
+Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+Environment="KUBELET_KUBEADM_ARGS=--container-runtime-endpoint=unix:///run/containerd/containerd.sock"
+ExecStart=
+ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+Restart=always
+StartLimitInterval=0
+RestartSec=10
+EOF
+    
+    # Create a fallback script to handle missing config.yaml gracefully
+    cat > "$kubelet_dropin_dir/kubelet-bootstrap-wrapper.sh" << 'EOF'
+#!/bin/bash
+# Kubelet bootstrap wrapper to handle missing config.yaml during join
+
+CONFIG_FILE="/var/lib/kubelet/config.yaml"
+BOOTSTRAP_FILE="/etc/kubernetes/bootstrap-kubelet.conf"
+
+# If config.yaml doesn't exist but bootstrap does, use bootstrap mode
+if [ ! -f "$CONFIG_FILE" ] && [ -f "$BOOTSTRAP_FILE" ]; then
+    echo "Using bootstrap configuration (config.yaml not yet created by kubeadm join)"
+    exec /usr/bin/kubelet \
+        --bootstrap-kubeconfig="$BOOTSTRAP_FILE" \
+        --kubeconfig=/etc/kubernetes/kubelet.conf \
+        --container-runtime-endpoint=unix:///run/containerd/containerd.sock \
+        --rotate-certificates=true \
+        --v=2
+elif [ -f "$CONFIG_FILE" ]; then
+    echo "Using generated configuration (config.yaml created by kubeadm join)"
+    exec /usr/bin/kubelet \
+        --config="$CONFIG_FILE" \
+        --kubeconfig=/etc/kubernetes/kubelet.conf \
+        --container-runtime-endpoint=unix:///run/containerd/containerd.sock \
+        --v=2
+else
+    echo "ERROR: Neither config.yaml nor bootstrap configuration available"
+    exit 1
+fi
+EOF
+    chmod +x "$kubelet_dropin_dir/kubelet-bootstrap-wrapper.sh"
+    
+    # Reload systemd to pick up the new configuration
+    systemctl daemon-reload
+    
+    info "✓ System prepared for join with bootstrap kubelet configuration"
 }
 
 # Function to monitor kubelet during join
@@ -520,8 +580,41 @@ perform_join() {
     local enhanced_command="timeout $((JOIN_TIMEOUT + 60)) $join_command --v=5"
     log_both "Enhanced command: $enhanced_command"
     
-    # Execute join using bash -c to properly handle the command string
-    if bash -c "$enhanced_command" 2>&1 | tee -a "$LOG_FILE"; then
+    # Create a wrapper script that handles kubelet start timing
+    local join_wrapper="/tmp/kubeadm_join_wrapper.sh"
+    cat > "$join_wrapper" << 'EOF'
+#!/bin/bash
+set -e
+
+# Function to wait for config.yaml to be created
+wait_for_kubelet_config() {
+    local timeout=60
+    local start_time=$(date +%s)
+    local end_time=$((start_time + timeout))
+    
+    echo "Waiting for kubeadm join to create kubelet config.yaml..."
+    while [ $(date +%s) -lt $end_time ]; do
+        if [ -f /var/lib/kubelet/config.yaml ]; then
+            echo "✓ kubelet config.yaml created by kubeadm join"
+            return 0
+        fi
+        sleep 2
+    done
+    
+    echo "WARNING: kubelet config.yaml not created within ${timeout}s"
+    return 1
+}
+
+# Execute the actual kubeadm join command
+echo "Executing kubeadm join command..."
+EOF
+    
+    # Add the join command to the wrapper
+    echo "exec $1" >> "$join_wrapper"
+    chmod +x "$join_wrapper"
+    
+    # Execute join using the wrapper script
+    if bash -c "timeout $((JOIN_TIMEOUT + 60)) $join_wrapper" 2>&1 | tee -a "$LOG_FILE"; then
         # Wait for monitor to complete with timeout to prevent hanging
         local wait_timeout=30
         info "Waiting up to ${wait_timeout}s for kubelet monitoring to complete..."
@@ -811,9 +904,15 @@ cleanup_failed_join() {
         rm -rf /var/lib/kubelet/* 2>/dev/null || true
         rm -rf /etc/cni/net.d/* 2>/dev/null || true
         
-        # Reset systemd
+        # Reset systemd and unmask kubelet
         systemctl daemon-reload
         systemctl reset-failed kubelet 2>/dev/null || true
+        systemctl unmask kubelet 2>/dev/null || true  # Ensure kubelet is unmasked for retry
+        
+        # Clean up temporary bootstrap configuration
+        rm -f /etc/systemd/system/kubelet.service.d/20-bootstrap-kubeadm.conf 2>/dev/null || true
+        rm -f /etc/systemd/system/kubelet.service.d/kubelet-bootstrap-wrapper.sh 2>/dev/null || true
+        systemctl daemon-reload
         
         # Restart containerd
         systemctl restart containerd
@@ -891,6 +990,12 @@ main() {
         if perform_join "$join_command" $attempt; then
             # Validate success
             if validate_join_success; then
+                # Clean up temporary bootstrap configuration after successful join
+                info "Cleaning up temporary bootstrap configuration..."
+                rm -f /etc/systemd/system/kubelet.service.d/20-bootstrap-kubeadm.conf 2>/dev/null || true
+                rm -f /etc/systemd/system/kubelet.service.d/kubelet-bootstrap-wrapper.sh 2>/dev/null || true
+                systemctl daemon-reload
+                
                 if [ "$WORKER_POST_WIPE" = "true" ]; then
                     info "🎉 Post-wipe worker join completed successfully!"
                     log_both "Post-wipe worker join successful at $(date)"
