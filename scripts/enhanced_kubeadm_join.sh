@@ -168,6 +168,17 @@ fix_containerd_filesystem() {
     # This prevents the "invalid capacity 0 on image filesystem" error
     ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
     
+    # Verify filesystem capacity is detectable before proceeding
+    local initial_capacity=$(df -B1 /var/lib/containerd 2>/dev/null | tail -1 | awk '{print $2}' || echo "0")
+    if [ "$initial_capacity" = "0" ]; then
+        warn "Filesystem capacity detection issue - attempting to resolve..."
+        # Force filesystem stat refresh
+        find /var/lib/containerd -maxdepth 1 -type d >/dev/null 2>&1 || true
+        du -sb /var/lib/containerd >/dev/null 2>&1 || true
+        sync
+        sleep 2
+    fi
+    
     # Additional step to ensure snapshotter is properly initialized after repointing
     # This is critical when containerd has been moved to a new filesystem location
     info "Ensuring snapshotter initialization for repointed containerd..."
@@ -187,29 +198,60 @@ fix_containerd_filesystem() {
     while [ $retry_count -lt $max_retries ]; do
         # Test both ctr command and CRI status to ensure image_filesystem is detected
         if ctr --namespace k8s.io images ls >/dev/null 2>&1 && crictl info 2>/dev/null | grep -q "image"; then
-            info "✓ Containerd image filesystem initialized successfully"
             
-            # Additional validation for repointing scenarios - ensure CRI shows image_filesystem
+            # Enhanced validation: Check that CRI shows actual imageFilesystem with capacity
             if crictl info 2>/dev/null | grep -q "\"imageFilesystem\""; then
-                info "✓ CRI status shows image_filesystem - repointing successful"
+                # Further validate that filesystem shows non-zero capacity
+                local cri_capacity=$(crictl info 2>/dev/null | grep -A10 "imageFilesystem" | grep "capacityBytes" | head -1 | grep -oE '[0-9]+' || echo "0")
+                local fs_capacity=$(df -B1 /var/lib/containerd 2>/dev/null | tail -1 | awk '{print $2}' || echo "0")
+                
+                if [ "$cri_capacity" != "0" ] && [ "$fs_capacity" != "0" ]; then
+                    info "✓ Containerd image filesystem initialized successfully"
+                    info "✓ CRI status shows image_filesystem with capacity: ${cri_capacity} bytes"
+                    info "✓ Filesystem capacity verified: ${fs_capacity} bytes"
+                    break
+                else
+                    warn "CRI shows imageFilesystem but capacity is zero (CRI: $cri_capacity, FS: $fs_capacity)"
+                    # Continue retrying as this indicates incomplete initialization
+                fi
             else
-                warn "CRI status doesn't show image_filesystem yet, but basic functionality works"
+                warn "CRI status doesn't show imageFilesystem section yet"
+                # Continue retrying
             fi
-            break
-        else
-            warn "Containerd image filesystem not ready, retrying... ($((retry_count + 1))/$max_retries)"
-            # Retry the initialization commands
-            ctr namespace create k8s.io 2>/dev/null || true
-            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            ctr --namespace k8s.io snapshots ls >/dev/null 2>&1 || true
-            crictl info >/dev/null 2>&1 || true
-            sleep 3
-            ((retry_count++))
         fi
+        
+        warn "Containerd image filesystem not ready, retrying... ($((retry_count + 1))/$max_retries)"
+        # Retry the initialization commands with enhanced filesystem verification
+        ctr namespace create k8s.io 2>/dev/null || true
+        
+        # Force filesystem capacity detection by creating and removing a test image namespace
+        ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+        
+        # Ensure snapshotter detects the filesystem
+        ctr --namespace k8s.io snapshots ls >/dev/null 2>&1 || true
+        
+        # Force CRI to re-detect filesystem capacity
+        crictl info >/dev/null 2>&1 || true
+        
+        # Additional filesystem verification to ensure proper capacity detection
+        df -h /var/lib/containerd >/dev/null 2>&1 || true
+        
+        sleep 3
+        ((retry_count++))
     done
     
     if [ $retry_count -eq $max_retries ]; then
         error "Failed to initialize containerd image filesystem after $max_retries attempts"
+        error "This indicates a persistent containerd configuration or filesystem issue"
+        
+        # Provide diagnostic information
+        local fs_capacity=$(df -h /var/lib/containerd 2>/dev/null | tail -1 || echo "N/A")
+        local cri_output=$(crictl info 2>/dev/null | grep -A10 "imageFilesystem" || echo "No imageFilesystem section found")
+        
+        error "Diagnostic info:"
+        error "  Filesystem: $fs_capacity"
+        error "  CRI imageFilesystem: $cri_output"
+        
         return 1
     fi
     
@@ -336,6 +378,8 @@ monitor_kubelet_join() {
                 else
                     error "❌ Failed to fix containerd filesystem during join"
                     error "This indicates a persistent containerd configuration issue"
+                    error "The enhanced validation detected that containerd filesystem capacity"
+                    error "is still not properly initialized after attempted fixes"
                     return 1
                 fi
             fi
