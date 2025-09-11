@@ -17,6 +17,29 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 
+# Helper function to run crictl with proper permissions
+run_crictl() {
+    local cmd="$1"
+    local suppress_output="${2:-false}"
+    
+    # Ensure containerd socket has proper permissions if we can fix them
+    if [ -S /run/containerd/containerd.sock ] && [ "$(id -u)" = "0" ]; then
+        # Create containerd group if it doesn't exist 
+        if ! getent group containerd >/dev/null 2>&1; then
+            groupadd containerd 2>/dev/null || true
+        fi
+        # Ensure socket has appropriate group ownership for access
+        chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+    fi
+    
+    # Execute crictl command with error handling
+    if [ "$suppress_output" = "true" ]; then
+        crictl $cmd >/dev/null 2>&1
+    else
+        crictl $cmd
+    fi
+}
+
 # Configuration
 MASTER_IP="${MASTER_IP:-192.168.4.63}"
 JOIN_TIMEOUT="${JOIN_TIMEOUT:-90}"
@@ -249,7 +272,7 @@ fix_containerd_filesystem() {
     # Force CRI runtime status check to initialize image_filesystem detection
     # This ensures the CRI status shows image_filesystem after repointing operations
     info "Triggering CRI image_filesystem detection..."
-    crictl info >/dev/null 2>&1 || true
+    run_crictl "info" true || true
     
     # Wait for containerd image filesystem to fully initialize
     sleep 5
@@ -259,12 +282,12 @@ fix_containerd_filesystem() {
     local max_retries=5
     while [ $retry_count -lt $max_retries ]; do
         # Test both ctr command and CRI status to ensure image_filesystem is detected
-        if ctr --namespace k8s.io images ls >/dev/null 2>&1 && crictl info 2>/dev/null | grep -q "image"; then
+        if ctr --namespace k8s.io images ls >/dev/null 2>&1 && run_crictl "info" true 2>/dev/null | grep -q "image"; then
             
             # Enhanced validation: Check that CRI shows actual imageFilesystem with capacity
-            if crictl info 2>/dev/null | grep -q "\"imageFilesystem\""; then
+            if run_crictl "info" true 2>/dev/null | grep -q "\"imageFilesystem\""; then
                 # Further validate that filesystem shows non-zero capacity
-                local cri_capacity=$(crictl info 2>/dev/null | grep -A10 "imageFilesystem" | grep "capacityBytes" | head -1 | grep -oE '[0-9]+' || echo "0")
+                local cri_capacity=$(run_crictl "info" true 2>/dev/null | grep -A10 "imageFilesystem" | grep "capacityBytes" | head -1 | grep -oE '[0-9]+' || echo "0")
                 local fs_capacity=$(df -B1 /var/lib/containerd 2>/dev/null | tail -1 | awk '{print $2}' || echo "0")
                 
                 if [ "$cri_capacity" != "0" ] && [ "$fs_capacity" != "0" ]; then
@@ -293,7 +316,7 @@ fix_containerd_filesystem() {
         ctr --namespace k8s.io snapshots ls >/dev/null 2>&1 || true
         
         # Force CRI to re-detect filesystem capacity
-        crictl info >/dev/null 2>&1 || true
+        run_crictl "info" true || true
         
         # Additional aggressive measures for stubborn cases
         if [ $retry_count -ge 2 ]; then
@@ -304,8 +327,8 @@ fix_containerd_filesystem() {
             du -sb /var/lib/containerd >/dev/null 2>&1 || true
             
             # Try additional CRI operations
-            crictl images >/dev/null 2>&1 || true
-            crictl ps -a >/dev/null 2>&1 || true
+            run_crictl "images" true || true
+            run_crictl "ps -a" true || true
             
             # Sync filesystem
             sync
@@ -324,7 +347,7 @@ fix_containerd_filesystem() {
         
         # Provide diagnostic information
         local fs_capacity=$(df -h /var/lib/containerd 2>/dev/null | tail -1 || echo "N/A")
-        local cri_output=$(crictl info 2>/dev/null | grep -A10 "imageFilesystem" || echo "No imageFilesystem section found")
+        local cri_output=$(run_crictl "info" true 2>/dev/null | grep -A10 "imageFilesystem" || echo "No imageFilesystem section found")
         
         error "Diagnostic info:"
         error "  Filesystem: $fs_capacity"

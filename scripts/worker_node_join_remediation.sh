@@ -119,6 +119,18 @@ debug: false
 EOF
     info "✓ crictl configuration created"
     
+    # Ensure proper permissions for containerd socket access
+    if [ -S /run/containerd/containerd.sock ]; then
+        # Create containerd group if it doesn't exist
+        if ! getent group containerd >/dev/null 2>&1; then
+            info "Creating containerd group for socket access..."
+            groupadd containerd 2>/dev/null || true
+        fi
+        # Set appropriate group ownership for socket access
+        chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+        info "✓ containerd socket permissions configured"
+    fi
+    
     # Check if containerd filesystem initialization is needed
     local needs_fix=false
     
