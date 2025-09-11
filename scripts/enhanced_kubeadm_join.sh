@@ -62,6 +62,68 @@ check_existing_join() {
     fi
 }
 
+# Function to detect if worker was aggressively wiped
+detect_post_wipe_state() {
+    info "Detecting post-wipe worker state..."
+    
+    local wipe_indicators=0
+    local total_checks=0
+    
+    # Check for absence of key Kubernetes directories/files
+    local checks=(
+        "/etc/kubernetes/kubelet.conf"
+        "/etc/kubernetes/pki/ca.crt"
+        "/var/lib/kubelet/config.yaml"
+        "/etc/cni/net.d/10-flannel.conflist"
+    )
+    
+    for check in "${checks[@]}"; do
+        ((total_checks++))
+        if [ ! -f "$check" ]; then
+            ((wipe_indicators++))
+            debug "✓ Missing (as expected after wipe): $check"
+        else
+            debug "• Found residual file: $check"
+        fi
+    done
+    
+    # Check for clean directory states
+    local dir_checks=(
+        "/var/lib/kubelet"
+        "/etc/kubernetes"
+        "/var/lib/etcd"
+    )
+    
+    for dir in "${dir_checks[@]}"; do
+        ((total_checks++))
+        if [ ! -d "$dir" ] || [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+            ((wipe_indicators++))
+            debug "✓ Directory clean/empty: $dir"
+        else
+            debug "• Directory has content: $dir"
+        fi
+    done
+    
+    # Calculate wipe percentage
+    local wipe_percentage=$((wipe_indicators * 100 / total_checks))
+    
+    info "Post-wipe state analysis:"
+    info "  Clean indicators: $wipe_indicators/$total_checks"
+    info "  Wipe percentage: ${wipe_percentage}%"
+    
+    # Consider it a post-wipe state if >75% indicators are clean
+    if [ $wipe_percentage -gt 75 ]; then
+        info "✅ Detected post-wipe worker state (${wipe_percentage}% clean)"
+        info "Worker appears to have been aggressively wiped and is ready for fresh join"
+        export WORKER_POST_WIPE=true
+        return 0
+    else
+        info "• Normal worker state detected (${wipe_percentage}% clean)"
+        export WORKER_POST_WIPE=false
+        return 1
+    fi
+}
+
 # Function to run prerequisite validation
 validate_prerequisites() {
     info "Running comprehensive prerequisite validation..."
@@ -791,6 +853,13 @@ main() {
     log_both "Command: $join_command"
     log_both "Timestamp: $(date)"
     
+    # Detect post-wipe state early
+    detect_post_wipe_state
+    if [ "$WORKER_POST_WIPE" = "true" ]; then
+        info "🔧 Post-wipe worker detected - using optimized join process"
+        log_both "Post-wipe worker state detected"
+    fi
+    
     # Check if already joined
     if check_existing_join; then
         info "✅ Node already successfully joined - nothing to do"
@@ -806,7 +875,11 @@ main() {
     # Attempt join with retries
     local attempt=1
     while [ $attempt -le $MAX_RETRIES ]; do
-        info "=== Join Attempt $attempt/$MAX_RETRIES ==="
+        if [ "$WORKER_POST_WIPE" = "true" ]; then
+            info "=== Post-Wipe Worker Join Attempt $attempt/$MAX_RETRIES ==="
+        else
+            info "=== Join Attempt $attempt/$MAX_RETRIES ==="
+        fi
         
         # Prepare system
         if ! prepare_for_join; then
@@ -818,8 +891,13 @@ main() {
         if perform_join "$join_command" $attempt; then
             # Validate success
             if validate_join_success; then
-                info "🎉 Join completed successfully!"
-                log_both "Join successful at $(date)"
+                if [ "$WORKER_POST_WIPE" = "true" ]; then
+                    info "🎉 Post-wipe worker join completed successfully!"
+                    log_both "Post-wipe worker join successful at $(date)"
+                else
+                    info "🎉 Join completed successfully!"
+                    log_both "Join successful at $(date)"
+                fi
                 
                 # Show final status
                 echo ""
@@ -852,8 +930,13 @@ main() {
         ((attempt++))
     done
     
-    error "❌ All join attempts failed after $MAX_RETRIES tries"
-    log_both "All join attempts failed at $(date)"
+    if [ "$WORKER_POST_WIPE" = "true" ]; then
+        error "❌ All post-wipe worker join attempts failed after $MAX_RETRIES tries"
+        log_both "Post-wipe worker join failed at $(date)"
+    else
+        error "❌ All join attempts failed after $MAX_RETRIES tries"
+        log_both "All join attempts failed at $(date)"
+    fi
     
     # Show diagnostic information
     echo ""
