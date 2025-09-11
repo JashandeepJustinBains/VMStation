@@ -39,12 +39,13 @@ ansible-playbook -i ansible/inventory.txt ansible/plays/kubernetes/rhel10_setup_
 ```
 
 **Enhanced Fix (Implemented):**
-The `setup_cluster.yaml` playbook now includes automatic fallback mechanisms:
+The `setup_cluster.yaml` playbook now includes automatic fallback mechanisms for both main CNI installation and worker node CNI installation:
 1. **Primary attempt**: Uses Ansible's `get_url` module with `validate_certs: false` and `use_proxy: false`
 2. **Automatic fallback**: If urllib3/cert_file errors occur, automatically switches to shell commands using curl or wget
 3. **Error detection**: Specifically detects 'cert_file' and 'urllib3' error messages
 4. **Verification**: Ensures binaries are downloaded and have correct permissions
 5. **Retry logic**: Both methods include retry attempts with delays
+6. **Worker node consistency**: Worker nodes now have the same robust fallback mechanisms as control plane nodes
 
 ### 3. CNI Plugin Verification Shell Syntax Errors
 **Symptoms:**

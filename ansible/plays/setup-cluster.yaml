@@ -1569,7 +1569,31 @@
             dest: /opt/cni/bin/flannel
             mode: '0755'
             timeout: 60
+            validate_certs: false
+            use_proxy: false
           retries: 3
+          delay: 10
+          until: flannel_download_worker is succeeded
+          register: flannel_download_worker
+          failed_when: false
+
+        - name: "Fallback: Download Flannel CNI plugin with curl on worker nodes"
+          shell: |
+            curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64" \
+              -o /opt/cni/bin/flannel --retry 3 --retry-delay 10
+            chmod 755 /opt/cni/bin/flannel
+          when: flannel_download_worker.failed and ('cert_file' in flannel_download_worker.msg or 'urllib3' in flannel_download_worker.msg)
+          register: flannel_curl_download_worker
+
+        - name: "Verify Flannel CNI plugin download succeeded on worker nodes"
+          fail:
+            msg: |
+              Failed to download Flannel CNI plugin on worker node using both get_url and curl methods.
+              get_url result: {{ flannel_download_worker.msg | default('Unknown error') }}
+              curl result: {{ flannel_curl_download_worker.msg | default('Not attempted') }}
+          when: 
+            - flannel_download_worker.failed 
+            - flannel_curl_download_worker is not defined or flannel_curl_download_worker.failed
 
         - name: "Download and install additional CNI plugins on worker nodes"
           unarchive:
