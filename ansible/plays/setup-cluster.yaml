@@ -170,6 +170,18 @@
             state: restarted
             enabled: yes
 
+        - name: "Configure crictl for containerd"
+          copy:
+            content: |
+              runtime-endpoint: unix:///run/containerd/containerd.sock
+              image-endpoint: unix:///run/containerd/containerd.sock
+              timeout: 10
+              debug: false
+            dest: /etc/crictl.yaml
+            owner: root
+            group: root
+            mode: '0644'
+
         - name: "Wait for containerd to fully initialize"
           pause:
             seconds: 10
@@ -858,6 +870,17 @@
               echo "ERROR: containerd is not running"
               exit 1
             fi
+            
+            # Configure crictl to communicate with containerd before validation
+            echo "Configuring crictl for containerd communication..."
+            mkdir -p /etc
+            cat > /etc/crictl.yaml << 'EOF'
+            runtime-endpoint: unix:///run/containerd/containerd.sock
+            image-endpoint: unix:///run/containerd/containerd.sock
+            timeout: 10
+            debug: false
+            EOF
+            echo "✓ crictl configuration created"
             
             # Ensure containerd can communicate with CRI
             if ! crictl info >/dev/null 2>&1; then

@@ -108,6 +108,17 @@ fix_containerd() {
         sleep 10
     fi
     
+    # Configure crictl for containerd before checking CRI interface
+    info "Configuring crictl for containerd communication..."
+    mkdir -p /etc
+    cat > /etc/crictl.yaml << 'EOF'
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+debug: false
+EOF
+    info "✓ crictl configuration created"
+    
     # Check if containerd filesystem initialization is needed
     local needs_fix=false
     
