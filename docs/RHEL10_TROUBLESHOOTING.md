@@ -46,7 +46,68 @@ The `setup_cluster.yaml` playbook now includes automatic fallback mechanisms:
 4. **Verification**: Ensures binaries are downloaded and have correct permissions
 5. **Retry logic**: Both methods include retry attempts with delays
 
-### 2. Container Runtime Issues
+### 3. CNI Plugin Verification Shell Syntax Errors
+**Symptoms:**
+- Shell script syntax errors during CNI plugin verification
+- Error: "Syntax error: '(' unexpected"
+- Failed CNI plugin installation check
+
+**Root Cause:**
+The CNI plugin verification script uses bash arrays but runs with `/bin/sh` (dash) which doesn't support bash array syntax.
+
+**Solutions:**
+```bash
+# Check if CNI plugins are properly installed
+ls -la /opt/cni/bin/
+ls -la /etc/cni/net.d/
+
+# Manual verification if needed
+for plugin in bridge host-local loopback flannel; do
+  if [ -f "/opt/cni/bin/$plugin" ] && [ -x "/opt/cni/bin/$plugin" ]; then
+    echo "✓ $plugin plugin installed and executable"
+  else
+    echo "✗ $plugin plugin missing or not executable"
+  fi
+done
+```
+
+**Enhanced Fix (Implemented):**
+The `setup_cluster.yaml` playbook now explicitly uses bash shell for CNI verification:
+1. **Explicit bash shell**: Uses `args: executable: /bin/bash` for array support
+2. **POSIX compliance**: Fallback to POSIX-compliant shell commands if needed
+3. **Enhanced verification**: More robust plugin checking with detailed output
+
+### 4. Service Unit File Location Issues
+**Symptoms:**
+- "kubelet.service unit file not found in expected locations"
+- "containerd.service unit file not found"
+- Service enable failures
+
+**Root Cause:**
+Different Linux distributions place systemd service files in different locations, and package managers may install to non-standard paths.
+
+**Solutions:**
+```bash
+# Search for service unit files manually
+find /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system -name "kubelet.service" 2>/dev/null
+find /lib/systemd/system /usr/lib/systemd/system /etc/systemd/system -name "containerd.service" 2>/dev/null
+
+# Check if packages are properly installed
+rpm -ql kubelet | grep "\.service$"
+rpm -ql containerd | grep "\.service$"
+
+# Verify systemd can see the services
+systemctl list-unit-files | grep -E "(kubelet|containerd)"
+```
+
+**Enhanced Fix (Implemented):**
+The `setup_cluster.yaml` playbook now includes comprehensive service file location detection:
+1. **Multiple search paths**: Checks `/lib/systemd/system`, `/usr/lib/systemd/system`, and `/etc/systemd/system`
+2. **Dynamic search**: Uses `find` command to locate service files in any systemd directory
+3. **Detailed error reporting**: Provides specific paths checked and found
+4. **Better diagnostics**: Shows exact location where service files are found
+
+### 5. Container Runtime Issues
 **Symptoms:**
 - containerd service fails to start
 - "container runtime is not running" errors
@@ -83,7 +144,7 @@ ssh 192.168.4.62 "firewall-cmd --list-all"
 ssh 192.168.4.62 "systemctl stop firewalld"
 ```
 
-### 4. Systemd Service Configuration Issues
+### 6. Systemd Service Configuration Issues
 **Symptoms:**
 - kubelet service fails to start
 - "kubelet.service: Start request repeated too quickly" errors
