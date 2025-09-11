@@ -45,7 +45,12 @@
           - kubectl
           - containerd
         state: present
+        update_cache: yes
       when: ansible_os_family == 'Debian'
+      register: k8s_package_install
+      retries: 3
+      delay: 10
+      until: k8s_package_install is succeeded
 
     - name: "Install packages for RHEL/CentOS"
       block:
@@ -67,6 +72,10 @@
               - kubectl
               - containerd
             state: present
+          register: k8s_package_install_rhel
+          retries: 3
+          delay: 10
+          until: k8s_package_install_rhel is succeeded
       when: ansible_os_family == 'RedHat'
 
     - name: "Hold Kubernetes packages (Debian/Ubuntu)"
@@ -78,6 +87,104 @@
         - kubeadm
         - kubectl
       when: ansible_os_family == 'Debian'
+
+    - name: "Comprehensive Kubernetes package validation"
+      block:
+        - name: "Verify Kubernetes binaries are installed and executable"
+          shell: |
+            echo "=== Verifying Kubernetes Package Installation ==="
+            for cmd in kubelet kubeadm kubectl; do
+              if command -v "$cmd" >/dev/null 2>&1; then
+                version=$($cmd --version 2>/dev/null | head -1 || echo "Version check failed")
+                echo "✓ $cmd is installed: $version"
+                # Verify binary is executable
+                if [ -x "$(command -v "$cmd")" ]; then
+                  echo "✓ $cmd is executable"
+                else
+                  echo "✗ $cmd is not executable"
+                  exit 1
+                fi
+              else
+                echo "✗ $cmd is not found in PATH"
+                exit 1
+              fi
+            done
+            
+            # Verify containerd
+            if command -v containerd >/dev/null 2>&1; then
+              echo "✓ containerd is installed"
+              if [ -x "$(command -v containerd)" ]; then
+                echo "✓ containerd is executable"
+              else
+                echo "✗ containerd is not executable"
+                exit 1
+              fi
+            else
+              echo "✗ containerd is not found in PATH"
+              exit 1
+            fi
+            
+            echo "✅ All Kubernetes packages verified successfully"
+          register: k8s_package_verification
+          failed_when: k8s_package_verification.rc != 0
+
+        - name: "Display package verification results"
+          debug:
+            msg: "{{ k8s_package_verification.stdout_lines | join('\n') }}"
+
+        - name: "Verify kubelet systemd service unit exists"
+          stat:
+            path: /lib/systemd/system/kubelet.service
+          register: kubelet_service_unit
+          
+        - name: "Alternative kubelet service unit location check"
+          stat:
+            path: /usr/lib/systemd/system/kubelet.service
+          register: kubelet_service_unit_alt
+          when: not kubelet_service_unit.stat.exists
+
+        - name: "Verify kubelet service unit was found"
+          fail:
+            msg: |
+              kubelet.service unit file not found in expected locations:
+              - /lib/systemd/system/kubelet.service
+              - /usr/lib/systemd/system/kubelet.service
+              This indicates a failed kubelet package installation.
+          when: 
+            - not kubelet_service_unit.stat.exists
+            - not (kubelet_service_unit_alt.stat.exists | default(false))
+
+        - name: "Display kubelet service unit location"
+          debug:
+            msg: |
+              kubelet service unit found at: 
+              {% if kubelet_service_unit.stat.exists %}
+              /lib/systemd/system/kubelet.service
+              {% elif kubelet_service_unit_alt.stat.exists | default(false) %}
+              /usr/lib/systemd/system/kubelet.service
+              {% endif %}
+
+        - name: "Verify containerd systemd service unit exists"
+          stat:
+            path: /lib/systemd/system/containerd.service
+          register: containerd_service_unit
+
+        - name: "Alternative containerd service unit location check"
+          stat:
+            path: /usr/lib/systemd/system/containerd.service
+          register: containerd_service_unit_alt
+          when: not containerd_service_unit.stat.exists
+
+        - name: "Verify containerd service unit was found"
+          fail:
+            msg: |
+              containerd.service unit file not found in expected locations:
+              - /lib/systemd/system/containerd.service  
+              - /usr/lib/systemd/system/containerd.service
+              This indicates a failed containerd package installation.
+          when:
+            - not containerd_service_unit.stat.exists
+            - not (containerd_service_unit_alt.stat.exists | default(false))
 
     - name: "Disable swap"
       shell: |
@@ -211,12 +318,110 @@
       systemd:
         name: kubelet
         enabled: yes
+      register: kubelet_enable_result
+      failed_when: false
+
+    - name: "Verify kubelet service can be enabled"
+      block:
+        - name: "Check kubelet enable result"
+          debug:
+            msg: |
+              kubelet enable result: {{ kubelet_enable_result.enabled | default('unknown') }}
+              kubelet enable failed: {{ kubelet_enable_result.failed | default(false) }}
+              
+        - name: "Handle kubelet enable failure"
+          block:
+            - name: "Reload systemd daemon"
+              systemd:
+                daemon_reload: yes
+                
+            - name: "Retry kubelet enable after daemon reload"
+              systemd:
+                name: kubelet
+                enabled: yes
+              register: kubelet_enable_retry
+              
+            - name: "Final kubelet enable verification"
+              fail:
+                msg: |
+                  Failed to enable kubelet service even after systemd daemon reload.
+                  This indicates a serious kubelet installation issue.
+                  kubelet enable error: {{ kubelet_enable_result.msg | default('Unknown error') }}
+                  kubelet retry error: {{ kubelet_enable_retry.msg | default('Unknown error') }}
+              when: kubelet_enable_retry.failed | default(false)
+              
+          when: kubelet_enable_result.failed | default(false)
+
+        - name: "Verify kubelet service is properly enabled"
+          shell: systemctl is-enabled kubelet
+          register: kubelet_enabled_check
+          failed_when: kubelet_enabled_check.stdout != "enabled"
 
     - name: "Ensure kubelet service directory exists"
       file:
         path: /etc/systemd/system/kubelet.service.d
         state: directory
         mode: '0755'
+
+    - name: "Comprehensive CNI plugin installation for all nodes"
+      block:
+        - name: "Download and install Flannel CNI plugin binary"
+          get_url:
+            url: "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel2/flannel-amd64"
+            dest: /opt/cni/bin/flannel
+            mode: '0755'
+            timeout: 60
+          retries: 3
+          delay: 10
+          until: flannel_download is succeeded
+          register: flannel_download
+
+        - name: "Download and install additional CNI plugins"
+          unarchive:
+            src: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+            dest: /opt/cni/bin
+            remote_src: yes
+            creates: /opt/cni/bin/bridge
+            owner: root
+            group: root
+            mode: '0755'
+          retries: 3
+          delay: 10
+          register: cni_plugins_download
+          until: cni_plugins_download is succeeded
+
+        - name: "Verify essential CNI plugins are installed"
+          shell: |
+            echo "=== Verifying CNI Plugin Installation ==="
+            required_plugins=("bridge" "host-local" "loopback" "flannel")
+            all_found=true
+            
+            for plugin in "${required_plugins[@]}"; do
+              if [ -f "/opt/cni/bin/$plugin" ] && [ -x "/opt/cni/bin/$plugin" ]; then
+                echo "✓ $plugin plugin installed and executable"
+              else
+                echo "✗ $plugin plugin missing or not executable"
+                all_found=false
+              fi
+            done
+            
+            if [ "$all_found" = "true" ]; then
+              echo "✅ All required CNI plugins verified successfully"
+            else
+              echo "❌ Some CNI plugins are missing"
+              exit 1
+            fi
+            
+            # Show all installed CNI plugins
+            echo ""
+            echo "All installed CNI plugins:"
+            ls -la /opt/cni/bin/
+          register: cni_verification
+          failed_when: cni_verification.rc != 0
+
+        - name: "Display CNI plugin verification results"
+          debug:
+            msg: "{{ cni_verification.stdout_lines | join('\n') }}"
 
     # Note: Removed static kubelet configuration that conflicted with kubeadm join process
     # kubeadm init (control plane) and kubeadm join (workers) will handle kubelet configuration
@@ -226,6 +431,109 @@
     - name: reload systemd
       systemd:
         daemon_reload: yes
+
+# Worker Node Installation Verification
+- name: "Comprehensive Worker Node Installation Verification"
+  hosts: storage_nodes:compute_nodes
+  become: true
+  tasks:
+    - name: "Verify complete worker node setup"
+      block:
+        - name: "Check all required Kubernetes services and packages"
+          shell: |
+            echo "=== Worker Node Installation Verification ==="
+            echo "Node: {{ ansible_hostname }} ({{ ansible_default_ipv4.address }})"
+            echo "Timestamp: $(date)"
+            echo ""
+            
+            # Check package installation
+            echo "=== Package Verification ==="
+            all_packages_ok=true
+            for pkg in kubelet kubeadm kubectl containerd; do
+              if command -v "$pkg" >/dev/null 2>&1; then
+                version=$($pkg --version 2>/dev/null | head -1 || echo "Version check failed")
+                echo "✓ $pkg: $version"
+              else
+                echo "✗ $pkg: NOT FOUND"
+                all_packages_ok=false
+              fi
+            done
+            
+            # Check service units
+            echo ""
+            echo "=== Service Unit Verification ==="
+            for service in kubelet containerd; do
+              if systemctl list-unit-files | grep -q "^${service}.service"; then
+                status=$(systemctl is-enabled $service 2>/dev/null || echo "unknown")
+                echo "✓ ${service}.service unit exists (enabled: $status)"
+              else
+                echo "✗ ${service}.service unit NOT FOUND"
+                all_packages_ok=false
+              fi
+            done
+            
+            # Check CNI plugins
+            echo ""
+            echo "=== CNI Plugin Verification ==="
+            cni_plugins_ok=true
+            required_plugins=("bridge" "host-local" "loopback" "flannel")
+            for plugin in "${required_plugins[@]}"; do
+              if [ -f "/opt/cni/bin/$plugin" ] && [ -x "/opt/cni/bin/$plugin" ]; then
+                echo "✓ CNI plugin: $plugin"
+              else
+                echo "✗ CNI plugin missing: $plugin"
+                cni_plugins_ok=false
+              fi
+            done
+            
+            # Check directories
+            echo ""
+            echo "=== Directory Structure Verification ==="
+            dirs_ok=true
+            required_dirs=("/opt/cni/bin" "/etc/cni/net.d" "/var/lib/kubelet" "/etc/systemd/system/kubelet.service.d")
+            for dir in "${required_dirs[@]}"; do
+              if [ -d "$dir" ]; then
+                echo "✓ Directory exists: $dir"
+              else
+                echo "✗ Directory missing: $dir"
+                dirs_ok=false
+              fi
+            done
+            
+            # Check containerd configuration
+            echo ""
+            echo "=== Containerd Configuration Verification ==="
+            containerd_ok=true
+            if [ -f "/etc/containerd/config.toml" ]; then
+              echo "✓ containerd config exists"
+              if grep -q "SystemdCgroup = true" /etc/containerd/config.toml; then
+                echo "✓ containerd cgroup driver configured"
+              else
+                echo "⚠ containerd cgroup driver may not be properly configured"
+              fi
+            else
+              echo "✗ containerd config missing"
+              containerd_ok=false
+            fi
+            
+            # Overall status
+            echo ""
+            echo "=== Overall Status ==="
+            if [ "$all_packages_ok" = "true" ] && [ "$cni_plugins_ok" = "true" ] && [ "$dirs_ok" = "true" ] && [ "$containerd_ok" = "true" ]; then
+              echo "✅ Worker node installation verification PASSED"
+              echo "Node is ready for cluster join"
+              exit 0
+            else
+              echo "❌ Worker node installation verification FAILED"
+              echo "Some components are missing or misconfigured"
+              exit 1
+            fi
+          register: worker_verification
+          failed_when: worker_verification.rc != 0
+
+        - name: "Display worker node verification results"
+          debug:
+            msg: "{{ worker_verification.stdout_lines | join('\n') }}"
 
 # Control plane initialization
 - name: "Initialize Kubernetes Control Plane"
@@ -868,8 +1176,10 @@
             # Validate containerd is properly initialized for wiped workers
             if ! systemctl is-active containerd >/dev/null 2>&1; then
               echo "ERROR: containerd is not running"
+              systemctl status containerd --no-pager || true
               exit 1
             fi
+            echo "✓ containerd service is active"
             
             # Configure crictl to communicate with containerd before validation
             echo "Configuring crictl for containerd communication..."
@@ -882,63 +1192,88 @@
             EOF
             echo "✓ crictl configuration created"
             
-            # Ensure containerd can communicate with CRI with robust retry logic
+            # Test crictl communication with containerd with timeout protection
             echo "Testing crictl communication with containerd..."
-            if ! crictl info >/dev/null 2>&1; then
-              echo "WARNING: crictl cannot communicate with containerd, attempting fix..."
+            crictl_timeout=30  # 30 second timeout for crictl operations
+            
+            # Use timeout command to prevent crictl from hanging indefinitely
+            if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
+              echo "✓ crictl communication working"
+            else
+              echo "WARNING: crictl cannot communicate with containerd within ${crictl_timeout}s"
+              echo "Attempting containerd restart..."
               
-              # First ensure containerd is actually running properly
-              if ! systemctl is-active containerd >/dev/null 2>&1; then
-                echo "containerd service is not active, starting it..."
-                systemctl start containerd
-              else
-                echo "containerd service is active but CRI interface not responding, restarting..."
-                systemctl restart containerd
-              fi
+              # Try restarting containerd and wait for it to be ready
+              systemctl restart containerd
+              sleep 10
               
-              # Wait for containerd to fully initialize with retry logic
-              echo "Waiting for containerd to fully initialize..."
+              # Retry crictl communication with timeout
               retry_count=0
-              max_retries=6
+              max_retries=3
               while [ $retry_count -lt $max_retries ]; do
-                sleep 5
-                if crictl info >/dev/null 2>&1; then
-                  echo "✓ containerd CRI interface is now working (attempt $((retry_count + 1)))"
+                if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
+                  echo "✓ crictl communication restored after restart (attempt $((retry_count + 1)))"
                   break
                 else
                   echo "  Waiting for containerd... ($((retry_count + 1))/$max_retries)"
+                  sleep 5
                   retry_count=$((retry_count + 1))
                 fi
               done
               
-              # Final check after all retries
               if [ $retry_count -eq $max_retries ]; then
-                echo "ERROR: containerd CRI interface still not working after $((max_retries * 5)) seconds"
+                echo "ERROR: crictl still cannot communicate with containerd after restart"
                 echo "This indicates a persistent containerd configuration issue"
+                systemctl status containerd --no-pager || true
                 exit 1
               fi
-            else
-              echo "✓ crictl communication already working"
             fi
             
             # Initialize containerd image filesystem for kubelet
             echo "Initializing containerd image filesystem..."
             ctr namespace create k8s.io 2>/dev/null || true
-            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
-            echo "✓ containerd image filesystem initialized"
             
-            # Check network connectivity to control-plane
+            # Use timeout for ctr operations to prevent hanging
+            if timeout 15 ctr --namespace k8s.io images ls >/dev/null 2>&1; then
+              echo "✓ containerd image filesystem initialized"
+            else
+              echo "WARNING: containerd image filesystem initialization timed out"
+              echo "This may cause kubelet join issues"
+            fi
+            
+            # Check network connectivity to control-plane with timeout
             echo "Testing connectivity to control-plane..."
-            if ! timeout 10 bash -c "</dev/tcp/{{ control_plane_ip }}/6443" 2>/dev/null; then
+            if timeout 10 bash -c "</dev/tcp/{{ control_plane_ip }}/6443" 2>/dev/null; then
+              echo "✓ Control-plane connectivity verified"
+            else
               echo "ERROR: Cannot connect to control-plane API server at {{ control_plane_ip }}:6443"
+              echo "Network connectivity test failed"
               exit 1
             fi
-            echo "✓ Control-plane connectivity verified"
             
-            echo "✓ Pre-join validation passed successfully"
+            echo "✅ Pre-join validation completed successfully"
           register: pre_join_validation
-          async: 60
-          poll: 5
+          async: 120  # Increased from 60 to 120 seconds
+          poll: 0     # Start async, we'll check status with async_status
+
+        - name: "Wait for pre-join validation to complete"
+          async_status:
+            jid: "{{ pre_join_validation.ansible_job_id }}"
+          register: pre_join_result
+          until: pre_join_result.finished
+          retries: 24  # 24 * 5 = 120 seconds maximum wait
+          delay: 5
+          failed_when: pre_join_result.rc != 0
+
+        - name: "Display pre-join validation results"
+          debug:
+            msg: |
+              Pre-join validation completed:
+              Exit code: {{ pre_join_result.rc }}
+              Output: {{ pre_join_result.stdout_lines | join('\n              ') }}
+              {% if pre_join_result.stderr_lines is defined and pre_join_result.stderr_lines %}
+              Errors: {{ pre_join_result.stderr_lines | join('\n              ') }}
+              {% endif %}
 
         - name: "Execute enhanced join process for wiped worker"
           shell: |
@@ -966,7 +1301,7 @@
           debug:
             msg: |
               Enhanced Join Results for Post-Wipe Worker:
-              Pre-validation: {{ pre_join_validation.stdout_lines | join('\n              ') }}
+              Pre-validation: {{ pre_join_result.stdout_lines | join('\n              ') }}
               
               Join execution:
               Exit Code: {{ enhanced_join_result.rc }}
