@@ -379,6 +379,83 @@
             group: root
             mode: '0644'
 
+        - name: "Ensure containerd socket permissions and group access"
+          block:
+            - name: "Create containerd group for socket access"
+              group:
+                name: containerd
+                state: present
+
+            - name: "Add root user to containerd group for socket access"
+              user:
+                name: root
+                groups: containerd
+                append: yes
+
+            - name: "Set up containerd socket permissions monitoring"
+              shell: |
+                # Function to ensure proper socket permissions
+                ensure_socket_perms() {
+                  if [ -S /run/containerd/containerd.sock ]; then
+                    chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+                    chmod 660 /run/containerd/containerd.sock 2>/dev/null || true
+                    echo "✓ Containerd socket permissions updated"
+                  else
+                    echo "WARNING: Containerd socket not found"
+                    return 1
+                  fi
+                }
+                
+                # Ensure socket permissions are correct
+                ensure_socket_perms
+              register: socket_perms_result
+              failed_when: false
+
+            - name: "Test crictl communication with containerd"
+              shell: |
+                # Test crictl communication with proper error handling
+                if crictl version >/dev/null 2>&1; then
+                  echo "✓ crictl communication successful"
+                  crictl version
+                  exit 0
+                else
+                  echo "WARNING: crictl communication failed"
+                  echo "Attempting to fix socket permissions..."
+                  
+                  # Wait for containerd socket to be ready
+                  retry_count=0
+                  max_retries=10
+                  while [ $retry_count -lt $max_retries ]; do
+                    if [ -S /run/containerd/containerd.sock ]; then
+                      chgrp containerd /run/containerd/containerd.sock 2>/dev/null || true
+                      chmod 660 /run/containerd/containerd.sock 2>/dev/null || true
+                      
+                      if crictl version >/dev/null 2>&1; then
+                        echo "✓ crictl communication restored after socket fix"
+                        crictl version
+                        exit 0
+                      fi
+                    fi
+                    
+                    echo "Waiting for containerd socket... ($((retry_count + 1))/$max_retries)"
+                    sleep 2
+                    ((retry_count++))
+                  done
+                  
+                  echo "ERROR: crictl still cannot communicate with containerd"
+                  exit 1
+                fi
+              register: crictl_test_result
+              failed_when: crictl_test_result.rc != 0
+
+            - name: "Display crictl communication status"
+              debug:
+                msg: |
+                  Crictl Communication Status:
+                  {{ crictl_test_result.stdout_lines | join('\n                  ') }}
+                  
+                  Socket permissions properly configured for worker node join.
+
         - name: "Wait for containerd to fully initialize"
           pause:
             seconds: 10
@@ -1356,6 +1433,103 @@
 
     - name: "Enhanced kubeadm join with post-wipe worker support"
       block:
+        - name: "Pre-join kubelet config validation and remediation"
+          block:
+            - name: "Check if kubelet config already exists"
+              stat:
+                path: /var/lib/kubelet/config.yaml
+              register: existing_kubelet_config
+
+            - name: "Validate existing kubelet config if present"
+              shell: |
+                echo "=== Existing Kubelet Configuration Validation ==="
+                if [ -f /var/lib/kubelet/config.yaml ]; then
+                  echo "kubelet config.yaml exists"
+                  
+                  # Check if kubelet config points to correct control plane
+                  if [ -f /etc/kubernetes/kubelet.conf ]; then
+                    config_server=$(grep "server:" /etc/kubernetes/kubelet.conf 2>/dev/null | awk '{print $2}' | sed 's|https://||' | cut -d':' -f1 || echo "")
+                    expected_server="{{ control_plane_ip }}"
+                    
+                    if [ "$config_server" = "$expected_server" ]; then
+                      echo "✓ kubelet config points to correct control plane: $config_server"
+                      
+                      # Check if kubelet is running properly with this config
+                      if systemctl is-active kubelet >/dev/null 2>&1; then
+                        if ! journalctl -u kubelet --no-pager --since "5 minutes ago" | grep -q "standalone"; then
+                          echo "✓ kubelet is running in cluster mode - join may not be needed"
+                          echo "KUBELET_ALREADY_JOINED=true"
+                          exit 0
+                        else
+                          echo "WARNING: kubelet config exists but kubelet is in standalone mode"
+                          echo "KUBELET_CONFIG_INVALID=true"
+                        fi
+                      else
+                        echo "WARNING: kubelet config exists but kubelet is not running"
+                        echo "KUBELET_CONFIG_INVALID=true"
+                      fi
+                    else
+                      echo "WARNING: kubelet config points to wrong server: $config_server (expected: $expected_server)"
+                      echo "KUBELET_CONFIG_INVALID=true"
+                    fi
+                  else
+                    echo "WARNING: kubelet config.yaml exists but kubelet.conf missing"
+                    echo "KUBELET_CONFIG_INVALID=true"
+                  fi
+                else
+                  echo "kubelet config.yaml does not exist - fresh join needed"
+                  echo "KUBELET_CONFIG_MISSING=true"
+                fi
+              register: kubelet_config_validation
+              when: existing_kubelet_config.stat.exists
+
+            - name: "Handle invalid kubelet configuration"
+              block:
+                - name: "Backup invalid kubelet configuration"
+                  shell: |
+                    timestamp=$(date +%Y%m%d-%H%M%S)
+                    backup_dir="/tmp/kubelet-config-backup-$timestamp"
+                    mkdir -p "$backup_dir"
+                    
+                    # Backup existing config files
+                    [ -f /var/lib/kubelet/config.yaml ] && cp /var/lib/kubelet/config.yaml "$backup_dir/"
+                    [ -f /etc/kubernetes/kubelet.conf ] && cp /etc/kubernetes/kubelet.conf "$backup_dir/"
+                    [ -f /var/lib/kubelet/kubeadm-flags.env ] && cp /var/lib/kubelet/kubeadm-flags.env "$backup_dir/"
+                    
+                    echo "Kubelet config backed up to: $backup_dir"
+                    echo "BACKUP_DIR=$backup_dir"
+
+                - name: "Reset invalid kubelet configuration"
+                  shell: |
+                    echo "Resetting invalid kubelet configuration..."
+                    
+                    # Stop kubelet
+                    systemctl stop kubelet 2>/dev/null || true
+                    
+                    # Remove invalid config files
+                    rm -f /var/lib/kubelet/config.yaml
+                    rm -f /etc/kubernetes/kubelet.conf
+                    rm -f /etc/kubernetes/bootstrap-kubelet.conf
+                    rm -f /var/lib/kubelet/kubeadm-flags.env
+                    
+                    # Reset kubelet systemd state
+                    systemctl reset-failed kubelet 2>/dev/null || true
+                    
+                    echo "✓ Invalid kubelet configuration reset"
+                  
+              when: 
+                - existing_kubelet_config.stat.exists
+                - kubelet_config_validation.stdout is defined
+                - '"KUBELET_CONFIG_INVALID=true" in kubelet_config_validation.stdout'
+
+            - name: "Skip join if kubelet already properly joined"
+              set_fact:
+                skip_join_process: true
+              when: 
+                - existing_kubelet_config.stat.exists
+                - kubelet_config_validation.stdout is defined
+                - '"KUBELET_ALREADY_JOINED=true" in kubelet_config_validation.stdout'
+
         - name: "Copy pre-join validation script to worker"
           copy:
             src: "../../scripts/ansible_pre_join_validation.sh"
@@ -1393,6 +1567,7 @@
             export MASTER_IP="{{ control_plane_ip }}"
             export JOIN_TIMEOUT=120
             export MAX_RETRIES=3
+            export TOKEN_REFRESH_RETRIES=2
             
             # Extract base join command from script (remove "$@" placeholder)
             JOIN_COMMAND=$(grep -v '^#' /tmp/kubeadm-join.sh | grep kubeadm | head -1 | sed 's/ "\$@"$//')
@@ -1402,13 +1577,23 @@
             echo "Master IP: $MASTER_IP"
             echo "Timeout: ${JOIN_TIMEOUT}s"
             echo "Max retries: $MAX_RETRIES"
+            echo "Token refresh retries: $TOKEN_REFRESH_RETRIES"
             echo ""
             
             # Run enhanced join process with properly quoted command
             /tmp/enhanced_kubeadm_join.sh "$JOIN_COMMAND"
           register: enhanced_join_result
           failed_when: enhanced_join_result.rc != 0
+          when: not (skip_join_process | default(false))
           
+        - name: "Display join skip message"
+          debug:
+            msg: |
+              ✅ Kubelet already properly joined to cluster
+              Skipping join process as node is already connected to control plane.
+              Kubelet is running in cluster mode and configuration is valid.
+          when: skip_join_process | default(false)
+
         - name: "Display enhanced join results for wiped worker"
           debug:
             msg: |
@@ -1423,6 +1608,98 @@
               {% if enhanced_join_result.stderr %}
               Errors: {{ enhanced_join_result.stderr }}
               {% endif %}
+          when: not (skip_join_process | default(false))
+          
+        - name: "Handle join failures with comprehensive logging"
+          block:
+            - name: "Gather detailed failure diagnostics"
+              shell: |
+                echo "=== Join Failure Diagnostics ==="
+                echo "Timestamp: $(date)"
+                echo "Node: {{ ansible_hostname }}"
+                echo ""
+                
+                echo "=== Join Log Files ==="
+                find /tmp -name "kubeadm-join-*.log" -type f -exec echo "File: {}" \; -exec cat {} \; 2>/dev/null || echo "No join log files found"
+                echo ""
+                
+                echo "=== Recent Kubelet Logs ==="
+                journalctl -u kubelet --no-pager -l --since "30 minutes ago" | tail -50 || echo "No kubelet logs available"
+                echo ""
+                
+                echo "=== Recent Containerd Logs ==="
+                journalctl -u containerd --no-pager -l --since "30 minutes ago" | tail -50 || echo "No containerd logs available"
+                echo ""
+                
+                echo "=== Kubelet Service Status ==="
+                systemctl status kubelet --no-pager -l || true
+                echo ""
+                
+                echo "=== Containerd Service Status ==="
+                systemctl status containerd --no-pager -l || true
+                echo ""
+                
+                echo "=== Configuration Files ==="
+                echo "crictl.yaml:"
+                cat /etc/crictl.yaml 2>/dev/null || echo "File not found"
+                echo ""
+                echo "kubelet config.yaml:"
+                cat /var/lib/kubelet/config.yaml 2>/dev/null || echo "File not found"
+                echo ""
+                echo "kubelet.conf:"
+                cat /etc/kubernetes/kubelet.conf 2>/dev/null || echo "File not found"
+                echo ""
+                
+                echo "=== Socket Information ==="
+                ls -la /run/containerd/ 2>/dev/null || echo "Containerd runtime directory not found"
+                echo ""
+                
+                echo "=== CRI Status ==="
+                crictl info 2>/dev/null || echo "CRI info failed"
+                echo ""
+              register: failure_diagnostics
+              when: enhanced_join_result.failed | default(false)
+              
+            - name: "Create comprehensive failure report"
+              fail:
+                msg: |
+                  ❌ Worker node join failed after all retry attempts
+                  
+                  Join Command: {{ enhanced_join_result.cmd | default('Unknown') }}
+                  Exit Code: {{ enhanced_join_result.rc | default('Unknown') }}
+                  
+                  === DETAILED FAILURE DIAGNOSTICS ===
+                  {{ failure_diagnostics.stdout | default('No diagnostics available') }}
+                  
+                  === REMEDIATION STEPS ===
+                  1. Check containerd socket permissions:
+                     sudo ls -la /run/containerd/
+                     sudo chmod 660 /run/containerd/containerd.sock
+                     sudo chgrp containerd /run/containerd/containerd.sock
+                  
+                  2. Test crictl communication:
+                     sudo crictl version
+                     sudo crictl info
+                  
+                  3. Check for containerd filesystem issues:
+                     sudo ./scripts/manual_containerd_filesystem_fix.sh
+                  
+                  4. Gather comprehensive diagnostics:
+                     sudo ./scripts/gather_worker_diagnostics.sh
+                  
+                  5. Manual join attempt:
+                     Check control plane: kubeadm token create --print-join-command
+                     Run enhanced join: sudo ./scripts/enhanced_kubeadm_join.sh "<join-command>"
+                  
+                  === LOG FILES TO REVIEW ===
+                  - /tmp/kubeadm-join-*.log
+                  - journalctl -u kubelet -f
+                  - journalctl -u containerd -f
+              when: enhanced_join_result.failed | default(false)
+              
+          when: 
+            - not (skip_join_process | default(false))
+            - enhanced_join_result.failed | default(false)
 
       when: not kubelet_conf.stat.exists
 

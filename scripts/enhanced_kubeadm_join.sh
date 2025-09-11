@@ -61,7 +61,8 @@ run_crictl() {
 # Configuration
 MASTER_IP="${MASTER_IP:-192.168.4.63}"
 JOIN_TIMEOUT="${JOIN_TIMEOUT:-90}"
-MAX_RETRIES="${MAX_RETRIES:-2}"
+MAX_RETRIES="${MAX_RETRIES:-3}"
+TOKEN_REFRESH_RETRIES="${TOKEN_REFRESH_RETRIES:-2}"
 LOG_FILE="/tmp/kubeadm-join-$(date +%Y%m%d-%H%M%S).log"
 
 echo "=== VMStation Enhanced Kubeadm Join Process ==="
@@ -165,7 +166,93 @@ detect_post_wipe_state() {
     fi
 }
 
-# Function to run prerequisite validation
+# Function to refresh join token from control plane
+refresh_join_token() {
+    local original_command="$1"
+    local attempt="$2"
+    
+    info "Attempting to refresh join token from control plane (attempt $attempt)..."
+    
+    # Extract the discovery token CA cert hash from original command
+    local ca_cert_hash=$(echo "$original_command" | grep -oE '--discovery-token-ca-cert-hash sha256:[a-f0-9]+' || echo "")
+    
+    if [ -z "$ca_cert_hash" ]; then
+        error "Cannot extract CA cert hash from original join command"
+        return 1
+    fi
+    
+    # Generate new token on control plane
+    info "Generating fresh join token on control plane $MASTER_IP..."
+    local new_join_command
+    
+    # Try to generate new token via SSH
+    if command -v ssh >/dev/null 2>&1; then
+        # First try SSH key authentication
+        new_join_command=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@"$MASTER_IP" \
+            "kubeadm token create --ttl=2h --print-join-command" 2>/dev/null || echo "")
+        
+        if [ -z "$new_join_command" ]; then
+            # Try with password authentication if key auth fails
+            info "SSH key authentication failed, please manually refresh token on control plane"
+            warn "Run on control plane: kubeadm token create --ttl=2h --print-join-command"
+            return 1
+        fi
+    else
+        warn "SSH not available for automatic token refresh"
+        warn "Please manually refresh token on control plane and retry"
+        return 1
+    fi
+    
+    if [[ "$new_join_command" == kubeadm* ]] && [[ "$new_join_command" == *"$MASTER_IP"* ]]; then
+        info "✅ Successfully generated fresh join token"
+        log_both "New join command: $new_join_command"
+        echo "$new_join_command"
+        return 0
+    else
+        error "Failed to generate valid join command from control plane"
+        error "Response: $new_join_command"
+        return 1
+    fi
+}
+
+# Function to check if join failure is due to token expiry
+check_token_expiry() {
+    local join_output="$1"
+    
+    # Check for common token expiry error patterns
+    if echo "$join_output" | grep -qi "token.*expired\|token.*invalid\|unauthorized\|forbidden\|401\|403"; then
+        return 0  # Token likely expired
+    fi
+    
+    # Check kubelet logs for TLS Bootstrap failures that might indicate token issues
+    if journalctl -u kubelet --no-pager --since "5 minutes ago" | grep -qi "unauthorized\|forbidden\|certificate"; then
+        return 0  # Likely token or certificate issue
+    fi
+    
+    return 1  # Not a token expiry issue
+}
+
+# Function to validate kubelet config exists and is correct
+validate_kubelet_config() {
+    info "Validating kubelet configuration..."
+    
+    # Check if kubelet config was created
+    if [ ! -f /var/lib/kubelet/config.yaml ]; then
+        error "kubelet config.yaml not found after join attempt"
+        error "This indicates kubeadm join did not complete successfully"
+        return 1
+    fi
+    
+    # Check if kubelet config points to correct control plane
+    local config_server=$(grep "server:" /etc/kubernetes/kubelet.conf 2>/dev/null | awk '{print $2}' | sed 's|https://||' | cut -d':' -f1 || echo "")
+    if [ "$config_server" != "$MASTER_IP" ]; then
+        error "kubelet config points to wrong server: $config_server (expected: $MASTER_IP)"
+        return 1
+    fi
+    
+    info "✅ kubelet configuration validated successfully"
+    return 0
+}
 validate_prerequisites() {
     info "Running comprehensive prerequisite validation..."
     
@@ -654,8 +741,13 @@ EOF
     echo "exec $1" >> "$join_wrapper"
     chmod +x "$join_wrapper"
     
-    # Execute join using the wrapper script
-    if bash -c "timeout $((JOIN_TIMEOUT + 60)) $join_wrapper" 2>&1 | tee -a "$LOG_FILE"; then
+    # Execute join using the wrapper script and capture output
+    local join_result=0
+    local join_output=""
+    
+    join_output=$(bash -c "timeout $((JOIN_TIMEOUT + 60)) $join_wrapper" 2>&1 | tee -a "$LOG_FILE") || join_result=$?
+    
+    if [ $join_result -eq 0 ]; then
         # Wait for monitor to complete with timeout to prevent hanging
         local wait_timeout=30
         info "Waiting up to ${wait_timeout}s for kubelet monitoring to complete..."
@@ -688,17 +780,15 @@ EOF
             return 1
         fi
         
-        # Check monitor result
-        if [ $monitor_result -eq 0 ]; then
+        # Check monitor result and validate kubelet config
+        if [ $monitor_result -eq 0 ] && validate_kubelet_config; then
             info "✅ kubeadm join completed successfully!"
             return 0
         else
-            warn "kubeadm join command succeeded but kubelet monitoring failed"
+            warn "kubeadm join command succeeded but validation failed"
             return 1
         fi
     else
-        local join_result=$?
-        
         # Kill monitoring process immediately on join failure
         if kill -0 $monitor_pid 2>/dev/null; then
             kill $monitor_pid 2>/dev/null || true
@@ -708,7 +798,23 @@ EOF
             kill -9 $monitor_pid 2>/dev/null || true
         fi
         
+        # Check if this is a token expiry issue and attempt token refresh
+        if check_token_expiry "$join_output" && [ $attempt -le $TOKEN_REFRESH_RETRIES ]; then
+            warn "Detected potential token expiry issue"
+            info "Attempting to refresh join token and retry..."
+            
+            local new_join_command
+            if new_join_command=$(refresh_join_token "$join_command" $attempt); then
+                info "Token refreshed successfully, retrying join with new token..."
+                # Recursive call with new token (but same attempt number)
+                return $(perform_join "$new_join_command" $attempt)
+            else
+                warn "Failed to refresh token, continuing with original retry logic"
+            fi
+        fi
+        
         error "kubeadm join command failed with exit code: $join_result"
+        log_both "Join output: $join_output"
         return $join_result
     fi
 }
