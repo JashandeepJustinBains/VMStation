@@ -1380,7 +1380,7 @@
             
             # Test crictl communication with containerd with timeout protection
             echo "Testing crictl communication with containerd..."
-            crictl_timeout=30  # 30 second timeout for crictl operations
+            crictl_timeout=60  # 60 second timeout for crictl operations (increased from 30s)
             
             # Use timeout command to prevent crictl from hanging indefinitely
             if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
@@ -1391,18 +1391,26 @@
               
               # Try restarting containerd and wait for it to be ready
               systemctl restart containerd
-              sleep 10
+              sleep 20  # Increased wait time from 10s to 20s for better initialization
               
-              # Retry crictl communication with timeout
+              # Initialize containerd image filesystem to prevent communication issues
+              echo "Initializing containerd image filesystem..."
+              ctr namespace create k8s.io 2>/dev/null || true
+              ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+              sleep 5
+              
+              # Retry crictl communication with timeout and improved backoff
               retry_count=0
-              max_retries=3
+              max_retries=5  # Increased from 3 to 5 retries
               while [ $retry_count -lt $max_retries ]; do
                 if timeout $crictl_timeout crictl info >/dev/null 2>&1; then
                   echo "✓ crictl communication restored after restart (attempt $((retry_count + 1)))"
                   break
                 else
                   echo "  Waiting for containerd... ($((retry_count + 1))/$max_retries)"
-                  sleep 5
+                  # Progressive backoff: 8s, 12s, 16s, 20s
+                  sleep_time=$((8 + retry_count * 4))
+                  sleep $sleep_time
                   retry_count=$((retry_count + 1))
                 fi
               done
@@ -1439,7 +1447,7 @@
             
             echo "✅ Pre-join validation completed successfully"
           register: pre_join_validation
-          async: 120  # Increased from 60 to 120 seconds
+          async: 180  # Increased from 120 to 180 seconds due to increased timeouts
           poll: 0     # Start async, we'll check status with async_status
 
         - name: "Wait for pre-join validation to complete"
@@ -1447,7 +1455,7 @@
             jid: "{{ pre_join_validation.ansible_job_id }}"
           register: pre_join_result
           until: pre_join_result.finished
-          retries: 24  # 24 * 5 = 120 seconds maximum wait
+          retries: 36  # 36 * 5 = 180 seconds maximum wait (increased from 24)
           delay: 5
           failed_when: pre_join_result.rc != 0
 
