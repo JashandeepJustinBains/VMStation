@@ -472,7 +472,7 @@
         - name: "Fallback: Download Flannel CNI plugin with curl"
           shell: |
             curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
-              -o /opt/cni/bin/flannel --retry 3 --retry-delay 10
+              -o /opt/cni/bin/flannel --retry 3 --retry-delay 10 --connect-timeout 30 --max-time 120
             chmod 755 /opt/cni/bin/flannel
           when: flannel_download.failed and ('cert_file' in flannel_download.msg or 'urllib3' in flannel_download.msg or 'ssl' in flannel_download.msg or 'certificate' in flannel_download.msg)
           register: flannel_curl_download
@@ -480,7 +480,7 @@
         - name: "Enhanced fallback: Download Flannel CNI plugin with wget"
           shell: |
             wget -O /opt/cni/bin/flannel "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
-              --no-check-certificate --retry-connrefused --tries=3
+              --no-check-certificate --retry-connrefused --tries=3 --timeout=30 --dns-timeout=10
             chmod 755 /opt/cni/bin/flannel
           when: 
             - flannel_download.failed 
@@ -533,7 +533,7 @@
               shell: |
                 rm -f /opt/cni/bin/flannel
                 curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
-                  -o /opt/cni/bin/flannel --retry 2 --retry-delay 5
+                  -o /opt/cni/bin/flannel --retry 2 --retry-delay 5 --connect-timeout 30 --max-time 120
                 chmod 755 /opt/cni/bin/flannel
               when: >
                 flannel_diagnostics.stdout is search("File exists. NO") or 
@@ -800,7 +800,7 @@
 
     - name: "Check if Flannel CNI is already installed"
       shell: |
-        kubectl get namespace kube-flannel >/dev/null 2>&1
+        timeout 30 kubectl get namespace kube-flannel >/dev/null 2>&1
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_exists
@@ -808,7 +808,7 @@
 
     - name: "Install Flannel CNI"
       shell: |
-        kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+        timeout 60 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_install
@@ -816,25 +816,28 @@
       delay: 10
       until: flannel_install.rc == 0
       when: flannel_exists.rc != 0
+      async: 120
+      poll: 5
 
     - name: "Wait for Flannel DaemonSet to be created"
       shell: |
-        kubectl get daemonset -n kube-flannel kube-flannel-ds
+        timeout 30 kubectl get daemonset -n kube-flannel kube-flannel-ds
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_ds_check
-      retries: 10
-      delay: 5
+      retries: 6
+      delay: 10
       until: flannel_ds_check.rc == 0
       when: flannel_exists.rc != 0
+      failed_when: false
 
     - name: "Ensure CoreDNS has correct replica count"
       shell: |
         # Check current CoreDNS replica count
-        current_replicas=$(kubectl get deployment coredns -n kube-system -o jsonpath='{.spec.replicas}')
+        current_replicas=$(timeout 30 kubectl get deployment coredns -n kube-system -o jsonpath='{.spec.replicas}')
         if [ "$current_replicas" != "1" ]; then
           echo "Scaling CoreDNS from $current_replicas to 1 replica"
-          kubectl scale deployment coredns -n kube-system --replicas=1
+          timeout 60 kubectl scale deployment coredns -n kube-system --replicas=1
         else
           echo "CoreDNS already has correct replica count: $current_replicas"
         fi
@@ -846,10 +849,10 @@
     - name: "Check Flannel namespace and resources"
       shell: |
         echo "Checking Flannel deployment status:"
-        kubectl get namespace kube-flannel
-        kubectl get all -n kube-flannel
+        timeout 30 kubectl get namespace kube-flannel
+        timeout 30 kubectl get all -n kube-flannel
         echo "Node status:"
-        kubectl get nodes
+        timeout 30 kubectl get nodes
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_status
@@ -892,21 +895,23 @@
         - name: "Reapply Flannel when CNI shows only loopback interface"
           shell: |
             echo "Detected CNI only showing loopback interface - reapplying Flannel"
-            kubectl delete -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml || true
+            timeout 60 kubectl delete -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml || true
             sleep 10
-            kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+            timeout 60 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
           register: flannel_reapply
           when: cni_runtime_analysis.stdout is defined and 'cni_only_loopback=true' in cni_runtime_analysis.stdout
+          async: 180
+          poll: 10
 
     - name: "Check Flannel DaemonSet status"
       shell: |
         echo "=== Flannel DaemonSet and Pod Status ==="
-        kubectl get daemonset,pods -n kube-flannel -l app=flannel -o wide
+        timeout 30 kubectl get daemonset,pods -n kube-flannel -l app=flannel -o wide
         echo ""
         echo "=== Flannel Readiness Check ==="
-        kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' || echo "0"
+        timeout 30 kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' || echo "0"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_ds_status
@@ -966,7 +971,7 @@
 
     - name: "Validate kubernetes-admin RBAC permissions"
       shell: >
-        kubectl auth can-i create secrets --namespace=kube-system
+        timeout 30 kubectl auth can-i create secrets --namespace=kube-system
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: rbac_check
@@ -974,7 +979,7 @@
 
     - name: "Check current authorization mode"
       shell: >
-        kubectl get pods -n kube-system kube-apiserver-* -o jsonpath='{.items[0].spec.containers[0].command}' | 
+        timeout 30 kubectl get pods -n kube-system kube-apiserver-* -o jsonpath='{.items[0].spec.containers[0].command}' | 
         grep -o '\--authorization-mode=[^[:space:]]*' | 
         cut -d= -f2
       environment:
@@ -988,10 +993,10 @@
 
     - name: "Fix kubernetes-admin RBAC if needed"
       shell: |
-        kubectl create clusterrolebinding kubernetes-admin \
+        timeout 60 kubectl create clusterrolebinding kubernetes-admin \
           --clusterrole=cluster-admin \
           --user=kubernetes-admin \
-          --dry-run=client -o yaml | kubectl apply -f -
+          --dry-run=client -o yaml | timeout 60 kubectl apply -f -
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       when: 
@@ -1073,16 +1078,16 @@
 
     - name: "Create RBAC rule for anonymous access to cluster-info configmap"
       shell: |
-        kubectl create clusterrole system:public-info-viewer \
+        timeout 60 kubectl create clusterrole system:public-info-viewer \
           --verb=get --resource=configmaps \
           --resource-name=cluster-info \
-          --dry-run=client -o yaml | kubectl apply -f -
+          --dry-run=client -o yaml | timeout 60 kubectl apply -f -
         
-        kubectl create clusterrolebinding cluster-info \
+        timeout 60 kubectl create clusterrolebinding cluster-info \
           --clusterrole=system:public-info-viewer \
           --group=system:unauthenticated \
           --group=system:authenticated \
-          --dry-run=client -o yaml | kubectl apply -f -
+          --dry-run=client -o yaml | timeout 60 kubectl apply -f -
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       when: cluster_info_rbac_check.stdout != "yes"
@@ -1620,7 +1625,7 @@
         - name: "Fallback: Download Flannel CNI plugin with curl on worker nodes"
           shell: |
             curl -fsSL "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
-              -o /opt/cni/bin/flannel --retry 3 --retry-delay 10
+              -o /opt/cni/bin/flannel --retry 3 --retry-delay 10 --connect-timeout 30 --max-time 120
             chmod 755 /opt/cni/bin/flannel
           when: flannel_download_worker.failed and ('cert_file' in flannel_download_worker.msg or 'urllib3' in flannel_download_worker.msg or 'ssl' in flannel_download_worker.msg or 'certificate' in flannel_download_worker.msg)
           register: flannel_curl_download_worker
@@ -1628,7 +1633,7 @@
         - name: "Enhanced fallback: Download Flannel CNI plugin with wget on worker nodes"
           shell: |
             wget -O /opt/cni/bin/flannel "https://github.com/flannel-io/cni-plugin/releases/download/v1.7.1-flannel1/flannel-amd64" \
-              --no-check-certificate --retry-connrefused --tries=3
+              --no-check-certificate --retry-connrefused --tries=3 --timeout=30 --dns-timeout=10
             chmod 755 /opt/cni/bin/flannel
           when: 
             - flannel_download_worker.failed 
@@ -2010,24 +2015,24 @@
         echo ""
         
         echo "Cluster Nodes:"
-        kubectl get nodes -o wide
+        timeout 30 kubectl get nodes -o wide
         echo ""
         
         echo "Node Readiness Status:"
-        kubectl get nodes -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[3].type,READY:.status.conditions[3].status
+        timeout 30 kubectl get nodes -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[3].type,READY:.status.conditions[3].status
         echo ""
         
         echo "Flannel DaemonSet Status:"
-        kubectl get daemonset -n kube-flannel -o wide
+        timeout 30 kubectl get daemonset -n kube-flannel -o wide
         echo ""
         
         echo "Pod Network Status:"
-        kubectl get pods -n kube-flannel -o wide
+        timeout 30 kubectl get pods -n kube-flannel -o wide
         echo ""
         
         # Count nodes by type
-        total_nodes=$(kubectl get nodes --no-headers | wc -l)
-        ready_nodes=$(kubectl get nodes --no-headers | grep " Ready " | wc -l)
+        total_nodes=$(timeout 30 kubectl get nodes --no-headers | wc -l)
+        ready_nodes=$(timeout 30 kubectl get nodes --no-headers | grep " Ready " | wc -l)
         
         echo "Cluster Summary:"
         echo "- Total nodes: $total_nodes"
