@@ -712,6 +712,8 @@
               echo "Some components are missing or misconfigured"
               exit 1
             fi
+          args:
+            executable: /bin/bash
           register: worker_verification
           failed_when: worker_verification.rc != 0
 
