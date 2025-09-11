@@ -21,6 +21,39 @@ echo "=== VMStation Mixed OS Flannel Download Validation ==="
 echo "Timestamp: $(date)"
 echo ""
 
+# Function to check version consistency between DaemonSet and manual downloads
+check_version_consistency() {
+    local playbook_file="$1"
+    
+    info "Checking Flannel version consistency..."
+    
+    # Check DaemonSet template if it exists
+    local template_file="/home/runner/work/VMStation/VMStation/ansible/plays/kubernetes/templates/kube-flannel-allnodes.yml"
+    if [ -f "$template_file" ]; then
+        local daemonset_version=$(grep "flannel-cni-plugin:" "$template_file" | head -1 | sed 's/.*://' | tr -d ' ')
+        info "DaemonSet uses flannel CNI plugin version: $daemonset_version"
+        
+        # Extract version from manual downloads in playbook
+        local manual_version=$(grep "flannel-io/cni-plugin/releases/download/" "$playbook_file" | head -1 | sed 's/.*download\///' | sed 's/\/flannel-amd64.*//')
+        info "Manual downloads use version: $manual_version"
+        
+        # Compare versions (normalize flannel1 vs flannel2 suffixes)
+        local daemonset_base=$(echo "$daemonset_version" | sed 's/-flannel[0-9]*$//')
+        local manual_base=$(echo "$manual_version" | sed 's/-flannel[0-9]*$//')
+        
+        if [ "$daemonset_base" = "$manual_base" ]; then
+            info "✅ Version bases are consistent ($daemonset_base)"
+            return 0
+        else
+            error "❌ Version mismatch between DaemonSet ($daemonset_version) and manual downloads ($manual_version)"
+            return 1
+        fi
+    else
+        warn "⚠️  DaemonSet template not found, skipping version consistency check"
+        return 0
+    fi
+}
+
 # Function to validate Flannel download consistency
 validate_flannel_downloads() {
     local playbook_file="$1"
@@ -33,18 +66,24 @@ validate_flannel_downloads() {
     # Count Flannel curl fallbacks
     local curl_count=$(grep -c "Fallback.*Download Flannel CNI plugin with curl" "$playbook_file" || echo 0)
     
+    # Count Flannel wget fallbacks
+    local wget_count=$(grep -c "Enhanced fallback.*Download Flannel CNI plugin with wget" "$playbook_file" || echo 0)
+    
     # Count verification tasks
     local verify_count=$(grep -c "Verify Flannel CNI plugin download succeeded" "$playbook_file" || echo 0)
     
     info "Found $get_url_count Flannel get_url downloads"
     info "Found $curl_count Flannel curl fallbacks"
+    info "Found $wget_count Flannel wget fallbacks"
     info "Found $verify_count Flannel verification tasks"
     
-    if [ "$get_url_count" -eq "$curl_count" ] && [ "$get_url_count" -eq "$verify_count" ]; then
-        info "✅ All Flannel downloads have complete fallback and verification"
+    if [ "$get_url_count" -eq "$curl_count" ] && [ "$get_url_count" -eq "$wget_count" ] && [ "$get_url_count" -eq "$verify_count" ]; then
+        info "✅ All Flannel downloads have complete fallback and verification chain"
         return 0
     else
         error "❌ Inconsistent Flannel download implementations"
+        error "   Expected: get_url=$get_url_count, curl=$get_url_count, wget=$get_url_count, verify=$get_url_count"
+        error "   Found: get_url=$get_url_count, curl=$curl_count, wget=$wget_count, verify=$verify_count"
         return 1
     fi
 }
@@ -118,6 +157,7 @@ main() {
     
     # Run all validations
     validate_flannel_downloads "$playbook_path" || exit 1
+    check_version_consistency "$playbook_path" || exit 1
     check_os_compatibility "$playbook_path"
     check_worker_node_enhancements "$playbook_path" || exit 1
     
@@ -132,7 +172,8 @@ main() {
     
     echo ""
     info "🎉 Mixed OS Flannel Download Validation Summary:"
-    info "✅ Consistent fallback mechanisms for all Flannel downloads"
+    info "✅ Consistent fallback mechanisms for all Flannel downloads (get_url -> curl -> wget)"
+    info "✅ Version consistency between DaemonSet and manual downloads"
     info "✅ OS-specific compatibility features implemented"
     info "✅ Worker node enhancements properly configured"
     info "✅ Ansible syntax validation passed"
