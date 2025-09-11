@@ -150,13 +150,23 @@ tempfilesreadoutput.yml
 *_TROUBLESHOOTING.md
 test_*.sh
 demo_*.sh
-fix_*.sh
-diagnose_*.sh
-analyze_*.sh
-validate_*.sh
-manual_*.sh
-integration_*.sh
-worker_node_*.sh
 *_output.txt
-*_diagnostics.sh
-*_remediation.sh
+
+# Allow essential infrastructure scripts but block temporary testing scripts
+!/scripts/manual_containerd_filesystem_fix.sh
+!/scripts/quick_join_diagnostics.sh  
+!/scripts/worker_node_join_remediation.sh
+!/scripts/validate_join_prerequisites.sh
+!/scripts/enhanced_kubeadm_join.sh
+
+# Block temporary testing/fix scripts (use /tmp for these)
+/tmp/test_*.sh
+/tmp/demo_*.sh
+/tmp/fix_*.sh
+/tmp/diagnose_*.sh
+/tmp/analyze_*.sh
+/tmp/validate_*.sh
+/tmp/manual_*.sh
+/tmp/integration_*.sh
+/tmp/*_diagnostics.sh
+/tmp/*_remediation.sh

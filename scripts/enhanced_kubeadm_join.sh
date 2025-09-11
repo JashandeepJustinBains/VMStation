@@ -273,7 +273,17 @@ fix_containerd_filesystem() {
         error "The automated containerd filesystem initialization has failed."
         error "Please run the manual fix script to resolve this issue:"
         error ""
-        error "   sudo ./manual_containerd_filesystem_fix.sh"
+        
+        # Determine the correct path to the manual fix script
+        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        local manual_fix_script="$script_dir/manual_containerd_filesystem_fix.sh"
+        
+        if [ -f "$manual_fix_script" ]; then
+            error "   sudo $manual_fix_script"
+        else
+            error "   sudo ./scripts/manual_containerd_filesystem_fix.sh"
+            error "   (Note: Run from the VMStation repository root directory)"
+        fi
         error ""
         error "This script will:"
         error "  • Completely reset containerd configuration"
@@ -858,7 +868,16 @@ main() {
     error "🔧 MANUAL REMEDIATION OPTIONS:"
     echo ""
     error "If the issue is related to containerd filesystem initialization:"
-    error "   sudo ./manual_containerd_filesystem_fix.sh"
+    # Determine the correct path to the manual fix script
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local manual_fix_script="$script_dir/manual_containerd_filesystem_fix.sh"
+    
+    if [ -f "$manual_fix_script" ]; then
+        error "   sudo $manual_fix_script"
+    else
+        error "   sudo ./scripts/manual_containerd_filesystem_fix.sh"
+        error "   (Note: Run from the VMStation repository root directory)"
+    fi
     echo ""
     error "For general worker node remediation:"
     error "   sudo ./worker_node_join_remediation.sh"
