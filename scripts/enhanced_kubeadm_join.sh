@@ -233,6 +233,22 @@ fix_containerd_filesystem() {
         # Force CRI to re-detect filesystem capacity
         crictl info >/dev/null 2>&1 || true
         
+        # Additional aggressive measures for stubborn cases
+        if [ $retry_count -ge 2 ]; then
+            warn "Trying more aggressive initialization measures..."
+            
+            # Force filesystem stat operations
+            find /var/lib/containerd -maxdepth 2 -type d >/dev/null 2>&1 || true
+            du -sb /var/lib/containerd >/dev/null 2>&1 || true
+            
+            # Try additional CRI operations
+            crictl images >/dev/null 2>&1 || true
+            crictl ps -a >/dev/null 2>&1 || true
+            
+            # Sync filesystem
+            sync
+        fi
+        
         # Additional filesystem verification to ensure proper capacity detection
         df -h /var/lib/containerd >/dev/null 2>&1 || true
         
@@ -251,6 +267,21 @@ fix_containerd_filesystem() {
         error "Diagnostic info:"
         error "  Filesystem: $fs_capacity"
         error "  CRI imageFilesystem: $cri_output"
+        
+        echo ""
+        error "🔧 MANUAL FIX REQUIRED:"
+        error "The automated containerd filesystem initialization has failed."
+        error "Please run the manual fix script to resolve this issue:"
+        error ""
+        error "   sudo ./manual_containerd_filesystem_fix.sh"
+        error ""
+        error "This script will:"
+        error "  • Completely reset containerd configuration"
+        error "  • Regenerate containerd and crictl configs"
+        error "  • Perform aggressive filesystem initialization"
+        error "  • Verify imageFilesystem detection"
+        error ""
+        error "After running the manual fix, retry the join operation."
         
         return 1
     fi
@@ -622,6 +653,21 @@ main() {
     error "3. Check kubelet logs: journalctl -u kubelet -f"
     error "4. Check containerd status: systemctl status containerd"
     error "5. Verify master node connectivity: curl -k https://$MASTER_IP:6443/healthz"
+    
+    echo ""
+    error "🔧 MANUAL REMEDIATION OPTIONS:"
+    echo ""
+    error "If the issue is related to containerd filesystem initialization:"
+    error "   sudo ./manual_containerd_filesystem_fix.sh"
+    echo ""
+    error "For general worker node remediation:"
+    error "   sudo ./worker_node_join_remediation.sh"
+    echo ""
+    error "For quick diagnostics:"
+    error "   sudo ./scripts/quick_join_diagnostics.sh"
+    echo ""
+    error "After running manual fixes, retry the join operation with:"
+    error "   sudo ./scripts/enhanced_kubeadm_join.sh \"<your-join-command>\""
     
     exit 1
 }
