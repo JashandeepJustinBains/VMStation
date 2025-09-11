@@ -138,3 +138,25 @@ site/
 test_deployment_order_fix.sh
 
 tempfilesreadoutput.yml
+
+# Prevent bloat accumulation - block fix-specific and redundant files
+*_FIX.md
+*_ANALYSIS.md
+*_SUMMARY.md
+*_RECEIPT.md
+*_VALIDATION.md
+*_COMPARISON.md
+*_IMPROVEMENTS.md
+*_TROUBLESHOOTING.md
+test_*.sh
+demo_*.sh
+fix_*.sh
+diagnose_*.sh
+analyze_*.sh
+validate_*.sh
+manual_*.sh
+integration_*.sh
+worker_node_*.sh
+*_output.txt
+*_diagnostics.sh
+*_remediation.sh
