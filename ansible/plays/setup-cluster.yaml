@@ -882,25 +882,63 @@
             EOF
             echo "✓ crictl configuration created"
             
-            # Ensure containerd can communicate with CRI
+            # Ensure containerd can communicate with CRI with robust retry logic
+            echo "Testing crictl communication with containerd..."
             if ! crictl info >/dev/null 2>&1; then
               echo "WARNING: crictl cannot communicate with containerd, attempting fix..."
-              systemctl restart containerd
-              sleep 10
-              if ! crictl info >/dev/null 2>&1; then
-                echo "ERROR: containerd CRI interface not working"
+              
+              # First ensure containerd is actually running properly
+              if ! systemctl is-active containerd >/dev/null 2>&1; then
+                echo "containerd service is not active, starting it..."
+                systemctl start containerd
+              else
+                echo "containerd service is active but CRI interface not responding, restarting..."
+                systemctl restart containerd
+              fi
+              
+              # Wait for containerd to fully initialize with retry logic
+              echo "Waiting for containerd to fully initialize..."
+              retry_count=0
+              max_retries=6
+              while [ $retry_count -lt $max_retries ]; do
+                sleep 5
+                if crictl info >/dev/null 2>&1; then
+                  echo "✓ containerd CRI interface is now working (attempt $((retry_count + 1)))"
+                  break
+                else
+                  echo "  Waiting for containerd... ($((retry_count + 1))/$max_retries)"
+                  retry_count=$((retry_count + 1))
+                fi
+              done
+              
+              # Final check after all retries
+              if [ $retry_count -eq $max_retries ]; then
+                echo "ERROR: containerd CRI interface still not working after $((max_retries * 5)) seconds"
+                echo "This indicates a persistent containerd configuration issue"
                 exit 1
               fi
+            else
+              echo "✓ crictl communication already working"
             fi
             
+            # Initialize containerd image filesystem for kubelet
+            echo "Initializing containerd image filesystem..."
+            ctr namespace create k8s.io 2>/dev/null || true
+            ctr --namespace k8s.io images ls >/dev/null 2>&1 || true
+            echo "✓ containerd image filesystem initialized"
+            
             # Check network connectivity to control-plane
+            echo "Testing connectivity to control-plane..."
             if ! timeout 10 bash -c "</dev/tcp/{{ control_plane_ip }}/6443" 2>/dev/null; then
               echo "ERROR: Cannot connect to control-plane API server at {{ control_plane_ip }}:6443"
               exit 1
             fi
+            echo "✓ Control-plane connectivity verified"
             
-            echo "✓ Pre-join validation passed"
+            echo "✓ Pre-join validation passed successfully"
           register: pre_join_validation
+          async: 60
+          poll: 5
 
         - name: "Execute enhanced join process for wiped worker"
           shell: |
