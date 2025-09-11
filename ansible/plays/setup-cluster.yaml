@@ -1358,7 +1358,7 @@
       block:
         - name: "Copy pre-join validation script to worker"
           copy:
-            src: "{{ playbook_dir }}/../scripts/ansible_pre_join_validation.sh"
+            src: "../../scripts/ansible_pre_join_validation.sh"
             dest: "/tmp/ansible_pre_join_validation.sh"
             mode: '0755'
 
