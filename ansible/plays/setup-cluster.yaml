@@ -211,6 +211,28 @@
       systemd:
         name: kubelet
         enabled: yes
+      register: kubelet_enable_result
+      failed_when: false
+
+    - name: "Check if kubelet service exists"
+      shell: systemctl list-unit-files | grep -q "kubelet.service"
+      register: kubelet_service_check
+      failed_when: false
+      when: kubelet_enable_result.failed | default(false)
+
+    - name: "Reload systemd and retry kubelet enable if service was not found"
+      block:
+        - name: "Reload systemd daemon"
+          systemd:
+            daemon_reload: yes
+            
+        - name: "Enable kubelet after systemd reload"
+          systemd:
+            name: kubelet
+            enabled: yes
+      when: 
+        - kubelet_enable_result.failed | default(false)
+        - kubelet_service_check.rc != 0
 
     - name: "Ensure kubelet service directory exists"
       file:
