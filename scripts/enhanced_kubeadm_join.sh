@@ -337,36 +337,23 @@ perform_join() {
         local wait_timeout=30
         info "Waiting up to ${wait_timeout}s for kubelet monitoring to complete..."
         
-        # Use timeout to prevent indefinite waiting by polling process existence
-        local start_time=$(date +%s)
-        local end_time=$((start_time + wait_timeout))
-        local monitor_result=1
-        
-        info "Waiting up to ${wait_timeout}s for kubelet monitoring to complete..."
-        
-        while [ $(date +%s) -lt $end_time ]; do
-            if ! kill -0 $monitor_pid 2>/dev/null; then
-                # Process has finished, get its exit status by waiting
-                wait $monitor_pid
-                monitor_result=$?
-                break
+        # Use timeout to prevent indefinite waiting
+        if timeout $wait_timeout bash -c "wait $monitor_pid"; then
+            local monitor_result=$?
+            if [ $monitor_result -eq 0 ]; then
+                info "✅ kubeadm join completed successfully!"
+                return 0
+            else
+                warn "kubeadm join command succeeded but kubelet monitoring failed"
+                # Kill monitor process to prevent hanging
+                kill $monitor_pid 2>/dev/null || true
+                return 1
             fi
-            sleep 1
-        done
-        
-        if [ $(date +%s) -ge $end_time ] && kill -0 $monitor_pid 2>/dev/null; then
-            warn "Kubelet monitoring timed out after ${wait_timeout}s - cleaning up monitor process"
-            kill $monitor_pid 2>/dev/null || true
-            return 1
-        fi
-        
-        if [ $monitor_result -eq 0 ]; then
-            info "✅ kubeadm join completed successfully!"
-            return 0
         else
-            warn "kubeadm join command succeeded but kubelet monitoring failed"
-            # Kill monitor process to prevent hanging
+            warn "Kubelet monitoring timed out after ${wait_timeout}s - cleaning up monitor process"
+            # Kill the hanging monitor process
             kill $monitor_pid 2>/dev/null || true
+            warn "kubeadm join command succeeded but monitoring didn't complete in time"
             return 1
         fi
     else
