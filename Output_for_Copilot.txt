@@ -1,141 +1,340 @@
-1.
-root@storagenodeT3500:~# # On the worker
-sudo ls -l /tmp/kubeadm-join-*.log
-sudo sed -n '1,200p' /tmp/kubeadm-join-*.log
-sudo sed -n '200,400p' /tmp/kubeadm-join-*.log
-# or just
-sudo tail -n +1 /tmp/kubeadm-join-*.log
--rw-r--r-- 1 root root 262 Sep 11 16:43 /tmp/kubeadm-join-20250911-164339.log
--rw-r--r-- 1 root root 262 Sep 11 17:00 /tmp/kubeadm-join-20250911-170008.log
--rw-r--r-- 1 root root 262 Sep 11 17:19 /tmp/kubeadm-join-20250911-171906.log
--rw-r--r-- 1 root root 262 Sep 11 18:17 /tmp/kubeadm-join-20250911-181722.log
--rw-r--r-- 1 root root 262 Sep 11 18:34 /tmp/kubeadm-join-20250911-183414.log
--rw-r--r-- 1 root root 262 Sep 11 18:53 /tmp/kubeadm-join-20250911-185335.log
--rw-r--r-- 1 root root 262 Sep 12 12:14 /tmp/kubeadm-join-20250912-121458.log
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 7cxxkg.6keexohhde3ltzc0 --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 16:43:39 EDT 2025
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token z2vjhm.pk06n1w0vvlgyrev --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 17:00:08 EDT 2025
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token tkkgpv.8p6ikmwdg9sj7xje --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 17:19:06 EDT 2025
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 8x759m.l2gjl6t7eqjjmj0a --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 18:17:22 EDT 2025
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token x0qvtj.d9gvr65qwvytxdqb --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 18:34:14 EDT 2025
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 501c8t.k9lntrbuwxf6ruff --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 18:53:35 EDT 2025
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 61n19o.54ysv9uf5icbnj94 --discovery-token-ca-cert-hash sha256:00bbe219ecec7b05f790aa8a5382fd9cdc4ec5f2dca29554a5f2e2999ff1ad88
-Timestamp: Fri Sep 12 12:14:58 EDT 2025
-==> /tmp/kubeadm-join-20250911-164339.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 7cxxkg.6keexohhde3ltzc0 --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 16:43:39 EDT 2025
+root@masternode:~# kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
+kubectl --kubeconfig=/etc/kubernetes/admin.conf describe node storagenodet3500
+NAME               STATUS   ROLES           AGE   VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION   CONTAINER-RUNTIME
+masternode         Ready    control-plane   62m   v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)   6.1.0-32-amd64   containerd://1.6.20
+storagenodet3500   Ready    <none>          28m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)   6.1.0-34-amd64   containerd://1.6.20
+Name:               storagenodet3500
+Roles:              <none>
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=storagenodet3500
+                    kubernetes.io/os=linux
+Annotations:        flannel.alpha.coreos.com/backend-data: {"VNI":1,"VtepMAC":"de:29:87:ed:04:e1"}
+                    flannel.alpha.coreos.com/backend-type: vxlan
+                    flannel.alpha.coreos.com/kube-subnet-manager: true
+                    flannel.alpha.coreos.com/public-ip: 192.168.4.61
+                    kubeadm.alpha.kubernetes.io/cri-socket: unix:///var/run/containerd/containerd.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Fri, 12 Sep 2025 12:17:45 -0400
+Taints:             <none>
+Unschedulable:      false
+Lease:
+  HolderIdentity:  storagenodet3500
+  AcquireTime:     <unset>
+  RenewTime:       Fri, 12 Sep 2025 12:45:50 -0400
+Conditions:
+  Type                 Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----                 ------  -----------------                 ------------------                ------                       -------
+  NetworkUnavailable   False   Fri, 12 Sep 2025 12:22:14 -0400   Fri, 12 Sep 2025 12:22:14 -0400   FlannelIsUp                  Flannel is running on this node
+  MemoryPressure       False   Fri, 12 Sep 2025 12:43:16 -0400   Fri, 12 Sep 2025 12:17:45 -0400   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure         False   Fri, 12 Sep 2025 12:43:16 -0400   Fri, 12 Sep 2025 12:17:45 -0400   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure          False   Fri, 12 Sep 2025 12:43:16 -0400   Fri, 12 Sep 2025 12:17:45 -0400   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready                True    Fri, 12 Sep 2025 12:43:16 -0400   Fri, 12 Sep 2025 12:17:46 -0400   KubeletReady                 kubelet is posting ready status. AppArmor enabled
+Addresses:
+  InternalIP:  192.168.4.61
+  Hostname:    storagenodet3500
+Capacity:
+  cpu:                8
+  ephemeral-storage:  478114568Ki
+  hugepages-2Mi:      0
+  memory:             8121356Ki
+  pods:               110
+Allocatable:
+  cpu:                8
+  ephemeral-storage:  440630385140
+  hugepages-2Mi:      0
+  memory:             8018956Ki
+  pods:               110
+System Info:
+  Machine ID:                 c948a00c7cac4964811d844623f3486a
+  System UUID:                44454c4c-4600-1042-8034-cac04f514c31
+  Boot ID:                    1091f2d5-faa0-4426-a5fe-f4d05fe0c41e
+  Kernel Version:             6.1.0-34-amd64
+  OS Image:                   Debian GNU/Linux 12 (bookworm)
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  containerd://1.6.20
+  Kubelet Version:            v1.29.15
+  Kube-Proxy Version:         v1.29.15
+PodCIDR:                      10.244.1.0/24
+PodCIDRs:                     10.244.1.0/24
+Non-terminated Pods:          (2 in total)
+  Namespace                   Name                     CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                     ------------  ----------  ---------------  -------------  ---
+  kube-flannel                kube-flannel-ds-f68pp    100m (1%)     0 (0%)      50Mi (0%)        0 (0%)         23m
+  kube-system                 kube-proxy-lzqpj         0 (0%)        0 (0%)      0 (0%)           0 (0%)         28m
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests   Limits
+  --------           --------   ------
+  cpu                100m (1%)  0 (0%)
+  memory             50Mi (0%)  0 (0%)
+  ephemeral-storage  0 (0%)     0 (0%)
+  hugepages-2Mi      0 (0%)     0 (0%)
+Events:
+  Type    Reason                   Age                From             Message
+  ----    ------                   ----               ----             -------
+  Normal  Starting                 28m                kube-proxy
+  Normal  RegisteredNode           28m                node-controller  Node storagenodet3500 event: Registered Node storagenodet3500 in Controller
+  Normal  NodeHasSufficientMemory  28m (x2 over 28m)  kubelet          Node storagenodet3500 status is now: NodeHasSufficientMemory
+  Normal  NodeHasNoDiskPressure    28m (x2 over 28m)  kubelet          Node storagenodet3500 status is now: NodeHasNoDiskPressure
+  Normal  NodeHasSufficientPID     28m (x2 over 28m)  kubelet          Node storagenodet3500 status is now: NodeHasSufficientPID
+  Normal  NodeAllocatableEnforced  28m                kubelet          Updated Node Allocatable limit across pods
+  Normal  NodeReady                28m                kubelet          Node storagenodet3500 status is now: NodeReady
+root@masternode:~# # check kubelet
+sudo systemctl status kubelet --no-pager
+sudo journalctl -u kubelet --no-pager -n 200 | sed -n '1,200p'
 
-==> /tmp/kubeadm-join-20250911-170008.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token z2vjhm.pk06n1w0vvlgyrev --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 17:00:08 EDT 2025
+# check join artifacts
+sudo ls -l /var/lib/kubelet/config.yaml /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf
+sudo cat /var/lib/kubelet/config.yaml 2>/dev/null | head -n 20
+● kubelet.service - kubelet: The Kubernetes Node Agent
+     Loaded: loaded (/lib/systemd/system/kubelet.service; enabled; preset: enabled)
+    Drop-In: /etc/systemd/system/kubelet.service.d
+             └─10-kubeadm.conf, 20-join-config.conf
+     Active: active (running) since Fri 2025-09-12 11:55:43 EDT; 50min ago
+       Docs: https://kubernetes.io/docs/
+   Main PID: 1208026 (kubelet)
+      Tasks: 12 (limit: 9366)
+     Memory: 46.8M
+        CPU: 1min 45.218s
+     CGroup: /system.slice/kubelet.service
+             └─1208026 /usr/bin/kubelet --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/lib/kubelet/config.yaml --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock --pod-infra-con…
 
-==> /tmp/kubeadm-join-20250911-171906.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token tkkgpv.8p6ikmwdg9sj7xje --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 17:19:06 EDT 2025
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.408781 1208026 scope.go:117] "RemoveContainer" containerID="d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa"
+Sep 12 12:22:05 masternode kubelet[1208026]: E0912 12:22:05.409235 1208026 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when t…
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409354 1208026 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"d5c65377a1f394b864ee501ba4f2509…
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409376 1208026 scope.go:117] "RemoveContainer" containerID="4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7"
+Sep 12 12:22:05 masternode kubelet[1208026]: E0912 12:22:05.409828 1208026 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when t…
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409880 1208026 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"4e9a089d7b7a052ae007c0f0d6e1bde…
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409900 1208026 scope.go:117] "RemoveContainer" containerID="bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9"
+Sep 12 12:22:05 masternode kubelet[1208026]: E0912 12:22:05.410330 1208026 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when t…
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.410366 1208026 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"bd2d89a02332d710066c600b6589e4c…
+Sep 12 12:22:07 masternode kubelet[1208026]: I0912 12:22:07.161266 1208026 kubelet_volumes.go:163] "Cleaned up orphaned pod volumes dir" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" path="/v…de2c150/volumes"
+Hint: Some lines were ellipsized, use -l to show in full.
+Sep 12 11:54:08 masternode kubelet[1189682]: E0912 11:54:08.781403 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\" is reserved for \"fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a\""
+Sep 12 11:54:08 masternode kubelet[1189682]: E0912 11:54:08.781446 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\" is reserved for \"fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:08 masternode kubelet[1189682]: E0912 11:54:08.781468 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\" is reserved for \"fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:08 masternode kubelet[1189682]: E0912 11:54:08.781520 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_4\\\" is reserved for \\\"fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:54:23 masternode kubelet[1189682]: E0912 11:54:23.886524 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to setup network for sandbox \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\": plugin type=\"bridge\" failed (add): failed to set bridge addr: \"cni0\" already has an IP address different from 10.244.0.1/16"
+Sep 12 11:54:23 masternode kubelet[1189682]: E0912 11:54:23.886586 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to setup network for sandbox \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\": plugin type=\"bridge\" failed (add): failed to set bridge addr: \"cni0\" already has an IP address different from 10.244.0.1/16" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:23 masternode kubelet[1189682]: E0912 11:54:23.886616 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to setup network for sandbox \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\": plugin type=\"bridge\" failed (add): failed to set bridge addr: \"cni0\" already has an IP address different from 10.244.0.1/16" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:23 masternode kubelet[1189682]: E0912 11:54:23.886687 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to setup network for sandbox \\\"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\\\": plugin type=\\\"bridge\\\" failed (add): failed to set bridge addr: \\\"cni0\\\" already has an IP address different from 10.244.0.1/16\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:54:24 masternode kubelet[1189682]: I0912 11:54:24.549256 1189682 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd"
+Sep 12 11:54:24 masternode kubelet[1189682]: E0912 11:54:24.567387 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\""
+Sep 12 11:54:24 masternode kubelet[1189682]: E0912 11:54:24.567456 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:24 masternode kubelet[1189682]: E0912 11:54:24.567490 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:24 masternode kubelet[1189682]: E0912 11:54:24.567564 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\" is reserved for \\\"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:54:36 masternode kubelet[1189682]: E0912 11:54:36.781534 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\""
+Sep 12 11:54:36 masternode kubelet[1189682]: E0912 11:54:36.781576 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:36 masternode kubelet[1189682]: E0912 11:54:36.781602 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:36 masternode kubelet[1189682]: E0912 11:54:36.781651 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\" is reserved for \\\"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:54:51 masternode kubelet[1189682]: E0912 11:54:51.780163 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\""
+Sep 12 11:54:51 masternode kubelet[1189682]: E0912 11:54:51.780232 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:51 masternode kubelet[1189682]: E0912 11:54:51.780270 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:54:51 masternode kubelet[1189682]: E0912 11:54:51.780353 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\" is reserved for \\\"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:55:04 masternode kubelet[1189682]: E0912 11:55:04.783447 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\""
+Sep 12 11:55:04 masternode kubelet[1189682]: E0912 11:55:04.783512 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:04 masternode kubelet[1189682]: E0912 11:55:04.783548 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:04 masternode kubelet[1189682]: E0912 11:55:04.783629 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\" is reserved for \\\"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:55:18 masternode kubelet[1189682]: E0912 11:55:18.780162 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\""
+Sep 12 11:55:18 masternode kubelet[1189682]: E0912 11:55:18.780238 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:18 masternode kubelet[1189682]: E0912 11:55:18.780276 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:18 masternode kubelet[1189682]: E0912 11:55:18.780353 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\" is reserved for \\\"761cc3c662fb68bbd3d5475c1240c180d5b78701cfca74dc17fab2674d8b6bbd\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:55:29 masternode kubelet[1189682]: E0912 11:55:29.887138 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to setup network for sandbox \"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\": plugin type=\"bridge\" failed (add): failed to set bridge addr: \"cni0\" already has an IP address different from 10.244.0.1/16"
+Sep 12 11:55:29 masternode kubelet[1189682]: E0912 11:55:29.887196 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to setup network for sandbox \"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\": plugin type=\"bridge\" failed (add): failed to set bridge addr: \"cni0\" already has an IP address different from 10.244.0.1/16" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:29 masternode kubelet[1189682]: E0912 11:55:29.887228 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to setup network for sandbox \"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\": plugin type=\"bridge\" failed (add): failed to set bridge addr: \"cni0\" already has an IP address different from 10.244.0.1/16" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:29 masternode kubelet[1189682]: E0912 11:55:29.887310 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to setup network for sandbox \\\"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\\\": plugin type=\\\"bridge\\\" failed (add): failed to set bridge addr: \\\"cni0\\\" already has an IP address different from 10.244.0.1/16\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:55:30 masternode kubelet[1189682]: I0912 11:55:30.721924 1189682 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b"
+Sep 12 11:55:30 masternode kubelet[1189682]: E0912 11:55:30.738007 1189682 remote_runtime.go:193] "RunPodSandbox from runtime service failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\""
+Sep 12 11:55:30 masternode kubelet[1189682]: E0912 11:55:30.738064 1189682 kuberuntime_sandbox.go:72] "Failed to create sandbox for pod" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:30 masternode kubelet[1189682]: E0912 11:55:30.738120 1189682 kuberuntime_manager.go:1184] "CreatePodSandbox for pod failed" err="rpc error: code = Unknown desc = failed to reserve sandbox name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\": name \"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\" is reserved for \"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\"" pod="kube-system/coredns-68444cf7cd-85vlv"
+Sep 12 11:55:30 masternode kubelet[1189682]: E0912 11:55:30.738196 1189682 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"CreatePodSandbox\" for \"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\" with CreatePodSandboxError: \"Failed to create sandbox for pod \\\"coredns-68444cf7cd-85vlv_kube-system(1bca2941-ba01-4d20-ae9e-1b1debd95dee)\\\": rpc error: code = Unknown desc = failed to reserve sandbox name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\": name \\\"coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_5\\\" is reserved for \\\"a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b\\\"\"" pod="kube-system/coredns-68444cf7cd-85vlv" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee"
+Sep 12 11:55:37 masternode kubelet[1189682]: I0912 11:55:37.766909 1189682 dynamic_cafile_content.go:171] "Shutting down controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
+Sep 12 11:55:37 masternode systemd[1]: Stopping kubelet.service - kubelet: The Kubernetes Node Agent...
+Sep 12 11:55:37 masternode systemd[1]: kubelet.service: Deactivated successfully.
+Sep 12 11:55:37 masternode systemd[1]: Stopped kubelet.service - kubelet: The Kubernetes Node Agent.
+Sep 12 11:55:37 masternode systemd[1]: kubelet.service: Consumed 23.293s CPU time.
+Sep 12 11:55:43 masternode systemd[1]: Started kubelet.service - kubelet: The Kubernetes Node Agent.
+Sep 12 11:55:43 masternode kubelet[1208026]: Flag --container-runtime-endpoint has been deprecated, This parameter should be set via the config file specified by the Kubelet's --config flag. See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for more information.
+Sep 12 11:55:43 masternode kubelet[1208026]: Flag --pod-infra-container-image has been deprecated, will be removed in a future release. Image garbage collector will get sandbox image information from CRI.
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.086382 1208026 server.go:209] "--pod-infra-container-image will not be pruned by the image garbage collector in kubelet and should also be set in the remote runtime"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.091261 1208026 server.go:492] "Kubelet version" kubeletVersion="v1.29.15"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.091284 1208026 server.go:494] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.091477 1208026 server.go:924] "Client rotation is on, will bootstrap in background"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.092230 1208026 certificate_store.go:130] Loading cert/key pair from "/var/lib/kubelet/pki/kubelet-client-current.pem".
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.094545 1208026 dynamic_cafile_content.go:157] "Starting controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.104036 1208026 server.go:750] "--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.104582 1208026 container_manager_linux.go:265] "Container manager verified user specified cgroup-root exists" cgroupRoot=[]
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.105165 1208026 container_manager_linux.go:270] "Creating Container Manager object based on Node Config" nodeConfig={"RuntimeCgroupsName":"","SystemCgroupsName":"","KubeletCgroupsName":"","KubeletOOMScoreAdj":-999,"ContainerRuntime":"","CgroupsPerQOS":true,"CgroupRoot":"/","CgroupDriver":"systemd","KubeletRootDir":"/var/lib/kubelet","ProtectKernelDefaults":false,"KubeReservedCgroupName":"","SystemReservedCgroupName":"","ReservedSystemCPUs":{},"EnforceNodeAllocatable":{"pods":{}},"KubeReserved":null,"SystemReserved":null,"HardEvictionThresholds":[{"Signal":"nodefs.inodesFree","Operator":"LessThan","Value":{"Quantity":null,"Percentage":0.05},"GracePeriod":0,"MinReclaim":null},{"Signal":"imagefs.available","Operator":"LessThan","Value":{"Quantity":null,"Percentage":0.15},"GracePeriod":0,"MinReclaim":null},{"Signal":"memory.available","Operator":"LessThan","Value":{"Quantity":"100Mi","Percentage":0},"GracePeriod":0,"MinReclaim":null},{"Signal":"nodefs.available","Operator":"LessThan","Value":{"Quantity":null,"Percentage":0.1},"GracePeriod":0,"MinReclaim":null}],"QOSReserved":{},"CPUManagerPolicy":"none","CPUManagerPolicyOptions":null,"TopologyManagerScope":"container","CPUManagerReconcilePeriod":10000000000,"ExperimentalMemoryManagerPolicy":"None","ExperimentalMemoryManagerReservedMemory":null,"PodPidsLimit":-1,"EnforceCPULimits":true,"CPUCFSQuotaPeriod":100000000,"TopologyManagerPolicy":"none","TopologyManagerPolicyOptions":null}
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.105412 1208026 topology_manager.go:138] "Creating topology manager with none policy"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.105518 1208026 container_manager_linux.go:301] "Creating device plugin manager"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.105659 1208026 state_mem.go:36] "Initialized new in-memory state store"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.105898 1208026 kubelet.go:396] "Attempting to sync node with API server"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.106011 1208026 kubelet.go:301] "Adding static pod path" path="/etc/kubernetes/manifests"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.106143 1208026 kubelet.go:312] "Adding apiserver pod source"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.106329 1208026 apiserver.go:42] "Waiting for node sync before watching apiserver pods"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.107816 1208026 kuberuntime_manager.go:260] "Container runtime initialized" containerRuntime="containerd" version="1.6.20~ds1" apiVersion="v1"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.108139 1208026 kubelet.go:809] "Not starting ClusterTrustBundle informer because we are in static kubelet mode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.109075 1208026 server.go:1261] "Started kubelet"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.113155 1208026 fs_resource_analyzer.go:67] "Starting FS ResourceAnalyzer"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.120410 1208026 server.go:162] "Starting to listen" address="0.0.0.0" port=10250
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.122189 1208026 server.go:450] "Adding debug handlers to kubelet server"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.124072 1208026 ratelimit.go:55] "Setting rate limiting for endpoint" service="podresources" qps=100 burstTokens=10
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.124400 1208026 server.go:233] "Starting to serve the podresources API" endpoint="unix:/var/lib/kubelet/pod-resources/kubelet.sock"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.132437 1208026 volume_manager.go:291] "Starting Kubelet Volume Manager"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.134481 1208026 kubelet.go:1462] "Image garbage collection failed once. Stats initialization may not have completed yet" err="invalid capacity 0 on image filesystem"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.135188 1208026 desired_state_of_world_populator.go:151] "Desired state populator starts to run"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.135879 1208026 reconciler_new.go:29] "Reconciler: start to sync state"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.139040 1208026 factory.go:221] Registration of the systemd container factory successfully
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.139992 1208026 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: no such file or directory
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.145266 1208026 factory.go:221] Registration of the containerd container factory successfully
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.152539 1208026 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv4"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.156761 1208026 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv6"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.156978 1208026 status_manager.go:217] "Starting to sync pod status with apiserver"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.157135 1208026 kubelet.go:2347] "Starting kubelet main sync loop"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.157296 1208026 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.236777 1208026 kubelet_node_status.go:73] "Attempting to register node" node="masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.250629 1208026 kubelet_node_status.go:112] "Node was previously registered" node="masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.250728 1208026 kubelet_node_status.go:76] "Successfully registered node" node="masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.252896 1208026 kuberuntime_manager.go:1541] "Updating runtime config through cri with podcidr" CIDR="10.244.0.0/24"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.253533 1208026 kubelet_network.go:61] "Updating Pod CIDR" originalPodCIDR="" newPodCIDR="10.244.0.0/24"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.254944 1208026 setters.go:568] "Node became not ready" node="masternode" condition={"type":"Ready","status":"False","lastHeartbeatTime":"2025-09-12T15:55:43Z","lastTransitionTime":"2025-09-12T15:55:43Z","reason":"KubeletNotReady","message":"container runtime status check may not have completed yet"}
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.256714 1208026 cpu_manager.go:214] "Starting CPU manager" policy="none"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.256961 1208026 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.257088 1208026 state_mem.go:36] "Initialized new in-memory state store"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.257490 1208026 state_mem.go:88] "Updated default CPUSet" cpuSet=""
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.257677 1208026 state_mem.go:96] "Updated CPUSet assignments" assignments={}
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.257794 1208026 policy_none.go:49] "None policy: Start"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.257855 1208026 kubelet.go:2371] "Skipping pod synchronization" err="container runtime status check may not have completed yet"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.259156 1208026 memory_manager.go:170] "Starting memorymanager" policy="None"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.259200 1208026 state_mem.go:35] "Initializing new in-memory state store"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.259594 1208026 state_mem.go:75] "Updated machine memory state"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.265046 1208026 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.265349 1208026 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.272085 1208026 kubelet_node_status.go:497] "Fast updating node status as it just became ready"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.458385 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="310b6c94507e75997ff41605f87056ba" podNamespace="kube-system" podName="kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.458671 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="14dedf7322adec20b2d7fe90ea829fab" podNamespace="kube-system" podName="kube-scheduler-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.458846 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="ae85cbac0ec6e7c5250eb914c4a530aa" podNamespace="kube-system" podName="etcd-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.459016 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="bc73f6e29284e18ef1a5976a5c72479c" podNamespace="kube-system" podName="kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.459264 1208026 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="a8a193e4f3eb8b0a81a1957f6d96db89791f1dbe7053890cb9f2db3e00a1748b"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.459321 1208026 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.478903 1208026 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-scheduler-masternode\" already exists" pod="kube-system/kube-scheduler-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.481086 1208026 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-controller-manager-masternode\" already exists" pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.481089 1208026 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-apiserver-masternode\" already exists" pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: E0912 11:55:43.481087 1208026 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"etcd-masternode\" already exists" pod="kube-system/etcd-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566489 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"etc-ca-certificates\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-etc-ca-certificates\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566540 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"k8s-certs\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-k8s-certs\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566597 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"etcd-data\" (UniqueName: \"kubernetes.io/host-path/ae85cbac0ec6e7c5250eb914c4a530aa-etcd-data\") pod \"etcd-masternode\" (UID: \"ae85cbac0ec6e7c5250eb914c4a530aa\") " pod="kube-system/etcd-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566641 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"usr-local-share-ca-certificates\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-usr-local-share-ca-certificates\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566671 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"ca-certs\" (UniqueName: \"kubernetes.io/host-path/bc73f6e29284e18ef1a5976a5c72479c-ca-certs\") pod \"kube-apiserver-masternode\" (UID: \"bc73f6e29284e18ef1a5976a5c72479c\") " pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566743 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"etc-ca-certificates\" (UniqueName: \"kubernetes.io/host-path/bc73f6e29284e18ef1a5976a5c72479c-etc-ca-certificates\") pod \"kube-apiserver-masternode\" (UID: \"bc73f6e29284e18ef1a5976a5c72479c\") " pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566810 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"usr-local-share-ca-certificates\" (UniqueName: \"kubernetes.io/host-path/bc73f6e29284e18ef1a5976a5c72479c-usr-local-share-ca-certificates\") pod \"kube-apiserver-masternode\" (UID: \"bc73f6e29284e18ef1a5976a5c72479c\") " pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566860 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"usr-share-ca-certificates\" (UniqueName: \"kubernetes.io/host-path/bc73f6e29284e18ef1a5976a5c72479c-usr-share-ca-certificates\") pod \"kube-apiserver-masternode\" (UID: \"bc73f6e29284e18ef1a5976a5c72479c\") " pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566906 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"flexvolume-dir\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-flexvolume-dir\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.566956 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"kubeconfig\" (UniqueName: \"kubernetes.io/host-path/14dedf7322adec20b2d7fe90ea829fab-kubeconfig\") pod \"kube-scheduler-masternode\" (UID: \"14dedf7322adec20b2d7fe90ea829fab\") " pod="kube-system/kube-scheduler-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.567006 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"k8s-certs\" (UniqueName: \"kubernetes.io/host-path/bc73f6e29284e18ef1a5976a5c72479c-k8s-certs\") pod \"kube-apiserver-masternode\" (UID: \"bc73f6e29284e18ef1a5976a5c72479c\") " pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.567051 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"ca-certs\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-ca-certs\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.567077 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"kubeconfig\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-kubeconfig\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.567112 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"usr-share-ca-certificates\" (UniqueName: \"kubernetes.io/host-path/310b6c94507e75997ff41605f87056ba-usr-share-ca-certificates\") pod \"kube-controller-manager-masternode\" (UID: \"310b6c94507e75997ff41605f87056ba\") " pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:43 masternode kubelet[1208026]: I0912 11:55:43.567171 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"etcd-certs\" (UniqueName: \"kubernetes.io/host-path/ae85cbac0ec6e7c5250eb914c4a530aa-etcd-certs\") pod \"etcd-masternode\" (UID: \"ae85cbac0ec6e7c5250eb914c4a530aa\") " pod="kube-system/etcd-masternode"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.107251 1208026 apiserver.go:52] "Watching apiserver"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.113036 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" podNamespace="kube-flannel" podName="kube-flannel-ds-gjh88"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.113392 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="1bca2941-ba01-4d20-ae9e-1b1debd95dee" podNamespace="kube-system" podName="coredns-68444cf7cd-85vlv"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.113639 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="4bc6f2af-5748-4364-87d2-d22afa1cd21b" podNamespace="kube-system" podName="kube-proxy-hfcqt"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.136375 1208026 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.171419 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/4bc6f2af-5748-4364-87d2-d22afa1cd21b-xtables-lock\") pod \"kube-proxy-hfcqt\" (UID: \"4bc6f2af-5748-4364-87d2-d22afa1cd21b\") " pod="kube-system/kube-proxy-hfcqt"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.172110 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni\") pod \"kube-flannel-ds-gjh88\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") " pod="kube-flannel/kube-flannel-ds-gjh88"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.172599 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"run\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-run\") pod \"kube-flannel-ds-gjh88\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") " pod="kube-flannel/kube-flannel-ds-gjh88"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.172861 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni-plugin\") pod \"kube-flannel-ds-gjh88\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") " pod="kube-flannel/kube-flannel-ds-gjh88"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.173091 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"lib-modules\" (UniqueName: \"kubernetes.io/host-path/4bc6f2af-5748-4364-87d2-d22afa1cd21b-lib-modules\") pod \"kube-proxy-hfcqt\" (UID: \"4bc6f2af-5748-4364-87d2-d22afa1cd21b\") " pod="kube-system/kube-proxy-hfcqt"
+Sep 12 11:55:44 masternode kubelet[1208026]: I0912 11:55:44.173205 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-xtables-lock\") pod \"kube-flannel-ds-gjh88\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") " pod="kube-flannel/kube-flannel-ds-gjh88"
+Sep 12 11:55:44 masternode kubelet[1208026]: E0912 11:55:44.211248 1208026 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-controller-manager-masternode\" already exists" pod="kube-system/kube-controller-manager-masternode"
+Sep 12 11:55:44 masternode kubelet[1208026]: E0912 11:55:44.211297 1208026 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-apiserver-masternode\" already exists" pod="kube-system/kube-apiserver-masternode"
+Sep 12 11:55:44 masternode kubelet[1208026]: E0912 11:55:44.423399 1208026 remote_runtime.go:222] "StopPodSandbox from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find sandbox \"fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a\": not found" podSandboxID="fd86b9ea7c986e60b81955eb1577591e9da931c6dadd78f8a03e92ed41d9d15a"
+Sep 12 11:55:48 masternode kubelet[1208026]: I0912 11:55:48.337231 1208026 prober_manager.go:312] "Failed to trigger a manual run" probe="Readiness"
+Sep 12 11:58:41 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 11:58:41 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 11:58:42 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:01:50 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:01:50 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:01:51 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:13:40 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:13:40 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:13:41 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:20:19 masternode kubelet[1208026]: E0912 12:20:19.094580 1208026 remote_runtime.go:294] "ListPodSandbox with filter from runtime service failed" err="rpc error: code = Unknown desc = server is not initialized yet" filter="nil"
+Sep 12 12:20:19 masternode kubelet[1208026]: E0912 12:20:19.094618 1208026 kuberuntime_sandbox.go:297] "Failed to list pod sandboxes" err="rpc error: code = Unknown desc = server is not initialized yet"
+Sep 12 12:20:19 masternode kubelet[1208026]: E0912 12:20:19.094634 1208026 generic.go:238] "GenericPLEG: Unable to retrieve pods" err="rpc error: code = Unknown desc = server is not initialized yet"
+Sep 12 12:20:40 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:20:40 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:20:41 masternode systemd[1]: /etc/systemd/system/kubelet.service.d/20-join-config.conf:1: Assignment outside of section. Ignoring.
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.666674 1208026 topology_manager.go:215] "Topology Admit Handler" podUID="c4dae544-7a05-4513-9f60-90c6b024ffc0" podNamespace="kube-flannel" podName="kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: E0912 12:22:04.666750 1208026 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" containerName="kube-flannel"
+Sep 12 12:22:04 masternode kubelet[1208026]: E0912 12:22:04.666770 1208026 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" containerName="install-cni-plugin"
+Sep 12 12:22:04 masternode kubelet[1208026]: E0912 12:22:04.666784 1208026 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" containerName="install-cni"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.666825 1208026 memory_manager.go:354] "RemoveStaleState removing state" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" containerName="install-cni-plugin"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.666840 1208026 memory_manager.go:354] "RemoveStaleState removing state" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" containerName="kube-flannel"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.666854 1208026 memory_manager.go:354] "RemoveStaleState removing state" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" containerName="install-cni"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709215 1208026 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni\") pod \"6ddeb54d-2229-46e1-945e-422adde2c150\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") "
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709285 1208026 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"flannel-cfg\" (UniqueName: \"kubernetes.io/configmap/6ddeb54d-2229-46e1-945e-422adde2c150-flannel-cfg\") pod \"6ddeb54d-2229-46e1-945e-422adde2c150\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") "
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709320 1208026 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni-plugin\") pod \"6ddeb54d-2229-46e1-945e-422adde2c150\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") "
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709351 1208026 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-xtables-lock\") pod \"6ddeb54d-2229-46e1-945e-422adde2c150\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") "
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709387 1208026 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"kube-api-access-p9dfm\" (UniqueName: \"kubernetes.io/projected/6ddeb54d-2229-46e1-945e-422adde2c150-kube-api-access-p9dfm\") pod \"6ddeb54d-2229-46e1-945e-422adde2c150\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") "
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709420 1208026 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"run\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-run\") pod \"6ddeb54d-2229-46e1-945e-422adde2c150\" (UID: \"6ddeb54d-2229-46e1-945e-422adde2c150\") "
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709491 1208026 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-run" (OuterVolumeSpecName: "run") pod "6ddeb54d-2229-46e1-945e-422adde2c150" (UID: "6ddeb54d-2229-46e1-945e-422adde2c150"). InnerVolumeSpecName "run". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709544 1208026 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni-plugin" (OuterVolumeSpecName: "cni-plugin") pod "6ddeb54d-2229-46e1-945e-422adde2c150" (UID: "6ddeb54d-2229-46e1-945e-422adde2c150"). InnerVolumeSpecName "cni-plugin". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709572 1208026 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-xtables-lock" (OuterVolumeSpecName: "xtables-lock") pod "6ddeb54d-2229-46e1-945e-422adde2c150" (UID: "6ddeb54d-2229-46e1-945e-422adde2c150"). InnerVolumeSpecName "xtables-lock". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709792 1208026 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/configmap/6ddeb54d-2229-46e1-945e-422adde2c150-flannel-cfg" (OuterVolumeSpecName: "flannel-cfg") pod "6ddeb54d-2229-46e1-945e-422adde2c150" (UID: "6ddeb54d-2229-46e1-945e-422adde2c150"). InnerVolumeSpecName "flannel-cfg". PluginName "kubernetes.io/configmap", VolumeGidValue ""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.709321 1208026 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni" (OuterVolumeSpecName: "cni") pod "6ddeb54d-2229-46e1-945e-422adde2c150" (UID: "6ddeb54d-2229-46e1-945e-422adde2c150"). InnerVolumeSpecName "cni". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.712077 1208026 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/projected/6ddeb54d-2229-46e1-945e-422adde2c150-kube-api-access-p9dfm" (OuterVolumeSpecName: "kube-api-access-p9dfm") pod "6ddeb54d-2229-46e1-945e-422adde2c150" (UID: "6ddeb54d-2229-46e1-945e-422adde2c150"). InnerVolumeSpecName "kube-api-access-p9dfm". PluginName "kubernetes.io/projected", VolumeGidValue ""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810410 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"run\" (UniqueName: \"kubernetes.io/host-path/c4dae544-7a05-4513-9f60-90c6b024ffc0-run\") pod \"kube-flannel-ds-q6zn9\" (UID: \"c4dae544-7a05-4513-9f60-90c6b024ffc0\") " pod="kube-flannel/kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810448 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/c4dae544-7a05-4513-9f60-90c6b024ffc0-cni-plugin\") pod \"kube-flannel-ds-q6zn9\" (UID: \"c4dae544-7a05-4513-9f60-90c6b024ffc0\") " pod="kube-flannel/kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810494 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"kube-api-access-ncq5p\" (UniqueName: \"kubernetes.io/projected/c4dae544-7a05-4513-9f60-90c6b024ffc0-kube-api-access-ncq5p\") pod \"kube-flannel-ds-q6zn9\" (UID: \"c4dae544-7a05-4513-9f60-90c6b024ffc0\") " pod="kube-flannel/kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810527 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/c4dae544-7a05-4513-9f60-90c6b024ffc0-cni\") pod \"kube-flannel-ds-q6zn9\" (UID: \"c4dae544-7a05-4513-9f60-90c6b024ffc0\") " pod="kube-flannel/kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810607 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"flannel-cfg\" (UniqueName: \"kubernetes.io/configmap/c4dae544-7a05-4513-9f60-90c6b024ffc0-flannel-cfg\") pod \"kube-flannel-ds-q6zn9\" (UID: \"c4dae544-7a05-4513-9f60-90c6b024ffc0\") " pod="kube-flannel/kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810643 1208026 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/c4dae544-7a05-4513-9f60-90c6b024ffc0-xtables-lock\") pod \"kube-flannel-ds-q6zn9\" (UID: \"c4dae544-7a05-4513-9f60-90c6b024ffc0\") " pod="kube-flannel/kube-flannel-ds-q6zn9"
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810665 1208026 reconciler_common.go:305] "Volume detached for volume \"run\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-run\") on node \"masternode\" DevicePath \"\""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810676 1208026 reconciler_common.go:305] "Volume detached for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni\") on node \"masternode\" DevicePath \"\""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810694 1208026 reconciler_common.go:305] "Volume detached for volume \"flannel-cfg\" (UniqueName: \"kubernetes.io/configmap/6ddeb54d-2229-46e1-945e-422adde2c150-flannel-cfg\") on node \"masternode\" DevicePath \"\""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810714 1208026 reconciler_common.go:305] "Volume detached for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-cni-plugin\") on node \"masternode\" DevicePath \"\""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810732 1208026 reconciler_common.go:305] "Volume detached for volume \"kube-api-access-p9dfm\" (UniqueName: \"kubernetes.io/projected/6ddeb54d-2229-46e1-945e-422adde2c150-kube-api-access-p9dfm\") on node \"masternode\" DevicePath \"\""
+Sep 12 12:22:04 masternode kubelet[1208026]: I0912 12:22:04.810745 1208026 reconciler_common.go:305] "Volume detached for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/6ddeb54d-2229-46e1-945e-422adde2c150-xtables-lock\") on node \"masternode\" DevicePath \"\""
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.322133 1208026 scope.go:117] "RemoveContainer" containerID="d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.380329 1208026 scope.go:117] "RemoveContainer" containerID="4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.396910 1208026 scope.go:117] "RemoveContainer" containerID="bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.408781 1208026 scope.go:117] "RemoveContainer" containerID="d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa"
+Sep 12 12:22:05 masternode kubelet[1208026]: E0912 12:22:05.409235 1208026 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa\": not found" containerID="d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409354 1208026 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa"} err="failed to get container status \"d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa\": rpc error: code = NotFound desc = an error occurred when try to find container \"d5c65377a1f394b864ee501ba4f25098badb5b5702d4621ea22e00426331baaa\": not found"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409376 1208026 scope.go:117] "RemoveContainer" containerID="4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7"
+Sep 12 12:22:05 masternode kubelet[1208026]: E0912 12:22:05.409828 1208026 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7\": not found" containerID="4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409880 1208026 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7"} err="failed to get container status \"4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7\": rpc error: code = NotFound desc = an error occurred when try to find container \"4e9a089d7b7a052ae007c0f0d6e1bde5fdf7fa4ed5107c6a8bfb4adadb9764c7\": not found"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.409900 1208026 scope.go:117] "RemoveContainer" containerID="bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9"
+Sep 12 12:22:05 masternode kubelet[1208026]: E0912 12:22:05.410330 1208026 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9\": not found" containerID="bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9"
+Sep 12 12:22:05 masternode kubelet[1208026]: I0912 12:22:05.410366 1208026 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9"} err="failed to get container status \"bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9\": rpc error: code = NotFound desc = an error occurred when try to find container \"bd2d89a02332d710066c600b6589e4cf077c82c9be815d7b9d32292a86f9e5e9\": not found"
+Sep 12 12:22:07 masternode kubelet[1208026]: I0912 12:22:07.161266 1208026 kubelet_volumes.go:163] "Cleaned up orphaned pod volumes dir" podUID="6ddeb54d-2229-46e1-945e-422adde2c150" path="/var/lib/kubelet/pods/6ddeb54d-2229-46e1-945e-422adde2c150/volumes"
+ls: cannot access '/etc/kubernetes/bootstrap-kubelet.conf': No such file or directory
+-rw------- 1 root root 1984 Sep 12 11:43 /etc/kubernetes/kubelet.conf
+-rw-r--r-- 1 root root 1021 Sep 12 11:43 /var/lib/kubelet/config.yaml
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    cacheTTL: 0s
+    enabled: true
+  x509:
+    clientCAFile: /etc/kubernetes/pki/ca.crt
+authorization:
+  mode: Webhook
+  webhook:
+    cacheAuthorizedTTL: 0s
+    cacheUnauthorizedTTL: 0s
+cgroupDriver: systemd
+clusterDNS:
+- 10.96.0.10
+clusterDomain: cluster.local
+containerRuntimeEndpoint: ""
+cpuManagerReconcilePeriod: 0s
 
-==> /tmp/kubeadm-join-20250911-181722.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 8x759m.l2gjl6t7eqjjmj0a --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 18:17:22 EDT 2025
-
-==> /tmp/kubeadm-join-20250911-183414.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token x0qvtj.d9gvr65qwvytxdqb --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 18:34:14 EDT 2025
-
-==> /tmp/kubeadm-join-20250911-185335.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 501c8t.k9lntrbuwxf6ruff --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
-Timestamp: Thu Sep 11 18:53:35 EDT 2025
-
-==> /tmp/kubeadm-join-20250912-121458.log <==
-=== Enhanced Kubeadm Join Process Started ===
-Command: kubeadm join 192.168.4.63:6443 --token 61n19o.54ysv9uf5icbnj94 --discovery-token-ca-cert-hash sha256:00bbe219ecec7b05f790aa8a5382fd9cdc4ec5f2dca29554a5f2e2999ff1ad88
-Timestamp: Fri Sep 12 12:14:58 EDT 2025
-
-2.
-Sep 12 11:41:39 storagenodeT3500 kubelet[76271]: E0912 11:41:39.018316   76271 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"jellyfin\" with CrashLoopBackOff: \"back-off 5m0s restarting failed container=jellyfin pod=jellyfin_jellyfin(a9acf74c-22f2-4c12-b1c8-2b1d3ec6a56f)\"" pod="jellyfin/jellyfin" podUID="a9acf74c-22f2-4c12-b1c8-2b1d3ec6a56f"
-
-3.
-root@storagenodeT3500:~# # On the worker (copy the join command printed earlier)
-sudo kubeadm join 192.168.4.63:6443 --token 61n19o.54ysv9uf5icbnj94 --discovery-token-ca-cert-hash sha256:00bbe219ecec7b05f790aa8a5382fd9cdc4ec5f2dca29554a5f2e2999ff1ad88 --v=5
-I0912 12:17:42.901085  451173 join.go:413] [preflight] found NodeName empty; using OS hostname as NodeName
-I0912 12:17:42.901377  451173 initconfiguration.go:122] detected and using CRI socket: unix:///var/run/containerd/containerd.sock
-[preflight] Running pre-flight checks
-I0912 12:17:42.901523  451173 preflight.go:93] [preflight] Running general checks
-I0912 12:17:42.901609  451173 checks.go:280] validating the existence of file /etc/kubernetes/kubelet.conf
-I0912 12:17:42.901637  451173 checks.go:280] validating the existence of file /etc/kubernetes/bootstrap-kubelet.conf
-I0912 12:17:42.901715  451173 checks.go:104] validating the container runtime
-I0912 12:17:42.930104  451173 checks.go:639] validating whether swap is enabled or not
-I0912 12:17:42.930198  451173 checks.go:370] validating the presence of executable crictl
-I0912 12:17:42.930238  451173 checks.go:370] validating the presence of executable conntrack
-I0912 12:17:42.930264  451173 checks.go:370] validating the presence of executable ip
-I0912 12:17:42.930304  451173 checks.go:370] validating the presence of executable iptables
-I0912 12:17:42.930332  451173 checks.go:370] validating the presence of executable mount
-I0912 12:17:42.930369  451173 checks.go:370] validating the presence of executable nsenter
-I0912 12:17:42.930406  451173 checks.go:370] validating the presence of executable ethtool
-I0912 12:17:42.930438  451173 checks.go:370] validating the presence of executable tc
-I0912 12:17:42.930466  451173 checks.go:370] validating the presence of executable touch
-I0912 12:17:42.930496  451173 checks.go:516] running all checks
-I0912 12:17:42.947731  451173 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost
-I0912 12:17:42.948059  451173 checks.go:605] validating kubelet version
-I0912 12:17:43.004064  451173 checks.go:130] validating if the "kubelet" service is enabled and active
-I0912 12:17:43.028781  451173 checks.go:203] validating availability of port 10250
-I0912 12:17:43.029000  451173 checks.go:280] validating the existence of file /etc/kubernetes/pki/ca.crt
-I0912 12:17:43.029019  451173 checks.go:430] validating if the connectivity type is via proxy or direct
-I0912 12:17:43.029065  451173 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables
-I0912 12:17:43.029118  451173 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward
-I0912 12:17:43.029156  451173 join.go:532] [preflight] Discovering cluster-info
-I0912 12:17:43.029183  451173 token.go:80] [discovery] Created cluster-info discovery client, requesting info from "192.168.4.63:6443"
-I0912 12:17:43.045942  451173 token.go:118] [discovery] Requesting info from "192.168.4.63:6443" again to validate TLS against the pinned public key
-I0912 12:17:43.062311  451173 token.go:135] [discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server "192.168.4.63:6443"
-I0912 12:17:43.062328  451173 discovery.go:52] [discovery] Using provided TLSBootstrapToken as authentication credentials for the join process
-I0912 12:17:43.062341  451173 join.go:546] [preflight] Fetching init configuration
-I0912 12:17:43.062353  451173 join.go:592] [preflight] Retrieving KubeConfig objects
-[preflight] Reading configuration from the cluster...
-[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
-I0912 12:17:43.079070  451173 kubeproxy.go:55] attempting to download the KubeProxyConfiguration from ConfigMap "kube-proxy"
-I0912 12:17:43.086414  451173 kubelet.go:74] attempting to download the KubeletConfiguration from ConfigMap "kubelet-config"
-I0912 12:17:43.094406  451173 initconfiguration.go:114] skip CRI socket detection, fill with the default CRI socket unix:///var/run/containerd/containerd.sock
-I0912 12:17:43.094647  451173 interface.go:432] Looking for default routes with IPv4 addresses
-I0912 12:17:43.094664  451173 interface.go:437] Default route transits interface "enp5s0"
-I0912 12:17:43.094855  451173 interface.go:209] Interface enp5s0 is up
-I0912 12:17:43.094930  451173 interface.go:257] Interface "enp5s0" has 3 addresses :[192.168.4.61/24 fd91:176e:252c:1:baac:6fff:fe7e:6c9d/64 fe80::baac:6fff:fe7e:6c9d/64].
-I0912 12:17:43.094957  451173 interface.go:224] Checking addr  192.168.4.61/24.
-I0912 12:17:43.094978  451173 interface.go:231] IP found 192.168.4.61
-I0912 12:17:43.095007  451173 interface.go:263] Found valid IPv4 address 192.168.4.61 for interface "enp5s0".
-I0912 12:17:43.095028  451173 interface.go:443] Found active IP 192.168.4.61
-I0912 12:17:43.105693  451173 preflight.go:104] [preflight] Running configuration dependant checks
-I0912 12:17:43.105725  451173 controlplaneprepare.go:225] [download-certs] Skipping certs download
-I0912 12:17:43.105756  451173 kubelet.go:121] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf
-I0912 12:17:43.106996  451173 kubelet.go:136] [kubelet-start] writing CA certificate at /etc/kubernetes/pki/ca.crt
-I0912 12:17:43.108003  451173 kubelet.go:157] [kubelet-start] Checking for an existing Node in the cluster with name "storagenodet3500" and status "Ready"
-I0912 12:17:43.115060  451173 kubelet.go:172] [kubelet-start] Stopping the kubelet
-[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
-[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
-[kubelet-start] Starting the kubelet
-[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...
-I0912 12:17:45.535414  451173 cert_rotation.go:137] Starting client certificate rotation controller
-I0912 12:17:45.536578  451173 kubelet.go:220] [kubelet-start] preserving the crisocket information for the node
-I0912 12:17:45.536605  451173 patchnode.go:31] [patchnode] Uploading the CRI Socket information "unix:///var/run/containerd/containerd.sock" to the Node API object "storagenodet3500" as an annotation
-
-This node has joined the cluster:
-* Certificate signing request was sent to apiserver and a response was received.
-* The Kubelet was informed of the new secure connection details.
-
-Run 'kubectl get nodes' on the control-plane to see this node join the cluster.

@@ -1754,29 +1754,30 @@
               Errors: {{ pre_join_result.stderr_lines | join('\n              ') }}
               {% endif %}
 
-        - name: "Execute enhanced join process for wiped worker"
+        - name: "Execute enhanced join process for wiped worker (bash)"
           shell: |
-            # Set environment variables for enhanced join
-            export MASTER_IP="{{ control_plane_ip }}"
-            export JOIN_TIMEOUT=120
-            export MAX_RETRIES=3
-            export TOKEN_REFRESH_RETRIES=2
-            
-            # Extract base join command from script (remove "$@" placeholder)
-            JOIN_COMMAND=$(grep -v '^#' /tmp/kubeadm-join.sh | grep kubeadm | head -1 | sed 's/ "\$@"$//')
-            
-            echo "=== Enhanced Join for Post-Wipe Worker ==="
-            echo "Join command: $JOIN_COMMAND"
-            echo "Master IP: $MASTER_IP"
-            echo "Timeout: ${JOIN_TIMEOUT}s"
-            echo "Max retries: $MAX_RETRIES"
-            echo "Token refresh retries: $TOKEN_REFRESH_RETRIES"
-            echo ""
-            
-            # Run enhanced join process with properly quoted command
-            /tmp/enhanced_kubeadm_join.sh "$JOIN_COMMAND"
+            # Run under bash -lc to preserve quoting and environment
+            bash -lc '
+            export MASTER_IP="{{ control_plane_ip }}"; 
+            export JOIN_TIMEOUT=180; 
+            export MAX_RETRIES=3; 
+            export TOKEN_REFRESH_RETRIES=2; 
+            JOIN_COMMAND=$(grep -v "^#" /tmp/kubeadm-join.sh | grep kubeadm | head -1 | sed "s/ \"\$@\"$//"); 
+            echo "=== Enhanced Join for Post-Wipe Worker ==="; 
+            echo "Join command: $JOIN_COMMAND"; 
+            /tmp/enhanced_kubeadm_join.sh "$JOIN_COMMAND"'
           register: enhanced_join_result
-          failed_when: enhanced_join_result.rc != 0
+          failed_when: false
+          when: not (skip_join_process | default(false))
+
+        - name: "Confirm worker appears and is Ready on control plane after join"
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+          delegate_to: "{{ control_plane_host }}"
+          register: node_ready_check
+          retries: 12
+          delay: 10
+          until: node_ready_check.stdout == "True"
+          failed_when: node_ready_check.stdout != "True"
           when: not (skip_join_process | default(false))
           
         - name: "Display join skip message"
