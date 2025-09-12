@@ -249,11 +249,11 @@ fix_iptables_compatibility() {
     info "Checking iptables/nftables compatibility on cluster nodes"
     
     # Check if we're experiencing nftables compatibility issues
-    local iptables_error=$(kubectl logs -n kube-system -l component=kube-proxy --tail=100 2>/dev/null | grep -i "nf_tables.*incompatible" | head -1 || echo "")
+    iptables_error=$(kubectl logs -n kube-system -l component=kube-proxy --tail=100 2>/dev/null | grep -i "nf_tables.*incompatible" | head -1 || echo "")
     
     # Get list of nodes with different OS types
-    local rhel_nodes=$(kubectl get nodes -o wide | grep -i "red.*hat\|rhel\|centos" | awk '{print $1}' || echo "")
-    local debian_nodes=$(kubectl get nodes -o wide | grep -i "debian\|ubuntu" | awk '{print $1}' || echo "")
+    rhel_nodes=$(kubectl get nodes -o wide | grep -i "red.*hat\|rhel\|centos" | awk '{print $1}' || echo "")
+    debian_nodes=$(kubectl get nodes -o wide | grep -i "debian\|ubuntu" | awk '{print $1}' || echo "")
     
     if [ -n "$rhel_nodes" ] && [ -n "$debian_nodes" ]; then
         info "Mixed OS cluster detected: RHEL nodes ($rhel_nodes) and Debian nodes ($debian_nodes)"
@@ -314,11 +314,11 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     echo "$CRASHLOOP_PROXY"
     
     # Analyze by node OS type for better diagnostics
-    echo "$CRASHLOOP_PROXY" | while read line; do
+    echo "$CRASHLOOP_PROXY" | while read -r line; do
         if [ -n "$line" ]; then
-            local pod_name=$(echo "$line" | awk '{print $1}')
-            local node_name=$(echo "$line" | awk '{print $7}')
-            local node_os=$(kubectl get node "$node_name" -o jsonpath='{.status.nodeInfo.osImage}' 2>/dev/null || echo "Unknown")
+            pod_name=$(echo "$line" | awk '{print $1}')
+            node_name=$(echo "$line" | awk '{print $7}')
+            node_os=$(kubectl get node "$node_name" -o jsonpath='{.status.nodeInfo.osImage}' 2>/dev/null || echo "Unknown")
             
             warn "Crashlooping pod $pod_name on node $node_name (OS: $node_os)"
             
@@ -340,8 +340,8 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | head -20 || echo "No previous logs available"
     
     # Check for specific error patterns
-    local nftables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "nf_tables.*incompatible" || echo "")
-    local iptables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "iptables.*failed" || echo "")
+    nftables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "nf_tables.*incompatible" || echo "")
+    iptables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "iptables.*failed" || echo "")
     
     if [ -n "$nftables_error" ]; then
         error "Detected nftables compatibility issue: $nftables_error"
@@ -355,8 +355,8 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     info "Applying kube-proxy fixes for affected nodes"
     
     # Delete all crashlooping pods to force recreation
-    echo "$CRASHLOOP_PROXY" | while read line; do
-        local pod_name=$(echo "$line" | awk '{print $1}')
+    echo "$CRASHLOOP_PROXY" | while read -r line; do
+        pod_name=$(echo "$line" | awk '{print $1}')
         info "Deleting crashlooping pod: $pod_name"
         kubectl delete pod -n kube-system "$pod_name" --force --grace-period=0 2>/dev/null || true
     done

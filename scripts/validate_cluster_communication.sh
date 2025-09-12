@@ -140,15 +140,15 @@ if [ -n "$NODEPORT_SERVICES" ]; then
     # Test NodePort connectivity for each service
     echo "$NODEPORT_SERVICES" | while read -r line; do
         if [ -n "$line" ]; then
-            local namespace=$(echo "$line" | awk '{print $1}')
-            local service=$(echo "$line" | awk '{print $2}')
-            local nodeport=$(echo "$line" | awk '{print $6}' | cut -d: -f2 | cut -d/ -f1)
+            namespace=$(echo "$line" | awk '{print $1}')
+            service=$(echo "$line" | awk '{print $2}')
+            nodeport=$(echo "$line" | awk '{print $6}' | cut -d: -f2 | cut -d/ -f1)
             
             if [ -n "$nodeport" ] && [ "$nodeport" != "<none>" ]; then
                 info "Testing NodePort service: $namespace/$service on port $nodeport"
                 
                 # Get node IPs for testing
-                local node_ips=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+                node_ips=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
                 
                 for node_ip in $node_ips; do
                     if timeout 5 curl -s --connect-timeout 3 "http://$node_ip:$nodeport/" >/dev/null 2>&1; then
@@ -211,7 +211,7 @@ if command -v iptables >/dev/null 2>&1; then
     fi
     
     # Check for nftables compatibility issues
-    local nftables_error=$(sudo iptables -t nat -L 2>&1 | grep -i "nf_tables.*incompatible" || echo "")
+    nftables_error=$(sudo iptables -t nat -L 2>&1 | grep -i "nf_tables.*incompatible" || echo "")
     if [ -n "$nftables_error" ]; then
         error "Detected iptables/nftables compatibility issue:"
         echo "$nftables_error"
@@ -260,7 +260,7 @@ EOF
 sleep 15
 
 if kubectl get pod comm-test-1 >/dev/null 2>&1 && kubectl get pod comm-test-2 >/dev/null 2>&1; then
-    local pod1_ip=$(kubectl get pod comm-test-1 -o jsonpath='{.status.podIP}' 2>/dev/null)
+    pod1_ip=$(kubectl get pod comm-test-1 -o jsonpath='{.status.podIP}' 2>/dev/null)
     
     if [ -n "$pod1_ip" ]; then
         run_test "Inter-pod communication test" "kubectl exec comm-test-2 -- wget -q -O- --timeout=5 http://$pod1_ip/"
@@ -283,13 +283,13 @@ if kubectl get namespace jellyfin >/dev/null 2>&1; then
     
     # Check if jellyfin service exists
     if kubectl get service -n jellyfin jellyfin-service >/dev/null 2>&1; then
-        local jellyfin_nodeport=$(kubectl get service -n jellyfin jellyfin-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
+        jellyfin_nodeport=$(kubectl get service -n jellyfin jellyfin-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
         
         if [ -n "$jellyfin_nodeport" ]; then
             info "Testing Jellyfin NodePort $jellyfin_nodeport"
             
             # Test on each node
-            local node_ips=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+            node_ips=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
             
             for node_ip in $node_ips; do
                 if timeout 5 curl -s --connect-timeout 3 "http://$node_ip:$jellyfin_nodeport/" >/dev/null 2>&1; then
