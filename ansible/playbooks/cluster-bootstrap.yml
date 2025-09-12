@@ -184,6 +184,8 @@
 - name: "Verify Cluster Status"
   hosts: monitoring_nodes
   become: true
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
   tasks:
     - name: "Wait for all nodes to be Ready"
       kubernetes.core.k8s_info:
