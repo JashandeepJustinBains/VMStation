@@ -249,7 +249,7 @@ fix_iptables_compatibility() {
     info "Checking iptables/nftables compatibility on cluster nodes"
     
     # Check if we're experiencing nftables compatibility issues
-    iptables_error=$(kubectl logs -n kube-system -l component=kube-proxy --tail=100 2>/dev/null | grep -i "nf_tables.*incompatible" | head -1 || echo "")
+    iptables_error=$(kubectl logs -n kube-system -l k8s-app=kube-proxy --tail=100 2>/dev/null | grep -i "nf_tables.*incompatible" | head -1 || echo "")
     
     # Get list of nodes with different OS types
     rhel_nodes=$(kubectl get nodes -o wide | grep -i "red.*hat\|rhel\|centos" | awk '{print $1}' || echo "")
@@ -463,8 +463,11 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     echo "$NEW_PROXY_STATUS"
     
     # Count running vs total
-    RUNNING_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c "Running" || echo "0")
-    TOTAL_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c kube-proxy || echo "0")
+    RUNNING_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c "Running" 2>/dev/null || echo "0")
+    TOTAL_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c kube-proxy 2>/dev/null || echo "0")
+    # Ensure single integers
+    RUNNING_PROXY=$(echo "$RUNNING_PROXY" | tr -d ' \n\r' | head -1)
+    TOTAL_PROXY=$(echo "$TOTAL_PROXY" | tr -d ' \n\r' | head -1)
     
     if [ "$RUNNING_PROXY" -eq "$TOTAL_PROXY" ] && [ "$TOTAL_PROXY" -gt 0 ]; then
         info "✓ All kube-proxy pods are now running ($RUNNING_PROXY/$TOTAL_PROXY)"
@@ -485,8 +488,11 @@ else
         info "Checking if kube-proxy DaemonSet needs to be recreated..."
         # This will be caught by the DaemonSet check we added above
     else
-        RUNNING_PROXY=$(echo "$EXISTING_PROXY" | grep -c "Running" || echo "0")
-        TOTAL_PROXY=$(echo "$EXISTING_PROXY" | grep -c kube-proxy || echo "0")
+        RUNNING_PROXY=$(echo "$EXISTING_PROXY" | grep -c "Running" 2>/dev/null || echo "0")
+        TOTAL_PROXY=$(echo "$EXISTING_PROXY" | grep -c kube-proxy 2>/dev/null || echo "0")
+        # Ensure single integers
+        RUNNING_PROXY=$(echo "$RUNNING_PROXY" | tr -d ' \n\r' | head -1)
+        TOTAL_PROXY=$(echo "$TOTAL_PROXY" | tr -d ' \n\r' | head -1)
         if [ "$RUNNING_PROXY" -eq "$TOTAL_PROXY" ] && [ "$TOTAL_PROXY" -gt 0 ]; then
             info "✓ All kube-proxy pods are running ($RUNNING_PROXY/$TOTAL_PROXY)"
         else
@@ -538,8 +544,11 @@ echo
 info "Step 4: Restart any remaining problematic pods"
 
 # Restart CoreDNS if it's not ready
-COREDNS_READY=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $2}' | grep -c "1/1" || echo "0")
-COREDNS_TOTAL=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | wc -l)
+COREDNS_READY=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $2}' | grep -c "1/1" 2>/dev/null || echo "0")
+COREDNS_TOTAL=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | wc -l 2>/dev/null)
+# Ensure single integers 
+COREDNS_READY=$(echo "$COREDNS_READY" | tr -d ' \n\r' | head -1)
+COREDNS_TOTAL=$(echo "$COREDNS_TOTAL" | tr -d ' \n\r' | head -1)
 
 if [ "$COREDNS_READY" -lt "$COREDNS_TOTAL" ]; then
     warn "CoreDNS pods are not all ready ($COREDNS_READY/$COREDNS_TOTAL)"
@@ -562,7 +571,7 @@ echo
 echo "=== Critical Pod Status ==="
 kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
 kubectl get pods -n kube-flannel -o wide
-kubectl get pods -n kube-system -l component=kube-proxy -o wide
+kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide
 
 if kubectl get namespace jellyfin >/dev/null 2>&1; then
     echo
@@ -610,7 +619,7 @@ if [ "$JELLYFIN_FINAL_READY" = "true" ] && [ "$REMAINING_CRASHLOOP" -eq 0 ] && [
 else
     warn "Some issues may persist. Check logs with:"
     echo "  kubectl logs -n jellyfin jellyfin"
-    echo "  kubectl logs -n kube-system -l component=kube-proxy"
+    echo "  kubectl logs -n kube-system -l k8s-app=kube-proxy"
     echo "  kubectl get events --all-namespaces --sort-by='.lastTimestamp'"
 fi
 
