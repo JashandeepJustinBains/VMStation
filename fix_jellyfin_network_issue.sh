@@ -1,4 +1,130 @@
 #!/bin/bash
+# Quick remediation and diagnostic script for Jellyfin network issues in this repo
+# - Collects diagnostics from the Jellyfin pod and cluster
+# - Attempts non-destructive cluster-level remediation steps
+# - Prints node-level commands to run manually if deeper fixes are required
+
+set -euo pipefail
+
+NON_INTERACTIVE=false
+if [[ "${1:-}" == "--non-interactive" || "${1:-}" == "-y" ]]; then
+    NON_INTERACTIVE=true
+fi
+
+if [[ $(id -u) -ne 0 ]]; then
+    echo "This script should be run as root or with sudo from the control plane node (for daemonset restarts)."
+fi
+
+info(){ echo -e "[INFO] $*"; }
+warn(){ echo -e "[WARN] $*"; }
+err(){ echo -e "[ERROR] $*"; }
+
+OUTDIR="/tmp/jellyfin-network-fix-$(date +%s)"
+mkdir -p "$OUTDIR"
+info "Collecting diagnostics to $OUTDIR"
+
+# Find jellyfin pod
+POD_NAME=$(kubectl -n jellyfin get pod -o name 2>/dev/null | head -n1 | sed 's#pod/##' || true)
+if [ -z "$POD_NAME" ]; then
+    warn "No jellyfin pod found in namespace 'jellyfin'"
+else
+    info "Found pod: $POD_NAME"
+    kubectl -n jellyfin get pod "$POD_NAME" -o wide > "$OUTDIR/pod-describe.txt" 2>&1 || true
+    kubectl -n jellyfin describe pod "$POD_NAME" > "$OUTDIR/pod-describe-full.txt" 2>&1 || true
+    kubectl -n jellyfin logs "$POD_NAME" --all-containers=true > "$OUTDIR/pod-logs.txt" 2>&1 || true
+
+    info "Testing network from inside the pod (DNS, route, curl)"
+    kubectl -n jellyfin exec "$POD_NAME" -- cat /etc/resolv.conf > "$OUTDIR/pod-resolv.conf" 2>&1 || true
+    kubectl -n jellyfin exec "$POD_NAME" -- ip -4 addr show > "$OUTDIR/pod-ip-addr.txt" 2>&1 || true
+    kubectl -n jellyfin exec "$POD_NAME" -- ip -4 route show > "$OUTDIR/pod-route.txt" 2>&1 || true
+    kubectl -n jellyfin exec "$POD_NAME" -- ss -tunlp > "$OUTDIR/pod-ss.txt" 2>&1 || true
+
+    # Try direct curl to jellyfin manifest (may fail) but we capture output
+    kubectl -n jellyfin exec "$POD_NAME" -- sh -c "curl -sv --max-time 8 https://repo.jellyfin.org/files/plugin/manifest.json" > "$OUTDIR/pod-curl-manifest.txt" 2>&1 || true
+fi
+
+# Cluster level state
+kubectl get nodes -o wide > "$OUTDIR/nodes.txt" 2>&1 || true
+kubectl get pods --all-namespaces -o wide > "$OUTDIR/pods-all.txt" 2>&1 || true
+kubectl get daemonset -n kube-system kube-proxy -o wide > "$OUTDIR/kube-proxy-ds.txt" 2>&1 || true
+kubectl -n kube-system get pods -l k8s-app=kube-proxy -o wide > "$OUTDIR/kube-proxy-pods.txt" 2>&1 || true
+kubectl -n kube-system logs -l k8s-app=kube-proxy --tail=200 > "$OUTDIR/kube-proxy-logs.txt" 2>&1 || true
+kubectl -n kube-flannel get pods -o wide > "$OUTDIR/kube-flannel-pods.txt" 2>&1 || true
+kubectl -n kube-flannel logs -l app=kube-flannel --tail=200 > "$OUTDIR/kube-flannel-logs.txt" 2>&1 || true || true
+
+info "Saved cluster diagnostics. Attempting safe remediations (daemonset restarts and pod recreation)."
+
+if [ "$NON_INTERACTIVE" = false ]; then
+    read -p "Proceed with restarting kube-proxy and flannel daemonsets and recreating jellyfin pod? [y/N] " yn || true
+    case "$yn" in
+        [Yy]*) ;;
+        *) info "Aborting remediation steps"; echo "Diagnostics saved in $OUTDIR"; exit 0 ;;
+    esac
+else
+    info "Non-interactive mode: proceeding with remediations"
+fi
+
+# Restart kube-proxy daemonset
+info "Restarting kube-proxy daemonset in kube-system"
+kubectl -n kube-system rollout restart daemonset kube-proxy || warn "Failed to restart kube-proxy via kubectl; you may need to restart kube-proxy on nodes manually"
+sleep 6
+
+# Restart flannel daemonset (attempt common namespaces)
+info "Restarting flannel daemonset (kube-flannel namespace, falling back to kube-system)"
+kubectl -n kube-flannel rollout restart daemonset kube-flannel-ds >/dev/null 2>&1 || kubectl -n kube-system rollout restart daemonset kube-flannel-ds >/dev/null 2>&1 || warn "Could not restart flannel daemonset via kubectl"
+sleep 8
+
+# Give cluster a moment then re-check pod status
+info "Waiting 10s for pods to stabilize..."
+sleep 10
+
+if [ -n "$POD_NAME" ]; then
+    info "Deleting jellyfin pod to force new network namespace allocation"
+    kubectl -n jellyfin delete pod "$POD_NAME" --wait=false || warn "Failed to delete jellyfin pod"
+    info "New pod will be created by the existing manifest/Deployment/Controller. Waiting up to 60s for new pod to appear..."
+    for i in {1..12}; do
+        NEWPOD=$(kubectl -n jellyfin get pod -o name 2>/dev/null | head -n1 | sed 's#pod/##' || true)
+        if [ -n "$NEWPOD" ] && [ "$NEWPOD" != "$POD_NAME" ]; then
+            info "New pod detected: $NEWPOD"
+            kubectl -n jellyfin get pod "$NEWPOD" -o wide > "$OUTDIR/newpod.txt" 2>&1 || true
+            break
+        fi
+        sleep 5
+    done
+fi
+
+info "Remediation steps complete. Diagnostics are in: $OUTDIR"
+tar -czf "${OUTDIR}.tar.gz" -C "$(dirname "$OUTDIR")" "$(basename "$OUTDIR")" || true
+
+cat <<'EOF'
+Next steps if issues persist (run on the node where the jellyfin pod is scheduled):
+
+# Replace <NODE> with the node name and run as root on that node
+ip -4 addr show
+ip -4 route show
+ip route get 8.8.8.8
+ip -d link show flannel.1 || ip -d link show cni0
+sudo nft list table ip nat || sudo iptables -t nat -L KUBE-SERVICES -n --line-numbers
+sudo sysctl net.ipv4.ip_forward
+sudo conntrack -L | head -n 40   # requires conntrack tool
+
+# Try restarting container runtime if suspect (node-level):
+sudo systemctl restart containerd
+
+# Optionally flush conntrack entries (will disrupt active connections):
+# sudo conntrack -F
+
+# After node-level changes, restart kube-proxy and flannel daemonsets again from control plane:
+# kubectl -n kube-system rollout restart daemonset kube-proxy
+# kubectl -n kube-flannel rollout restart daemonset kube-flannel-ds || kubectl -n kube-system rollout restart daemonset kube-flannel-ds
+
+If you want, upload the tarball printed above and I will analyze the collected logs and suggest exact next commands.
+EOF
+
+echo "Diagnostics tarball: ${OUTDIR}.tar.gz"
+
+exit 0
+#!/bin/bash
 
 # Fix Jellyfin "no route to host" Network Issue
 # This script addresses the specific CNI bridge configuration problem
