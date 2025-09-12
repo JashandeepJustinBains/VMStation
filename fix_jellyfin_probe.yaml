@@ -36,6 +36,10 @@ spec:
     env:
     - name: JELLYFIN_PublishedServerUrl
       value: "http://192.168.4.61:30096"
+    - name: JELLYFIN_HTTP_BIND_ADDRESS
+      value: "0.0.0.0"
+    - name: JELLYFIN_HTTP_PORT
+      value: "8096"
     resources:
       requests:
         memory: "512Mi"
@@ -51,7 +55,7 @@ spec:
     - name: jellyfin-media
       mountPath: /media
       readOnly: true
-    # Fixed probe configuration - use root endpoint instead of /web/index.html
+    # Fixed probe configuration - more time for initial Jellyfin setup
     livenessProbe:
       httpGet:
         path: /
@@ -75,9 +79,9 @@ spec:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 10
       failureThreshold: 30
     securityContext:
       allowPrivilegeEscalation: false
