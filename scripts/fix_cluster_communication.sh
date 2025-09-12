@@ -220,6 +220,24 @@ main() {
         sleep 8
     fi
     
+    # Fix 2b: Worker node specific CNI issues (addresses pod-to-pod communication failures)
+    echo
+    info "Step 2b: Fixing worker node CNI communication issues"
+    if ! run_fix_script "fix_worker_node_cni.sh" "Worker node CNI communication fix" "--node" "storagenodet3500"; then
+        warn "Worker node CNI fix had issues, collecting diagnostics"
+        overall_success=false
+        collect_diagnostics
+    fi
+    
+    # Fix 2c: Flannel mixed-OS configuration issues
+    echo
+    info "Step 2c: Fixing Flannel configuration for mixed OS environment"
+    if ! run_fix_script "fix_flannel_mixed_os.sh" "Flannel mixed-OS configuration fix"; then
+        warn "Flannel configuration fix had issues, collecting diagnostics"
+        overall_success=false
+        collect_diagnostics
+    fi
+    
     # Fix 3: kube-proxy and remaining pod issues
     echo
     info "Step 3: Fixing kube-proxy and pod issues"
@@ -253,6 +271,15 @@ main() {
     info "=== Final Validation ==="
     if ! run_fix_script "validate_cluster_communication.sh" "cluster communication validation"; then
         warn "Validation found remaining issues, collecting diagnostics"
+        overall_success=false
+        collect_diagnostics
+    fi
+    
+    # Additional pod-to-pod connectivity validation (addresses specific problem statement scenario)
+    echo
+    info "=== Pod-to-Pod Connectivity Validation ==="
+    if ! run_fix_script "validate_pod_connectivity.sh" "pod-to-pod connectivity validation"; then
+        warn "Pod connectivity validation found issues - may need worker node CNI fix"
         overall_success=false
         collect_diagnostics
     fi
