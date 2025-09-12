@@ -2,7 +2,7 @@
 
 # Fix Jellyfin Pod Readiness Issues
 # This script applies minimal changes to fix the probe configuration
-# and ensure proper volume permissions
+# and ensure proper network connectivity for health checks
 
 set -e
 
@@ -23,7 +23,7 @@ echo "Timestamp: $(date)"
 echo
 
 # Check if this is being run from the repository root
-if [ ! -f "fix_jellyfin_probe.yaml" ]; then
+if [ ! -f "manifests/jellyfin/jellyfin.yaml" ]; then
     error "This script must be run from the VMStation repository root"
     exit 1
 fi
@@ -40,6 +40,37 @@ if ! kubectl get nodes >/dev/null 2>&1; then
     exit 1
 fi
 
+info "Checking current cluster network status..."
+
+# Check for CNI bridge conflicts that commonly cause "no route to host" errors
+if ip addr show cni0 >/dev/null 2>&1; then
+    CNI_IP=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+    if [ -n "$CNI_IP" ]; then
+        echo "Current cni0 bridge IP: $CNI_IP"
+        
+        # Check if it matches expected Flannel subnet
+        if echo "$CNI_IP" | grep -q "10.244."; then
+            info "✓ cni0 bridge IP is in correct Flannel subnet"
+        else
+            warn "cni0 bridge IP ($CNI_IP) is NOT in expected Flannel subnet (10.244.0.0/16)"
+            warn "This is likely causing the 'no route to host' errors"
+            
+            if [ -f "scripts/fix_cni_bridge_conflict.sh" ]; then
+                warn "Running CNI bridge fix to resolve network connectivity..."
+                if sudo ./scripts/fix_cni_bridge_conflict.sh; then
+                    info "✓ CNI bridge conflict resolved"
+                    # Wait for network to stabilize
+                    sleep 30
+                else
+                    warn "CNI bridge fix failed, proceeding with extended probe timeouts"
+                fi
+            fi
+        fi
+    fi
+else
+    warn "No cni0 bridge found - Flannel may not be properly initialized"
+fi
+
 info "Checking current Jellyfin pod status..."
 
 # Check if jellyfin namespace exists
@@ -52,27 +83,19 @@ fi
 if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
     info "Current Jellyfin pod found - checking configuration..."
     
-    # Get current probe configuration
-    CURRENT_LIVENESS_PATH=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.spec.containers[0].livenessProbe.httpGet.path}' 2>/dev/null || echo "")
-    CURRENT_READINESS_PATH=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.spec.containers[0].readinessProbe.httpGet.path}' 2>/dev/null || echo "")
-    CURRENT_STARTUP_PATH=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.spec.containers[0].startupProbe.httpGet.path}' 2>/dev/null || echo "")
+    # Get current pod status and recent events
+    POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}')
+    POD_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "false")
     
-    echo "Current probe paths:"
-    echo "  Liveness: $CURRENT_LIVENESS_PATH"
-    echo "  Readiness: $CURRENT_READINESS_PATH" 
-    echo "  Startup: $CURRENT_STARTUP_PATH"
+    echo "Current pod status: $POD_STATUS, Ready: $POD_READY"
     
-    if [ "$CURRENT_LIVENESS_PATH" = "/web/index.html" ] || [ "$CURRENT_READINESS_PATH" = "/web/index.html" ] || [ "$CURRENT_STARTUP_PATH" = "/web/index.html" ]; then
-        warn "Detected incorrect probe paths using /web/index.html"
-        info "This is the root cause of the readiness failure"
-        
-        # Check pod status
-        POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}')
-        POD_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "false")
-        
-        echo "Current pod status: $POD_STATUS, Ready: $POD_READY"
-        
-        info "Applying fix: replacing pod with correct probe configuration..."
+    # Check for network-related failures
+    NETWORK_ERRORS=$(kubectl get events -n jellyfin --field-selector involvedObject.name=jellyfin --sort-by='.lastTimestamp' -o json 2>/dev/null | jq -r '.items[] | select(.message | contains("no route to host") or contains("dial tcp")) | .message' 2>/dev/null || echo "")
+    
+    if [ -n "$NETWORK_ERRORS" ]; then
+        warn "Detected network connectivity errors:"
+        echo "$NETWORK_ERRORS"
+        warn "Will recreate pod with network-optimized configuration"
         
         # Delete the problematic pod
         kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true
@@ -82,20 +105,15 @@ if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
         while kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; do
             sleep 1
         done
-        
+    elif [ "$POD_READY" = "true" ]; then
+        info "✓ Jellyfin pod is already ready and healthy"
+        exit 0
     else
-        info "Probe paths look correct, checking if pod is ready..."
-        POD_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "false")
-        if [ "$POD_READY" = "true" ]; then
-            info "✓ Jellyfin pod is already ready and healthy"
-            exit 0
-        else
-            warn "Pod exists with correct probes but is not ready - will recreate"
-            kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true
-            while kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; do
-                sleep 1
-            done
-        fi
+        warn "Pod exists but is not ready - will recreate with improved configuration"
+        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true
+        while kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; do
+            sleep 1
+        done
     fi
 else
     info "No existing Jellyfin pod found - will create new one"
@@ -128,9 +146,9 @@ else
     echo "  sudo chmod 755 /var/lib/jellyfin /srv/media"
 fi
 
-# Apply the fixed pod configuration
-info "Applying corrected Jellyfin pod configuration..."
-kubectl apply -f fix_jellyfin_probe.yaml
+# Apply the fixed pod configuration with network-optimized settings
+info "Applying network-optimized Jellyfin pod configuration..."
+kubectl apply -f manifests/jellyfin/jellyfin.yaml
 
 # Wait for pod to be created
 info "Waiting for pod to be created..."
@@ -147,18 +165,29 @@ for i in $(seq 1 $timeout); do
     sleep 1
 done
 
-# Wait for pod to be ready
-info "Waiting for pod to become ready (this may take a few minutes)..."
-if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=300s; then
+# Wait for pod to be ready with extended timeout for network issues
+info "Waiting for pod to become ready (extended timeout for network resolution)..."
+if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=600s; then
     info "✓ Jellyfin pod is now ready!"
     
     # Show final status
     POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}')
     POD_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.containerStatuses[0].ready}')
+    POD_IP=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.podIP}')
     
     echo
-    info "Final status: $POD_STATUS, Ready: $POD_READY"
+    info "Final status: $POD_STATUS, Ready: $POD_READY, IP: $POD_IP"
     info "Access Jellyfin at: http://192.168.4.61:30096"
+    
+    # Verify network connectivity to pod IP
+    if [ -n "$POD_IP" ]; then
+        info "Testing network connectivity to pod IP..."
+        if timeout 10 curl -s --connect-timeout 5 "http://$POD_IP:8096/" >/dev/null 2>&1; then
+            info "✓ Direct pod connectivity confirmed"
+        else
+            warn "Direct pod connectivity test failed, but pod is ready (may be normal)"
+        fi
+    fi
     
     # Verify service exists
     if kubectl get service -n jellyfin jellyfin-service >/dev/null 2>&1; then
@@ -193,7 +222,7 @@ EOF
     fi
     
 else
-    error "Pod failed to become ready within timeout"
+    error "Pod failed to become ready within extended timeout"
     
     # Show diagnostic information
     echo
@@ -203,10 +232,13 @@ else
     echo
     echo "Pod events:"
     kubectl describe pod -n jellyfin jellyfin | tail -20
+    echo
+    echo "Recent cluster events (last 10):"
+    kubectl get events --all-namespaces --sort-by='.lastTimestamp' | tail -10
     
     exit 1
 fi
 
 echo
 info "Jellyfin readiness issue has been resolved!"
-info "The pod is now using the correct health check endpoint (/) instead of (/web/index.html)"
+info "The pod now uses network-optimized configuration to handle connectivity issues"
