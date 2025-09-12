@@ -21,11 +21,13 @@ spec:
   # Schedule on storage node explicitly
   nodeSelector:
     kubernetes.io/hostname: storagenodet3500
-  # Security context: run as non-root user
+  # Security context: Allow Jellyfin to handle permissions internally
   securityContext:
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
+    runAsUser: 0
+    runAsGroup: 0
+    fsGroup: 0
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: jellyfin
     image: jellyfin/jellyfin:latest
@@ -59,10 +61,10 @@ spec:
       limits:
         cpu: 2000m
         memory: 2Gi
-    # Improved health checks using web interface
+    # Health checks using root endpoint for better compatibility
     livenessProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 180
@@ -71,7 +73,7 @@ spec:
       failureThreshold: 5
     readinessProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 120
@@ -80,13 +82,13 @@ spec:
       failureThreshold: 5
     startupProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 30
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 10
+      failureThreshold: 20
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false

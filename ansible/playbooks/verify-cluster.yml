@@ -301,14 +301,14 @@
 
     - name: "Test Jellyfin web interface"
       uri:
-        url: "http://192.168.4.61:30096/web/index.html"
+        url: "http://192.168.4.61:30096/"
         method: GET
         return_content: yes
-        status_code: [200, 404]  # 404 is acceptable for health endpoint
+        status_code: [200, 302]  # 302 is acceptable for redirect to setup
       register: jellyfin_test
       retries: 10
       delay: 15
-      failed_when: jellyfin_test.status not in [200, 404]
+      failed_when: jellyfin_test.status not in [200, 302]
 
 - name: "Final Smoke Test Summary"
   hosts: monitoring_nodes

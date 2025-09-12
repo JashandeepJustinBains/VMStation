@@ -32,7 +32,7 @@ The user specifically requested removal of PVC dependencies since they handle al
 ### 2. Fixed Health Check Endpoints
 **Files**: `manifests/jellyfin/jellyfin.yaml`, `ansible/playbooks/verify-cluster.yml`
 - **Before**: Used `/health` endpoint (incorrect/unreliable)
-- **After**: Uses `/web/index.html` endpoint (correct Jellyfin endpoint)
+- **After**: Uses `/` endpoint (better compatibility with Jellyfin startup)
 
 **Benefits**:
 - Startup probe: 30 attempts × 10s = 5 minutes startup time allowance

@@ -98,10 +98,10 @@ spec:
       mountPath: /config
       readOnly: false
     
-    # Improved health checks - using web interface instead of /health endpoint
+    # Health checks using root endpoint for better compatibility
     livenessProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 180
@@ -111,7 +111,7 @@ spec:
     
     readinessProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 120
@@ -122,13 +122,13 @@ spec:
     # Startup probe to handle slow initialization
     startupProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 30
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 10
+      failureThreshold: 20
     
     # Security context for container
     securityContext:

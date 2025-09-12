@@ -156,10 +156,10 @@ spec:
     - name: config
       mountPath: /config
       readOnly: false
-    # Improved health checks with longer delays and more lenient settings
+    # Improved health checks using root endpoint for compatibility
     livenessProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 180
@@ -168,7 +168,7 @@ spec:
       failureThreshold: 5
     readinessProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 120
@@ -178,13 +178,13 @@ spec:
     # Startup probe to handle slow initialization
     startupProbe:
       httpGet:
-        path: /web/index.html
+        path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 30
+      initialDelaySeconds: 60
+      periodSeconds: 15
+      timeoutSeconds: 10
+      failureThreshold: 20
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
