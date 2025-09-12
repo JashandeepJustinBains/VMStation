@@ -306,8 +306,89 @@ EOF
     fi
 }
 
-# Find crashlooping kube-proxy pods (check all nodes, especially mixed OS environments)
-CRASHLOOP_PROXY=$(kubectl get pods -n kube-system -l component=kube-proxy -o wide | grep "CrashLoopBackOff" || echo "")
+# Check if kube-proxy DaemonSet exists first
+if ! kubectl get daemonset kube-proxy -n kube-system >/dev/null 2>&1; then
+    warn "kube-proxy DaemonSet not found - recreating it"
+    info "Creating kube-proxy DaemonSet"
+    
+    # Get the control plane endpoint for the config
+    CONTROL_PLANE_ENDPOINT=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' | sed 's|https://||' | cut -d: -f1)
+    
+    # Create kube-proxy DaemonSet
+    cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    k8s-app: kube-proxy
+  name: kube-proxy
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      k8s-app: kube-proxy
+  template:
+    metadata:
+      labels:
+        k8s-app: kube-proxy
+    spec:
+      containers:
+      - command:
+        - /usr/local/bin/kube-proxy
+        - --config=/var/lib/kube-proxy/config.conf
+        - --hostname-override=\$(NODE_NAME)
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        image: registry.k8s.io/kube-proxy:v1.29.15
+        imagePullPolicy: IfNotPresent
+        name: kube-proxy
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/kube-proxy
+          name: kube-proxy
+        - mountPath: /run/xtables.lock
+          name: xtables-lock
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      serviceAccount: kube-proxy
+      serviceAccountName: kube-proxy
+      tolerations:
+      - operator: Exists
+      volumes:
+      - configMap:
+          name: kube-proxy
+        name: kube-proxy
+      - hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+        name: xtables-lock
+      - hostPath:
+          path: /lib/modules
+        name: lib-modules
+  updateStrategy:
+    type: RollingUpdate
+EOF
+    
+    info "Waiting for kube-proxy DaemonSet to be ready..."
+    kubectl rollout status daemonset/kube-proxy -n kube-system --timeout=180s || warn "kube-proxy rollout timed out"
+fi
+
+# Find crashlooping kube-proxy pods (check all nodes, especially mixed OS environments)  
+CRASHLOOP_PROXY=$(kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide 2>/dev/null | grep "CrashLoopBackOff" || echo "")
 
 if [ -n "$CRASHLOOP_PROXY" ]; then
     warn "Found crashlooping kube-proxy pods:"
@@ -377,7 +458,7 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     
     # Check the new pod status
     sleep 10
-    NEW_PROXY_STATUS=$(kubectl get pods -n kube-system -l component=kube-proxy -o wide)
+    NEW_PROXY_STATUS=$(kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide)
     echo "Updated kube-proxy pod status:"
     echo "$NEW_PROXY_STATUS"
     
@@ -396,6 +477,23 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     
 else
     info "No crashlooping kube-proxy pods found"
+    
+    # Check if kube-proxy pods exist and are running
+    EXISTING_PROXY=$(kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide 2>/dev/null | grep kube-proxy || echo "")
+    if [ -z "$EXISTING_PROXY" ]; then
+        warn "No kube-proxy pods found at all - they may not have been created"
+        info "Checking if kube-proxy DaemonSet needs to be recreated..."
+        # This will be caught by the DaemonSet check we added above
+    else
+        RUNNING_PROXY=$(echo "$EXISTING_PROXY" | grep -c "Running" || echo "0")
+        TOTAL_PROXY=$(echo "$EXISTING_PROXY" | grep -c kube-proxy || echo "0")
+        if [ "$RUNNING_PROXY" -eq "$TOTAL_PROXY" ] && [ "$TOTAL_PROXY" -gt 0 ]; then
+            info "✓ All kube-proxy pods are running ($RUNNING_PROXY/$TOTAL_PROXY)"
+        else
+            warn "Some kube-proxy pods are not running ($RUNNING_PROXY/$TOTAL_PROXY)"
+            echo "$EXISTING_PROXY"
+        fi
+    fi
     
     # Still check for iptables compatibility in current logs
     fix_iptables_compatibility
@@ -477,8 +575,11 @@ echo "=== Monitoring Pods ==="
 kubectl get pods -n monitoring -o wide 2>/dev/null || echo "No monitoring namespace found"
 
 # Count remaining issues
-REMAINING_CRASHLOOP=$(kubectl get pods --all-namespaces | grep -c "CrashLoopBackOff" || echo "0")
-REMAINING_PENDING=$(kubectl get pods --all-namespaces | grep -c "Pending\|ContainerCreating" || echo "0")
+REMAINING_CRASHLOOP=$(kubectl get pods --all-namespaces | grep -c "CrashLoopBackOff" 2>/dev/null || echo "0")
+REMAINING_PENDING=$(kubectl get pods --all-namespaces | grep -c "Pending\|ContainerCreating" 2>/dev/null || echo "0")
+# Ensure we have single integers
+REMAINING_CRASHLOOP=$(echo "$REMAINING_CRASHLOOP" | tr -d ' \n\r' | head -1)
+REMAINING_PENDING=$(echo "$REMAINING_PENDING" | tr -d ' \n\r' | head -1)
 JELLYFIN_FINAL_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "false")
 
 echo
