@@ -1,102 +1,1845 @@
-TASK [Deploy monitoring namespace and components] *********************************************************************************************************************************************
-failed: [masternode] (item=/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/prometheus.yaml) => {"ansible_loop_var": "item", "changed": false, "item": "/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/prometheus.yaml", "msg": "Failed to patch object: b'{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"Deployment.apps \\\\\"prometheus\\\\\" is invalid: spec.selector: Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"prometheus\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"prometheus\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"reason\":\"Invalid\",\"details\":{\"name\":\"prometheus\",\"group\":\"apps\",\"kind\":\"Deployment\",\"causes\":[{\"reason\":\"FieldValueInvalid\",\"message\":\"Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"prometheus\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"prometheus\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"field\":\"spec.selector\"}]},\"code\":422}\\n'", "reason": "Unprocessable Entity"}
-failed: [masternode] (item=/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/grafana.yaml) => {"ansible_loop_var": "item", "changed": false, "item": "/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/grafana.yaml", "msg": "Failed to patch object: b'{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"Deployment.apps \\\\\"grafana\\\\\" is invalid: spec.selector: Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"grafana\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"grafana\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"reason\":\"Invalid\",\"details\":{\"name\":\"grafana\",\"group\":\"apps\",\"kind\":\"Deployment\",\"causes\":[{\"reason\":\"FieldValueInvalid\",\"message\":\"Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"grafana\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"grafana\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"field\":\"spec.selector\"}]},\"code\":422}\\n'", "reason": "Unprocessable Entity"}
-
-PLAY RECAP ************************************************************************************************************************************************************************************
-masternode                 : ok=14   changed=0    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0
-
-[ERROR] ❌ Cluster verification failed!
-[INFO] Run smoke test for quick diagnosis: ./deploy-cluster.sh smoke-test
-=== VMStation Kubernetes Cluster Deployment ===
-Command: verify
-Mode: full
-Timestamp: Fri 12 Sep 2025 11:09:56 AM EDT
-
-[INFO] Checking prerequisites...
-[SUCCESS] Prerequisites check passed
-[INFO] Running cluster verification...
-[WARNING]: Collection kubernetes.core does not support Ansible version 2.14.18
-
-PLAY [Cluster Health Verification] ************************************************************************************************************************************************************
-
-TASK [Gathering Facts] ************************************************************************************************************************************************************************
-ok: [masternode]
-
-TASK [Verify kubectl is working] **************************************************************************************************************************************************************
-[WARNING]: kubernetes<24.2.0 is not supported or tested. Some features may not work.
-ok: [masternode]
-
-TASK [Check all nodes are Ready] **************************************************************************************************************************************************************
-ok: [masternode]
-
-TASK [Display node status] ********************************************************************************************************************************************************************
-ok: [masternode] => (item={'metadata': {'name': 'homelab', 'uid': '6ca3bad7-3ca3-4fab-a838-a69f131d5858', 'resourceVersion': '210922', 'creationTimestamp': '2025-09-11T23:04:37Z', 'labels': {'beta.kubernetes.io/arch': 'amd64', 'beta.kubernetes.io/os': 'linux', 'kubernetes.io/arch': 'amd64', 'kubernetes.io/hostname': 'homelab', 'kubernetes.io/os': 'linux'}, 'annotations': {'flannel.alpha.coreos.com/backend-data': '{"VNI":1,"VtepMAC":"5e:b3:e9:37:1f:d1"}', 'flannel.alpha.coreos.com/backend-type': 'vxlan', 'flannel.alpha.coreos.com/kube-subnet-manager': 'true', 'flannel.alpha.coreos.com/public-ip': '192.168.4.62', 'kubeadm.alpha.kubernetes.io/cri-socket': 'unix:///var/run/containerd/containerd.sock', 'node.alpha.kubernetes.io/ttl': '0', 'volumes.kubernetes.io/controller-managed-attach-detach': 'true'}, 'managedFields': [{'manager': 'kubeadm', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-11T23:04:37Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:kubeadm.alpha.kubernetes.io/cri-socket': {}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-11T23:04:37Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'.': {}, 'f:volumes.kubernetes.io/controller-managed-attach-detach': {}}, 'f:labels': {'.': {}, 'f:beta.kubernetes.io/arch': {}, 'f:beta.kubernetes.io/os': {}, 'f:kubernetes.io/arch': {}, 'f:kubernetes.io/hostname': {}, 'f:kubernetes.io/os': {}}}}}, {'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-11T23:04:38Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:node.alpha.kubernetes.io/ttl': {}}}, 'f:spec': {'f:podCIDR': {}, 'f:podCIDRs': {'.': {}, 'v:"10.244.2.0/24"': {}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T15:05:59Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"DiskPressure"}': {'f:lastHeartbeatTime': {}}, 'k:{"type":"MemoryPressure"}': {'f:lastHeartbeatTime': {}}, 'k:{"type":"PIDPressure"}': {'f:lastHeartbeatTime': {}}, 'k:{"type":"Ready"}': {'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}}}, 'f:images': {}}}, 'subresource': 'status'}, {'manager': 'flanneld', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T15:09:20Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:flannel.alpha.coreos.com/backend-data': {}, 'f:flannel.alpha.coreos.com/backend-type': {}, 'f:flannel.alpha.coreos.com/kube-subnet-manager': {}, 'f:flannel.alpha.coreos.com/public-ip': {}}}, 'f:status': {'f:conditions': {'k:{"type":"NetworkUnavailable"}': {'.': {}, 'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}, 'f:type': {}}}}}, 'subresource': 'status'}]}, 'spec': {'podCIDR': '10.244.2.0/24', 'podCIDRs': ['10.244.2.0/24']}, 'status': {'capacity': {'cpu': '16', 'ephemeral-storage': '69664568Ki', 'hugepages-1Gi': '0', 'hugepages-2Mi': '0', 'memory': '65216188Ki', 'pods': '110'}, 'allocatable': {'cpu': '16', 'ephemeral-storage': '64202865763', 'hugepages-1Gi': '0', 'hugepages-2Mi': '0', 'memory': '65113788Ki', 'pods': '110'}, 'conditions': [{'type': 'NetworkUnavailable', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:09:20Z', 'lastTransitionTime': '2025-09-12T15:09:20Z', 'reason': 'FlannelIsUp', 'message': 'Flannel is running on this node'}, {'type': 'MemoryPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:05:59Z', 'lastTransitionTime': '2025-09-11T23:04:37Z', 'reason': 'KubeletHasSufficientMemory', 'message': 'kubelet has sufficient memory available'}, {'type': 'DiskPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:05:59Z', 'lastTransitionTime': '2025-09-11T23:04:37Z', 'reason': 'KubeletHasNoDiskPressure', 'message': 'kubelet has no disk pressure'}, {'type': 'PIDPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:05:59Z', 'lastTransitionTime': '2025-09-11T23:04:37Z', 'reason': 'KubeletHasSufficientPID', 'message': 'kubelet has sufficient PID available'}, {'type': 'Ready', 'status': 'True', 'lastHeartbeatTime': '2025-09-12T15:05:59Z', 'lastTransitionTime': '2025-09-11T23:04:38Z', 'reason': 'KubeletReady', 'message': 'kubelet is posting ready status'}], 'addresses': [{'type': 'InternalIP', 'address': '192.168.4.62'}, {'type': 'Hostname', 'address': 'homelab'}], 'daemonEndpoints': {'kubeletEndpoint': {'Port': 10250}}, 'nodeInfo': {'machineID': '07bff45e6fe54e5a8006fa5cf8c19c93', 'systemUUID': '4c4c4544-0039-4810-8030-b3c04f594d32', 'bootID': 'b7efa6c1-2b6a-4bb6-b2fa-849105e97934', 'kernelVersion': '6.12.0-55.9.1.el10_0.x86_64', 'osImage': 'Red Hat Enterprise Linux 10.0 (Coughlan)', 'containerRuntimeVersion': 'containerd://1.7.27', 'kubeletVersion': 'v1.29.15', 'kubeProxyVersion': 'v1.29.15', 'operatingSystem': 'linux', 'architecture': 'amd64'}, 'images': [{'names': ['ghcr.io/flannel-io/flannel@sha256:8cc0cf9e94df48e98be84bce3e61984bbd46c3c44ad35707ec7ef40e96b009d1', 'ghcr.io/flannel-io/flannel:v0.27.3'], 'sizeBytes': 33997918}, {'names': ['docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'docker.io/flannel/flannel:v0.24.2'], 'sizeBytes': 29594543}, {'names': ['registry.k8s.io/kube-proxy@sha256:243026cfce3209b89d9f883789108276ffec87d98190ac2a77776edd4e0e6015', 'registry.k8s.io/kube-proxy:v1.29.15'], 'sizeBytes': 28750032}, {'names': ['registry.k8s.io/coredns/coredns@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1', 'registry.k8s.io/coredns/coredns:v1.11.1'], 'sizeBytes': 18182961}, {'names': ['ghcr.io/flannel-io/flannel-cni-plugin@sha256:cb3176a2c9eae5fa0acd7f45397e706eacb4577dac33cad89f93b775ff5611df', 'ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1'], 'sizeBytes': 4878976}, {'names': ['docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1'], 'sizeBytes': 4498296}, {'names': ['docker.io/library/busybox@sha256:98ad9d1a2be345201bb0709b0d38655eb1b370145c7d94ca1fe9c421f76e245a', 'docker.io/library/busybox:1.35'], 'sizeBytes': 2159953}, {'names': ['registry.k8s.io/pause@sha256:9001185023633d17a2f98ff69b6ff2615b8ea02a825adffa40422f51dfdcde9d', 'registry.k8s.io/pause:3.8'], 'sizeBytes': 311286}]}, 'apiVersion': 'v1', 'kind': 'Node'}) => {
-    "msg": "Node homelab (192.168.4.62) is True"
-}
-ok: [masternode] => (item={'metadata': {'name': 'masternode', 'uid': '8efa6fbb-4b90-40ec-879f-bcf00f2005f4', 'resourceVersion': '210638', 'creationTimestamp': '2025-09-10T20:30:10Z', 'labels': {'beta.kubernetes.io/arch': 'amd64', 'beta.kubernetes.io/os': 'linux', 'kubernetes.io/arch': 'amd64', 'kubernetes.io/hostname': 'masternode', 'kubernetes.io/os': 'linux', 'node-role.kubernetes.io/control-plane': '', 'node.kubernetes.io/exclude-from-external-load-balancers': ''}, 'annotations': {'flannel.alpha.coreos.com/backend-data': '{"VNI":1,"VtepMAC":"6a:1d:ea:d2:3d:0f"}', 'flannel.alpha.coreos.com/backend-type': 'vxlan', 'flannel.alpha.coreos.com/kube-subnet-manager': 'true', 'flannel.alpha.coreos.com/public-ip': '192.168.4.63', 'kubeadm.alpha.kubernetes.io/cri-socket': 'unix:///var/run/containerd/containerd.sock', 'node.alpha.kubernetes.io/ttl': '0', 'volumes.kubernetes.io/controller-managed-attach-detach': 'true'}, 'managedFields': [{'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-10T20:30:10Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'.': {}, 'f:volumes.kubernetes.io/controller-managed-attach-detach': {}}, 'f:labels': {'.': {}, 'f:beta.kubernetes.io/arch': {}, 'f:beta.kubernetes.io/os': {}, 'f:kubernetes.io/arch': {}, 'f:kubernetes.io/hostname': {}, 'f:kubernetes.io/os': {}}}}}, {'manager': 'kubeadm', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-10T20:30:13Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:kubeadm.alpha.kubernetes.io/cri-socket': {}}, 'f:labels': {'f:node-role.kubernetes.io/control-plane': {}, 'f:node.kubernetes.io/exclude-from-external-load-balancers': {}}}}}, {'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-10T20:30:28Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:node.alpha.kubernetes.io/ttl': {}}}, 'f:spec': {'f:podCIDR': {}, 'f:podCIDRs': {'.': {}, 'v:"10.244.0.0/24"': {}}}}}, {'manager': 'flanneld', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:59Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:flannel.alpha.coreos.com/backend-data': {}, 'f:flannel.alpha.coreos.com/backend-type': {}, 'f:flannel.alpha.coreos.com/kube-subnet-manager': {}, 'f:flannel.alpha.coreos.com/public-ip': {}}}, 'f:status': {'f:conditions': {'k:{"type":"NetworkUnavailable"}': {'.': {}, 'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}, 'f:type': {}}}}}, 'subresource': 'status'}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T15:06:18Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"DiskPressure"}': {'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}}, 'k:{"type":"MemoryPressure"}': {'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}}, 'k:{"type":"PIDPressure"}': {'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}}, 'k:{"type":"Ready"}': {'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}}}, 'f:images': {}, 'f:nodeInfo': {'f:containerRuntimeVersion': {}}}}, 'subresource': 'status'}]}, 'spec': {'podCIDR': '10.244.0.0/24', 'podCIDRs': ['10.244.0.0/24']}, 'status': {'capacity': {'cpu': '4', 'ephemeral-storage': '60239740Ki', 'hugepages-1Gi': '0', 'hugepages-2Mi': '0', 'memory': '8041696Ki', 'pods': '110'}, 'allocatable': {'cpu': '4', 'ephemeral-storage': '55516944293', 'hugepages-1Gi': '0', 'hugepages-2Mi': '0', 'memory': '7939296Ki', 'pods': '110'}, 'conditions': [{'type': 'NetworkUnavailable', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T13:33:59Z', 'lastTransitionTime': '2025-09-12T13:33:59Z', 'reason': 'FlannelIsUp', 'message': 'Flannel is running on this node'}, {'type': 'MemoryPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:06:18Z', 'lastTransitionTime': '2025-09-11T18:40:45Z', 'reason': 'KubeletHasSufficientMemory', 'message': 'kubelet has sufficient memory available'}, {'type': 'DiskPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:06:18Z', 'lastTransitionTime': '2025-09-11T18:40:45Z', 'reason': 'KubeletHasNoDiskPressure', 'message': 'kubelet has no disk pressure'}, {'type': 'PIDPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:06:18Z', 'lastTransitionTime': '2025-09-11T18:40:45Z', 'reason': 'KubeletHasSufficientPID', 'message': 'kubelet has sufficient PID available'}, {'type': 'Ready', 'status': 'True', 'lastHeartbeatTime': '2025-09-12T15:06:18Z', 'lastTransitionTime': '2025-09-11T18:40:45Z', 'reason': 'KubeletReady', 'message': 'kubelet is posting ready status. AppArmor enabled'}], 'addresses': [{'type': 'InternalIP', 'address': '192.168.4.63'}, {'type': 'Hostname', 'address': 'masternode'}], 'daemonEndpoints': {'kubeletEndpoint': {'Port': 10250}}, 'nodeInfo': {'machineID': '9b1ba9f7a94d41cf852a66663dcc531e', 'systemUUID': '03000200-0400-0500-0006-000700080009', 'bootID': '6305d46a-429c-4f5f-bfdc-9ce7b605fda1', 'kernelVersion': '6.1.0-32-amd64', 'osImage': 'Debian GNU/Linux 12 (bookworm)', 'containerRuntimeVersion': 'containerd://1.6.20', 'kubeletVersion': 'v1.29.15', 'kubeProxyVersion': 'v1.29.15', 'operatingSystem': 'linux', 'architecture': 'amd64'}, 'images': [{'names': ['docker.io/grafana/grafana@sha256:a1701c2180249361737a99a01bc770db39381640e4d631825d38ff4535efa47d', 'docker.io/grafana/grafana:latest'], 'sizeBytes': 201615524}, {'names': ['docker.io/prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996', 'docker.io/prom/prometheus:latest'], 'sizeBytes': 123797512}, {'names': ['docker.io/kubernetesui/dashboard@sha256:2e500d29e9d5f4a086b908eb8dfe7ecac57d2ab09d65b24f588b1d449841ef93', 'docker.io/kubernetesui/dashboard:v2.7.0'], 'sizeBytes': 75788960}, {'names': ['registry.k8s.io/etcd@sha256:c6a9d11cc5c04b114ccdef39a9265eeef818e3d02f5359be035ae784097fdec5', 'registry.k8s.io/etcd:3.5.16-0'], 'sizeBytes': 57680541}, {'names': ['docker.io/grafana/loki@sha256:31628519045e7f28692a7ae73b4a3fd293dccb425585ed5d16ceea3b5c9592e6', 'docker.io/grafana/loki:latest'], 'sizeBytes': 39246829}, {'names': ['docker.io/grafana/loki@sha256:0b9846377113bc6a56eea2e56fe5963afdea2962178bd171190e30fa25157542'], 'sizeBytes': 39246635}, {'names': ['registry.k8s.io/kube-apiserver@sha256:fd82c74e0773a10396055904753126411b3a9584cc453e1c7152c81018a933b6', 'registry.k8s.io/kube-apiserver:v1.29.15'], 'sizeBytes': 35156316}, {'names': ['ghcr.io/flannel-io/flannel@sha256:8cc0cf9e94df48e98be84bce3e61984bbd46c3c44ad35707ec7ef40e96b009d1', 'ghcr.io/flannel-io/flannel:v0.27.3'], 'sizeBytes': 33997918}, {'names': ['registry.k8s.io/kube-controller-manager@sha256:4f05be2c0667d9f4975bcc43d5e136b2436946f84c8f7dc2d2da14392e761a71', 'registry.k8s.io/kube-controller-manager:v1.29.15'], 'sizeBytes': 33730275}, {'names': ['docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'docker.io/flannel/flannel:v0.24.2'], 'sizeBytes': 29594543}, {'names': ['registry.k8s.io/kube-proxy@sha256:243026cfce3209b89d9f883789108276ffec87d98190ac2a77776edd4e0e6015', 'registry.k8s.io/kube-proxy:v1.29.15'], 'sizeBytes': 28750032}, {'names': ['docker.io/kubernetesui/metrics-scraper@sha256:76049887f07a0476dc93efc2d3569b9529bf982b22d29f356092ce206e98765c', 'docker.io/kubernetesui/metrics-scraper:v1.0.8'], 'sizeBytes': 19746404}, {'names': ['registry.k8s.io/kube-scheduler@sha256:276108a4541a51894a010633230f7b6d10e92e730274f24bd21e827e64243d66', 'registry.k8s.io/kube-scheduler:v1.29.15'], 'sizeBytes': 18950858}, {'names': ['registry.k8s.io/coredns/coredns@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1', 'registry.k8s.io/coredns/coredns:v1.11.1'], 'sizeBytes': 18182961}, {'names': ['ghcr.io/flannel-io/flannel-cni-plugin@sha256:cb3176a2c9eae5fa0acd7f45397e706eacb4577dac33cad89f93b775ff5611df', 'ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1'], 'sizeBytes': 4878976}, {'names': ['docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1'], 'sizeBytes': 4498296}, {'names': ['registry.k8s.io/pause@sha256:7031c1b283388d2c2e09b57badb803c05ebed362dc88d84b480cc47f72a21097', 'registry.k8s.io/pause:3.9'], 'sizeBytes': 321520}, {'names': ['registry.k8s.io/pause@sha256:3d380ca8864549e74af4b29c10f9cb0956236dfb01c40ca076fb6c37253234db', 'registry.k8s.io/pause:3.6'], 'sizeBytes': 301773}]}, 'apiVersion': 'v1', 'kind': 'Node'}) => {
-    "msg": "Node masternode (192.168.4.63) is True"
-}
-ok: [masternode] => (item={'metadata': {'name': 'storagenodet3500', 'uid': 'd351692d-3831-46da-a6d7-d984b17564aa', 'resourceVersion': '210659', 'creationTimestamp': '2025-09-11T23:02:36Z', 'labels': {'beta.kubernetes.io/arch': 'amd64', 'beta.kubernetes.io/os': 'linux', 'kubernetes.io/arch': 'amd64', 'kubernetes.io/hostname': 'storagenodet3500', 'kubernetes.io/os': 'linux'}, 'annotations': {'flannel.alpha.coreos.com/backend-data': '{"VNI":1,"VtepMAC":"de:29:87:ed:04:e1"}', 'flannel.alpha.coreos.com/backend-type': 'vxlan', 'flannel.alpha.coreos.com/kube-subnet-manager': 'true', 'flannel.alpha.coreos.com/public-ip': '192.168.4.61', 'kubeadm.alpha.kubernetes.io/cri-socket': 'unix:///var/run/containerd/containerd.sock', 'node.alpha.kubernetes.io/ttl': '0', 'volumes.kubernetes.io/controller-managed-attach-detach': 'true'}, 'managedFields': [{'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-11T23:02:36Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'.': {}, 'f:volumes.kubernetes.io/controller-managed-attach-detach': {}}, 'f:labels': {'.': {}, 'f:beta.kubernetes.io/arch': {}, 'f:beta.kubernetes.io/os': {}, 'f:kubernetes.io/arch': {}, 'f:kubernetes.io/hostname': {}, 'f:kubernetes.io/os': {}}}}}, {'manager': 'kubeadm', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-11T23:02:37Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:kubeadm.alpha.kubernetes.io/cri-socket': {}}}}}, {'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-11T23:02:38Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:node.alpha.kubernetes.io/ttl': {}}}, 'f:spec': {'f:podCIDR': {}, 'f:podCIDRs': {'.': {}, 'v:"10.244.1.0/24"': {}}}}}, {'manager': 'flanneld', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:34:28Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:annotations': {'f:flannel.alpha.coreos.com/backend-data': {}, 'f:flannel.alpha.coreos.com/backend-type': {}, 'f:flannel.alpha.coreos.com/kube-subnet-manager': {}, 'f:flannel.alpha.coreos.com/public-ip': {}}}, 'f:status': {'f:conditions': {'k:{"type":"NetworkUnavailable"}': {'.': {}, 'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}, 'f:type': {}}}}}, 'subresource': 'status'}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T15:06:31Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:allocatable': {'f:ephemeral-storage': {}}, 'f:conditions': {'k:{"type":"DiskPressure"}': {'f:lastHeartbeatTime': {}}, 'k:{"type":"MemoryPressure"}': {'f:lastHeartbeatTime': {}}, 'k:{"type":"PIDPressure"}': {'f:lastHeartbeatTime': {}}, 'k:{"type":"Ready"}': {'f:lastHeartbeatTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}}}, 'f:images': {}}}, 'subresource': 'status'}]}, 'spec': {'podCIDR': '10.244.1.0/24', 'podCIDRs': ['10.244.1.0/24']}, 'status': {'capacity': {'cpu': '8', 'ephemeral-storage': '478114568Ki', 'hugepages-2Mi': '0', 'memory': '8121356Ki', 'pods': '110'}, 'allocatable': {'cpu': '8', 'ephemeral-storage': '440630385140', 'hugepages-2Mi': '0', 'memory': '8018956Ki', 'pods': '110'}, 'conditions': [{'type': 'NetworkUnavailable', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T13:34:28Z', 'lastTransitionTime': '2025-09-12T13:34:28Z', 'reason': 'FlannelIsUp', 'message': 'Flannel is running on this node'}, {'type': 'MemoryPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:06:31Z', 'lastTransitionTime': '2025-09-11T23:02:36Z', 'reason': 'KubeletHasSufficientMemory', 'message': 'kubelet has sufficient memory available'}, {'type': 'DiskPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:06:31Z', 'lastTransitionTime': '2025-09-11T23:02:36Z', 'reason': 'KubeletHasNoDiskPressure', 'message': 'kubelet has no disk pressure'}, {'type': 'PIDPressure', 'status': 'False', 'lastHeartbeatTime': '2025-09-12T15:06:31Z', 'lastTransitionTime': '2025-09-11T23:02:36Z', 'reason': 'KubeletHasSufficientPID', 'message': 'kubelet has sufficient PID available'}, {'type': 'Ready', 'status': 'True', 'lastHeartbeatTime': '2025-09-12T15:06:31Z', 'lastTransitionTime': '2025-09-11T23:02:37Z', 'reason': 'KubeletReady', 'message': 'kubelet is posting ready status. AppArmor enabled'}], 'addresses': [{'type': 'InternalIP', 'address': '192.168.4.61'}, {'type': 'Hostname', 'address': 'storagenodet3500'}], 'daemonEndpoints': {'kubeletEndpoint': {'Port': 10250}}, 'nodeInfo': {'machineID': 'c948a00c7cac4964811d844623f3486a', 'systemUUID': '44454c4c-4600-1042-8034-cac04f514c31', 'bootID': '1091f2d5-faa0-4426-a5fe-f4d05fe0c41e', 'kernelVersion': '6.1.0-34-amd64', 'osImage': 'Debian GNU/Linux 12 (bookworm)', 'containerRuntimeVersion': 'containerd://1.6.20', 'kubeletVersion': 'v1.29.15', 'kubeProxyVersion': 'v1.29.15', 'operatingSystem': 'linux', 'architecture': 'amd64'}, 'images': [{'names': ['docker.io/jellyfin/jellyfin@sha256:7ae36aab93ef9b6aaff02b37f8bb23df84bb2d7a3f6054ec8fc466072a648ce2', 'docker.io/jellyfin/jellyfin:latest'], 'sizeBytes': 487292244}, {'names': ['ghcr.io/flannel-io/flannel@sha256:8cc0cf9e94df48e98be84bce3e61984bbd46c3c44ad35707ec7ef40e96b009d1', 'ghcr.io/flannel-io/flannel:v0.27.3'], 'sizeBytes': 33997918}, {'names': ['docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'docker.io/flannel/flannel:v0.24.2'], 'sizeBytes': 29594543}, {'names': ['registry.k8s.io/kube-proxy@sha256:243026cfce3209b89d9f883789108276ffec87d98190ac2a77776edd4e0e6015', 'registry.k8s.io/kube-proxy:v1.29.15'], 'sizeBytes': 28750032}, {'names': ['ghcr.io/flannel-io/flannel-cni-plugin@sha256:cb3176a2c9eae5fa0acd7f45397e706eacb4577dac33cad89f93b775ff5611df', 'ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1'], 'sizeBytes': 4878976}, {'names': ['docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1'], 'sizeBytes': 4498296}, {'names': ['registry.k8s.io/pause@sha256:3d380ca8864549e74af4b29c10f9cb0956236dfb01c40ca076fb6c37253234db', 'registry.k8s.io/pause:3.6'], 'sizeBytes': 301773}]}, 'apiVersion': 'v1', 'kind': 'Node'}) => {
-    "msg": "Node storagenodet3500 (192.168.4.61) is True"
-}
-
-TASK [Verify correct number of nodes] *********************************************************************************************************************************************************
-ok: [masternode] => {
-    "changed": false,
-    "msg": "✅ All 3 nodes are present in the cluster"
-}
-
-TASK [Verify control plane node] **************************************************************************************************************************************************************
-ok: [masternode] => {
-    "changed": false,
-    "msg": "✅ Control plane node verified"
-}
-
-TASK [Verify worker nodes] ********************************************************************************************************************************************************************
-ok: [masternode] => {
-    "changed": false,
-    "msg": "✅ Both worker nodes verified"
-}
-
-TASK [Check CoreDNS pods are Running] *********************************************************************************************************************************************************
-ok: [masternode]
-
-TASK [Display CoreDNS status] *****************************************************************************************************************************************************************
-ok: [masternode] => (item={'metadata': {'name': 'coredns-68444cf7cd-vq79r', 'generateName': 'coredns-68444cf7cd-', 'namespace': 'kube-system', 'uid': 'c002f635-edb4-4087-8d49-097dc080494f', 'resourceVersion': '140000', 'creationTimestamp': '2025-09-12T01:58:33Z', 'labels': {'k8s-app': 'kube-dns', 'pod-template-hash': '68444cf7cd'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'ReplicaSet', 'name': 'coredns-68444cf7cd', 'uid': '5213488b-dfcf-4511-9575-d70f4deb05c3', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T01:58:33Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:k8s-app': {}, 'f:pod-template-hash': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"5213488b-dfcf-4511-9575-d70f4deb05c3"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:preferredDuringSchedulingIgnoredDuringExecution': {}}, 'f:podAntiAffinity': {'.': {}, 'f:preferredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"coredns"}': {'.': {}, 'f:args': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:livenessProbe': {'.': {}, 'f:failureThreshold': {}, 'f:httpGet': {'.': {}, 'f:path': {}, 'f:port': {}, 'f:scheme': {}}, 'f:initialDelaySeconds': {}, 'f:periodSeconds': {}, 'f:successThreshold': {}, 'f:timeoutSeconds': {}}, 'f:name': {}, 'f:ports': {'.': {}, 'k:{"containerPort":53,"protocol":"TCP"}': {'.': {}, 'f:containerPort': {}, 'f:name': {}, 'f:protocol': {}}, 'k:{"containerPort":53,"protocol":"UDP"}': {'.': {}, 'f:containerPort': {}, 'f:name': {}, 'f:protocol': {}}, 'k:{"containerPort":9153,"protocol":"TCP"}': {'.': {}, 'f:containerPort': {}, 'f:name': {}, 'f:protocol': {}}}, 'f:readinessProbe': {'.': {}, 'f:failureThreshold': {}, 'f:httpGet': {'.': {}, 'f:path': {}, 'f:port': {}, 'f:scheme': {}}, 'f:periodSeconds': {}, 'f:successThreshold': {}, 'f:timeoutSeconds': {}}, 'f:resources': {'.': {}, 'f:limits': {'.': {}, 'f:memory': {}}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:allowPrivilegeEscalation': {}, 'f:capabilities': {'.': {}, 'f:add': {}, 'f:drop': {}}, 'f:readOnlyRootFilesystem': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/coredns"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}, 'f:readOnly': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:nodeSelector': {}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"config-volume"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:items': {}, 'f:name': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T02:33:08Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"10.244.0.27"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'config-volume', 'configMap': {'name': 'coredns', 'items': [{'key': 'Corefile', 'path': 'Corefile'}], 'defaultMode': 420}}, {'name': 'kube-api-access-6q8xk', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'containers': [{'name': 'coredns', 'image': 'registry.k8s.io/coredns/coredns:v1.11.1', 'args': ['-conf', '/etc/coredns/Corefile'], 'ports': [{'name': 'dns', 'containerPort': 53, 'protocol': 'UDP'}, {'name': 'dns-tcp', 'containerPort': 53, 'protocol': 'TCP'}, {'name': 'metrics', 'containerPort': 9153, 'protocol': 'TCP'}], 'resources': {'limits': {'memory': '170Mi'}, 'requests': {'cpu': '100m', 'memory': '70Mi'}}, 'volumeMounts': [{'name': 'config-volume', 'readOnly': True, 'mountPath': '/etc/coredns'}, {'name': 'kube-api-access-6q8xk', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'livenessProbe': {'httpGet': {'path': '/health', 'port': 8080, 'scheme': 'HTTP'}, 'initialDelaySeconds': 60, 'timeoutSeconds': 5, 'periodSeconds': 10, 'successThreshold': 1, 'failureThreshold': 5}, 'readinessProbe': {'httpGet': {'path': '/ready', 'port': 8181, 'scheme': 'HTTP'}, 'timeoutSeconds': 1, 'periodSeconds': 10, 'successThreshold': 1, 'failureThreshold': 3}, 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_BIND_SERVICE'], 'drop': ['ALL']}, 'readOnlyRootFilesystem': True, 'allowPrivilegeEscalation': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'Default', 'nodeSelector': {'kubernetes.io/os': 'linux'}, 'serviceAccountName': 'coredns', 'serviceAccount': 'coredns', 'nodeName': 'masternode', 'securityContext': {}, 'affinity': {'nodeAffinity': {'preferredDuringSchedulingIgnoredDuringExecution': [{'weight': 100, 'preference': {'matchExpressions': [{'key': 'node-role.kubernetes.io/control-plane', 'operator': 'Exists'}]}}]}, 'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution': [{'weight': 100, 'podAffinityTerm': {'labelSelector': {'matchExpressions': [{'key': 'k8s-app', 'operator': 'In', 'values': ['kube-dns']}]}, 'topologyKey': 'kubernetes.io/hostname'}}]}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'key': 'node-role.kubernetes.io/control-plane', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute', 'tolerationSeconds': 300}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute', 'tolerationSeconds': 300}], 'priorityClassName': 'system-cluster-critical', 'priority': 2000000000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T02:33:08Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T01:58:33Z'}, {'type': 'Ready', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T02:33:08Z'}, {'type': 'ContainersReady', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T02:33:08Z'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T01:58:33Z'}], 'hostIP': '192.168.4.63', 'hostIPs': [{'ip': '192.168.4.63'}], 'podIP': '10.244.0.27', 'podIPs': [{'ip': '10.244.0.27'}], 'startTime': '2025-09-12T01:58:33Z', 'containerStatuses': [{'name': 'coredns', 'state': {'running': {'startedAt': '2025-09-12T02:33:08Z'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'registry.k8s.io/coredns/coredns:v1.11.1', 'imageID': 'registry.k8s.io/coredns/coredns@sha256:1eeb4c7316bacb1d4c8ead65571cd92dd21e27359f0d4917f1a5822a73b75db1', 'containerID': 'containerd://7e613d170c22b6dc34d2a853a3da1be447aecc085224e46917d3b60237c21051', 'started': True}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) => {
-    "msg": "CoreDNS pod coredns-68444cf7cd-vq79r is Running"
-}
-
-TASK [Verify CNI (Flannel) pods are Running] **************************************************************************************************************************************************
-ok: [masternode]
+        name: run
+      - hostPath:
+          path: /opt/cni/bin
+          type: ''
+        name: cni-plugin
+      - hostPath:
+          path: /etc/cni/net.d
+          type: ''
+        name: cni
+      - configMap:
+          defaultMode: 420
+          name: kube-flannel-cfg
+        name: flannel-cfg
+      - hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+        name: xtables-lock
+      - name: kube-api-access-p57f5
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+              - key: ca.crt
+                path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+              - fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+                path: namespace
+    status:
+      conditions:
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:33:53Z'
+        status: 'True'
+        type: PodReadyToStartContainers
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:33:58Z'
+        status: 'True'
+        type: Initialized
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:33:59Z'
+        status: 'True'
+        type: Ready
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:33:59Z'
+        status: 'True'
+        type: ContainersReady
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:33:50Z'
+        status: 'True'
+        type: PodScheduled
+      containerStatuses:
+      - containerID: containerd://33285268119196e7bc2d01a2d4c1fc24889b5cdcdc2dcea18c2f32bf714e9c78
+        image: docker.io/flannel/flannel:v0.24.2
+        imageID: docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173
+        lastState: {}
+        name: kube-flannel
+        ready: true
+        restartCount: 0
+        started: true
+        state:
+          running:
+            startedAt: '2025-09-12T13:33:58Z'
+      hostIP: 192.168.4.63
+      hostIPs:
+      - ip: 192.168.4.63
+      initContainerStatuses:
+      - containerID: containerd://9218ca8b78b862240d08a6b72a257c08fed1cd6dfd8ec6bc4d4b792c0969d057
+        image: docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1
+        imageID: docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b
+        lastState: {}
+        name: install-cni-plugin
+        ready: true
+        restartCount: 0
+        started: false
+        state:
+          terminated:
+            containerID: containerd://9218ca8b78b862240d08a6b72a257c08fed1cd6dfd8ec6bc4d4b792c0969d057
+            exitCode: 0
+            finishedAt: '2025-09-12T13:33:52Z'
+            reason: Completed
+            startedAt: '2025-09-12T13:33:52Z'
+      - containerID: containerd://968310553ecc5539f7bb0853108d6905d733b332d31955c05b967ee2e0fc9313
+        image: docker.io/flannel/flannel:v0.24.2
+        imageID: docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173
+        lastState: {}
+        name: install-cni
+        ready: true
+        restartCount: 0
+        started: false
+        state:
+          terminated:
+            containerID: containerd://968310553ecc5539f7bb0853108d6905d733b332d31955c05b967ee2e0fc9313
+            exitCode: 0
+            finishedAt: '2025-09-12T13:33:57Z'
+            reason: Completed
+            startedAt: '2025-09-12T13:33:57Z'
+      phase: Running
+      podIP: 192.168.4.63
+      podIPs:
+      - ip: 192.168.4.63
+      qosClass: Burstable
+      startTime: '2025-09-12T13:33:50Z'
+  - apiVersion: v1
+    kind: Pod
+    metadata:
+      creationTimestamp: '2025-09-12T13:33:59Z'
+      generateName: kube-flannel-ds-
+      labels:
+        app: flannel
+        controller-revision-hash: 5cc678f779
+        k8s-app: flannel
+        pod-template-generation: '2'
+        tier: node
+      managedFields:
+      - apiVersion: v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:metadata:
+            f:generateName: {}
+            f:labels:
+              .: {}
+              f:app: {}
+              f:controller-revision-hash: {}
+              f:k8s-app: {}
+              f:pod-template-generation: {}
+              f:tier: {}
+            f:ownerReferences:
+              .: {}
+              k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}: {}
+          f:spec:
+            f:affinity:
+              .: {}
+              f:nodeAffinity:
+                .: {}
+                f:requiredDuringSchedulingIgnoredDuringExecution: {}
+            f:containers:
+              k:{"name":"kube-flannel"}:
+                .: {}
+                f:args: {}
+                f:command: {}
+                f:env:
+                  .: {}
+                  k:{"name":"CONT_WHEN_CACHE_NOT_READY"}:
+                    .: {}
+                    f:name: {}
+                    f:value: {}
+                  k:{"name":"EVENT_QUEUE_DEPTH"}:
+                    .: {}
+                    f:name: {}
+                    f:value: {}
+                  k:{"name":"POD_NAME"}:
+                    .: {}
+                    f:name: {}
+                    f:valueFrom:
+                      .: {}
+                      f:fieldRef: {}
+                  k:{"name":"POD_NAMESPACE"}:
+                    .: {}
+                    f:name: {}
+                    f:valueFrom:
+                      .: {}
+                      f:fieldRef: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources:
+                  .: {}
+                  f:requests:
+                    .: {}
+                    f:cpu: {}
+                    f:memory: {}
+                f:securityContext:
+                  .: {}
+                  f:capabilities:
+                    .: {}
+                    f:add: {}
+                  f:privileged: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/etc/kube-flannel/"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/run/flannel"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/run/xtables.lock"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+            f:dnsPolicy: {}
+            f:enableServiceLinks: {}
+            f:hostNetwork: {}
+            f:initContainers:
+              .: {}
+              k:{"name":"install-cni"}:
+                .: {}
+                f:args: {}
+                f:command: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/etc/cni/net.d"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/etc/kube-flannel/"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+              k:{"name":"install-cni-plugin"}:
+                .: {}
+                f:args: {}
+                f:command: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/opt/cni/bin"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+            f:priorityClassName: {}
+            f:restartPolicy: {}
+            f:schedulerName: {}
+            f:securityContext: {}
+            f:serviceAccount: {}
+            f:serviceAccountName: {}
+            f:terminationGracePeriodSeconds: {}
+            f:tolerations: {}
+            f:volumes:
+              .: {}
+              k:{"name":"cni"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"cni-plugin"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"flannel-cfg"}:
+                .: {}
+                f:configMap:
+                  .: {}
+                  f:defaultMode: {}
+                  f:name: {}
+                f:name: {}
+              k:{"name":"run"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"xtables-lock"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+        manager: kube-controller-manager
+        operation: Update
+        time: '2025-09-12T13:33:59Z'
+      - apiVersion: v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:status:
+            f:conditions:
+              k:{"type":"ContainersReady"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:message: {}
+                f:reason: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"Initialized"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"PodReadyToStartContainers"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"Ready"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:message: {}
+                f:reason: {}
+                f:status: {}
+                f:type: {}
+            f:containerStatuses: {}
+            f:hostIP: {}
+            f:hostIPs: {}
+            f:initContainerStatuses: {}
+            f:phase: {}
+            f:podIP: {}
+            f:podIPs:
+              .: {}
+              k:{"ip":"192.168.4.62"}:
+                .: {}
+                f:ip: {}
+            f:startTime: {}
+        manager: kubelet
+        operation: Update
+        subresource: status
+        time: '2025-09-12T15:11:05Z'
+      name: kube-flannel-ds-hns7m
+      namespace: kube-flannel
+      ownerReferences:
+      - apiVersion: apps/v1
+        blockOwnerDeletion: true
+        controller: true
+        kind: DaemonSet
+        name: kube-flannel-ds
+        uid: 498c66ad-8d8f-4b82-abce-7eff1439f0f1
+      resourceVersion: '211088'
+      uid: 1fc6bc2f-e94a-4f81-ab3f-0e81350f877a
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchFields:
+              - key: metadata.name
+                operator: In
+                values:
+                - homelab
+      containers:
+      - args:
+        - --ip-masq
+        - --kube-subnet-mgr
+        command:
+        - /opt/bin/flanneld
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: EVENT_QUEUE_DEPTH
+          value: '5000'
+        - name: CONT_WHEN_CACHE_NOT_READY
+          value: 'false'
+        image: docker.io/flannel/flannel:v0.24.2
+        imagePullPolicy: IfNotPresent
+        name: kube-flannel
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+          privileged: false
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /run/flannel
+          name: run
+        - mountPath: /etc/kube-flannel/
+          name: flannel-cfg
+        - mountPath: /run/xtables.lock
+          name: xtables-lock
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-nrx29
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      hostNetwork: true
+      initContainers:
+      - args:
+        - -f
+        - /flannel
+        - /opt/cni/bin/flannel
+        command:
+        - cp
+        image: docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1
+        imagePullPolicy: IfNotPresent
+        name: install-cni-plugin
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/cni/bin
+          name: cni-plugin
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-nrx29
+          readOnly: true
+      - args:
+        - -f
+        - /etc/kube-flannel/cni-conf.json
+        - /etc/cni/net.d/10-flannel.conflist
+        command:
+        - cp
+        image: docker.io/flannel/flannel:v0.24.2
+        imagePullPolicy: IfNotPresent
+        name: install-cni
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/cni/net.d
+          name: cni
+        - mountPath: /etc/kube-flannel/
+          name: flannel-cfg
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-nrx29
+          readOnly: true
+      nodeName: homelab
+      preemptionPolicy: PreemptLowerPriority
+      priority: 2000001000
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: flannel
+      serviceAccountName: flannel
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/disk-pressure
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/memory-pressure
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/pid-pressure
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/unschedulable
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/network-unavailable
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /run/flannel
+          type: ''
+        name: run
+      - hostPath:
+          path: /opt/cni/bin
+          type: ''
+        name: cni-plugin
+      - hostPath:
+          path: /etc/cni/net.d
+          type: ''
+        name: cni
+      - configMap:
+          defaultMode: 420
+          name: kube-flannel-cfg
+        name: flannel-cfg
+      - hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+        name: xtables-lock
+      - name: kube-api-access-nrx29
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+              - key: ca.crt
+                path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+              - fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+                path: namespace
+    status:
+      conditions:
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T15:10:51Z'
+        status: 'True'
+        type: PodReadyToStartContainers
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:34:06Z'
+        status: 'True'
+        type: Initialized
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T15:10:50Z'
+        message: 'containers with unready status: [kube-flannel]'
+        reason: ContainersNotReady
+        status: 'False'
+        type: Ready
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T15:10:50Z'
+        message: 'containers with unready status: [kube-flannel]'
+        reason: ContainersNotReady
+        status: 'False'
+        type: ContainersReady
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:33:59Z'
+        status: 'True'
+        type: PodScheduled
+      containerStatuses:
+      - containerID: containerd://2bb313ebec2a2754bed970bfe3ad2bae27bbb8954c7411fd8454542c9bee1b39
+        image: docker.io/flannel/flannel:v0.24.2
+        imageID: docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173
+        lastState:
+          terminated:
+            containerID: containerd://2bb313ebec2a2754bed970bfe3ad2bae27bbb8954c7411fd8454542c9bee1b39
+            exitCode: 0
+            finishedAt: '2025-09-12T15:10:50Z'
+            reason: Completed
+            startedAt: '2025-09-12T15:09:19Z'
+        name: kube-flannel
+        ready: false
+        restartCount: 19
+        started: false
+        state:
+          waiting:
+            message: back-off 5m0s restarting failed container=kube-flannel pod=kube-flannel-ds-hns7m_kube-flannel(1fc6bc2f-e94a-4f81-ab3f-0e81350f877a)
+            reason: CrashLoopBackOff
+      hostIP: 192.168.4.62
+      hostIPs:
+      - ip: 192.168.4.62
+      initContainerStatuses:
+      - containerID: containerd://b292c1191f1e734e7c57d5fb8e2bcc7b471de69a93abe56bfd9629c15d6474d9
+        image: docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1
+        imageID: docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b
+        lastState: {}
+        name: install-cni-plugin
+        ready: true
+        restartCount: 14
+        started: false
+        state:
+          terminated:
+            containerID: containerd://b292c1191f1e734e7c57d5fb8e2bcc7b471de69a93abe56bfd9629c15d6474d9
+            exitCode: 0
+            finishedAt: '2025-09-12T15:10:50Z'
+            reason: Completed
+            startedAt: '2025-09-12T15:10:50Z'
+      - containerID: containerd://563cf2ee1d967f07a689e275034b9002e0f44b39ba0f52b907bbce269761f909
+        image: docker.io/flannel/flannel:v0.24.2
+        imageID: docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173
+        lastState: {}
+        name: install-cni
+        ready: true
+        restartCount: 0
+        started: false
+        state:
+          terminated:
+            containerID: containerd://563cf2ee1d967f07a689e275034b9002e0f44b39ba0f52b907bbce269761f909
+            exitCode: 0
+            finishedAt: '2025-09-12T15:10:51Z'
+            reason: Completed
+            startedAt: '2025-09-12T15:10:51Z'
+      phase: Running
+      podIP: 192.168.4.62
+      podIPs:
+      - ip: 192.168.4.62
+      qosClass: Burstable
+      startTime: '2025-09-12T13:33:59Z'
+  - apiVersion: v1
+    kind: Pod
+    metadata:
+      creationTimestamp: '2025-09-12T13:34:08Z'
+      generateName: kube-flannel-ds-
+      labels:
+        app: flannel
+        controller-revision-hash: 5cc678f779
+        k8s-app: flannel
+        pod-template-generation: '2'
+        tier: node
+      managedFields:
+      - apiVersion: v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:metadata:
+            f:generateName: {}
+            f:labels:
+              .: {}
+              f:app: {}
+              f:controller-revision-hash: {}
+              f:k8s-app: {}
+              f:pod-template-generation: {}
+              f:tier: {}
+            f:ownerReferences:
+              .: {}
+              k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}: {}
+          f:spec:
+            f:affinity:
+              .: {}
+              f:nodeAffinity:
+                .: {}
+                f:requiredDuringSchedulingIgnoredDuringExecution: {}
+            f:containers:
+              k:{"name":"kube-flannel"}:
+                .: {}
+                f:args: {}
+                f:command: {}
+                f:env:
+                  .: {}
+                  k:{"name":"CONT_WHEN_CACHE_NOT_READY"}:
+                    .: {}
+                    f:name: {}
+                    f:value: {}
+                  k:{"name":"EVENT_QUEUE_DEPTH"}:
+                    .: {}
+                    f:name: {}
+                    f:value: {}
+                  k:{"name":"POD_NAME"}:
+                    .: {}
+                    f:name: {}
+                    f:valueFrom:
+                      .: {}
+                      f:fieldRef: {}
+                  k:{"name":"POD_NAMESPACE"}:
+                    .: {}
+                    f:name: {}
+                    f:valueFrom:
+                      .: {}
+                      f:fieldRef: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources:
+                  .: {}
+                  f:requests:
+                    .: {}
+                    f:cpu: {}
+                    f:memory: {}
+                f:securityContext:
+                  .: {}
+                  f:capabilities:
+                    .: {}
+                    f:add: {}
+                  f:privileged: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/etc/kube-flannel/"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/run/flannel"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/run/xtables.lock"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+            f:dnsPolicy: {}
+            f:enableServiceLinks: {}
+            f:hostNetwork: {}
+            f:initContainers:
+              .: {}
+              k:{"name":"install-cni"}:
+                .: {}
+                f:args: {}
+                f:command: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/etc/cni/net.d"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/etc/kube-flannel/"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+              k:{"name":"install-cni-plugin"}:
+                .: {}
+                f:args: {}
+                f:command: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/opt/cni/bin"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+            f:priorityClassName: {}
+            f:restartPolicy: {}
+            f:schedulerName: {}
+            f:securityContext: {}
+            f:serviceAccount: {}
+            f:serviceAccountName: {}
+            f:terminationGracePeriodSeconds: {}
+            f:tolerations: {}
+            f:volumes:
+              .: {}
+              k:{"name":"cni"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"cni-plugin"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"flannel-cfg"}:
+                .: {}
+                f:configMap:
+                  .: {}
+                  f:defaultMode: {}
+                  f:name: {}
+                f:name: {}
+              k:{"name":"run"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"xtables-lock"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+        manager: kube-controller-manager
+        operation: Update
+        time: '2025-09-12T13:34:08Z'
+      - apiVersion: v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:status:
+            f:conditions:
+              k:{"type":"ContainersReady"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"Initialized"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"PodReadyToStartContainers"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"Ready"}:
+                .: {}
+                f:lastProbeTime: {}
+                f:lastTransitionTime: {}
+                f:status: {}
+                f:type: {}
+            f:containerStatuses: {}
+            f:hostIP: {}
+            f:hostIPs: {}
+            f:initContainerStatuses: {}
+            f:phase: {}
+            f:podIP: {}
+            f:podIPs:
+              .: {}
+              k:{"ip":"192.168.4.61"}:
+                .: {}
+                f:ip: {}
+            f:startTime: {}
+        manager: kubelet
+        operation: Update
+        subresource: status
+        time: '2025-09-12T13:34:27Z'
+      name: kube-flannel-ds-zmn26
+      namespace: kube-flannel
+      ownerReferences:
+      - apiVersion: apps/v1
+        blockOwnerDeletion: true
+        controller: true
+        kind: DaemonSet
+        name: kube-flannel-ds
+        uid: 498c66ad-8d8f-4b82-abce-7eff1439f0f1
+      resourceVersion: '202000'
+      uid: faf3707c-3350-418d-a288-0d0fe0f57075
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchFields:
+              - key: metadata.name
+                operator: In
+                values:
+                - storagenodet3500
+      containers:
+      - args:
+        - --ip-masq
+        - --kube-subnet-mgr
+        command:
+        - /opt/bin/flanneld
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: EVENT_QUEUE_DEPTH
+          value: '5000'
+        - name: CONT_WHEN_CACHE_NOT_READY
+          value: 'false'
+        image: docker.io/flannel/flannel:v0.24.2
+        imagePullPolicy: IfNotPresent
+        name: kube-flannel
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - NET_RAW
+          privileged: false
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /run/flannel
+          name: run
+        - mountPath: /etc/kube-flannel/
+          name: flannel-cfg
+        - mountPath: /run/xtables.lock
+          name: xtables-lock
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-fbksv
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      enableServiceLinks: true
+      hostNetwork: true
+      initContainers:
+      - args:
+        - -f
+        - /flannel
+        - /opt/cni/bin/flannel
+        command:
+        - cp
+        image: docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1
+        imagePullPolicy: IfNotPresent
+        name: install-cni-plugin
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /opt/cni/bin
+          name: cni-plugin
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-fbksv
+          readOnly: true
+      - args:
+        - -f
+        - /etc/kube-flannel/cni-conf.json
+        - /etc/cni/net.d/10-flannel.conflist
+        command:
+        - cp
+        image: docker.io/flannel/flannel:v0.24.2
+        imagePullPolicy: IfNotPresent
+        name: install-cni
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/cni/net.d
+          name: cni
+        - mountPath: /etc/kube-flannel/
+          name: flannel-cfg
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-fbksv
+          readOnly: true
+      nodeName: storagenodet3500
+      preemptionPolicy: PreemptLowerPriority
+      priority: 2000001000
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: flannel
+      serviceAccountName: flannel
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/disk-pressure
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/memory-pressure
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/pid-pressure
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/unschedulable
+        operator: Exists
+      - effect: NoSchedule
+        key: node.kubernetes.io/network-unavailable
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /run/flannel
+          type: ''
+        name: run
+      - hostPath:
+          path: /opt/cni/bin
+          type: ''
+        name: cni-plugin
+      - hostPath:
+          path: /etc/cni/net.d
+          type: ''
+        name: cni
+      - configMap:
+          defaultMode: 420
+          name: kube-flannel-cfg
+        name: flannel-cfg
+      - hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+        name: xtables-lock
+      - name: kube-api-access-fbksv
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+              - key: ca.crt
+                path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+              - fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+                path: namespace
+    status:
+      conditions:
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:34:13Z'
+        status: 'True'
+        type: PodReadyToStartContainers
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:34:26Z'
+        status: 'True'
+        type: Initialized
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:34:27Z'
+        status: 'True'
+        type: Ready
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:34:27Z'
+        status: 'True'
+        type: ContainersReady
+      - lastProbeTime: null
+        lastTransitionTime: '2025-09-12T13:34:08Z'
+        status: 'True'
+        type: PodScheduled
+      containerStatuses:
+      - containerID: containerd://28514fcc0ce6b5b5b2db60c41eb22b1e833046831b7f174c8bda1795cf8beafc
+        image: docker.io/flannel/flannel:v0.24.2
+        imageID: docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173
+        lastState: {}
+        name: kube-flannel
+        ready: true
+        restartCount: 0
+        started: true
+        state:
+          running:
+            startedAt: '2025-09-12T13:34:27Z'
+      hostIP: 192.168.4.61
+      hostIPs:
+      - ip: 192.168.4.61
+      initContainerStatuses:
+      - containerID: containerd://15656a969b1c98edd520af2ceb4ab1a9199d657f723b71329d7ee452a0b82b0e
+        image: docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1
+        imageID: docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b
+        lastState: {}
+        name: install-cni-plugin
+        ready: true
+        restartCount: 0
+        started: false
+        state:
+          terminated:
+            containerID: containerd://15656a969b1c98edd520af2ceb4ab1a9199d657f723b71329d7ee452a0b82b0e
+            exitCode: 0
+            finishedAt: '2025-09-12T13:34:13Z'
+            reason: Completed
+            startedAt: '2025-09-12T13:34:13Z'
+      - containerID: containerd://0426caecbdd6d30cf618c0376dd36fad494108408c1f27fd9ef4451301b33d69
+        image: docker.io/flannel/flannel:v0.24.2
+        imageID: docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173
+        lastState: {}
+        name: install-cni
+        ready: true
+        restartCount: 0
+        started: false
+        state:
+          terminated:
+            containerID: containerd://0426caecbdd6d30cf618c0376dd36fad494108408c1f27fd9ef4451301b33d69
+            exitCode: 0
+            finishedAt: '2025-09-12T13:34:23Z'
+            reason: Completed
+            startedAt: '2025-09-12T13:34:23Z'
+      phase: Running
+      podIP: 192.168.4.61
+      podIPs:
+      - ip: 192.168.4.61
+      qosClass: Burstable
+      startTime: '2025-09-12T13:34:08Z'
 
 TASK [Display Flannel status] *****************************************************************************************************************************************************************
-ok: [masternode] => (item={'metadata': {'name': 'kube-flannel-ds-fmxpq', 'generateName': 'kube-flannel-ds-', 'namespace': 'kube-flannel', 'uid': '2586317a-77fa-4bd8-9821-80c4ab06f962', 'resourceVersion': '201896', 'creationTimestamp': '2025-09-12T13:33:50Z', 'labels': {'app': 'flannel', 'controller-revision-hash': '5cc678f779', 'k8s-app': 'flannel', 'pod-template-generation': '2', 'tier': 'node'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'DaemonSet', 'name': 'kube-flannel-ds', 'uid': '498c66ad-8d8f-4b82-abce-7eff1439f0f1', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:50Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:app': {}, 'f:controller-revision-hash': {}, 'f:k8s-app': {}, 'f:pod-template-generation': {}, 'f:tier': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:requiredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"kube-flannel"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:env': {'.': {}, 'k:{"name":"CONT_WHEN_CACHE_NOT_READY"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"EVENT_QUEUE_DEPTH"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"POD_NAME"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}, 'k:{"name":"POD_NAMESPACE"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {'.': {}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:capabilities': {'.': {}, 'f:add': {}}, 'f:privileged': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/flannel"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/xtables.lock"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:hostNetwork': {}, 'f:initContainers': {'.': {}, 'k:{"name":"install-cni"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/cni/net.d"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}, 'k:{"name":"install-cni-plugin"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/opt/cni/bin"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"cni"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"cni-plugin"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"flannel-cfg"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:name': {}}, 'f:name': {}}, 'k:{"name":"run"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"xtables-lock"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:59Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:initContainerStatuses': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"192.168.4.63"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'run', 'hostPath': {'path': '/run/flannel', 'type': ''}}, {'name': 'cni-plugin', 'hostPath': {'path': '/opt/cni/bin', 'type': ''}}, {'name': 'cni', 'hostPath': {'path': '/etc/cni/net.d', 'type': ''}}, {'name': 'flannel-cfg', 'configMap': {'name': 'kube-flannel-cfg', 'defaultMode': 420}}, {'name': 'xtables-lock', 'hostPath': {'path': '/run/xtables.lock', 'type': 'FileOrCreate'}}, {'name': 'kube-api-access-p57f5', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'initContainers': [{'name': 'install-cni-plugin', 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'command': ['cp'], 'args': ['-f', '/flannel', '/opt/cni/bin/flannel'], 'resources': {}, 'volumeMounts': [{'name': 'cni-plugin', 'mountPath': '/opt/cni/bin'}, {'name': 'kube-api-access-p57f5', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}, {'name': 'install-cni', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['cp'], 'args': ['-f', '/etc/kube-flannel/cni-conf.json', '/etc/cni/net.d/10-flannel.conflist'], 'resources': {}, 'volumeMounts': [{'name': 'cni', 'mountPath': '/etc/cni/net.d'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'kube-api-access-p57f5', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}], 'containers': [{'name': 'kube-flannel', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['/opt/bin/flanneld'], 'args': ['--ip-masq', '--kube-subnet-mgr'], 'env': [{'name': 'POD_NAME', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.name'}}}, {'name': 'POD_NAMESPACE', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}, {'name': 'EVENT_QUEUE_DEPTH', 'value': '5000'}, {'name': 'CONT_WHEN_CACHE_NOT_READY', 'value': 'false'}], 'resources': {'requests': {'cpu': '100m', 'memory': '50Mi'}}, 'volumeMounts': [{'name': 'run', 'mountPath': '/run/flannel'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'xtables-lock', 'mountPath': '/run/xtables.lock'}, {'name': 'kube-api-access-p57f5', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_ADMIN', 'NET_RAW']}, 'privileged': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'ClusterFirst', 'serviceAccountName': 'flannel', 'serviceAccount': 'flannel', 'nodeName': 'masternode', 'hostNetwork': True, 'securityContext': {}, 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {'nodeSelectorTerms': [{'matchFields': [{'key': 'metadata.name', 'operator': 'In', 'values': ['masternode']}]}]}}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/disk-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/memory-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/pid-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/unschedulable', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/network-unavailable', 'operator': 'Exists', 'effect': 'NoSchedule'}], 'priorityClassName': 'system-node-critical', 'priority': 2000001000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:53Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:58Z'}, {'type': 'Ready', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:59Z'}, {'type': 'ContainersReady', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:59Z'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:50Z'}], 'hostIP': '192.168.4.63', 'hostIPs': [{'ip': '192.168.4.63'}], 'podIP': '192.168.4.63', 'podIPs': [{'ip': '192.168.4.63'}], 'startTime': '2025-09-12T13:33:50Z', 'initContainerStatuses': [{'name': 'install-cni-plugin', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:33:52Z', 'finishedAt': '2025-09-12T13:33:52Z', 'containerID': 'containerd://9218ca8b78b862240d08a6b72a257c08fed1cd6dfd8ec6bc4d4b792c0969d057'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'imageID': 'docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'containerID': 'containerd://9218ca8b78b862240d08a6b72a257c08fed1cd6dfd8ec6bc4d4b792c0969d057', 'started': False}, {'name': 'install-cni', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:33:57Z', 'finishedAt': '2025-09-12T13:33:57Z', 'containerID': 'containerd://968310553ecc5539f7bb0853108d6905d733b332d31955c05b967ee2e0fc9313'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://968310553ecc5539f7bb0853108d6905d733b332d31955c05b967ee2e0fc9313', 'started': False}], 'containerStatuses': [{'name': 'kube-flannel', 'state': {'running': {'startedAt': '2025-09-12T13:33:58Z'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://33285268119196e7bc2d01a2d4c1fc24889b5cdcdc2dcea18c2f32bf714e9c78', 'started': True}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) => {
-    "msg": "Flannel pod kube-flannel-ds-fmxpq on node masternode is Running"
-}
-ok: [masternode] => (item={'metadata': {'name': 'kube-flannel-ds-hns7m', 'generateName': 'kube-flannel-ds-', 'namespace': 'kube-flannel', 'uid': '1fc6bc2f-e94a-4f81-ab3f-0e81350f877a', 'resourceVersion': '210920', 'creationTimestamp': '2025-09-12T13:33:59Z', 'labels': {'app': 'flannel', 'controller-revision-hash': '5cc678f779', 'k8s-app': 'flannel', 'pod-template-generation': '2', 'tier': 'node'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'DaemonSet', 'name': 'kube-flannel-ds', 'uid': '498c66ad-8d8f-4b82-abce-7eff1439f0f1', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:59Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:app': {}, 'f:controller-revision-hash': {}, 'f:k8s-app': {}, 'f:pod-template-generation': {}, 'f:tier': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:requiredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"kube-flannel"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:env': {'.': {}, 'k:{"name":"CONT_WHEN_CACHE_NOT_READY"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"EVENT_QUEUE_DEPTH"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"POD_NAME"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}, 'k:{"name":"POD_NAMESPACE"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {'.': {}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:capabilities': {'.': {}, 'f:add': {}}, 'f:privileged': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/flannel"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/xtables.lock"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:hostNetwork': {}, 'f:initContainers': {'.': {}, 'k:{"name":"install-cni"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/cni/net.d"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}, 'k:{"name":"install-cni-plugin"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/opt/cni/bin"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"cni"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"cni-plugin"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"flannel-cfg"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:name': {}}, 'f:name': {}}, 'k:{"name":"run"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"xtables-lock"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T15:09:20Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:initContainerStatuses': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"192.168.4.62"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'run', 'hostPath': {'path': '/run/flannel', 'type': ''}}, {'name': 'cni-plugin', 'hostPath': {'path': '/opt/cni/bin', 'type': ''}}, {'name': 'cni', 'hostPath': {'path': '/etc/cni/net.d', 'type': ''}}, {'name': 'flannel-cfg', 'configMap': {'name': 'kube-flannel-cfg', 'defaultMode': 420}}, {'name': 'xtables-lock', 'hostPath': {'path': '/run/xtables.lock', 'type': 'FileOrCreate'}}, {'name': 'kube-api-access-nrx29', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'initContainers': [{'name': 'install-cni-plugin', 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'command': ['cp'], 'args': ['-f', '/flannel', '/opt/cni/bin/flannel'], 'resources': {}, 'volumeMounts': [{'name': 'cni-plugin', 'mountPath': '/opt/cni/bin'}, {'name': 'kube-api-access-nrx29', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}, {'name': 'install-cni', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['cp'], 'args': ['-f', '/etc/kube-flannel/cni-conf.json', '/etc/cni/net.d/10-flannel.conflist'], 'resources': {}, 'volumeMounts': [{'name': 'cni', 'mountPath': '/etc/cni/net.d'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'kube-api-access-nrx29', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}], 'containers': [{'name': 'kube-flannel', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['/opt/bin/flanneld'], 'args': ['--ip-masq', '--kube-subnet-mgr'], 'env': [{'name': 'POD_NAME', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.name'}}}, {'name': 'POD_NAMESPACE', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}, {'name': 'EVENT_QUEUE_DEPTH', 'value': '5000'}, {'name': 'CONT_WHEN_CACHE_NOT_READY', 'value': 'false'}], 'resources': {'requests': {'cpu': '100m', 'memory': '50Mi'}}, 'volumeMounts': [{'name': 'run', 'mountPath': '/run/flannel'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'xtables-lock', 'mountPath': '/run/xtables.lock'}, {'name': 'kube-api-access-nrx29', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_ADMIN', 'NET_RAW']}, 'privileged': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'ClusterFirst', 'serviceAccountName': 'flannel', 'serviceAccount': 'flannel', 'nodeName': 'homelab', 'hostNetwork': True, 'securityContext': {}, 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {'nodeSelectorTerms': [{'matchFields': [{'key': 'metadata.name', 'operator': 'In', 'values': ['homelab']}]}]}}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/disk-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/memory-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/pid-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/unschedulable', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/network-unavailable', 'operator': 'Exists', 'effect': 'NoSchedule'}], 'priorityClassName': 'system-node-critical', 'priority': 2000001000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T15:04:17Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:06Z'}, {'type': 'Ready', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T15:09:20Z'}, {'type': 'ContainersReady', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T15:09:20Z'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:59Z'}], 'hostIP': '192.168.4.62', 'hostIPs': [{'ip': '192.168.4.62'}], 'podIP': '192.168.4.62', 'podIPs': [{'ip': '192.168.4.62'}], 'startTime': '2025-09-12T13:33:59Z', 'initContainerStatuses': [{'name': 'install-cni-plugin', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T15:04:16Z', 'finishedAt': '2025-09-12T15:04:16Z', 'containerID': 'containerd://214c97f52bf09b32ce972f360a3b527bb822bdba7591669f0764e2d6f11b231f'}}, 'lastState': {}, 'ready': True, 'restartCount': 13, 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'imageID': 'docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'containerID': 'containerd://214c97f52bf09b32ce972f360a3b527bb822bdba7591669f0764e2d6f11b231f', 'started': False}, {'name': 'install-cni', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T15:04:17Z', 'finishedAt': '2025-09-12T15:04:17Z', 'containerID': 'containerd://acbdc6bf7d127a723c03e0f868553034b1ffd25d97e29923cac83871e48ee4b9'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://acbdc6bf7d127a723c03e0f868553034b1ffd25d97e29923cac83871e48ee4b9', 'started': False}], 'containerStatuses': [{'name': 'kube-flannel', 'state': {'running': {'startedAt': '2025-09-12T15:09:19Z'}}, 'lastState': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T15:03:05Z', 'finishedAt': '2025-09-12T15:04:16Z', 'containerID': 'containerd://8980d2a92e8405cbdecbf9a1b0f25d3d92b220138f6676a66f3273dd31df5624'}}, 'ready': True, 'restartCount': 19, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://2bb313ebec2a2754bed970bfe3ad2bae27bbb8954c7411fd8454542c9bee1b39', 'started': True}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) => {
-    "msg": "Flannel pod kube-flannel-ds-hns7m on node homelab is Running"
-}
-ok: [masternode] => (item={'metadata': {'name': 'kube-flannel-ds-zmn26', 'generateName': 'kube-flannel-ds-', 'namespace': 'kube-flannel', 'uid': 'faf3707c-3350-418d-a288-0d0fe0f57075', 'resourceVersion': '202000', 'creationTimestamp': '2025-09-12T13:34:08Z', 'labels': {'app': 'flannel', 'controller-revision-hash': '5cc678f779', 'k8s-app': 'flannel', 'pod-template-generation': '2', 'tier': 'node'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'DaemonSet', 'name': 'kube-flannel-ds', 'uid': '498c66ad-8d8f-4b82-abce-7eff1439f0f1', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:34:08Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:app': {}, 'f:controller-revision-hash': {}, 'f:k8s-app': {}, 'f:pod-template-generation': {}, 'f:tier': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:requiredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"kube-flannel"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:env': {'.': {}, 'k:{"name":"CONT_WHEN_CACHE_NOT_READY"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"EVENT_QUEUE_DEPTH"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"POD_NAME"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}, 'k:{"name":"POD_NAMESPACE"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {'.': {}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:capabilities': {'.': {}, 'f:add': {}}, 'f:privileged': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/flannel"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/xtables.lock"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:hostNetwork': {}, 'f:initContainers': {'.': {}, 'k:{"name":"install-cni"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/cni/net.d"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}, 'k:{"name":"install-cni-plugin"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/opt/cni/bin"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"cni"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"cni-plugin"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"flannel-cfg"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:name': {}}, 'f:name': {}}, 'k:{"name":"run"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"xtables-lock"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:34:27Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:initContainerStatuses': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"192.168.4.61"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'run', 'hostPath': {'path': '/run/flannel', 'type': ''}}, {'name': 'cni-plugin', 'hostPath': {'path': '/opt/cni/bin', 'type': ''}}, {'name': 'cni', 'hostPath': {'path': '/etc/cni/net.d', 'type': ''}}, {'name': 'flannel-cfg', 'configMap': {'name': 'kube-flannel-cfg', 'defaultMode': 420}}, {'name': 'xtables-lock', 'hostPath': {'path': '/run/xtables.lock', 'type': 'FileOrCreate'}}, {'name': 'kube-api-access-fbksv', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'initContainers': [{'name': 'install-cni-plugin', 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'command': ['cp'], 'args': ['-f', '/flannel', '/opt/cni/bin/flannel'], 'resources': {}, 'volumeMounts': [{'name': 'cni-plugin', 'mountPath': '/opt/cni/bin'}, {'name': 'kube-api-access-fbksv', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}, {'name': 'install-cni', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['cp'], 'args': ['-f', '/etc/kube-flannel/cni-conf.json', '/etc/cni/net.d/10-flannel.conflist'], 'resources': {}, 'volumeMounts': [{'name': 'cni', 'mountPath': '/etc/cni/net.d'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'kube-api-access-fbksv', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}], 'containers': [{'name': 'kube-flannel', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['/opt/bin/flanneld'], 'args': ['--ip-masq', '--kube-subnet-mgr'], 'env': [{'name': 'POD_NAME', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.name'}}}, {'name': 'POD_NAMESPACE', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}, {'name': 'EVENT_QUEUE_DEPTH', 'value': '5000'}, {'name': 'CONT_WHEN_CACHE_NOT_READY', 'value': 'false'}], 'resources': {'requests': {'cpu': '100m', 'memory': '50Mi'}}, 'volumeMounts': [{'name': 'run', 'mountPath': '/run/flannel'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'xtables-lock', 'mountPath': '/run/xtables.lock'}, {'name': 'kube-api-access-fbksv', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_ADMIN', 'NET_RAW']}, 'privileged': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'ClusterFirst', 'serviceAccountName': 'flannel', 'serviceAccount': 'flannel', 'nodeName': 'storagenodet3500', 'hostNetwork': True, 'securityContext': {}, 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {'nodeSelectorTerms': [{'matchFields': [{'key': 'metadata.name', 'operator': 'In', 'values': ['storagenodet3500']}]}]}}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/disk-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/memory-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/pid-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/unschedulable', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/network-unavailable', 'operator': 'Exists', 'effect': 'NoSchedule'}], 'priorityClassName': 'system-node-critical', 'priority': 2000001000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:13Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:26Z'}, {'type': 'Ready', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:27Z'}, {'type': 'ContainersReady', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:27Z'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:08Z'}], 'hostIP': '192.168.4.61', 'hostIPs': [{'ip': '192.168.4.61'}], 'podIP': '192.168.4.61', 'podIPs': [{'ip': '192.168.4.61'}], 'startTime': '2025-09-12T13:34:08Z', 'initContainerStatuses': [{'name': 'install-cni-plugin', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:34:13Z', 'finishedAt': '2025-09-12T13:34:13Z', 'containerID': 'containerd://15656a969b1c98edd520af2ceb4ab1a9199d657f723b71329d7ee452a0b82b0e'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'imageID': 'docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'containerID': 'containerd://15656a969b1c98edd520af2ceb4ab1a9199d657f723b71329d7ee452a0b82b0e', 'started': False}, {'name': 'install-cni', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:34:23Z', 'finishedAt': '2025-09-12T13:34:23Z', 'containerID': 'containerd://0426caecbdd6d30cf618c0376dd36fad494108408c1f27fd9ef4451301b33d69'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://0426caecbdd6d30cf618c0376dd36fad494108408c1f27fd9ef4451301b33d69', 'started': False}], 'containerStatuses': [{'name': 'kube-flannel', 'state': {'running': {'startedAt': '2025-09-12T13:34:27Z'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://28514fcc0ce6b5b5b2db60c41eb22b1e833046831b7f174c8bda1795cf8beafc', 'started': True}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) => {
-    "msg": "Flannel pod kube-flannel-ds-zmn26 on node storagenodet3500 is Running"
-}
+task path: /srv/monitoring_data/VMStation/ansible/playbooks/verify-cluster.yml:92
+ok: [masternode] => (item={'metadata': {'name': 'kube-flannel-ds-fmxpq', 'generateName': 'kube-flannel-ds-', 'namespace': 'kube-flannel', 'uid': '2586317a-77fa-4bd8-9821-80c4ab06f962', 'resourceVersion': '201896', 'creationTimestamp': '2025-09-12T13:33:50Z', 'labels': {'app': 'flannel', 'controller-revision-hash': '5cc678f779', 'k8s-app': 'flannel', 'pod-template-generation': '2', 'tier': 'node'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'DaemonSet', 'name': 'kube-flannel-ds', 'uid': '498c66ad-8d8f-4b82-abce-7eff1439f0f1', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:50Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:app': {}, 'f:controller-revision-hash': {}, 'f:k8s-app': {}, 'f:pod-template-generation': {}, 'f:tier': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:requiredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"kube-flannel"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:env': {'.': {}, 'k:{"name":"CONT_WHEN_CACHE_NOT_READY"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"EVENT_QUEUE_DEPTH"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"POD_NAME"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}, 'k:{"name":"POD_NAMESPACE"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {'.': {}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:capabilities': {'.': {}, 'f:add': {}}, 'f:privileged': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/flannel"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/xtables.lock"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:hostNetwork': {}, 'f:initContainers': {'.': {}, 'k:{"name":"install-cni"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/cni/net.d"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}, 'k:{"name":"install-cni-plugin"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/opt/cni/bin"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"cni"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"cni-plugin"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"flannel-cfg"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:name': {}}, 'f:name': {}}, 'k:{"name":"run"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"xtables-lock"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:59Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:initContainerStatuses': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"192.168.4.63"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'run', 'hostPath': {'path': '/run/flannel', 'type': ''}}, {'name': 'cni-plugin', 'hostPath': {'path': '/opt/cni/bin', 'type': ''}}, {'name': 'cni', 'hostPath': {'path': '/etc/cni/net.d', 'type': ''}}, {'name': 'flannel-cfg', 'configMap': {'name': 'kube-flannel-cfg', 'defaultMode': 420}}, {'name': 'xtables-lock', 'hostPath': {'path': '/run/xtables.lock', 'type': 'FileOrCreate'}}, {'name': 'kube-api-access-p57f5', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'initContainers': [{'name': 'install-cni-plugin', 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'command': ['cp'], 'args': ['-f', '/flannel', '/opt/cni/bin/flannel'], 'resources': {}, 'volumeMounts': [{'name': 'cni-plugin', 'mountPath': '/opt/cni/bin'}, {'name': 'kube-api-access-p57f5', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}, {'name': 'install-cni', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['cp'], 'args': ['-f', '/etc/kube-flannel/cni-conf.json', '/etc/cni/net.d/10-flannel.conflist'], 'resources': {}, 'volumeMounts': [{'name': 'cni', 'mountPath': '/etc/cni/net.d'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'kube-api-access-p57f5', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}], 'containers': [{'name': 'kube-flannel', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['/opt/bin/flanneld'], 'args': ['--ip-masq', '--kube-subnet-mgr'], 'env': [{'name': 'POD_NAME', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.name'}}}, {'name': 'POD_NAMESPACE', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}, {'name': 'EVENT_QUEUE_DEPTH', 'value': '5000'}, {'name': 'CONT_WHEN_CACHE_NOT_READY', 'value': 'false'}], 'resources': {'requests': {'cpu': '100m', 'memory': '50Mi'}}, 'volumeMounts': [{'name': 'run', 'mountPath': '/run/flannel'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'xtables-lock', 'mountPath': '/run/xtables.lock'}, {'name': 'kube-api-access-p57f5', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_ADMIN', 'NET_RAW']}, 'privileged': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'ClusterFirst', 'serviceAccountName': 'flannel', 'serviceAccount': 'flannel', 'nodeName': 'masternode', 'hostNetwork': True, 'securityContext': {}, 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {'nodeSelectorTerms': [{'matchFields': [{'key': 'metadata.name', 'operator': 'In', 'values': ['masternode']}]}]}}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/disk-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/memory-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/pid-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/unschedulable', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/network-unavailable', 'operator': 'Exists', 'effect': 'NoSchedule'}], 'priorityClassName': 'system-node-critical', 'priority': 2000001000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:53Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:58Z'}, {'type': 'Ready', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:59Z'}, {'type': 'ContainersReady', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:59Z'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:50Z'}], 'hostIP': '192.168.4.63', 'hostIPs': [{'ip': '192.168.4.63'}], 'podIP': '192.168.4.63', 'podIPs': [{'ip': '192.168.4.63'}], 'startTime': '2025-09-12T13:33:50Z', 'initContainerStatuses': [{'name': 'install-cni-plugin', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:33:52Z', 'finishedAt': '2025-09-12T13:33:52Z', 'containerID': 'containerd://9218ca8b78b862240d08a6b72a257c08fed1cd6dfd8ec6bc4d4b792c0969d057'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'imageID': 'docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'containerID': 'containerd://9218ca8b78b862240d08a6b72a257c08fed1cd6dfd8ec6bc4d4b792c0969d057', 'started': False}, {'name': 'install-cni', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:33:57Z', 'finishedAt': '2025-09-12T13:33:57Z', 'containerID': 'containerd://968310553ecc5539f7bb0853108d6905d733b332d31955c05b967ee2e0fc9313'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://968310553ecc5539f7bb0853108d6905d733b332d31955c05b967ee2e0fc9313', 'started': False}], 'containerStatuses': [{'name': 'kube-flannel', 'state': {'running': {'startedAt': '2025-09-12T13:33:58Z'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://33285268119196e7bc2d01a2d4c1fc24889b5cdcdc2dcea18c2f32bf714e9c78', 'started': True}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) =>
+  msg: Flannel pod kube-flannel-ds-fmxpq on node masternode is Running
+ok: [masternode] => (item={'metadata': {'name': 'kube-flannel-ds-hns7m', 'generateName': 'kube-flannel-ds-', 'namespace': 'kube-flannel', 'uid': '1fc6bc2f-e94a-4f81-ab3f-0e81350f877a', 'resourceVersion': '211088', 'creationTimestamp': '2025-09-12T13:33:59Z', 'labels': {'app': 'flannel', 'controller-revision-hash': '5cc678f779', 'k8s-app': 'flannel', 'pod-template-generation': '2', 'tier': 'node'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'DaemonSet', 'name': 'kube-flannel-ds', 'uid': '498c66ad-8d8f-4b82-abce-7eff1439f0f1', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:33:59Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:app': {}, 'f:controller-revision-hash': {}, 'f:k8s-app': {}, 'f:pod-template-generation': {}, 'f:tier': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:requiredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"kube-flannel"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:env': {'.': {}, 'k:{"name":"CONT_WHEN_CACHE_NOT_READY"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"EVENT_QUEUE_DEPTH"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"POD_NAME"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}, 'k:{"name":"POD_NAMESPACE"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {'.': {}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:capabilities': {'.': {}, 'f:add': {}}, 'f:privileged': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/flannel"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/xtables.lock"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:hostNetwork': {}, 'f:initContainers': {'.': {}, 'k:{"name":"install-cni"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/cni/net.d"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}, 'k:{"name":"install-cni-plugin"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/opt/cni/bin"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"cni"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"cni-plugin"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"flannel-cfg"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:name': {}}, 'f:name': {}}, 'k:{"name":"run"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"xtables-lock"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T15:11:05Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:message': {}, 'f:reason': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:initContainerStatuses': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"192.168.4.62"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'run', 'hostPath': {'path': '/run/flannel', 'type': ''}}, {'name': 'cni-plugin', 'hostPath': {'path': '/opt/cni/bin', 'type': ''}}, {'name': 'cni', 'hostPath': {'path': '/etc/cni/net.d', 'type': ''}}, {'name': 'flannel-cfg', 'configMap': {'name': 'kube-flannel-cfg', 'defaultMode': 420}}, {'name': 'xtables-lock', 'hostPath': {'path': '/run/xtables.lock', 'type': 'FileOrCreate'}}, {'name': 'kube-api-access-nrx29', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'initContainers': [{'name': 'install-cni-plugin', 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'command': ['cp'], 'args': ['-f', '/flannel', '/opt/cni/bin/flannel'], 'resources': {}, 'volumeMounts': [{'name': 'cni-plugin', 'mountPath': '/opt/cni/bin'}, {'name': 'kube-api-access-nrx29', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}, {'name': 'install-cni', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['cp'], 'args': ['-f', '/etc/kube-flannel/cni-conf.json', '/etc/cni/net.d/10-flannel.conflist'], 'resources': {}, 'volumeMounts': [{'name': 'cni', 'mountPath': '/etc/cni/net.d'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'kube-api-access-nrx29', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}], 'containers': [{'name': 'kube-flannel', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['/opt/bin/flanneld'], 'args': ['--ip-masq', '--kube-subnet-mgr'], 'env': [{'name': 'POD_NAME', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.name'}}}, {'name': 'POD_NAMESPACE', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}, {'name': 'EVENT_QUEUE_DEPTH', 'value': '5000'}, {'name': 'CONT_WHEN_CACHE_NOT_READY', 'value': 'false'}], 'resources': {'requests': {'cpu': '100m', 'memory': '50Mi'}}, 'volumeMounts': [{'name': 'run', 'mountPath': '/run/flannel'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'xtables-lock', 'mountPath': '/run/xtables.lock'}, {'name': 'kube-api-access-nrx29', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_ADMIN', 'NET_RAW']}, 'privileged': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'ClusterFirst', 'serviceAccountName': 'flannel', 'serviceAccount': 'flannel', 'nodeName': 'homelab', 'hostNetwork': True, 'securityContext': {}, 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {'nodeSelectorTerms': [{'matchFields': [{'key': 'metadata.name', 'operator': 'In', 'values': ['homelab']}]}]}}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/disk-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/memory-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/pid-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/unschedulable', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/network-unavailable', 'operator': 'Exists', 'effect': 'NoSchedule'}], 'priorityClassName': 'system-node-critical', 'priority': 2000001000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T15:10:51Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:06Z'}, {'type': 'Ready', 'status': 'False', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T15:10:50Z', 'reason': 'ContainersNotReady', 'message': 'containers with unready status: [kube-flannel]'}, {'type': 'ContainersReady', 'status': 'False', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T15:10:50Z', 'reason': 'ContainersNotReady', 'message': 'containers with unready status: [kube-flannel]'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:33:59Z'}], 'hostIP': '192.168.4.62', 'hostIPs': [{'ip': '192.168.4.62'}], 'podIP': '192.168.4.62', 'podIPs': [{'ip': '192.168.4.62'}], 'startTime': '2025-09-12T13:33:59Z', 'initContainerStatuses': [{'name': 'install-cni-plugin', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T15:10:50Z', 'finishedAt': '2025-09-12T15:10:50Z', 'containerID': 'containerd://b292c1191f1e734e7c57d5fb8e2bcc7b471de69a93abe56bfd9629c15d6474d9'}}, 'lastState': {}, 'ready': True, 'restartCount': 14, 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'imageID': 'docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'containerID': 'containerd://b292c1191f1e734e7c57d5fb8e2bcc7b471de69a93abe56bfd9629c15d6474d9', 'started': False}, {'name': 'install-cni', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T15:10:51Z', 'finishedAt': '2025-09-12T15:10:51Z', 'containerID': 'containerd://563cf2ee1d967f07a689e275034b9002e0f44b39ba0f52b907bbce269761f909'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://563cf2ee1d967f07a689e275034b9002e0f44b39ba0f52b907bbce269761f909', 'started': False}], 'containerStatuses': [{'name': 'kube-flannel', 'state': {'waiting': {'reason': 'CrashLoopBackOff', 'message': 'back-off 5m0s restarting failed container=kube-flannel pod=kube-flannel-ds-hns7m_kube-flannel(1fc6bc2f-e94a-4f81-ab3f-0e81350f877a)'}}, 'lastState': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T15:09:19Z', 'finishedAt': '2025-09-12T15:10:50Z', 'containerID': 'containerd://2bb313ebec2a2754bed970bfe3ad2bae27bbb8954c7411fd8454542c9bee1b39'}}, 'ready': False, 'restartCount': 19, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://2bb313ebec2a2754bed970bfe3ad2bae27bbb8954c7411fd8454542c9bee1b39', 'started': False}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) =>
+  msg: Flannel pod kube-flannel-ds-hns7m on node homelab is Running
+ok: [masternode] => (item={'metadata': {'name': 'kube-flannel-ds-zmn26', 'generateName': 'kube-flannel-ds-', 'namespace': 'kube-flannel', 'uid': 'faf3707c-3350-418d-a288-0d0fe0f57075', 'resourceVersion': '202000', 'creationTimestamp': '2025-09-12T13:34:08Z', 'labels': {'app': 'flannel', 'controller-revision-hash': '5cc678f779', 'k8s-app': 'flannel', 'pod-template-generation': '2', 'tier': 'node'}, 'ownerReferences': [{'apiVersion': 'apps/v1', 'kind': 'DaemonSet', 'name': 'kube-flannel-ds', 'uid': '498c66ad-8d8f-4b82-abce-7eff1439f0f1', 'controller': True, 'blockOwnerDeletion': True}], 'managedFields': [{'manager': 'kube-controller-manager', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:34:08Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:metadata': {'f:generateName': {}, 'f:labels': {'.': {}, 'f:app': {}, 'f:controller-revision-hash': {}, 'f:k8s-app': {}, 'f:pod-template-generation': {}, 'f:tier': {}}, 'f:ownerReferences': {'.': {}, 'k:{"uid":"498c66ad-8d8f-4b82-abce-7eff1439f0f1"}': {}}}, 'f:spec': {'f:affinity': {'.': {}, 'f:nodeAffinity': {'.': {}, 'f:requiredDuringSchedulingIgnoredDuringExecution': {}}}, 'f:containers': {'k:{"name":"kube-flannel"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:env': {'.': {}, 'k:{"name":"CONT_WHEN_CACHE_NOT_READY"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"EVENT_QUEUE_DEPTH"}': {'.': {}, 'f:name': {}, 'f:value': {}}, 'k:{"name":"POD_NAME"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}, 'k:{"name":"POD_NAMESPACE"}': {'.': {}, 'f:name': {}, 'f:valueFrom': {'.': {}, 'f:fieldRef': {}}}}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {'.': {}, 'f:requests': {'.': {}, 'f:cpu': {}, 'f:memory': {}}}, 'f:securityContext': {'.': {}, 'f:capabilities': {'.': {}, 'f:add': {}}, 'f:privileged': {}}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/flannel"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/run/xtables.lock"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:dnsPolicy': {}, 'f:enableServiceLinks': {}, 'f:hostNetwork': {}, 'f:initContainers': {'.': {}, 'k:{"name":"install-cni"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/etc/cni/net.d"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}, 'k:{"mountPath":"/etc/kube-flannel/"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}, 'k:{"name":"install-cni-plugin"}': {'.': {}, 'f:args': {}, 'f:command': {}, 'f:image': {}, 'f:imagePullPolicy': {}, 'f:name': {}, 'f:resources': {}, 'f:terminationMessagePath': {}, 'f:terminationMessagePolicy': {}, 'f:volumeMounts': {'.': {}, 'k:{"mountPath":"/opt/cni/bin"}': {'.': {}, 'f:mountPath': {}, 'f:name': {}}}}}, 'f:priorityClassName': {}, 'f:restartPolicy': {}, 'f:schedulerName': {}, 'f:securityContext': {}, 'f:serviceAccount': {}, 'f:serviceAccountName': {}, 'f:terminationGracePeriodSeconds': {}, 'f:tolerations': {}, 'f:volumes': {'.': {}, 'k:{"name":"cni"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"cni-plugin"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"flannel-cfg"}': {'.': {}, 'f:configMap': {'.': {}, 'f:defaultMode': {}, 'f:name': {}}, 'f:name': {}}, 'k:{"name":"run"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}, 'k:{"name":"xtables-lock"}': {'.': {}, 'f:hostPath': {'.': {}, 'f:path': {}, 'f:type': {}}, 'f:name': {}}}}}}, {'manager': 'kubelet', 'operation': 'Update', 'apiVersion': 'v1', 'time': '2025-09-12T13:34:27Z', 'fieldsType': 'FieldsV1', 'fieldsV1': {'f:status': {'f:conditions': {'k:{"type":"ContainersReady"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Initialized"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"PodReadyToStartContainers"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}, 'k:{"type":"Ready"}': {'.': {}, 'f:lastProbeTime': {}, 'f:lastTransitionTime': {}, 'f:status': {}, 'f:type': {}}}, 'f:containerStatuses': {}, 'f:hostIP': {}, 'f:hostIPs': {}, 'f:initContainerStatuses': {}, 'f:phase': {}, 'f:podIP': {}, 'f:podIPs': {'.': {}, 'k:{"ip":"192.168.4.61"}': {'.': {}, 'f:ip': {}}}, 'f:startTime': {}}}, 'subresource': 'status'}]}, 'spec': {'volumes': [{'name': 'run', 'hostPath': {'path': '/run/flannel', 'type': ''}}, {'name': 'cni-plugin', 'hostPath': {'path': '/opt/cni/bin', 'type': ''}}, {'name': 'cni', 'hostPath': {'path': '/etc/cni/net.d', 'type': ''}}, {'name': 'flannel-cfg', 'configMap': {'name': 'kube-flannel-cfg', 'defaultMode': 420}}, {'name': 'xtables-lock', 'hostPath': {'path': '/run/xtables.lock', 'type': 'FileOrCreate'}}, {'name': 'kube-api-access-fbksv', 'projected': {'sources': [{'serviceAccountToken': {'expirationSeconds': 3607, 'path': 'token'}}, {'configMap': {'name': 'kube-root-ca.crt', 'items': [{'key': 'ca.crt', 'path': 'ca.crt'}]}}, {'downwardAPI': {'items': [{'path': 'namespace', 'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}]}}], 'defaultMode': 420}}], 'initContainers': [{'name': 'install-cni-plugin', 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'command': ['cp'], 'args': ['-f', '/flannel', '/opt/cni/bin/flannel'], 'resources': {}, 'volumeMounts': [{'name': 'cni-plugin', 'mountPath': '/opt/cni/bin'}, {'name': 'kube-api-access-fbksv', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}, {'name': 'install-cni', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['cp'], 'args': ['-f', '/etc/kube-flannel/cni-conf.json', '/etc/cni/net.d/10-flannel.conflist'], 'resources': {}, 'volumeMounts': [{'name': 'cni', 'mountPath': '/etc/cni/net.d'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'kube-api-access-fbksv', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent'}], 'containers': [{'name': 'kube-flannel', 'image': 'docker.io/flannel/flannel:v0.24.2', 'command': ['/opt/bin/flanneld'], 'args': ['--ip-masq', '--kube-subnet-mgr'], 'env': [{'name': 'POD_NAME', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.name'}}}, {'name': 'POD_NAMESPACE', 'valueFrom': {'fieldRef': {'apiVersion': 'v1', 'fieldPath': 'metadata.namespace'}}}, {'name': 'EVENT_QUEUE_DEPTH', 'value': '5000'}, {'name': 'CONT_WHEN_CACHE_NOT_READY', 'value': 'false'}], 'resources': {'requests': {'cpu': '100m', 'memory': '50Mi'}}, 'volumeMounts': [{'name': 'run', 'mountPath': '/run/flannel'}, {'name': 'flannel-cfg', 'mountPath': '/etc/kube-flannel/'}, {'name': 'xtables-lock', 'mountPath': '/run/xtables.lock'}, {'name': 'kube-api-access-fbksv', 'readOnly': True, 'mountPath': '/var/run/secrets/kubernetes.io/serviceaccount'}], 'terminationMessagePath': '/dev/termination-log', 'terminationMessagePolicy': 'File', 'imagePullPolicy': 'IfNotPresent', 'securityContext': {'capabilities': {'add': ['NET_ADMIN', 'NET_RAW']}, 'privileged': False}}], 'restartPolicy': 'Always', 'terminationGracePeriodSeconds': 30, 'dnsPolicy': 'ClusterFirst', 'serviceAccountName': 'flannel', 'serviceAccount': 'flannel', 'nodeName': 'storagenodet3500', 'hostNetwork': True, 'securityContext': {}, 'affinity': {'nodeAffinity': {'requiredDuringSchedulingIgnoredDuringExecution': {'nodeSelectorTerms': [{'matchFields': [{'key': 'metadata.name', 'operator': 'In', 'values': ['storagenodet3500']}]}]}}}, 'schedulerName': 'default-scheduler', 'tolerations': [{'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/not-ready', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/unreachable', 'operator': 'Exists', 'effect': 'NoExecute'}, {'key': 'node.kubernetes.io/disk-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/memory-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/pid-pressure', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/unschedulable', 'operator': 'Exists', 'effect': 'NoSchedule'}, {'key': 'node.kubernetes.io/network-unavailable', 'operator': 'Exists', 'effect': 'NoSchedule'}], 'priorityClassName': 'system-node-critical', 'priority': 2000001000, 'enableServiceLinks': True, 'preemptionPolicy': 'PreemptLowerPriority'}, 'status': {'phase': 'Running', 'conditions': [{'type': 'PodReadyToStartContainers', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:13Z'}, {'type': 'Initialized', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:26Z'}, {'type': 'Ready', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:27Z'}, {'type': 'ContainersReady', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:27Z'}, {'type': 'PodScheduled', 'status': 'True', 'lastProbeTime': None, 'lastTransitionTime': '2025-09-12T13:34:08Z'}], 'hostIP': '192.168.4.61', 'hostIPs': [{'ip': '192.168.4.61'}], 'podIP': '192.168.4.61', 'podIPs': [{'ip': '192.168.4.61'}], 'startTime': '2025-09-12T13:34:08Z', 'initContainerStatuses': [{'name': 'install-cni-plugin', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:34:13Z', 'finishedAt': '2025-09-12T13:34:13Z', 'containerID': 'containerd://15656a969b1c98edd520af2ceb4ab1a9199d657f723b71329d7ee452a0b82b0e'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel-cni-plugin:v1.4.0-flannel1', 'imageID': 'docker.io/flannel/flannel-cni-plugin@sha256:743c25e5e477527d8e54faa3e5259fbbee3463a335de1690879fc74305edc79b', 'containerID': 'containerd://15656a969b1c98edd520af2ceb4ab1a9199d657f723b71329d7ee452a0b82b0e', 'started': False}, {'name': 'install-cni', 'state': {'terminated': {'exitCode': 0, 'reason': 'Completed', 'startedAt': '2025-09-12T13:34:23Z', 'finishedAt': '2025-09-12T13:34:23Z', 'containerID': 'containerd://0426caecbdd6d30cf618c0376dd36fad494108408c1f27fd9ef4451301b33d69'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://0426caecbdd6d30cf618c0376dd36fad494108408c1f27fd9ef4451301b33d69', 'started': False}], 'containerStatuses': [{'name': 'kube-flannel', 'state': {'running': {'startedAt': '2025-09-12T13:34:27Z'}}, 'lastState': {}, 'ready': True, 'restartCount': 0, 'image': 'docker.io/flannel/flannel:v0.24.2', 'imageID': 'docker.io/flannel/flannel@sha256:2a2b74a762a5d99517659f940e3f2ad774de293d41fce6a78378df6fe9320173', 'containerID': 'containerd://28514fcc0ce6b5b5b2db60c41eb22b1e833046831b7f174c8bda1795cf8beafc', 'started': True}], 'qosClass': 'Burstable'}, 'apiVersion': 'v1', 'kind': 'Pod'}) =>
+  msg: Flannel pod kube-flannel-ds-zmn26 on node storagenodet3500 is Running
 
 PLAY [Deploy and Verify Monitoring Stack] *****************************************************************************************************************************************************
 
-TASK [Gathering Facts] ************************************************************************************************************************************************************************
-*ok: [masternode]
-
 TASK [Check existing Prometheus Deployment selector] ******************************************************************************************************************************************
-ok: [masternode]
+task path: /srv/monitoring_data/VMStation/ansible/playbooks/verify-cluster.yml:103
+<192.168.4.63> ESTABLISH LOCAL CONNECTION FOR USER: root
+<192.168.4.63> EXEC /bin/sh -c 'echo ~root && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '( umask 77 && mkdir -p "` echo /root/.ansible/tmp `"&& mkdir "` echo /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122 `" && echo ansible-tmp-1757690051.7491224-1174032-50884072275122="` echo /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122 `" ) && sleep 0'
+Using module file /root/.ansible/collections/ansible_collections/kubernetes/core/plugins/modules/k8s_info.py
+<192.168.4.63> PUT /root/.ansible/tmp/ansible-local-1173686q2dnx0wb/tmp5jboe8ho TO /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122/AnsiballZ_k8s_info.py
+<192.168.4.63> EXEC /bin/sh -c 'chmod u+x /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122/ /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122/AnsiballZ_k8s_info.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '/usr/bin/python3 /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122/AnsiballZ_k8s_info.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c 'rm -f -r /root/.ansible/tmp/ansible-tmp-1757690051.7491224-1174032-50884072275122/ > /dev/null 2>&1 && sleep 0'
+ok: [masternode] => changed=false
+  api_found: true
+  failed_when_result: false
+  invocation:
+    module_args:
+      api_key: null
+      api_version: apps/v1
+      ca_cert: null
+      client_cert: null
+      client_key: null
+      context: null
+      field_selectors: []
+      hidden_fields: null
+      host: null
+      impersonate_groups: null
+      impersonate_user: null
+      kind: Deployment
+      kubeconfig: VALUE_SPECIFIED_IN_NO_LOG_PARAMETER
+      label_selectors: []
+      name: prometheus
+      namespace: monitoring
+      no_proxy: null
+      password: null
+      persist_config: null
+      proxy: null
+      proxy_headers: null
+      username: null
+      validate_certs: null
+      wait: false
+      wait_condition: null
+      wait_sleep: 5
+      wait_timeout: 120
+  resources:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      annotations:
+        deployment.kubernetes.io/revision: '2'
+      creationTimestamp: '2025-09-11T16:43:21Z'
+      generation: 2
+      labels:
+        app.kubernetes.io/name: prometheus
+      managedFields:
+      - apiVersion: apps/v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:metadata:
+            f:labels:
+              .: {}
+              f:app.kubernetes.io/name: {}
+          f:spec:
+            f:progressDeadlineSeconds: {}
+            f:replicas: {}
+            f:revisionHistoryLimit: {}
+            f:selector: {}
+            f:strategy:
+              f:rollingUpdate:
+                .: {}
+                f:maxSurge: {}
+                f:maxUnavailable: {}
+              f:type: {}
+            f:template:
+              f:metadata:
+                f:labels:
+                  .: {}
+                  f:app.kubernetes.io/name: {}
+              f:spec:
+                f:containers:
+                  k:{"name":"prometheus"}:
+                    .: {}
+                    f:args: {}
+                    f:image: {}
+                    f:imagePullPolicy: {}
+                    f:livenessProbe:
+                      .: {}
+                      f:failureThreshold: {}
+                      f:httpGet:
+                        .: {}
+                        f:path: {}
+                        f:port: {}
+                        f:scheme: {}
+                      f:initialDelaySeconds: {}
+                      f:periodSeconds: {}
+                      f:successThreshold: {}
+                      f:timeoutSeconds: {}
+                    f:name: {}
+                    f:ports:
+                      .: {}
+                      k:{"containerPort":9090,"protocol":"TCP"}:
+                        .: {}
+                        f:containerPort: {}
+                        f:protocol: {}
+                    f:readinessProbe:
+                      .: {}
+                      f:failureThreshold: {}
+                      f:httpGet:
+                        .: {}
+                        f:path: {}
+                        f:port: {}
+                        f:scheme: {}
+                      f:initialDelaySeconds: {}
+                      f:periodSeconds: {}
+                      f:successThreshold: {}
+                      f:timeoutSeconds: {}
+                    f:resources:
+                      .: {}
+                      f:limits:
+                        .: {}
+                        f:cpu: {}
+                        f:memory: {}
+                      f:requests:
+                        .: {}
+                        f:cpu: {}
+                        f:memory: {}
+                    f:terminationMessagePath: {}
+                    f:terminationMessagePolicy: {}
+                    f:volumeMounts:
+                      .: {}
+                      k:{"mountPath":"/etc/prometheus/"}:
+                        .: {}
+                        f:mountPath: {}
+                        f:name: {}
+                      k:{"mountPath":"/prometheus/"}:
+                        .: {}
+                        f:mountPath: {}
+                        f:name: {}
+                f:dnsPolicy: {}
+                f:nodeSelector: {}
+                f:restartPolicy: {}
+                f:schedulerName: {}
+                f:securityContext: {}
+                f:terminationGracePeriodSeconds: {}
+                f:tolerations: {}
+                f:volumes:
+                  .: {}
+                  k:{"name":"config-volume"}:
+                    .: {}
+                    f:configMap:
+                      .: {}
+                      f:defaultMode: {}
+                      f:name: {}
+                    f:name: {}
+                  k:{"name":"storage-volume"}:
+                    .: {}
+                    f:emptyDir: {}
+                    f:name: {}
+        manager: OpenAPI-Generator
+        operation: Update
+        time: '2025-09-12T00:34:34Z'
+      - apiVersion: apps/v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:metadata:
+            f:annotations:
+              .: {}
+              f:deployment.kubernetes.io/revision: {}
+          f:status:
+            f:availableReplicas: {}
+            f:conditions:
+              .: {}
+              k:{"type":"Available"}:
+                .: {}
+                f:lastTransitionTime: {}
+                f:lastUpdateTime: {}
+                f:message: {}
+                f:reason: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"Progressing"}:
+                .: {}
+                f:lastTransitionTime: {}
+                f:lastUpdateTime: {}
+                f:message: {}
+                f:reason: {}
+                f:status: {}
+                f:type: {}
+            f:observedGeneration: {}
+            f:readyReplicas: {}
+            f:replicas: {}
+            f:updatedReplicas: {}
+        manager: kube-controller-manager
+        operation: Update
+        subresource: status
+        time: '2025-09-12T02:33:34Z'
+      name: prometheus
+      namespace: monitoring
+      resourceVersion: '140087'
+      uid: 322eee1d-dcb1-4114-a72e-8cc7b97ff249
+    spec:
+      progressDeadlineSeconds: 600
+      replicas: 1
+      revisionHistoryLimit: 10
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+      strategy:
+        rollingUpdate:
+          maxSurge: 25%
+          maxUnavailable: 25%
+        type: RollingUpdate
+      template:
+        metadata:
+          creationTimestamp: null
+          labels:
+            app.kubernetes.io/name: prometheus
+        spec:
+          containers:
+          - args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus/
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+            - --web.enable-lifecycle
+            image: prom/prometheus:latest
+            imagePullPolicy: IfNotPresent
+            livenessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /-/healthy
+                port: 9090
+                scheme: HTTP
+              initialDelaySeconds: 60
+              periodSeconds: 30
+              successThreshold: 1
+              timeoutSeconds: 1
+            name: prometheus
+            ports:
+            - containerPort: 9090
+              protocol: TCP
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /-/ready
+                port: 9090
+                scheme: HTTP
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 5
+            resources:
+              limits:
+                cpu: 500m
+                memory: 1Gi
+              requests:
+                cpu: 100m
+                memory: 256Mi
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+            volumeMounts:
+            - mountPath: /etc/prometheus/
+              name: config-volume
+            - mountPath: /prometheus/
+              name: storage-volume
+          dnsPolicy: ClusterFirst
+          nodeSelector:
+            node-role.kubernetes.io/control-plane: ''
+          restartPolicy: Always
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+          tolerations:
+          - effect: NoSchedule
+            key: node-role.kubernetes.io/control-plane
+            operator: Exists
+          volumes:
+          - configMap:
+              defaultMode: 420
+              name: prometheus-config
+            name: config-volume
+          - emptyDir: {}
+            name: storage-volume
+    status:
+      availableReplicas: 1
+      conditions:
+      - lastTransitionTime: '2025-09-12T02:32:59Z'
+        lastUpdateTime: '2025-09-12T02:32:59Z'
+        message: Deployment has minimum availability.
+        reason: MinimumReplicasAvailable
+        status: 'True'
+        type: Available
+      - lastTransitionTime: '2025-09-12T02:32:59Z'
+        lastUpdateTime: '2025-09-12T02:33:34Z'
+        message: ReplicaSet "prometheus-74887c8bb6" has successfully progressed.
+        reason: NewReplicaSetAvailable
+        status: 'True'
+        type: Progressing
+      observedGeneration: 2
+      readyReplicas: 1
+      replicas: 1
+      updatedReplicas: 1
 
 TASK [Delete Prometheus Deployment if selector doesn't match manifest expectation] ************************************************************************************************************
-skipping: [masternode]
+task path: /srv/monitoring_data/VMStation/ansible/playbooks/verify-cluster.yml:113
+skipping: [masternode] => changed=false
+  skip_reason: Conditional result was False
 
 TASK [Check existing Grafana Deployment selector] *********************************************************************************************************************************************
-ok: [masternode]
+task path: /srv/monitoring_data/VMStation/ansible/playbooks/verify-cluster.yml:123
+<192.168.4.63> ESTABLISH LOCAL CONNECTION FOR USER: root
+<192.168.4.63> EXEC /bin/sh -c 'echo ~root && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '( umask 77 && mkdir -p "` echo /root/.ansible/tmp `"&& mkdir "` echo /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782 `" && echo ansible-tmp-1757690052.5044055-1174060-177335242577782="` echo /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782 `" ) && sleep 0'
+Using module file /root/.ansible/collections/ansible_collections/kubernetes/core/plugins/modules/k8s_info.py
+<192.168.4.63> PUT /root/.ansible/tmp/ansible-local-1173686q2dnx0wb/tmp4hnk0b3i TO /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782/AnsiballZ_k8s_info.py
+<192.168.4.63> EXEC /bin/sh -c 'chmod u+x /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782/ /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782/AnsiballZ_k8s_info.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '/usr/bin/python3 /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782/AnsiballZ_k8s_info.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c 'rm -f -r /root/.ansible/tmp/ansible-tmp-1757690052.5044055-1174060-177335242577782/ > /dev/null 2>&1 && sleep 0'
+ok: [masternode] => changed=false
+  api_found: true
+  failed_when_result: false
+  invocation:
+    module_args:
+      api_key: null
+      api_version: apps/v1
+      ca_cert: null
+      client_cert: null
+      client_key: null
+      context: null
+      field_selectors: []
+      hidden_fields: null
+      host: null
+      impersonate_groups: null
+      impersonate_user: null
+      kind: Deployment
+      kubeconfig: VALUE_SPECIFIED_IN_NO_LOG_PARAMETER
+      label_selectors: []
+      name: grafana
+      namespace: monitoring
+      no_proxy: null
+      password: null
+      persist_config: null
+      proxy: null
+      proxy_headers: null
+      username: null
+      validate_certs: null
+      wait: false
+      wait_condition: null
+      wait_sleep: 5
+      wait_timeout: 120
+  resources:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      annotations:
+        deployment.kubernetes.io/revision: '2'
+      creationTimestamp: '2025-09-11T16:43:23Z'
+      generation: 2
+      labels:
+        app.kubernetes.io/name: grafana
+      managedFields:
+      - apiVersion: apps/v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:metadata:
+            f:labels:
+              .: {}
+              f:app.kubernetes.io/name: {}
+          f:spec:
+            f:progressDeadlineSeconds: {}
+            f:replicas: {}
+            f:revisionHistoryLimit: {}
+            f:selector: {}
+            f:strategy:
+              f:rollingUpdate:
+                .: {}
+                f:maxSurge: {}
+                f:maxUnavailable: {}
+              f:type: {}
+            f:template:
+              f:metadata:
+                f:labels:
+                  .: {}
+                  f:app.kubernetes.io/name: {}
+              f:spec:
+                f:containers:
+                  k:{"name":"grafana"}:
+                    .: {}
+                    f:env:
+                      .: {}
+                      k:{"name":"GF_INSTALL_PLUGINS"}:
+                        .: {}
+                        f:name: {}
+                      k:{"name":"GF_SECURITY_ADMIN_PASSWORD"}:
+                        .: {}
+                        f:name: {}
+                        f:value: {}
+                    f:image: {}
+                    f:imagePullPolicy: {}
+                    f:livenessProbe:
+                      .: {}
+                      f:failureThreshold: {}
+                      f:httpGet:
+                        .: {}
+                        f:path: {}
+                        f:port: {}
+                        f:scheme: {}
+                      f:initialDelaySeconds: {}
+                      f:periodSeconds: {}
+                      f:successThreshold: {}
+                      f:timeoutSeconds: {}
+                    f:name: {}
+                    f:ports:
+                      .: {}
+                      k:{"containerPort":3000,"protocol":"TCP"}:
+                        .: {}
+                        f:containerPort: {}
+                        f:protocol: {}
+                    f:readinessProbe:
+                      .: {}
+                      f:failureThreshold: {}
+                      f:httpGet:
+                        .: {}
+                        f:path: {}
+                        f:port: {}
+                        f:scheme: {}
+                      f:initialDelaySeconds: {}
+                      f:periodSeconds: {}
+                      f:successThreshold: {}
+                      f:timeoutSeconds: {}
+                    f:resources:
+                      .: {}
+                      f:limits:
+                        .: {}
+                        f:cpu: {}
+                        f:memory: {}
+                      f:requests:
+                        .: {}
+                        f:cpu: {}
+                        f:memory: {}
+                    f:terminationMessagePath: {}
+                    f:terminationMessagePolicy: {}
+                    f:volumeMounts:
+                      .: {}
+                      k:{"mountPath":"/var/lib/grafana"}:
+                        .: {}
+                        f:mountPath: {}
+                        f:name: {}
+                f:dnsPolicy: {}
+                f:nodeSelector: {}
+                f:restartPolicy: {}
+                f:schedulerName: {}
+                f:securityContext: {}
+                f:terminationGracePeriodSeconds: {}
+                f:tolerations: {}
+                f:volumes:
+                  .: {}
+                  k:{"name":"storage"}:
+                    .: {}
+                    f:emptyDir: {}
+                    f:name: {}
+        manager: OpenAPI-Generator
+        operation: Update
+        time: '2025-09-12T00:34:36Z'
+      - apiVersion: apps/v1
+        fieldsType: FieldsV1
+        fieldsV1:
+          f:metadata:
+            f:annotations:
+              .: {}
+              f:deployment.kubernetes.io/revision: {}
+          f:status:
+            f:availableReplicas: {}
+            f:conditions:
+              .: {}
+              k:{"type":"Available"}:
+                .: {}
+                f:lastTransitionTime: {}
+                f:lastUpdateTime: {}
+                f:message: {}
+                f:reason: {}
+                f:status: {}
+                f:type: {}
+              k:{"type":"Progressing"}:
+                .: {}
+                f:lastTransitionTime: {}
+                f:lastUpdateTime: {}
+                f:message: {}
+                f:reason: {}
+                f:status: {}
+                f:type: {}
+            f:observedGeneration: {}
+            f:readyReplicas: {}
+            f:replicas: {}
+            f:updatedReplicas: {}
+        manager: kube-controller-manager
+        operation: Update
+        subresource: status
+        time: '2025-09-12T02:33:46Z'
+      name: grafana
+      namespace: monitoring
+      resourceVersion: '140145'
+      uid: b47550bc-3afd-4b4a-bc62-fc0958201f97
+    spec:
+      progressDeadlineSeconds: 600
+      replicas: 1
+      revisionHistoryLimit: 10
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: grafana
+      strategy:
+        rollingUpdate:
+          maxSurge: 25%
+          maxUnavailable: 25%
+        type: RollingUpdate
+      template:
+        metadata:
+          creationTimestamp: null
+          labels:
+            app.kubernetes.io/name: grafana
+        spec:
+          containers:
+          - env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+            - name: GF_INSTALL_PLUGINS
+            image: grafana/grafana:latest
+            imagePullPolicy: IfNotPresent
+            livenessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /api/health
+                port: 3000
+                scheme: HTTP
+              initialDelaySeconds: 60
+              periodSeconds: 30
+              successThreshold: 1
+              timeoutSeconds: 1
+            name: grafana
+            ports:
+            - containerPort: 3000
+              protocol: TCP
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /api/health
+                port: 3000
+                scheme: HTTP
+              initialDelaySeconds: 30
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 5
+            resources:
+              limits:
+                cpu: 500m
+                memory: 512Mi
+              requests:
+                cpu: 100m
+                memory: 128Mi
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+            volumeMounts:
+            - mountPath: /var/lib/grafana
+              name: storage
+          dnsPolicy: ClusterFirst
+          nodeSelector:
+            node-role.kubernetes.io/control-plane: ''
+          restartPolicy: Always
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+          tolerations:
+          - effect: NoSchedule
+            key: node-role.kubernetes.io/control-plane
+            operator: Exists
+          volumes:
+          - emptyDir: {}
+            name: storage
+    status:
+      availableReplicas: 1
+      conditions:
+      - lastTransitionTime: '2025-09-12T02:33:03Z'
+        lastUpdateTime: '2025-09-12T02:33:03Z'
+        message: Deployment has minimum availability.
+        reason: MinimumReplicasAvailable
+        status: 'True'
+        type: Available
+      - lastTransitionTime: '2025-09-12T02:33:03Z'
+        lastUpdateTime: '2025-09-12T02:33:46Z'
+        message: ReplicaSet "grafana-79db5b584f" has successfully progressed.
+        reason: NewReplicaSetAvailable
+        status: 'True'
+        type: Progressing
+      observedGeneration: 2
+      readyReplicas: 1
+      replicas: 1
+      updatedReplicas: 1
 
 TASK [Delete Grafana Deployment if selector doesn't match manifest expectation] ***************************************************************************************************************
-skipping: [masternode]
+task path: /srv/monitoring_data/VMStation/ansible/playbooks/verify-cluster.yml:133
+skipping: [masternode] => changed=false
+  skip_reason: Conditional result was False
 
 TASK [Deploy monitoring namespace and components] *********************************************************************************************************************************************
-failed: [masternode] (item=/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/prometheus.yaml) => {"ansible_loop_var": "item", "changed": false, "item": "/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/prometheus.yaml", "msg": "Failed to patch object: b'{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"Deployment.apps \\\\\"prometheus\\\\\" is invalid: spec.selector: Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"prometheus\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"prometheus\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"reason\":\"Invalid\",\"details\":{\"name\":\"prometheus\",\"group\":\"apps\",\"kind\":\"Deployment\",\"causes\":[{\"reason\":\"FieldValueInvalid\",\"message\":\"Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"prometheus\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"prometheus\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"field\":\"spec.selector\"}]},\"code\":422}\\n'", "reason": "Unprocessable Entity"}
-failed: [masternode] (item=/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/grafana.yaml) => {"ansible_loop_var": "item", "changed": false, "item": "/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/grafana.yaml", "msg": "Failed to patch object: b'{\"kind\":\"Status\",\"apiVersion\":\"v1\",\"metadata\":{},\"status\":\"Failure\",\"message\":\"Deployment.apps \\\\\"grafana\\\\\" is invalid: spec.selector: Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"grafana\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"grafana\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"reason\":\"Invalid\",\"details\":{\"name\":\"grafana\",\"group\":\"apps\",\"kind\":\"Deployment\",\"causes\":[{\"reason\":\"FieldValueInvalid\",\"message\":\"Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\\\\"app\\\\\":\\\\\"grafana\\\\\", \\\\\"app.kubernetes.io/name\\\\\":\\\\\"grafana\\\\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable\",\"field\":\"spec.selector\"}]},\"code\":422}\\n'", "reason": "Unprocessable Entity"}
+task path: /srv/monitoring_data/VMStation/ansible/playbooks/verify-cluster.yml:143
+<192.168.4.63> ESTABLISH LOCAL CONNECTION FOR USER: root
+<192.168.4.63> EXEC /bin/sh -c 'echo ~root && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '( umask 77 && mkdir -p "` echo /root/.ansible/tmp `"&& mkdir "` echo /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694 `" && echo ansible-tmp-1757690053.2648623-1174088-25113771517694="` echo /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694 `" ) && sleep 0'
+Loading collection cloud.common from /usr/lib/python3/dist-packages/ansible_collections/cloud/common
+Using module file /root/.ansible/collections/ansible_collections/kubernetes/core/plugins/modules/k8s.py
+<192.168.4.63> PUT /root/.ansible/tmp/ansible-local-1173686q2dnx0wb/tmpiwn55jgo TO /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694/AnsiballZ_k8s.py
+<192.168.4.63> EXEC /bin/sh -c 'chmod u+x /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694/ /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694/AnsiballZ_k8s.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '/usr/bin/python3 /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694/AnsiballZ_k8s.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c 'rm -f -r /root/.ansible/tmp/ansible-tmp-1757690053.2648623-1174088-25113771517694/ > /dev/null 2>&1 && sleep 0'
+The full traceback is:
+  File "/tmp/ansible_kubernetes.core.k8s_payload_iz7s5zba/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/runner.py", line 101, in run_module
+    result = perform_action(svc, definition, module.params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ansible_kubernetes.core.k8s_payload_iz7s5zba/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/runner.py", line 194, in perform_action
+    instance, warnings = svc.update(resource, definition, existing)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ansible_kubernetes.core.k8s_payload_iz7s5zba/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/service.py", line 446, in update
+    raise exception
+  File "/tmp/ansible_kubernetes.core.k8s_payload_iz7s5zba/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/service.py", line 436, in update
+    return self.patch_resource(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ansible_kubernetes.core.k8s_payload_iz7s5zba/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/service.py", line 156, in patch_resource
+    raise CoreException(msg) from e
+failed: [masternode] (item=/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/prometheus.yaml) => changed=false
+  ansible_loop_var: item
+  invocation:
+    module_args:
+      api_key: null
+      api_version: v1
+      append_hash: false
+      apply: false
+      ca_cert: null
+      client_cert: null
+      client_key: null
+      context: null
+      continue_on_error: false
+      delete_all: false
+      delete_options: null
+      force: false
+      generate_name: null
+      hidden_fields: null
+      host: null
+      impersonate_groups: null
+      impersonate_user: null
+      kind: null
+      kubeconfig: VALUE_SPECIFIED_IN_NO_LOG_PARAMETER
+      label_selectors: null
+      merge_type: null
+      name: null
+      namespace: null
+      no_proxy: null
+      password: null
+      persist_config: null
+      proxy: null
+      proxy_headers: null
+      resource_definition: null
+      server_side_apply: null
+      src: /srv/monitoring_data/VMStation/manifests/monitoring/prometheus.yaml
+      state: present
+      template: null
+      username: null
+      validate: null
+      validate_certs: null
+      wait: false
+      wait_condition: null
+      wait_sleep: 5
+      wait_timeout: 120
+  item: /srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/prometheus.yaml
+  msg: 'Failed to patch object: b''{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"Deployment.apps \\"prometheus\\" is invalid: spec.selector: Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\"app\\":\\"prometheus\\", \\"app.kubernetes.io/name\\":\\"prometheus\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable","reason":"Invalid","details":{"name":"prometheus","group":"apps","kind":"Deployment","causes":[{"reason":"FieldValueInvalid","message":"Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\"app\\":\\"prometheus\\", \\"app.kubernetes.io/name\\":\\"prometheus\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable","field":"spec.selector"}]},"code":422}\n'''
+  reason: Unprocessable Entity
+<192.168.4.63> EXEC /bin/sh -c 'echo ~root && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '( umask 77 && mkdir -p "` echo /root/.ansible/tmp `"&& mkdir "` echo /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172 `" && echo ansible-tmp-1757690054.207969-1174088-217191530906172="` echo /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172 `" ) && sleep 0'
+Using module file /root/.ansible/collections/ansible_collections/kubernetes/core/plugins/modules/k8s.py
+<192.168.4.63> PUT /root/.ansible/tmp/ansible-local-1173686q2dnx0wb/tmplv9x4y4l TO /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172/AnsiballZ_k8s.py
+<192.168.4.63> EXEC /bin/sh -c 'chmod u+x /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172/ /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172/AnsiballZ_k8s.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c '/usr/bin/python3 /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172/AnsiballZ_k8s.py && sleep 0'
+<192.168.4.63> EXEC /bin/sh -c 'rm -f -r /root/.ansible/tmp/ansible-tmp-1757690054.207969-1174088-217191530906172/ > /dev/null 2>&1 && sleep 0'
+The full traceback is:
+  File "/tmp/ansible_kubernetes.core.k8s_payload_aa4gjzzn/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/runner.py", line 101, in run_module
+    result = perform_action(svc, definition, module.params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ansible_kubernetes.core.k8s_payload_aa4gjzzn/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/runner.py", line 194, in perform_action
+    instance, warnings = svc.update(resource, definition, existing)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ansible_kubernetes.core.k8s_payload_aa4gjzzn/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/service.py", line 446, in update
+    raise exception
+  File "/tmp/ansible_kubernetes.core.k8s_payload_aa4gjzzn/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/service.py", line 436, in update
+    return self.patch_resource(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ansible_kubernetes.core.k8s_payload_aa4gjzzn/ansible_kubernetes.core.k8s_payload.zip/ansible_collections/kubernetes/core/plugins/module_utils/k8s/service.py", line 156, in patch_resource
+    raise CoreException(msg) from e
+failed: [masternode] (item=/srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/grafana.yaml) => changed=false
+  ansible_loop_var: item
+  invocation:
+    module_args:
+      api_key: null
+      api_version: v1
+      append_hash: false
+      apply: false
+      ca_cert: null
+      client_cert: null
+      client_key: null
+      context: null
+      continue_on_error: false
+      delete_all: false
+      delete_options: null
+      force: false
+      generate_name: null
+      hidden_fields: null
+      host: null
+      impersonate_groups: null
+      impersonate_user: null
+      kind: null
+      kubeconfig: VALUE_SPECIFIED_IN_NO_LOG_PARAMETER
+      label_selectors: null
+      merge_type: null
+      name: null
+      namespace: null
+      no_proxy: null
+      password: null
+      persist_config: null
+      proxy: null
+      proxy_headers: null
+      resource_definition: null
+      server_side_apply: null
+      src: /srv/monitoring_data/VMStation/manifests/monitoring/grafana.yaml
+      state: present
+      template: null
+      username: null
+      validate: null
+      validate_certs: null
+      wait: false
+      wait_condition: null
+      wait_sleep: 5
+      wait_timeout: 120
+  item: /srv/monitoring_data/VMStation/ansible/playbooks/../../manifests/monitoring/grafana.yaml
+  msg: 'Failed to patch object: b''{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"Deployment.apps \\"grafana\\" is invalid: spec.selector: Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\"app\\":\\"grafana\\", \\"app.kubernetes.io/name\\":\\"grafana\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable","reason":"Invalid","details":{"name":"grafana","group":"apps","kind":"Deployment","causes":[{"reason":"FieldValueInvalid","message":"Invalid value: v1.LabelSelector{MatchLabels:map[string]string{\\"app\\":\\"grafana\\", \\"app.kubernetes.io/name\\":\\"grafana\\"}, MatchExpressions:[]v1.LabelSelectorRequirement(nil)}: field is immutable","field":"spec.selector"}]},"code":422}\n'''
+  reason: Unprocessable Entity
+
+PLAY RECAP ************************************************************************************************************************************************************************************
+masternode                 : ok=13   changed=0    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0
+
+[ERROR] ❌ Cluster verification failed!
+[INFO] Run smoke test for quick diagnosis: ./deploy-cluster.sh smoke-test
