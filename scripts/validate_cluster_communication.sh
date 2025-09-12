@@ -83,9 +83,12 @@ info "=== Step 2: Node Status Validation ==="
 
 run_test_with_output "All nodes are Ready" "kubectl get nodes --no-headers | grep -v NotReady"
 
-# Get node count for further tests
-NODE_COUNT=$(kubectl get nodes --no-headers | wc -l || echo "0")
-READY_COUNT=$(kubectl get nodes --no-headers | grep -c " Ready " || echo "0")
+# Get node count for further tests - improved counting
+NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l)
+READY_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | grep " Ready " | wc -l)
+# Normalize to integers
+NODE_COUNT=$((NODE_COUNT + 0))
+READY_COUNT=$((READY_COUNT + 0))
 
 info "Cluster has $NODE_COUNT nodes, $READY_COUNT are Ready"
 
@@ -94,7 +97,7 @@ info "=== Step 3: Core System Pod Health ==="
 
 run_test "kube-system namespace exists" "kubectl get namespace kube-system"
 run_test "CoreDNS pods are running" "kubectl get pods -n kube-system -l k8s-app=kube-dns | grep -q 'Running'"
-run_test "kube-proxy pods are running" "kubectl get pods -n kube-system -l component=kube-proxy | grep -q 'Running'"
+run_test "kube-proxy pods are running" "kubectl get pods -n kube-system -l k8s-app=kube-proxy | grep -q 'Running'"
 
 # Check for any crashlooping pods
 if ! run_test "No pods in CrashLoopBackOff" "! kubectl get pods --all-namespaces | grep -q CrashLoopBackOff"; then
