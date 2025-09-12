@@ -1,26 +1,4 @@
 
-TASK [Display pre-join validation results] ****************************************************************************************************************************************************
+TASK [Detect node name on control plane by internal IP] ***************************************************************************************************************************************
 skipping: [storagenodet3500]
-ok: [homelab] => {
-    "msg": "Pre-join validation completed:\nExit code: 0\nOutput: === Pre-Join Validation for Post-Wipe Worker ===\\n              Timestamp: Fri 12 Sep 2025 12:55:08 PM EDT\\n              Control-plane IP: 192.168.4.63\\n              Worker was wiped: False\\n              \\n              ✓ containerd service is active\\n              Configuring crictl for containerd communication...\\n              ✓ crictl configuration created\\n              Checking and fixing containerd socket permissions...\\n              Containerd socket permissions: 660 (root:containerd)\\n              ✓ containerd group created and socket permissions updated\\n              Testing crictl communication with containerd...\\n              ✓ crictl communication working (with containerd group)\\n              Initializing containerd image filesystem...\\n              ✓ containerd image filesystem initialized (with containerd group)\\n              Testing connectivity to control-plane...\\n              ✓ Control-plane connectivity verified\\n              ✅ Pre-join validation completed successfully\n"
-}
-
-TASK [Execute enhanced join process for wiped worker (bash)] **********************************************************************************************************************************
-skipping: [storagenodet3500]
-changed: [homelab]
-
-TASK [Confirm worker appears and is Ready on control plane after join] ************************************************************************************************************************
-skipping: [storagenodet3500]
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (12 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (11 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (10 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (9 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (8 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (7 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (6 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (5 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (4 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (3 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (2 retries left).
-FAILED - RETRYING: [homelab -> masternode]: Confirm worker appears and is Ready on control plane after join (1 retries left).
-fatal: [homelab -> masternode(192.168.4.63)]: FAILED! => {"attempts": 12, "changed": true, "cmd": "kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes homelab -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'", "delta": "0:00:00.061862", "end": "2025-09-12 12:57:14.148880", "failed_when_result": true, "msg": "non-zero return code", "rc": 1, "start": "2025-09-12 12:57:14.087018", "stderr": "Error from server (NotFound): nodes \"homelab\" not found", "stderr_lines": ["Error from server (NotFound): nodes \"homelab\" not found"], "stdout": "", "stdout_lines": []}
+fatal: [homelab -> masternode(192.168.4.63)]: FAILED! => {"changed": false, "cmd": "kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{range .items[*]}{.metadata.name}\"|\"{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}' | awk -F'\"|\"' '/192.168.4.62$/ {print $1}'", "delta": "0:00:00.069011", "end": "2025-09-12 13:05:26.284372", "failed_when_result": true, "msg": "", "rc": 0, "start": "2025-09-12 13:05:26.215361", "stderr": "", "stderr_lines": [], "stdout": "", "stdout_lines": []}
