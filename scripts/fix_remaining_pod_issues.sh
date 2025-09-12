@@ -33,7 +33,7 @@ fi
 wait_for_pod() {
     local namespace="$1"
     local pod_name="$2"
-    local timeout="${3:-300}"
+    local timeout="${3:-120}"
     
     info "Waiting for pod $namespace/$pod_name to be ready (timeout: ${timeout}s)"
     

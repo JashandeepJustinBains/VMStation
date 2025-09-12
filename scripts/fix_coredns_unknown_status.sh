@@ -153,7 +153,7 @@ done
 info "Step 5: Waiting for CoreDNS to be rescheduled with proper IPs..."
 
 echo "Waiting for CoreDNS deployment to be ready..."
-kubectl rollout status deployment/coredns -n kube-system --timeout=300s
+kubectl rollout status deployment/coredns -n kube-system --timeout=120s
 
 echo
 echo "Waiting for all CoreDNS pods to have IP addresses..."
