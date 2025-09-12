@@ -55,13 +55,13 @@ spec:
     - name: jellyfin-media
       mountPath: /media
       readOnly: true
-    # Fixed probe configuration - more time for initial Jellyfin setup
+    # Fixed probe configuration - more time for initial Jellyfin setup and CNI networking
     livenessProbe:
       httpGet:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 180
+      initialDelaySeconds: 240
       periodSeconds: 60
       timeoutSeconds: 30
       failureThreshold: 5
@@ -70,19 +70,19 @@ spec:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 120
+      initialDelaySeconds: 180
       periodSeconds: 30
-      timeoutSeconds: 15
-      failureThreshold: 5
+      timeoutSeconds: 20
+      failureThreshold: 8
     startupProbe:
       httpGet:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 60
-      periodSeconds: 15
-      timeoutSeconds: 10
-      failureThreshold: 30
+      initialDelaySeconds: 90
+      periodSeconds: 20
+      timeoutSeconds: 15
+      failureThreshold: 60
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
