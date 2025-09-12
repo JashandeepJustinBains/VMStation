@@ -8,169 +8,115 @@ metadata:
     name: jellyfin
     vmstation.io/component: media
 ---
-# Jellyfin PersistentVolume for configuration
+# Jellyfin Pod (using hostPath volumes instead of PVCs)
 apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: jellyfin-config-pv
-  labels:
-    app: jellyfin
-    type: config
-spec:
-  capacity:
-    storage: 5Gi
-  accessModes:
-    - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: manual
-  hostPath:
-    path: /var/lib/jellyfin
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: vmstation.io/role
-          operator: In
-          values: ["storage"]
----
-# Jellyfin PersistentVolumeClaim for configuration
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: jellyfin-config-pvc
-  namespace: jellyfin
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-  storageClassName: manual
-  selector:
-    matchLabels:
-      app: jellyfin
-      type: config
----
-# Jellyfin PersistentVolume for media
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: jellyfin-media-pv
-  labels:
-    app: jellyfin
-    type: media
-spec:
-  capacity:
-    storage: 1000Gi  # Large capacity for media storage
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: manual
-  hostPath:
-    path: /srv/media
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-      - matchExpressions:
-        - key: vmstation.io/role
-          operator: In
-          values: ["storage"]
----
-# Jellyfin PersistentVolumeClaim for media
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: jellyfin-media-pvc
-  namespace: jellyfin
-spec:
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 1000Gi
-  storageClassName: manual
-  selector:
-    matchLabels:
-      app: jellyfin
-      type: media
----
-# Jellyfin Deployment
-apiVersion: apps/v1
-kind: Deployment
+kind: Pod
 metadata:
   name: jellyfin
   namespace: jellyfin
   labels:
     app: jellyfin
-    vmstation.io/component: media
+    component: media-server
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: jellyfin
-  template:
-    metadata:
-      labels:
-        app: jellyfin
-    spec:
-      nodeSelector:
-        vmstation.io/role: storage
-      containers:
-      - name: jellyfin
-        image: jellyfin/jellyfin:10.8.13
-        ports:
-        - containerPort: 8096
-          name: http
-        - containerPort: 8920
-          name: https
-        - containerPort: 1900
-          name: dlna
-          protocol: UDP
-        - containerPort: 7359
-          name: discovery
-          protocol: UDP
-        env:
-        - name: JELLYFIN_PublishedServerUrl
-          value: "http://192.168.4.61:30096"
-        volumeMounts:
-        - name: jellyfin-config
-          mountPath: /config
-        - name: jellyfin-cache
-          mountPath: /cache
-        - name: jellyfin-media
-          mountPath: /media
-          readOnly: true
-        resources:
-          requests:
-            cpu: 500m
-            memory: 512Mi
-          limits:
-            cpu: 2000m
-            memory: 2Gi
-        securityContext:
-          allowPrivilegeEscalation: false
-          runAsNonRoot: true
-          runAsUser: 1000
-          runAsGroup: 1000
-      volumes:
-      - name: jellyfin-config
-        persistentVolumeClaim:
-          claimName: jellyfin-config-pvc
-      - name: jellyfin-cache
-        emptyDir:
-          sizeLimit: 10Gi
-      - name: jellyfin-media
-        persistentVolumeClaim:
-          claimName: jellyfin-media-pvc
+  # Schedule on storage node explicitly
+  nodeSelector:
+    kubernetes.io/hostname: storagenodet3500
+  # Security context: run as non-root user
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  containers:
+  - name: jellyfin
+    image: jellyfin/jellyfin:latest
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 8096
+      name: http
+    - containerPort: 8920
+      name: https
+    - containerPort: 1900
+      name: dlna
+      protocol: UDP
+    - containerPort: 7359
+      name: discovery
+      protocol: UDP
+    env:
+    - name: JELLYFIN_PublishedServerUrl
+      value: "http://192.168.4.61:30096"
+    volumeMounts:
+    - name: jellyfin-config
+      mountPath: /config
+    - name: jellyfin-cache
+      mountPath: /cache
+    - name: jellyfin-media
+      mountPath: /media
+      readOnly: true
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+    # Improved health checks using web interface
+    livenessProbe:
+      httpGet:
+        path: /web/index.html
+        port: 8096
+        scheme: HTTP
+      initialDelaySeconds: 180
+      periodSeconds: 60
+      timeoutSeconds: 30
+      failureThreshold: 5
+    readinessProbe:
+      httpGet:
+        path: /web/index.html
+        port: 8096
+        scheme: HTTP
+      initialDelaySeconds: 120
+      periodSeconds: 30
+      timeoutSeconds: 15
+      failureThreshold: 5
+    startupProbe:
+      httpGet:
+        path: /web/index.html
+        port: 8096
+        scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+  # Use hostPath volumes directly (no PVCs needed)
+  volumes:
+  - name: jellyfin-config
+    hostPath:
+      path: /var/lib/jellyfin
+      type: DirectoryOrCreate
+  - name: jellyfin-cache
+    emptyDir:
+      sizeLimit: 10Gi
+  - name: jellyfin-media
+    hostPath:
+      path: /srv/media
+      type: DirectoryOrCreate
+  restartPolicy: Always
 ---
 # Jellyfin Service
 apiVersion: v1
 kind: Service
 metadata:
-  name: jellyfin
+  name: jellyfin-service
   namespace: jellyfin
   labels:
     app: jellyfin
+    component: media-server
 spec:
   type: NodePort
   ports:
@@ -184,3 +130,4 @@ spec:
     name: https
   selector:
     app: jellyfin
+    component: media-server
