@@ -106,8 +106,8 @@
         src: "{{ item }}"
         kubeconfig: "{{ kubeconfig_path }}"
       loop:
-        - "{{ playbook_dir }}/../manifests/monitoring/prometheus.yaml"
-        - "{{ playbook_dir }}/../manifests/monitoring/grafana.yaml"
+        - "{{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml"
+        - "{{ playbook_dir }}/../../manifests/monitoring/grafana.yaml"
       register: monitoring_deploy
 
     - name: "Wait for Prometheus pod to be Running"
@@ -183,7 +183,7 @@
     - name: "Deploy Jellyfin"
       kubernetes.core.k8s:
         state: present
-        src: "{{ playbook_dir }}/../manifests/jellyfin/jellyfin.yaml"
+        src: "{{ playbook_dir }}/../../manifests/jellyfin/jellyfin.yaml"
         kubeconfig: "{{ kubeconfig_path }}"
       register: jellyfin_deploy
 
