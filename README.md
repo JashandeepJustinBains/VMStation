@@ -591,6 +591,85 @@ spec:
 3. **Security**: Never commit secrets or credentials
 4. **Compatibility**: Ensure changes work across all node types
 
+## Troubleshooting Deployment Issues
+
+### Application Deployment Timeouts
+
+If applications fail to deploy with timeout errors:
+
+#### Symptoms
+- Pods stuck in "ContainerCreating" state for extended periods
+- Ansible timeout errors after 300+ seconds
+- Flannel pods in CrashLoopBackOff state
+- CoreDNS pods showing "Unknown" status
+
+#### Quick Fixes
+```bash
+# 1. Check cluster networking first
+kubectl get pods -n kube-flannel
+kubectl get pods -n kube-system
+
+# 2. Restart failing flannel pods
+kubectl delete pod -n kube-flannel -l app=flannel
+
+# 3. Re-run deployment with improved timeouts
+./deploy.sh full
+
+# 4. Check application pod status
+kubectl get pods --all-namespaces -o wide
+kubectl describe pod -n monitoring <pod-name>
+```
+
+#### Root Causes & Solutions
+
+**Network Issues**: 
+- Flannel pods failing prevents other pods from getting IP addresses
+- **Solution**: The deployment now automatically detects and restarts crashlooping flannel pods
+
+**Resource Constraints**:
+- Insufficient memory/CPU for applications
+- **Solution**: Added resource requests and limits to all applications
+
+**Image Pull Issues**:
+- Slow or failing container image downloads
+- **Solution**: Added `imagePullPolicy: IfNotPresent` to use cached images when available
+
+**Timeout Configuration**:
+- 300-second timeout too short for initial deployments
+- **Solution**: Increased timeouts to 600 seconds and added better error handling
+
+#### Enhanced Diagnostics
+
+The deployment now provides detailed troubleshooting information when pods fail:
+- Container status and error messages
+- Exact kubectl commands for manual troubleshooting
+- Network connectivity checks
+- Resource usage analysis
+
+#### Manual Recovery Steps
+
+If automated deployment still fails:
+```bash
+# 1. Check node resources
+kubectl top nodes
+kubectl describe nodes
+
+# 2. Check for image pull issues
+kubectl describe pod -n monitoring <pod-name>
+
+# 3. Check networking
+kubectl get pods -n kube-flannel -o wide
+kubectl logs -n kube-flannel <flannel-pod>
+
+# 4. Restart containerd if needed
+sudo systemctl restart containerd
+sudo systemctl restart kubelet
+
+# 5. Re-deploy individual components
+./deploy.sh apps      # Just monitoring apps
+./deploy.sh jellyfin  # Just Jellyfin
+```
+
 ## Support & Troubleshooting
 
 - **Documentation**: Check `docs/` for comprehensive guides
