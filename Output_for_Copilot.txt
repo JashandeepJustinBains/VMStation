@@ -1,4 +1,386 @@
-1.
+root@masternode:/srv/monitoring_data/VMStation# ./deploy.sh
+=== VMStation Simplified Deployment ===
+Timestamp: Thu 11 Sep 2025 10:12:42 PM EDT
+
+[INFO] Simplified VMStation deployment starting...
+[INFO] Deploying complete VMStation stack...
+[WARNING]: Collection community.general does not support Ansible version 2.14.18
+[WARNING]: Collection ansible.posix does not support Ansible version 2.14.18
+[WARNING]: Collection kubernetes.core does not support Ansible version 2.14.18
+
+PLAY [VMStation Simplified Deployment] ********************************************************************************************************************************************************
+
+TASK [Display deployment overview] ************************************************************************************************************************************************************
+ok: [localhost] => {
+    "msg": "=== VMStation Simplified Deployment ===\n\nThis playbook deploys:\n1. Kubernetes cluster (if not exists)\n2. Essential monitoring stack (Prometheus, Grafana, Loki)\n3. Jellyfin media server\n4. Additional applications (Dashboard, MongoDB, etc.)\n\nTarget Infrastructure:\n- Control plane: 192.168.4.63 (monitoring_nodes)\n- Storage node: 192.168.4.61 (storage_nodes)  \n- Compute node: 192.168.4.62 (compute_nodes)\n"
+}
+
+PLAY [Setup Kubernetes Cluster - All Nodes] ***************************************************************************************************************************************************
+
+TASK [Gathering Facts] ************************************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Update package cache (Debian/Ubuntu)] ***************************************************************************************************************************************************
+skipping: [192.168.4.62]
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+
+TASK [Install required packages (Debian/Ubuntu)] **********************************************************************************************************************************************
+skipping: [192.168.4.62]
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+
+TASK [Add Kubernetes GPG key] *****************************************************************************************************************************************************************
+skipping: [192.168.4.62]
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+
+TASK [Add Kubernetes repository] **************************************************************************************************************************************************************
+skipping: [192.168.4.62]
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+
+TASK [Install Kubernetes packages] ************************************************************************************************************************************************************
+skipping: [192.168.4.62]
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+
+TASK [Add Kubernetes repository (RHEL/CentOS)] ************************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Install Kubernetes packages (RHEL/CentOS)] **********************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Hold Kubernetes packages (Debian/Ubuntu)] ***********************************************************************************************************************************************
+skipping: [192.168.4.62] => (item=kubelet)
+skipping: [192.168.4.62] => (item=kubeadm)
+skipping: [192.168.4.62] => (item=kubectl)
+skipping: [192.168.4.62]
+ok: [192.168.4.63] => (item=kubelet)
+ok: [192.168.4.61] => (item=kubelet)
+ok: [192.168.4.63] => (item=kubeadm)
+ok: [192.168.4.63] => (item=kubectl)
+ok: [192.168.4.61] => (item=kubeadm)
+ok: [192.168.4.61] => (item=kubectl)
+
+TASK [Verify Kubernetes binaries are installed and executable] ********************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Display package verification results] ***************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "=== Verifying Kubernetes Package Installation ===\n✓ kubelet is installed: Kubernetes v1.29.15\n✓ kubelet is executable\n✓ kubeadm is installed: \n✓ kubeadm is executable\n✓ kubectl is installed: \n✓ kubectl is executable\n✓ containerd is installed\n✓ containerd is executable\n✅ All Kubernetes packages verified successfully"
+}
+ok: [192.168.4.61] => {
+    "msg": "=== Verifying Kubernetes Package Installation ===\n✓ kubelet is installed: Kubernetes v1.29.15\n✓ kubelet is executable\n✓ kubeadm is installed: \n✓ kubeadm is executable\n✓ kubectl is installed: \n✓ kubectl is executable\n✓ containerd is installed\n✓ containerd is executable\n✅ All Kubernetes packages verified successfully"
+}
+ok: [192.168.4.62] => {
+    "msg": "=== Verifying Kubernetes Package Installation ===\n✓ kubelet is installed: Kubernetes v1.29.15\n✓ kubelet is executable\n✓ kubeadm is installed: \n✓ kubeadm is executable\n✓ kubectl is installed: \n✓ kubectl is executable\n✓ containerd is installed\n✓ containerd is executable\n✅ All Kubernetes packages verified successfully"
+}
+
+TASK [Verify kubelet systemd service unit exists] *********************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Alternative kubelet service unit location check] ****************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Third alternative kubelet service unit location check] **********************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Search for kubelet service unit in all locations] ***************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Attempt to reinstall kubelet package when service unit missing] *************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Attempt to reinstall kubelet package when service unit missing (RHEL/CentOS)] ***********************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Reload systemd daemon after package reinstallation] *************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Re-verify kubelet service unit after remediation] ***************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Alternative kubelet service unit location re-check] *************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Final kubelet service unit verification after remediation] ******************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display kubelet service unit location] **************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "kubelet service unit found at: \n/lib/systemd/system/kubelet.service\n"
+}
+ok: [192.168.4.61] => {
+    "msg": "kubelet service unit found at: \n/lib/systemd/system/kubelet.service\n"
+}
+ok: [192.168.4.62] => {
+    "msg": "kubelet service unit found at: \n/lib/systemd/system/kubelet.service\n"
+}
+
+TASK [Verify containerd systemd service unit exists] ******************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Alternative containerd service unit location check] *************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Search for containerd service unit in all locations] ************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify containerd service unit was found] ***********************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Disable swap] ***************************************************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Load kernel modules] ********************************************************************************************************************************************************************
+ok: [192.168.4.63] => (item=overlay)
+ok: [192.168.4.61] => (item=overlay)
+ok: [192.168.4.63] => (item=br_netfilter)
+ok: [192.168.4.62] => (item=overlay)
+ok: [192.168.4.61] => (item=br_netfilter)
+ok: [192.168.4.62] => (item=br_netfilter)
+
+TASK [Create kernel modules config] ***********************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Set sysctl parameters] ******************************************************************************************************************************************************************
+ok: [192.168.4.63] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [192.168.4.61] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [192.168.4.63] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [192.168.4.62] => (item={'key': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [192.168.4.63] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+ok: [192.168.4.61] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [192.168.4.61] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+ok: [192.168.4.62] => (item={'key': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [192.168.4.62] => (item={'key': 'net.ipv4.ip_forward', 'value': '1'})
+
+TASK [Create containerd config directory] *****************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Generate containerd config] *************************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Configure containerd cgroup driver] *****************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Create CNI directories before containerd starts] ****************************************************************************************************************************************
+ok: [192.168.4.63] => (item=/opt/cni/bin)
+ok: [192.168.4.61] => (item=/opt/cni/bin)
+ok: [192.168.4.63] => (item=/etc/cni/net.d)
+ok: [192.168.4.62] => (item=/opt/cni/bin)
+ok: [192.168.4.63] => (item=/var/lib/cni/networks)
+ok: [192.168.4.61] => (item=/etc/cni/net.d)
+ok: [192.168.4.63] => (item=/run/flannel)
+ok: [192.168.4.61] => (item=/var/lib/cni/networks)
+ok: [192.168.4.62] => (item=/etc/cni/net.d)
+ok: [192.168.4.61] => (item=/run/flannel)
+ok: [192.168.4.62] => (item=/var/lib/cni/networks)
+ok: [192.168.4.62] => (item=/run/flannel)
+
+TASK [Create placeholder CNI configuration before containerd starts] **************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Start and enable containerd] ************************************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Configure crictl for containerd] ********************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Create containerd group for socket access] **********************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Add root user to containerd group for socket access] ************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Set up containerd socket permissions monitoring] ****************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Test crictl communication with containerd] **********************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Display crictl communication status] ****************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "Crictl Communication Status:\n✓ crictl communication successful\\n                  Version:  0.1.0\\n                  RuntimeName:  containerd\\n                  RuntimeVersion:  1.6.20~ds1\\n                  RuntimeApiVersion:  v1\n\nSocket permissions properly configured for worker node join.\n"
+}
+ok: [192.168.4.61] => {
+    "msg": "Crictl Communication Status:\n✓ crictl communication successful\\n                  Version:  0.1.0\\n                  RuntimeName:  containerd\\n                  RuntimeVersion:  1.6.20~ds1\\n                  RuntimeApiVersion:  v1\n\nSocket permissions properly configured for worker node join.\n"
+}
+ok: [192.168.4.62] => {
+    "msg": "Crictl Communication Status:\n✓ crictl communication successful\\n                  Version:  0.1.0\\n                  RuntimeName:  containerd\\n                  RuntimeVersion:  1.7.27\\n                  RuntimeApiVersion:  v1\n\nSocket permissions properly configured for worker node join.\n"
+}
+
+TASK [Wait for containerd to fully initialize] ************************************************************************************************************************************************
+Pausing for 10 seconds
+(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+ok: [192.168.4.63]
+
+TASK [Initialize containerd image filesystem] *************************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Enable kubelet] *************************************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Check kubelet enable result] ************************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "kubelet enable result: True\nkubelet enable failed: False\n"
+}
+ok: [192.168.4.61] => {
+    "msg": "kubelet enable result: True\nkubelet enable failed: False\n"
+}
+ok: [192.168.4.62] => {
+    "msg": "kubelet enable result: True\nkubelet enable failed: False\n"
+}
+
+TASK [Reload systemd daemon] ******************************************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Retry kubelet enable after daemon reload] ***********************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Final kubelet enable verification] ******************************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify kubelet service is properly enabled] *********************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Ensure kubelet service directory exists] ************************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Download and install Flannel CNI plugin binary] *****************************************************************************************************************************************
+ok: [192.168.4.63]
+ok: [192.168.4.62]
+ok: [192.168.4.61]
+
+TASK [Fallback: Download Flannel CNI plugin with curl] ****************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Enhanced fallback: Download Flannel CNI plugin with wget] *******************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify Flannel CNI plugin download succeeded] *******************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Post-download verification: Ensure flannel binary is executable and valid] **************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
+TASK [Diagnose flannel binary issue] **********************************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Attempt to fix flannel binary permissions] **********************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Retry flannel download when file missing or corrupted] **********************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Final flannel binary verification after remediation] ************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display flannel remediation results] ****************************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Download and install additional CNI plugins] ********************************************************************************************************************************************
+skipping: [192.168.4.63]
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify essential CNI plugins are installed] *********************************************************************************************************************************************
+changed: [192.168.4.63]
+changed: [192.168.4.61]
+changed: [192.168.4.62]
+
 TASK [Display CNI plugin verification results] ************************************************************************************************************************************************
 ok: [192.168.4.63] => {
     "msg": "=== Verifying CNI Plugin Installation ===\n✓ bridge plugin installed and executable\n✓ host-local plugin installed and executable\n✓ loopback plugin installed and executable\n✓ flannel plugin installed and executable\n✅ All required CNI plugins verified successfully\n\nAll installed CNI plugins:\ntotal 79484\ndrwxr-xr-x 2 root root     4096 Sep 11 14:40 .\ndrwxr-xr-x 3 root root     4096 Aug 25 22:18 ..\n-rwxr-xr-x 1 root root  4016001 Sep 11  2023 bandwidth\n-rwxr-xr-x 1 root root  4531309 Sep 11  2023 bridge\n-rwxr-xr-x 1 root root 10816051 Sep 11  2023 dhcp\n-rwxr-xr-x 1 root root  4171248 Sep 11  2023 dummy\n-rwxr-xr-x 1 root root  4649749 Sep 11  2023 firewall\n-rwxr-xr-x 1 root root  2907995 Sep 11 14:40 flannel\n-rwxr-xr-x 1 root root  4059321 Sep 11  2023 host-device\n-rwxr-xr-x 1 root root  3444776 Sep 11  2023 host-local\n-rwxr-xr-x 1 root root  4193323 Sep 11  2023 ipvlan\n-rwxr-xr-x 1 root root  3514598 Sep 11  2023 loopback\n-rwxr-xr-x 1 root root  4227193 Sep 11  2023 macvlan\n-rwxr-xr-x 1 root root  3955775 Sep 11  2023 portmap\n-rwxr-xr-x 1 root root  4348835 Sep 11  2023 ptp\n-rwxr-xr-x 1 root root  3716095 Sep 11  2023 sbr\n-rwxr-xr-x 1 root root  2984504 Sep 11  2023 static\n-rwxr-xr-x 1 root root  4258344 Sep 11  2023 tap\n-rwxr-xr-x 1 root root  3603365 Sep 11  2023 tuning\n-rwxr-xr-x 1 root root  4187498 Sep 11  2023 vlan\n-rwxr-xr-x 1 root root  3754911 Sep 11  2023 vrf"
@@ -7,7 +389,7 @@ ok: [192.168.4.61] => {
     "msg": "=== Verifying CNI Plugin Installation ===\n✓ bridge plugin installed and executable\n✓ host-local plugin installed and executable\n✓ loopback plugin installed and executable\n✓ flannel plugin installed and executable\n✅ All required CNI plugins verified successfully\n\nAll installed CNI plugins:\ntotal 79484\ndrwxr-xr-x 2 root root     4096 Sep 11 19:03 .\ndrwxr-xr-x 3 root root     4096 Sep 11 14:40 ..\n-rwxr-xr-x 1 root root  4016001 May  9  2023 bandwidth\n-rwxr-xr-x 1 root root  4531309 May  9  2023 bridge\n-rwxr-xr-x 1 root root 10816051 May  9  2023 dhcp\n-rwxr-xr-x 1 root root  4171248 May  9  2023 dummy\n-rwxr-xr-x 1 root root  4649749 May  9  2023 firewall\n-rwxr-xr-x 1 root root  2907995 Sep 11 19:03 flannel\n-rwxr-xr-x 1 root root  4059321 May  9  2023 host-device\n-rwxr-xr-x 1 root root  3444776 May  9  2023 host-local\n-rwxr-xr-x 1 root root  4193323 May  9  2023 ipvlan\n-rwxr-xr-x 1 root root  3514598 May  9  2023 loopback\n-rwxr-xr-x 1 root root  4227193 May  9  2023 macvlan\n-rwxr-xr-x 1 root root  3955775 May  9  2023 portmap\n-rwxr-xr-x 1 root root  4348835 May  9  2023 ptp\n-rwxr-xr-x 1 root root  3716095 May  9  2023 sbr\n-rwxr-xr-x 1 root root  2984504 May  9  2023 static\n-rwxr-xr-x 1 root root  4258344 May  9  2023 tap\n-rwxr-xr-x 1 root root  3603365 May  9  2023 tuning\n-rwxr-xr-x 1 root root  4187498 May  9  2023 vlan\n-rwxr-xr-x 1 root root  3754911 May  9  2023 vrf"
 }
 ok: [192.168.4.62] => {
-    "msg": "=== Verifying CNI Plugin Installation ===\n✓ bridge plugin installed and executable\n✓ host-local plugin installed and executable\n✓ loopback plugin installed and executable\n✓ flannel plugin installed and executable\n✅ All required CNI plugins verified successfully\n\nAll installed CNI plugins:\ntotal 57800\ndrwxr-xr-x. 2 root root    4096 Sep 11 21:53 .\ndrwxr-xr-x. 3 root root      17 Sep 11 14:40 ..\n-rwxr-xr-x. 1 root root 2868856 Sep 11  2023 bandwidth\n-rwxr-xr-x. 1 root root 3248936 Sep 11  2023 bridge\n-rwxr-xr-x. 1 root root 8021392 Sep 11  2023 dhcp\n-rwxr-xr-x. 1 root root 2971752 Sep 11  2023 dummy\n-rwxr-xr-x. 1 root root 3333560 Sep 11  2023 firewall\n-rwxr-xr-x. 1 root root 2907995 Sep 11 21:53 flannel\n-rwxr-xr-x. 1 root root 2888056 Sep 11  2023 host-device\n-rwxr-xr-x. 1 root root 2426584 Sep 11  2023 host-local\n-rwxr-xr-x. 1 root root 2989072 Sep 11  2023 ipvlan\n-rwxr-xr-x. 1 root root 2492304 Sep 11  2023 loopback\n-rwxr-xr-x. 1 root root 3015104 Sep 11  2023 macvlan\n-rwxr-xr-x. 1 root root 2820904 Sep 11  2023 portmap\n-rwxr-xr-x. 1 root root 3112536 Sep 11  2023 ptp\n-rwxr-xr-x. 1 root root 2642160 Sep 11  2023 sbr\n-rwxr-xr-x. 1 root root 2158744 Sep 11  2023 static\n-rwxr-xr-x. 1 root root 3035352 Sep 11  2023 tap\n-rwxr-xr-x. 1 root root 2556368 Sep 11  2023 tuning\n-rwxr-xr-x. 1 root root 2984672 Sep 11  2023 vlan\n-rwxr-xr-x. 1 root root 2665880 Sep 11  2023 vrf"
+    "msg": "=== Verifying CNI Plugin Installation ===\n✓ bridge plugin installed and executable\n✓ host-local plugin installed and executable\n✓ loopback plugin installed and executable\n✓ flannel plugin installed and executable\n✅ All required CNI plugins verified successfully\n\nAll installed CNI plugins:\ntotal 57800\ndrwxr-xr-x. 2 root root    4096 Sep 11 22:13 .\ndrwxr-xr-x. 3 root root      17 Sep 11 14:40 ..\n-rwxr-xr-x. 1 root root 2868856 Sep 11  2023 bandwidth\n-rwxr-xr-x. 1 root root 3248936 Sep 11  2023 bridge\n-rwxr-xr-x. 1 root root 8021392 Sep 11  2023 dhcp\n-rwxr-xr-x. 1 root root 2971752 Sep 11  2023 dummy\n-rwxr-xr-x. 1 root root 3333560 Sep 11  2023 firewall\n-rwxr-xr-x. 1 root root 2907995 Sep 11 22:13 flannel\n-rwxr-xr-x. 1 root root 2888056 Sep 11  2023 host-device\n-rwxr-xr-x. 1 root root 2426584 Sep 11  2023 host-local\n-rwxr-xr-x. 1 root root 2989072 Sep 11  2023 ipvlan\n-rwxr-xr-x. 1 root root 2492304 Sep 11  2023 loopback\n-rwxr-xr-x. 1 root root 3015104 Sep 11  2023 macvlan\n-rwxr-xr-x. 1 root root 2820904 Sep 11  2023 portmap\n-rwxr-xr-x. 1 root root 3112536 Sep 11  2023 ptp\n-rwxr-xr-x. 1 root root 2642160 Sep 11  2023 sbr\n-rwxr-xr-x. 1 root root 2158744 Sep 11  2023 static\n-rwxr-xr-x. 1 root root 3035352 Sep 11  2023 tap\n-rwxr-xr-x. 1 root root 2556368 Sep 11  2023 tuning\n-rwxr-xr-x. 1 root root 2984672 Sep 11  2023 vlan\n-rwxr-xr-x. 1 root root 2665880 Sep 11  2023 vrf"
 }
 
 PLAY [Comprehensive Worker Node Installation Verification] ************************************************************************************************************************************
@@ -22,10 +404,10 @@ changed: [192.168.4.61]
 
 TASK [Display worker node verification results] ***********************************************************************************************************************************************
 ok: [192.168.4.61] => {
-    "msg": "=== Worker Node Installation Verification ===\nNode: storagenodeT3500 (192.168.4.61)\nTimestamp: Thu Sep 11 21:57:56 EDT 2025\n\n=== Package Verification ===\n✓ kubelet: Kubernetes v1.29.15\n✓ kubeadm: \n✓ kubectl: \n✓ containerd: containerd github.com/containerd/containerd 1.6.20~ds1 1.6.20~ds1-1+deb12u1\n\n=== Service Unit Verification ===\n✓ kubelet.service unit exists (enabled: enabled)\n✓ containerd.service unit exists (enabled: enabled)\n\n=== CNI Plugin Verification ===\n✓ CNI plugin: bridge\n✓ CNI plugin: host-local\n✓ CNI plugin: loopback\n✓ CNI plugin: flannel\n\n=== Directory Structure Verification ===\n✓ Directory exists: /opt/cni/bin\n✓ Directory exists: /etc/cni/net.d\n✓ Directory exists: /var/lib/kubelet\n✓ Directory exists: /etc/systemd/system/kubelet.service.d\n\n=== Containerd Configuration Verification ===\n✓ containerd config exists\n✓ containerd cgroup driver configured\n\n=== Overall Status ===\n✅ Worker node installation verification PASSED\nNode is ready for cluster join"
+    "msg": "=== Worker Node Installation Verification ===\nNode: storagenodeT3500 (192.168.4.61)\nTimestamp: Thu Sep 11 22:13:45 EDT 2025\n\n=== Package Verification ===\n✓ kubelet: Kubernetes v1.29.15\n✓ kubeadm: \n✓ kubectl: \n✓ containerd: containerd github.com/containerd/containerd 1.6.20~ds1 1.6.20~ds1-1+deb12u1\n\n=== Service Unit Verification ===\n✓ kubelet.service unit exists (enabled: enabled)\n✓ containerd.service unit exists (enabled: enabled)\n\n=== CNI Plugin Verification ===\n✓ CNI plugin: bridge\n✓ CNI plugin: host-local\n✓ CNI plugin: loopback\n✓ CNI plugin: flannel\n\n=== Directory Structure Verification ===\n✓ Directory exists: /opt/cni/bin\n✓ Directory exists: /etc/cni/net.d\n✓ Directory exists: /var/lib/kubelet\n✓ Directory exists: /etc/systemd/system/kubelet.service.d\n\n=== Containerd Configuration Verification ===\n✓ containerd config exists\n✓ containerd cgroup driver configured\n\n=== Overall Status ===\n✅ Worker node installation verification PASSED\nNode is ready for cluster join"
 }
 ok: [192.168.4.62] => {
-    "msg": "=== Worker Node Installation Verification ===\nNode: homelab (192.168.4.62)\nTimestamp: Thu 11 Sep 2025 09:57:56 PM EDT\n\n=== Package Verification ===\n✓ kubelet: Kubernetes v1.29.15\n✓ kubeadm: \n✓ kubectl: \n✓ containerd: containerd containerd.io 1.7.27 05044ec0a9a75232cad458027ca83437aae3f4da\n\n=== Service Unit Verification ===\n✓ kubelet.service unit exists (enabled: enabled)\n✓ containerd.service unit exists (enabled: enabled)\n\n=== CNI Plugin Verification ===\n✓ CNI plugin: bridge\n✓ CNI plugin: host-local\n✓ CNI plugin: loopback\n✓ CNI plugin: flannel\n\n=== Directory Structure Verification ===\n✓ Directory exists: /opt/cni/bin\n✓ Directory exists: /etc/cni/net.d\n✓ Directory exists: /var/lib/kubelet\n✓ Directory exists: /etc/systemd/system/kubelet.service.d\n\n=== Containerd Configuration Verification ===\n✓ containerd config exists\n⚠ containerd cgroup driver may not be properly configured\n\n=== Overall Status ===\n✅ Worker node installation verification PASSED\nNode is ready for cluster join"
+    "msg": "=== Worker Node Installation Verification ===\nNode: homelab (192.168.4.62)\nTimestamp: Thu 11 Sep 2025 10:13:45 PM EDT\n\n=== Package Verification ===\n✓ kubelet: Kubernetes v1.29.15\n✓ kubeadm: \n✓ kubectl: \n✓ containerd: containerd containerd.io 1.7.27 05044ec0a9a75232cad458027ca83437aae3f4da\n\n=== Service Unit Verification ===\n✓ kubelet.service unit exists (enabled: enabled)\n✓ containerd.service unit exists (enabled: enabled)\n\n=== CNI Plugin Verification ===\n✓ CNI plugin: bridge\n✓ CNI plugin: host-local\n✓ CNI plugin: loopback\n✓ CNI plugin: flannel\n\n=== Directory Structure Verification ===\n✓ Directory exists: /opt/cni/bin\n✓ Directory exists: /etc/cni/net.d\n✓ Directory exists: /var/lib/kubelet\n✓ Directory exists: /etc/systemd/system/kubelet.service.d\n\n=== Containerd Configuration Verification ===\n✓ containerd config exists\n⚠ containerd cgroup driver may not be properly configured\n\n=== Overall Status ===\n✅ Worker node installation verification PASSED\nNode is ready for cluster join"
 }
 
 PLAY [Initialize Kubernetes Control Plane] ****************************************************************************************************************************************************
@@ -93,7 +475,7 @@ changed: [192.168.4.63]
 
 TASK [Display comprehensive CNI readiness status] *********************************************************************************************************************************************
 ok: [192.168.4.63] => {
-    "msg": "=== CNI Readiness Status ===\n\nControl Plane Flannel Status:\nChecking Flannel deployment status:\nNAME           STATUS   AGE\nkube-flannel   Active   29h\nNAME                        READY   STATUS             RESTARTS         AGE\npod/kube-flannel-ds-bjwls   1/1     Running            0                175m\npod/kube-flannel-ds-n2cln   1/1     Running            1 (7h17m ago)    29h\npod/kube-flannel-ds-x74hm   0/1     CrashLoopBackOff   10 (4m40s ago)   54m\n\nNAME                             DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE\ndaemonset.apps/kube-flannel-ds   3         3         2       3            2           <none>          29h\nNode status:\nNAME               STATUS   ROLES           AGE    VERSION\nhomelab            Ready    <none>          173m   v1.29.15\nmasternode         Ready    control-plane   29h    v1.29.15\nstoragenodet3500   Ready    <none>          175m   v1.29.15\n\nCNI Plugins Status:\n=== CNI Plugins Status ===\n-rwxr-xr-x 1 root root  4531309 Sep 11  2023 bridge\n-rwxr-xr-x 1 root root  2907995 Sep 11 14:40 flannel\n-rwxr-xr-x 1 root root  3444776 Sep 11  2023 host-local\n-rwxr-xr-x 1 root root  3514598 Sep 11  2023 loopback\n\n=== CNI Configuration Directory ===\ntotal 16\ndrwxr-xr-x 2 root root 4096 Sep 11 14:40 .\ndrwxr-xr-x 3 root root 4096 Sep  9 14:27 ..\n-rw-r--r-- 1 root root  268 Sep 10 19:32 00-placeholder.conflist\n-rw-r--r-- 1 root root  292 Sep 11 14:40 10-flannel.conflist\n\nContainerd CNI Configuration:\n=== Containerd CNI Configuration ===\n    stream_server_port = \"0\"\n    systemd_cgroup = false\n    tolerate_missing_hugetlb_controller = true\n    unset_seccomp_profile = \"\"\n\n    [plugins.\"io.containerd.grpc.v1.cri\".cni]\n      bin_dir = \"/opt/cni/bin\"\n      conf_dir = \"/etc/cni/net.d\"\n      conf_template = \"\"\n      ip_pref = \"\"\n      max_conf_num = 1\n\n    [plugins.\"io.containerd.grpc.v1.cri\".containerd]\n--\n      no_pivot = false\n      snapshotter = \"overlayfs\"\n\n      [plugins.\"io.containerd.grpc.v1.cri\".containerd.default_runtime]\n        base_runtime_spec = \"\"\n        cni_conf_dir = \"\"\n        cni_max_conf_num = 0\n        container_annotations = []\n        pod_annotations = []\n        privileged_without_host_devices = false\n        runtime_engine = \"\"\n        runtime_path = \"\"\n--\n\n      [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes]\n\n        [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.runc]\n          base_runtime_spec = \"\"\n          cni_conf_dir = \"\"\n          cni_max_conf_num = 0\n          container_annotations = []\n          pod_annotations = []\n          privileged_without_host_devices = false\n          runtime_engine = \"\"\n          runtime_path = \"\"\n--\n            ShimCgroup = \"\"\n            SystemdCgroup = true\n\n      [plugins.\"io.containerd.grpc.v1.cri\".containerd.untrusted_workload_runtime]\n        base_runtime_spec = \"\"\n        cni_conf_dir = \"\"\n        cni_max_conf_num = 0\n        container_annotations = []\n        pod_annotations = []\n        privileged_without_host_devices = false\n        runtime_engine = \"\"\n        runtime_path = \"\"\n\nCNI Runtime Analysis:\ncni_has_real_network=true\n\nFlannel DaemonSet Status:\n=== Flannel DaemonSet and Pod Status ===\nNAME                             DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS     IMAGES                               SELECTOR\ndaemonset.apps/kube-flannel-ds   3         3         2       3            2           <none>          29h   kube-flannel   ghcr.io/flannel-io/flannel:v0.27.3   app=flannel,k8s-app=flannel\n\nNAME                        READY   STATUS             RESTARTS         AGE    IP             NODE               NOMINATED NODE   READINESS GATES\npod/kube-flannel-ds-bjwls   1/1     Running            0                175m   192.168.4.61   storagenodet3500   <none>           <none>\npod/kube-flannel-ds-n2cln   1/1     Running            1 (7h17m ago)    29h    192.168.4.63   masternode         <none>           <none>\npod/kube-flannel-ds-x74hm   0/1     CrashLoopBackOff   10 (4m41s ago)   54m    192.168.4.62   homelab            <none>           <none>\n\n=== Flannel Readiness Check ===\n2\n\n\nNote: Flannel pods may show CrashLoopBackOff until worker nodes join.\nThis is expected behavior in a single-node control plane setup.\n\nCNI Configuration Ready: Worker nodes can now join the cluster.\n"
+    "msg": "=== CNI Readiness Status ===\n\nControl Plane Flannel Status:\nChecking Flannel deployment status:\nNAME           STATUS   AGE\nkube-flannel   Active   29h\nNAME                        READY   STATUS             RESTARTS        AGE\npod/kube-flannel-ds-9xsgk   0/1     CrashLoopBackOff   2 (19s ago)     4m35s\npod/kube-flannel-ds-bjwls   1/1     Running            0               3h11m\npod/kube-flannel-ds-n2cln   1/1     Running            1 (7h33m ago)   29h\n\nNAME                             DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE\ndaemonset.apps/kube-flannel-ds   3         3         2       3            2           <none>          29h\nNode status:\nNAME               STATUS   ROLES           AGE     VERSION\nhomelab            Ready    <none>          3h9m    v1.29.15\nmasternode         Ready    control-plane   29h     v1.29.15\nstoragenodet3500   Ready    <none>          3h11m   v1.29.15\n\nCNI Plugins Status:\n=== CNI Plugins Status ===\n-rwxr-xr-x 1 root root  4531309 Sep 11  2023 bridge\n-rwxr-xr-x 1 root root  2907995 Sep 11 14:40 flannel\n-rwxr-xr-x 1 root root  3444776 Sep 11  2023 host-local\n-rwxr-xr-x 1 root root  3514598 Sep 11  2023 loopback\n\n=== CNI Configuration Directory ===\ntotal 16\ndrwxr-xr-x 2 root root 4096 Sep 11 14:40 .\ndrwxr-xr-x 3 root root 4096 Sep  9 14:27 ..\n-rw-r--r-- 1 root root  268 Sep 10 19:32 00-placeholder.conflist\n-rw-r--r-- 1 root root  292 Sep 11 14:40 10-flannel.conflist\n\nContainerd CNI Configuration:\n=== Containerd CNI Configuration ===\n    stream_server_port = \"0\"\n    systemd_cgroup = false\n    tolerate_missing_hugetlb_controller = true\n    unset_seccomp_profile = \"\"\n\n    [plugins.\"io.containerd.grpc.v1.cri\".cni]\n      bin_dir = \"/opt/cni/bin\"\n      conf_dir = \"/etc/cni/net.d\"\n      conf_template = \"\"\n      ip_pref = \"\"\n      max_conf_num = 1\n\n    [plugins.\"io.containerd.grpc.v1.cri\".containerd]\n--\n      no_pivot = false\n      snapshotter = \"overlayfs\"\n\n      [plugins.\"io.containerd.grpc.v1.cri\".containerd.default_runtime]\n        base_runtime_spec = \"\"\n        cni_conf_dir = \"\"\n        cni_max_conf_num = 0\n        container_annotations = []\n        pod_annotations = []\n        privileged_without_host_devices = false\n        runtime_engine = \"\"\n        runtime_path = \"\"\n--\n\n      [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes]\n\n        [plugins.\"io.containerd.grpc.v1.cri\".containerd.runtimes.runc]\n          base_runtime_spec = \"\"\n          cni_conf_dir = \"\"\n          cni_max_conf_num = 0\n          container_annotations = []\n          pod_annotations = []\n          privileged_without_host_devices = false\n          runtime_engine = \"\"\n          runtime_path = \"\"\n--\n            ShimCgroup = \"\"\n            SystemdCgroup = true\n\n      [plugins.\"io.containerd.grpc.v1.cri\".containerd.untrusted_workload_runtime]\n        base_runtime_spec = \"\"\n        cni_conf_dir = \"\"\n        cni_max_conf_num = 0\n        container_annotations = []\n        pod_annotations = []\n        privileged_without_host_devices = false\n        runtime_engine = \"\"\n        runtime_path = \"\"\n\nCNI Runtime Analysis:\ncni_has_real_network=true\n\nFlannel DaemonSet Status:\n=== Flannel DaemonSet and Pod Status ===\nNAME                             DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS     IMAGES                               SELECTOR\ndaemonset.apps/kube-flannel-ds   3         3         2       3            2           <none>          29h   kube-flannel   ghcr.io/flannel-io/flannel:v0.27.3   app=flannel,k8s-app=flannel\n\nNAME                        READY   STATUS             RESTARTS        AGE     IP             NODE               NOMINATED NODE   READINESS GATES\npod/kube-flannel-ds-9xsgk   0/1     CrashLoopBackOff   2 (20s ago)     4m36s   192.168.4.62   homelab            <none>           <none>\npod/kube-flannel-ds-bjwls   1/1     Running            0               3h11m   192.168.4.61   storagenodet3500   <none>           <none>\npod/kube-flannel-ds-n2cln   1/1     Running            1 (7h33m ago)   29h     192.168.4.63   masternode         <none>           <none>\n\n=== Flannel Readiness Check ===\n2\n\n\nNote: Flannel pods may show CrashLoopBackOff until worker nodes join.\nThis is expected behavior in a single-node control plane setup.\n\nCNI Configuration Ready: Worker nodes can now join the cluster.\n"
 }
 
 TASK [Wait for CoreDNS to stabilize after Flannel setup] **************************************************************************************************************************************
@@ -102,205 +484,527 @@ Pausing for 30 seconds
 ok: [192.168.4.63]
 
 TASK [Check CoreDNS pod status and fix if needed] *********************************************************************************************************************************************
+changed: [192.168.4.63]
 
-HANGS HERE
+TASK [Display CoreDNS fix results] ************************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "CoreDNS Post-Flannel Validation Results:\n=== Post-Flannel CoreDNS Validation ===\\n              CoreDNS pods status:\\n                coredns-68444cf7cd-vq79r: Status=Pending, IP=<none>\\n                  ↳ CNI bridge IP conflict detected for this pod\\n              === CNI Bridge Conflict Detected ===\\n              CoreDNS pods cannot start due to CNI bridge IP conflict.\\n              This requires CNI bridge reset, which will be handled by post-deployment fixes.\\n              Skipping CoreDNS rollout wait to avoid hanging the deployment.\\n              \\n              The deployment will complete and run fix_cni_bridge_conflict.sh automatically.\\n              === Final CoreDNS Status ===\\n              NAME                       READY   STATUS              RESTARTS   AGE   IP       NODE         NOMINATED NODE   READINESS GATES\\n              coredns-68444cf7cd-vq79r   0/1     ContainerCreating   0          15m   <none>   masternode   <none>           <none>\n\n\n"
+}
 
-2.
+TASK [Wait for API server to be ready] ********************************************************************************************************************************************************
+ok: [192.168.4.63]
+
+TASK [Verify API server accessibility using kubectl] ******************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Validate kubernetes-admin RBAC permissions] *********************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Check current authorization mode] *******************************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Display current authorization mode] *****************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "Current Kubernetes authorization mode: "
+}
+
+TASK [Fix kubernetes-admin RBAC if needed] ****************************************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Backup API server manifest] *************************************************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Update authorization mode from AlwaysAllow to Node,RBAC] ********************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Wait for API server to restart after authorization fix] *********************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Verify API server health after authorization fix] ***************************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Apply RBAC fix after authorization mode change] *****************************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Skip RBAC fix for AlwaysAllow mode (no longer needed after fix)] ************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Wait for API server pod to be Ready] ****************************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Check cluster-info configmap RBAC permissions] ******************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Create RBAC rule for anonymous access to cluster-info configmap] ************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Verify cluster-info configmap accessibility] ********************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Check existing tokens and clean up old ones if needed] **********************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Generate fresh join command with enhanced validation] ***********************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Validate join command contains correct control-plane IP] ********************************************************************************************************************************
+skipping: [192.168.4.63]
+
+TASK [Save enhanced join command for wiped workers] *******************************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Display join command info] **************************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "Join Command Generated:\n- Timestamp: 2025-09-12T02:13:48Z\n- Control-plane: 192.168.4.63:6443\n- Token TTL: 2 hours\n- Ready for wiped workers: Yes\n"
+}
+
+PLAY [Join Worker Nodes] **********************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ************************************************************************************************************************************************************************
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Check if node is joined] ****************************************************************************************************************************************************************
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Check for existing cluster artifacts] ***************************************************************************************************************************************************
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Check for clean post-wipe state indicators] *********************************************************************************************************************************************
+ok: [192.168.4.61] => (item=/etc/kubernetes)
+ok: [192.168.4.62] => (item=/etc/kubernetes)
+ok: [192.168.4.61] => (item=/var/lib/kubelet)
+ok: [192.168.4.61] => (item=/etc/cni/net.d)
+ok: [192.168.4.62] => (item=/var/lib/kubelet)
+ok: [192.168.4.61] => (item=/var/lib/containerd)
+ok: [192.168.4.62] => (item=/etc/cni/net.d)
+ok: [192.168.4.62] => (item=/var/lib/containerd)
+
+TASK [Detect if worker was aggressively wiped] ************************************************************************************************************************************************
+ok: [192.168.4.61]
+ok: [192.168.4.62]
+
+TASK [Display worker state detection] *********************************************************************************************************************************************************
+ok: [192.168.4.61] => {
+    "msg": "Worker Node State Analysis:\n- Kubelet config exists: True\n- Cluster artifacts exist: True\n- Post-wipe state detected: False\n- Node requires fresh join: False\n"
+}
+ok: [192.168.4.62] => {
+    "msg": "Worker Node State Analysis:\n- Kubelet config exists: True\n- Cluster artifacts exist: True\n- Post-wipe state detected: False\n- Node requires fresh join: False\n"
+}
+
+TASK [Check control-plane API server accessibility] *******************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify control-plane cluster status] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Ensure control-plane has proper RBAC configuration] *************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display control-plane readiness status] *************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Stop and disable kubelet service] *******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Stop containerd temporarily for thorough preparation] ***********************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Reset kubeadm configuration (idempotent for wiped workers)] *****************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Clean up iptables rules (idempotent)] ***************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Ensure complete removal of any residual Kubernetes state] *******************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Reset systemd services for clean slate] *************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Restart containerd after cleanup] *******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display worker preparation status] ******************************************************************************************************************************************************
+ok: [192.168.4.61] => {
+    "msg": "Worker Preparation Complete:\n- Worker was previously wiped: False\n- Required reset performed: False\n- Ready for fresh join: Yes\n"
+}
+ok: [192.168.4.62] => {
+    "msg": "Worker Preparation Complete:\n- Worker was previously wiped: False\n- Required reset performed: False\n- Ready for fresh join: Yes\n"
+}
+
+TASK [Open firewall ports for worker nodes] ***************************************************************************************************************************************************
+skipping: [192.168.4.61] => (item=10250/tcp)
+skipping: [192.168.4.61] => (item=8472/udp)
+skipping: [192.168.4.61]
+skipping: [192.168.4.62] => (item=10250/tcp)
+skipping: [192.168.4.62] => (item=8472/udp)
+skipping: [192.168.4.62]
+
+TASK [Test connectivity to control plane API server] ******************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Copy join command from control plane] ***************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Write join command to worker] ***********************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Copy enhanced join scripts to worker nodes] *********************************************************************************************************************************************
+skipping: [192.168.4.61] => (item=../../scripts/validate_join_prerequisites.sh)
+skipping: [192.168.4.61] => (item=../../scripts/enhanced_kubeadm_join.sh)
+skipping: [192.168.4.61]
+skipping: [192.168.4.62] => (item=../../scripts/validate_join_prerequisites.sh)
+skipping: [192.168.4.62] => (item=../../scripts/enhanced_kubeadm_join.sh)
+skipping: [192.168.4.62]
+
+TASK [Check if kubelet config already exists] *************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Validate existing kubelet config if present] ********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Backup invalid kubelet configuration] ***************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Reset invalid kubelet configuration] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Skip join if kubelet already properly joined] *******************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Copy pre-join validation script to worker] **********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Pre-join validation for wiped workers] **************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for pre-join validation to complete] ***********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display pre-join validation results] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Execute enhanced join process for wiped worker] *****************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display join skip message] **************************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display enhanced join results for wiped worker] *****************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Gather detailed failure diagnostics] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Create comprehensive failure report] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for kubelet to stabilize after join] ***********************************************************************************************************************************************
+skipping: [192.168.4.61]
+
+TASK [Enhanced kubelet validation for post-wipe workers] **************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display kubelet validation results] *****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify node appears in cluster from control plane] **************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display cluster integration status] *****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for Flannel DaemonSet to be ready on control plane] ********************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Check CNI configuration file exists] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Validate CNI configuration syntax] ******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Enhanced pre-join CNI preparation] ******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Create CNI directories on worker nodes] *************************************************************************************************************************************************
+skipping: [192.168.4.61] => (item=/opt/cni/bin)
+skipping: [192.168.4.61] => (item=/etc/cni/net.d)
+skipping: [192.168.4.61] => (item=/var/lib/cni/networks)
+skipping: [192.168.4.61] => (item=/var/lib/cni/results)
+skipping: [192.168.4.61]
+skipping: [192.168.4.62] => (item=/opt/cni/bin)
+skipping: [192.168.4.62] => (item=/etc/cni/net.d)
+skipping: [192.168.4.62] => (item=/var/lib/cni/networks)
+skipping: [192.168.4.62] => (item=/var/lib/cni/results)
+skipping: [192.168.4.62]
+
+TASK [Download and install Flannel CNI plugin binary on worker nodes] *************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Fallback: Download Flannel CNI plugin with curl on worker nodes] ************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Enhanced fallback: Download Flannel CNI plugin with wget on worker nodes] ***************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify Flannel CNI plugin download succeeded on worker nodes] ***************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Post-download verification: Ensure flannel binary is executable and valid on worker nodes] **********************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Download and install additional CNI plugins on worker nodes] ****************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Create basic CNI configuration for worker nodes BEFORE containerd restart] **************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Create Flannel subnet environment directory] ********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Restart containerd AFTER CNI configuration is ready] ************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for containerd to fully initialize] ************************************************************************************************************************************************
+skipping: [192.168.4.61]
+
+TASK [Initialize containerd image filesystem for kubelet] *************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display containerd image filesystem status] *********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify containerd is ready for kubelet] *************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Starting kubeadm join process] **********************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Stop kubelet service before join] *******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Remove any stale kubelet configuration files] *******************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Ensure kubelet service is enabled for post-join management] *****************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for kubelet to fully stop] *********************************************************************************************************************************************************
+skipping: [192.168.4.61]
+
+TASK [Join cluster with retry logic] **********************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Capture kubelet logs for troubleshooting] ***********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display failure diagnostics] ************************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Cleaning up after failed join] **********************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Stop services for comprehensive cleanup] ************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Clean up networking rules] **************************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Remove Kubernetes state directories] ****************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Reset systemd services] *****************************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Restart containerd and prepare for retry] ***********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for containerd to be fully ready after restart] ************************************************************************************************************************************
+skipping: [192.168.4.61]
+
+TASK [Reinitialize containerd image filesystem after cleanup] *********************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Recreate CNI directories] ***************************************************************************************************************************************************************
+skipping: [192.168.4.61] => (item=/etc/cni/net.d)
+skipping: [192.168.4.61] => (item=/run/flannel)
+skipping: [192.168.4.61]
+skipping: [192.168.4.62] => (item=/etc/cni/net.d)
+skipping: [192.168.4.62] => (item=/run/flannel)
+skipping: [192.168.4.62]
+
+TASK [Recreate basic CNI configuration] *******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Enable kubelet for kubeadm join] ********************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Verify containerd is running before retry] **********************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait before retry to ensure system stability] *******************************************************************************************************************************************
+skipping: [192.168.4.61]
+
+TASK [Stop kubelet service before retry] ******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Remove any stale kubelet configuration files before retry] ******************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Wait for kubelet to fully stop before retry] ********************************************************************************************************************************************
+skipping: [192.168.4.61]
+
+TASK [Retry join after thorough cleanup] ******************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Display join result] ********************************************************************************************************************************************************************
+skipping: [192.168.4.61]
+skipping: [192.168.4.62]
+
+TASK [Remove join command and cleanup temporary files] ****************************************************************************************************************************************
+skipping: [192.168.4.61] => (item=/tmp/kubeadm-join.sh)
+skipping: [192.168.4.61] => (item=/tmp/validate_join_prerequisites.sh)
+skipping: [192.168.4.61] => (item=/tmp/enhanced_kubeadm_join.sh)
+skipping: [192.168.4.61]
+skipping: [192.168.4.62] => (item=/tmp/kubeadm-join.sh)
+skipping: [192.168.4.62] => (item=/tmp/validate_join_prerequisites.sh)
+skipping: [192.168.4.62] => (item=/tmp/enhanced_kubeadm_join.sh)
+skipping: [192.168.4.62]
+
+PLAY [Post-Wipe Worker Integration Validation] ************************************************************************************************************************************************
+
+TASK [Gathering Facts] ************************************************************************************************************************************************************************
+ok: [192.168.4.63]
+
+TASK [Final cluster status check after post-wipe worker joins] ********************************************************************************************************************************
+changed: [192.168.4.63]
+
+TASK [Display final cluster integration summary] **********************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "=== Final Cluster Status After Post-Wipe Worker Integration ===\\n          Timestamp: Thu 11 Sep 2025 10:14:46 PM EDT\\n          \\n          Cluster Nodes:\\n          NAME               STATUS   ROLES           AGE     VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME\\n          homelab            Ready    <none>          3h10m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.27\\n          masternode         Ready    control-plane   29h     v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-32-amd64                containerd://1.6.20\\n          storagenodet3500   Ready    <none>          3h12m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-34-amd64                containerd://1.6.20\\n          \\n          Node Readiness Status:\\n          NAME               STATUS        READY\\n          homelab            PIDPressure   False\\n          masternode         PIDPressure   False\\n          storagenodet3500   PIDPressure   False\\n          \\n          Flannel DaemonSet Status:\\n          NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS     IMAGES                               SELECTOR\\n          kube-flannel-ds   3         3         3       3            3           <none>          29h   kube-flannel   ghcr.io/flannel-io/flannel:v0.27.3   app=flannel,k8s-app=flannel\\n          \\n          Pod Network Status:\\n          NAME                    READY   STATUS    RESTARTS        AGE     IP             NODE               NOMINATED NODE   READINESS GATES\\n          kube-flannel-ds-9xsgk   1/1     Running   3 (74s ago)     5m30s   192.168.4.62   homelab            <none>           <none>\\n          kube-flannel-ds-bjwls   1/1     Running   0               3h12m   192.168.4.61   storagenodet3500   <none>           <none>\\n          kube-flannel-ds-n2cln   1/1     Running   1 (7h34m ago)   29h     192.168.4.63   masternode         <none>           <none>\\n          \\n          Cluster Summary:\\n          - Total nodes: 3\\n          - Ready nodes: 3\\n          - Control-plane: 1\\n          - Storage nodes: 1\\n          - Compute nodes: 1\\n          \\n          ✅ POST-WIPE WORKER INTEGRATION SUCCESSFUL\\n          All wiped workers successfully joined control-plane cluster\n\n====================================\nPOST-WIPE WORKER JOIN PROCESS COMPLETE\n====================================\n\nThe enhanced worker join process has:\n✓ Detected post-wipe worker states\n✓ Validated control-plane readiness\n✓ Generated fresh join tokens (2h TTL)\n✓ Performed enhanced reset and cleanup\n✓ Successfully joined workers to control-plane\n✓ Verified kubelet cluster connectivity (NOT standalone)\n✓ Confirmed node registration in cluster\n\nWorkers are now managed by the control-plane using TLS certificates.\nNo standalone mode detected - cluster formation successful!\n"
+}
+
+PLAY [Cluster Readiness Validation] ***********************************************************************************************************************************************************
+
+TASK [Check cluster node status] **************************************************************************************************************************************************************
+[WARNING]: kubernetes<24.2.0 is not supported or tested. Some features may not work.
+ok: [192.168.4.63]
+
+TASK [Check flannel pod status] ***************************************************************************************************************************************************************
+ok: [192.168.4.63]
+
+TASK [Display cluster status] *****************************************************************************************************************************************************************
+ok: [192.168.4.63] => {
+    "msg": "=== Cluster Status Check ===\nTotal nodes: 3\n- homelab: True\n- masternode: True\n- storagenodet3500: True\n\nFlannel pods: 3\n- kube-flannel-ds-9xsgk on homelab: Running\n- kube-flannel-ds-bjwls on storagenodet3500: Running\n- kube-flannel-ds-n2cln on masternode: Running\n"
+}
+
+TASK [Wait for flannel to be ready on all nodes] **********************************************************************************************************************************************
+
+
+
 root@masternode:~# kubectl get pods --all-namespaces -o wide
-NAMESPACE              NAME                                         READY   STATUS              RESTARTS         AGE    IP             NODE               NOMINATED NODE   READINESS GATES
-jellyfin               jellyfin                                     0/1     Running             6 (3m27s ago)    25m    10.244.0.2     storagenodet3500   <none>           <none>
-kube-flannel           kube-flannel-ds-bjwls                        1/1     Running             0                176m   192.168.4.61   storagenodet3500   <none>           <none>
-kube-flannel           kube-flannel-ds-n2cln                        1/1     Running             1 (7h18m ago)    29h    192.168.4.63   masternode         <none>           <none>
-kube-flannel           kube-flannel-ds-x74hm                        1/1     Running             11 (5m39s ago)   55m    192.168.4.62   homelab            <none>           <none>
-kube-system            coredns-68444cf7cd-vq79r                     0/1     ContainerCreating   0                28s    <none>         masternode         <none>           <none>
-kube-system            etcd-masternode                              1/1     Running             4 (7h18m ago)    29h    192.168.4.63   masternode         <none>           <none>
-kube-system            kube-apiserver-masternode                    1/1     Running             11 (7h18m ago)   29h    192.168.4.63   masternode         <none>           <none>
-kube-system            kube-controller-manager-masternode           1/1     Running             32 (7h18m ago)   29h    192.168.4.63   masternode         <none>           <none>
-kube-system            kube-proxy-2zfsw                             1/1     Running             1 (7h18m ago)    29h    192.168.4.63   masternode         <none>           <none>
-kube-system            kube-proxy-nh8vb                             0/1     CrashLoopBackOff    32 (36s ago)     174m   192.168.4.62   homelab            <none>           <none>
-kube-system            kube-proxy-r8tlw                             1/1     Running             0                176m   192.168.4.61   storagenodet3500   <none>           <none>
-kube-system            kube-scheduler-masternode                    1/1     Running             32 (7h18m ago)   29h    192.168.4.63   masternode         <none>           <none>
-kubernetes-dashboard   dashboard-metrics-scraper-597744f4cf-lmvlj   0/1     ContainerCreating   0                8h     <none>         masternode         <none>           <none>
-kubernetes-dashboard   dashboard-metrics-scraper-fbd9c767-8pzxd     0/1     ContainerCreating   0                9h     <none>         masternode         <none>           <none>
-kubernetes-dashboard   kubernetes-dashboard-547749b7d9-zcs4w        0/1     ContainerCreating   0                9h     <none>         masternode         <none>           <none>
-kubernetes-dashboard   kubernetes-dashboard-7fc5595d85-cgh9p        0/1     ContainerCreating   0                8h     <none>         masternode         <none>           <none>
-monitoring             grafana-554bf5687f-l8snn                     0/1     ContainerCreating   0                9h     <none>         masternode         <none>           <none>
-monitoring             grafana-79db5b584f-jdbgf                     0/1     ContainerCreating   0                84m    <none>         masternode         <none>           <none>
-monitoring             loki-564bd8dfb7-wfjzk                        0/1     ContainerCreating   0                9h     <none>         masternode         <none>           <none>
-monitoring             loki-85d467fb56-xt466                        0/1     ContainerCreating   0                84m    <none>         masternode         <none>           <none>
-monitoring             prometheus-54d6cfcf7d-rs7vj                  0/1     ContainerCreating   0                9h     <none>         masternode         <none>           <none>
-monitoring             prometheus-74887c8bb6-rqdl5                  0/1     ContainerCreating   0                84m    <none>         masternode         <none>           <none>
-root@masternode:~# kubectl describe pod coredns-68444cf7cd-vq79r -n kube-system
-Name:                 coredns-68444cf7cd-vq79r
-Namespace:            kube-system
-Priority:             2000000000
-Priority Class Name:  system-cluster-critical
-Service Account:      coredns
-Node:                 masternode/192.168.4.63
-Start Time:           Thu, 11 Sep 2025 21:58:33 -0400
-Labels:               k8s-app=kube-dns
-                      pod-template-hash=68444cf7cd
-Annotations:          <none>
-Status:               Pending
-IP:
-IPs:                  <none>
-Controlled By:        ReplicaSet/coredns-68444cf7cd
-Containers:
-  coredns:
-    Container ID:
-    Image:         registry.k8s.io/coredns/coredns:v1.11.1
-    Image ID:
-    Ports:         53/UDP (dns), 53/TCP (dns-tcp), 9153/TCP (metrics)
-    Host Ports:    0/UDP (dns), 0/TCP (dns-tcp), 0/TCP (metrics)
-    Args:
-      -conf
-      /etc/coredns/Corefile
-    State:          Waiting
-      Reason:       ContainerCreating
-    Ready:          False
-    Restart Count:  0
-    Limits:
-      memory:  170Mi
-    Requests:
-      cpu:        100m
-      memory:     70Mi
-    Liveness:     http-get http://:8080/health delay=60s timeout=5s period=10s #success=1 #failure=5
-    Readiness:    http-get http://:8181/ready delay=0s timeout=1s period=10s #success=1 #failure=3
-    Environment:  <none>
-    Mounts:
-      /etc/coredns from config-volume (ro)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6q8xk (ro)
-Conditions:
-  Type                        Status
-  PodReadyToStartContainers   False
-  Initialized                 True
-  Ready                       False
-  ContainersReady             False
-  PodScheduled                True
-Volumes:
-  config-volume:
-    Type:      ConfigMap (a volume populated by a ConfigMap)
-    Name:      coredns
-    Optional:  false
-  kube-api-access-6q8xk:
-    Type:                    Projected (a volume that contains injected data from multiple sources)
-    TokenExpirationSeconds:  3607
-    ConfigMapName:           kube-root-ca.crt
-    Optional:                false
-    DownwardAPI:             true
-QoS Class:                   Burstable
-Node-Selectors:              kubernetes.io/os=linux
-Tolerations:                 node-role.kubernetes.io/control-plane:NoSchedule op=Exists
-                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
-                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
-Events:
-  Type     Reason                  Age                From               Message
-  ----     ------                  ----               ----               -------
-  Normal   Scheduled               59s                default-scheduler  Successfully assigned kube-system/coredns-68444cf7cd-vq79r to masternode
-  Warning  FailedCreatePodSandBox  59s                kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "23876f3217b3512647b3ba3b6d1667d4dbba339bbce6fde0d2d8df6feb3e5dee": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Warning  FailedCreatePodSandBox  58s                kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "809d4801a440ea859f79317215423b7b10de8368f17503ff427196b681b3b9cf": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Warning  FailedCreatePodSandBox  57s                kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "64210ba2477479c4669127c0898ec617817014e2984760b276b7fad735597ea0": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Warning  FailedCreatePodSandBox  46s (x2 over 56s)  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1": name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1" is reserved for "809d4801a440ea859f79317215423b7b10de8368f17503ff427196b681b3b9cf"
-  Warning  FailedCreatePodSandBox  31s                kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "bf6ca3e732f901f0ee0a23652201c41859344395b4372b4ffe5481abc12019d5": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Normal   SandboxChanged          1s (x8 over 58s)   kubelet            Pod sandbox changed, it will be killed and re-created.
-  Warning  FailedCreatePodSandBox  1s (x3 over 30s)   kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1": name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1" is reserved for "bf6ca3e732f901f0ee0a23652201c41859344395b4372b4ffe5481abc12019d5"
-
-
-root@masternode:~# kubectl describe pod kube-proxy-nh8vb -n kube-system
-Name:                 kube-proxy-nh8vb
-Namespace:            kube-system
-Priority:             2000001000
-Priority Class Name:  system-node-critical
-Service Account:      kube-proxy
-Node:                 homelab/192.168.4.62
-Start Time:           Thu, 11 Sep 2025 19:04:38 -0400
-Labels:               controller-revision-hash=5787cd6d6c
-                      k8s-app=kube-proxy
-                      pod-template-generation=1
-Annotations:          <none>
-Status:               Running
-IP:                   192.168.4.62
-IPs:
-  IP:           192.168.4.62
-Controlled By:  DaemonSet/kube-proxy
-Containers:
-  kube-proxy:
-    Container ID:  containerd://0d1974a350a02db3683c37197791d3e473f22091223e0360e1d60e2b6ab06c7e
-    Image:         registry.k8s.io/kube-proxy:v1.29.15
-    Image ID:      registry.k8s.io/kube-proxy@sha256:243026cfce3209b89d9f883789108276ffec87d98190ac2a77776edd4e0e6015
-    Port:          <none>
-    Host Port:     <none>
-    Command:
-      /usr/local/bin/kube-proxy
-      --config=/var/lib/kube-proxy/config.conf
-      --hostname-override=$(NODE_NAME)
-    State:          Waiting
-      Reason:       CrashLoopBackOff
-    Last State:     Terminated
-      Reason:       Error
-      Exit Code:    2
-      Started:      Thu, 11 Sep 2025 21:57:24 -0400
-      Finished:     Thu, 11 Sep 2025 21:58:25 -0400
-    Ready:          False
-    Restart Count:  32
-    Environment:
-      NODE_NAME:   (v1:spec.nodeName)
-    Mounts:
-      /lib/modules from lib-modules (ro)
-      /run/xtables.lock from xtables-lock (rw)
-      /var/lib/kube-proxy from kube-proxy (rw)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-qjdt2 (ro)
-Conditions:
-  Type                        Status
-  PodReadyToStartContainers   True
-  Initialized                 True
-  Ready                       False
-  ContainersReady             False
-  PodScheduled                True
-Volumes:
-  kube-proxy:
-    Type:      ConfigMap (a volume populated by a ConfigMap)
-    Name:      kube-proxy
-    Optional:  false
-  xtables-lock:
-    Type:          HostPath (bare host directory volume)
-    Path:          /run/xtables.lock
-    HostPathType:  FileOrCreate
-  lib-modules:
-    Type:          HostPath (bare host directory volume)
-    Path:          /lib/modules
-    HostPathType:
-  kube-api-access-qjdt2:
-    Type:                    Projected (a volume that contains injected data from multiple sources)
-    TokenExpirationSeconds:  3607
-    ConfigMapName:           kube-root-ca.crt
-    Optional:                false
-    DownwardAPI:             true
-QoS Class:                   BestEffort
-Node-Selectors:              kubernetes.io/os=linux
-Tolerations:                 op=Exists
-                             node.kubernetes.io/disk-pressure:NoSchedule op=Exists
-                             node.kubernetes.io/memory-pressure:NoSchedule op=Exists
-                             node.kubernetes.io/network-unavailable:NoSchedule op=Exists
-                             node.kubernetes.io/not-ready:NoExecute op=Exists
-                             node.kubernetes.io/pid-pressure:NoSchedule op=Exists
-                             node.kubernetes.io/unreachable:NoExecute op=Exists
-                             node.kubernetes.io/unschedulable:NoSchedule op=Exists
-Events:
-  Type     Reason   Age                   From     Message
-  ----     ------   ----                  ----     -------
-  Normal   Killing  14m (x31 over 175m)   kubelet  Stopping container kube-proxy
-  Warning  BackOff  40s (x682 over 175m)  kubelet  Back-off restarting failed container kube-proxy in pod kube-proxy-nh8vb_kube-system(5458a476-3646-4c15-a73b-dc5348a7c271)
-
-
-root@masternode:~# kubectl describe pod kube-flannel-ds-x74hm  -n kube-flannel
-Name:                 kube-flannel-ds-x74hm
+NAMESPACE              NAME                                         READY   STATUS              RESTARTS         AGE     IP             NODE               NOMINATED NODE   READINESS GATES
+jellyfin               jellyfin                                     0/1     CrashLoopBackOff    9 (74s ago)      41m     10.244.0.2     storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-9xsgk                        0/1     CrashLoopBackOff    3 (30s ago)      6m32s   192.168.4.62   homelab            <none>           <none>
+kube-flannel           kube-flannel-ds-bjwls                        1/1     Running             0                3h13m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-n2cln                        1/1     Running             1 (7h35m ago)    29h     192.168.4.63   masternode         <none>           <none>
+kube-system            coredns-68444cf7cd-vq79r                     0/1     ContainerCreating   0                17m     <none>         masternode         <none>           <none>
+kube-system            etcd-masternode                              1/1     Running             4 (7h35m ago)    29h     192.168.4.63   masternode         <none>           <none>
+kube-system            kube-apiserver-masternode                    1/1     Running             11 (7h35m ago)   29h     192.168.4.63   masternode         <none>           <none>
+kube-system            kube-controller-manager-masternode           1/1     Running             32 (7h35m ago)   29h     192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-2zfsw                             1/1     Running             1 (7h35m ago)    29h     192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-nh8vb                             0/1     CrashLoopBackOff    34 (4m29s ago)   3h11m   192.168.4.62   homelab            <none>           <none>
+kube-system            kube-proxy-r8tlw                             1/1     Running             0                3h13m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-system            kube-scheduler-masternode                    1/1     Running             32 (7h35m ago)   29h     192.168.4.63   masternode         <none>           <none>
+kubernetes-dashboard   dashboard-metrics-scraper-597744f4cf-lmvlj   0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+kubernetes-dashboard   dashboard-metrics-scraper-fbd9c767-8pzxd     0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-547749b7d9-zcs4w        0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-7fc5595d85-cgh9p        0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+monitoring             grafana-554bf5687f-l8snn                     0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+monitoring             grafana-79db5b584f-jdbgf                     0/1     ContainerCreating   0                101m    <none>         masternode         <none>           <none>
+monitoring             loki-564bd8dfb7-wfjzk                        0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+monitoring             loki-85d467fb56-xt466                        0/1     ContainerCreating   0                101m    <none>         masternode         <none>           <none>
+monitoring             prometheus-54d6cfcf7d-rs7vj                  0/1     ContainerCreating   0                9h      <none>         masternode         <none>           <none>
+monitoring             prometheus-74887c8bb6-rqdl5                  0/1     ContainerCreating   0                101m    <none>         masternode         <none>           <none>
+root@masternode:~# kubectl describe pod kube-flannel-ds-9xsgk  -n kube-flannel
+Name:                 kube-flannel-ds-9xsgk
 Namespace:            kube-flannel
 Priority:             2000001000
 Priority Class Name:  system-node-critical
 Service Account:      flannel
 Node:                 homelab/192.168.4.62
-Start Time:           Thu, 11 Sep 2025 21:03:11 -0400
+Start Time:           Thu, 11 Sep 2025 22:09:16 -0400
 Labels:               app=flannel
                       controller-revision-hash=8f698f8cd
                       k8s-app=flannel
@@ -314,7 +1018,7 @@ IPs:
 Controlled By:  DaemonSet/kube-flannel-ds
 Init Containers:
   install-cni-plugin:
-    Container ID:  containerd://81fe9e990ba59c20c7492910346c4a40c3aa4e620f84ebb960791c274228c031
+    Container ID:  containerd://47b011ef3fb67ccbf5a73721aae15cd06de1f8f6d3a4a0a3f23342afa697e85d
     Image:         ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1
     Image ID:      ghcr.io/flannel-io/flannel-cni-plugin@sha256:cb3176a2c9eae5fa0acd7f45397e706eacb4577dac33cad89f93b775ff5611df
     Port:          <none>
@@ -328,16 +1032,16 @@ Init Containers:
     State:          Terminated
       Reason:       Completed
       Exit Code:    0
-      Started:      Thu, 11 Sep 2025 21:59:53 -0400
-      Finished:     Thu, 11 Sep 2025 21:59:53 -0400
+      Started:      Thu, 11 Sep 2025 22:15:18 -0400
+      Finished:     Thu, 11 Sep 2025 22:15:18 -0400
     Ready:          True
-    Restart Count:  12
+    Restart Count:  4
     Environment:    <none>
     Mounts:
       /opt/cni/bin from cni-plugin (rw)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-ssqkl (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-jsvb9 (ro)
   install-cni:
-    Container ID:  containerd://c5039c683d312d1c2872f129b41f578fac81bfbbbc77d9e434badee9981f2c3d
+    Container ID:  containerd://21a13fb082e2b67ce373389f104f5d179906dfbe2fa2a08e940a0447de7bb1ef
     Image:         ghcr.io/flannel-io/flannel:v0.27.3
     Image ID:      ghcr.io/flannel-io/flannel@sha256:8cc0cf9e94df48e98be84bce3e61984bbd46c3c44ad35707ec7ef40e96b009d1
     Port:          <none>
@@ -351,18 +1055,18 @@ Init Containers:
     State:          Terminated
       Reason:       Completed
       Exit Code:    0
-      Started:      Thu, 11 Sep 2025 21:59:54 -0400
-      Finished:     Thu, 11 Sep 2025 21:59:54 -0400
+      Started:      Thu, 11 Sep 2025 22:15:19 -0400
+      Finished:     Thu, 11 Sep 2025 22:15:19 -0400
     Ready:          True
     Restart Count:  0
     Environment:    <none>
     Mounts:
       /etc/cni/net.d from cni (rw)
       /etc/kube-flannel/ from flannel-cfg (rw)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-ssqkl (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-jsvb9 (ro)
 Containers:
   kube-flannel:
-    Container ID:  containerd://d935e65d252986f9e12770f160c54f10f7cb95371132c06c8231f423fea514b3
+    Container ID:  containerd://b31b5e6d26f1e44e78dab197fdb1c672dd49264715e8eb4048abd0a54c847e40
     Image:         ghcr.io/flannel-io/flannel:v0.27.3
     Image ID:      ghcr.io/flannel-io/flannel@sha256:8cc0cf9e94df48e98be84bce3e61984bbd46c3c44ad35707ec7ef40e96b009d1
     Port:          <none>
@@ -372,20 +1076,20 @@ Containers:
     Args:
       --ip-masq
       --kube-subnet-mgr
-    State:          Waiting
-      Reason:       CrashLoopBackOff
+    State:          Running
+      Started:      Thu, 11 Sep 2025 22:16:03 -0400
     Last State:     Terminated
       Reason:       Completed
       Exit Code:    0
-      Started:      Thu, 11 Sep 2025 21:58:31 -0400
-      Finished:     Thu, 11 Sep 2025 21:59:53 -0400
-    Ready:          False
-    Restart Count:  11
+      Started:      Thu, 11 Sep 2025 22:13:59 -0400
+      Finished:     Thu, 11 Sep 2025 22:15:18 -0400
+    Ready:          True
+    Restart Count:  4
     Requests:
       cpu:     100m
       memory:  50Mi
     Environment:
-      POD_NAME:                   kube-flannel-ds-x74hm (v1:metadata.name)
+      POD_NAME:                   kube-flannel-ds-9xsgk (v1:metadata.name)
       POD_NAMESPACE:              kube-flannel (v1:metadata.namespace)
       EVENT_QUEUE_DEPTH:          5000
       CONT_WHEN_CACHE_NOT_READY:  false
@@ -393,13 +1097,13 @@ Containers:
       /etc/kube-flannel/ from flannel-cfg (rw)
       /run/flannel from run (rw)
       /run/xtables.lock from xtables-lock (rw)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-ssqkl (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-jsvb9 (ro)
 Conditions:
   Type                        Status
   PodReadyToStartContainers   True
   Initialized                 True
-  Ready                       False
-  ContainersReady             False
+  Ready                       True
+  ContainersReady             True
   PodScheduled                True
 Volumes:
   run:
@@ -422,7 +1126,7 @@ Volumes:
     Type:          HostPath (bare host directory volume)
     Path:          /run/xtables.lock
     HostPathType:  FileOrCreate
-  kube-api-access-ssqkl:
+  kube-api-access-jsvb9:
     Type:                    Projected (a volume that contains injected data from multiple sources)
     TokenExpirationSeconds:  3607
     ConfigMapName:           kube-root-ca.crt
@@ -439,104 +1143,18 @@ Tolerations:                 :NoSchedule op=Exists
                              node.kubernetes.io/unreachable:NoExecute op=Exists
                              node.kubernetes.io/unschedulable:NoSchedule op=Exists
 Events:
-  Type     Reason          Age                    From               Message
-  ----     ------          ----                   ----               -------
-  Normal   Scheduled       57m                    default-scheduler  Successfully assigned kube-flannel/kube-flannel-ds-x74hm to homelab
-  Normal   Created         56m (x2 over 57m)      kubelet            Created container: install-cni
-  Normal   Started         56m (x2 over 57m)      kubelet            Started container install-cni
-  Normal   Started         56m (x2 over 57m)      kubelet            Started container kube-flannel
-  Normal   Pulled          56m (x2 over 57m)      kubelet            Container image "ghcr.io/flannel-io/flannel:v0.27.3" already present on machine
-  Normal   Created         56m (x2 over 57m)      kubelet            Created container: kube-flannel
-  Normal   Started         52m (x3 over 57m)      kubelet            Started container install-cni-plugin
-  Normal   Created         52m (x3 over 57m)      kubelet            Created container: install-cni-plugin
-  Normal   Pulled          52m (x3 over 57m)      kubelet            Container image "ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1" already present on machine
-  Normal   SandboxChanged  52m (x2 over 56m)      kubelet            Pod sandbox changed, it will be killed and re-created.
-  Normal   Pulled          52m (x3 over 57m)      kubelet            Container image "ghcr.io/flannel-io/flannel:v0.27.3" already present on machine
-  Normal   Killing         7m36s (x11 over 56m)   kubelet            Stopping container kube-flannel
-  Warning  BackOff         2m39s (x145 over 52m)  kubelet            Back-off restarting failed container kube-flannel in pod kube-flannel-ds-x74hm_kube-flannel(b0702f00-3fef-4d83-8afb-43a2fc88e203)
-
-
-It appears that the jellyfin node is simply not able to communicate with the masternode which should be fixed after the coredns pod is fixed
-root@masternode:~# kubectl describe pod jellyfin -n jellyfin
-Name:             jellyfin
-Namespace:        jellyfin
-Priority:         0
-Service Account:  default
-Node:             storagenodet3500/192.168.4.61
-Start Time:       Thu, 11 Sep 2025 21:34:00 -0400
-Labels:           app=jellyfin
-                  component=media-server
-Annotations:      <none>
-Status:           Running
-IP:               10.244.0.2
-IPs:
-  IP:  10.244.0.2
-Containers:
-  jellyfin:
-    Container ID:   containerd://3af3472e996f136044b2ed2664b527e2ca06be1676ab22c5f413bacb0a430271
-    Image:          jellyfin/jellyfin:latest
-    Image ID:       docker.io/jellyfin/jellyfin@sha256:7ae36aab93ef9b6aaff02b37f8bb23df84bb2d7a3f6054ec8fc466072a648ce2
-    Ports:          8096/TCP (http), 8920/TCP (https)
-    Host Ports:     0/TCP (http), 0/TCP (https)
-    State:          Running
-      Started:      Thu, 11 Sep 2025 21:59:07 -0400
-    Last State:     Terminated
-      Reason:       Completed
-      Exit Code:    0
-      Started:      Thu, 11 Sep 2025 21:55:34 -0400
-      Finished:     Thu, 11 Sep 2025 21:59:07 -0400
-    Ready:          False
-    Restart Count:  7
-    Limits:
-      cpu:     1
-      memory:  2Gi
-    Requests:
-      cpu:      200m
-      memory:   512Mi
-    Liveness:   http-get http://:8096/health delay=120s timeout=10s period=30s #success=1 #failure=3
-    Readiness:  http-get http://:8096/health delay=60s timeout=5s period=10s #success=1 #failure=3
-    Environment:
-      JELLYFIN_PublishedServerUrl:  http://192.168.4.61:30096
-    Mounts:
-      /config from config (rw)
-      /media from media (ro)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-qzdn5 (ro)
-Conditions:
-  Type                        Status
-  PodReadyToStartContainers   True
-  Initialized                 True
-  Ready                       False
-  ContainersReady             False
-  PodScheduled                True
-Volumes:
-  media:
-    Type:          HostPath (bare host directory volume)
-    Path:          /srv/media
-    HostPathType:  Directory
-  config:
-    Type:          HostPath (bare host directory volume)
-    Path:          /var/lib/jellyfin
-    HostPathType:  DirectoryOrCreate
-  kube-api-access-qzdn5:
-    Type:                    Projected (a volume that contains injected data from multiple sources)
-    TokenExpirationSeconds:  3607
-    ConfigMapName:           kube-root-ca.crt
-    Optional:                false
-    DownwardAPI:             true
-QoS Class:                   Burstable
-Node-Selectors:              kubernetes.io/hostname=storagenodet3500
-Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
-                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
-Events:
-  Type     Reason     Age                   From               Message
-  ----     ------     ----                  ----               -------
-  Normal   Scheduled  27m                   default-scheduler  Successfully assigned jellyfin/jellyfin to storagenodet3500
-  Normal   Pulling    27m                   kubelet            Pulling image "jellyfin/jellyfin:latest"
-  Normal   Pulled     26m                   kubelet            Successfully pulled image "jellyfin/jellyfin:latest" in 51.614s (51.614s including waiting)
-  Normal   Started    26m                   kubelet            Started container jellyfin
-  Warning  Unhealthy  23m (x3 over 24m)     kubelet            Liveness probe failed: Get "http://10.244.0.2:8096/health": dial tcp 10.244.0.2:8096: connect: no route to host
-  Normal   Killing    23m                   kubelet            Container jellyfin failed liveness probe, will be restarted
-  Normal   Pulled     23m                   kubelet            Container image "jellyfin/jellyfin:latest" already present on machine
-  Normal   Created    23m (x2 over 26m)     kubelet            Created container: jellyfin
-  Warning  Unhealthy  7m46s (x85 over 25m)  kubelet            Readiness probe failed: Get "http://10.244.0.2:8096/health": dial tcp 10.244.0.2:8096: connect: no route to host
-  Warning  Unhealthy  2m44s (x14 over 24m)  kubelet            Readiness probe failed: Get "http://10.244.0.2:8096/health": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+  Type    Reason          Age                    From               Message
+  ----    ------          ----                   ----               -------
+  Normal  Scheduled       6m55s                  default-scheduler  Successfully assigned kube-flannel/kube-flannel-ds-9xsgk to homelab
+  Normal  Pulled          5m29s (x2 over 6m55s)  kubelet            Container image "ghcr.io/flannel-io/flannel:v0.27.3" already present on machine
+  Normal  Created         5m29s (x2 over 6m55s)  kubelet            Created container: install-cni
+  Normal  Started         5m29s (x2 over 6m55s)  kubelet            Started container install-cni
+  Normal  Pulled          5m28s (x2 over 6m54s)  kubelet            Container image "ghcr.io/flannel-io/flannel:v0.27.3" already present on machine
+  Normal  Created         5m28s (x2 over 6m54s)  kubelet            Created container: kube-flannel
+  Normal  Started         5m28s (x2 over 6m54s)  kubelet            Started container kube-flannel
+  Normal  Pulled          4m14s (x3 over 6m56s)  kubelet            Container image "ghcr.io/flannel-io/flannel-cni-plugin:v1.7.1-flannel1" already present on machine
+  Normal  Created         4m14s (x3 over 6m56s)  kubelet            Created container: install-cni-plugin
+  Normal  SandboxChanged  4m14s (x2 over 5m30s)  kubelet            Pod sandbox changed, it will be killed and re-created.
+  Normal  Started         4m13s (x3 over 6m55s)  kubelet            Started container install-cni-plugin
+  Normal  Killing         54s (x4 over 5m30s)    kubelet            Stopping container kube-flannel
+root@masternode:~#
