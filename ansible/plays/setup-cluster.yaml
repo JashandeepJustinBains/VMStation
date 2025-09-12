@@ -1622,10 +1622,39 @@
       loop:
         - "../../scripts/validate_join_prerequisites.sh"
         - "../../scripts/enhanced_kubeadm_join.sh"
+        - "../../scripts/validate_systemd_dropins.sh"
+        - "../../scripts/fix_kubelet_systemd_config.sh"
       when: not kubelet_conf.stat.exists
 
     - name: "Enhanced kubeadm join with post-wipe worker support"
       block:
+        - name: "Pre-join systemd configuration validation and fix"
+          block:
+            - name: "Run systemd drop-in validation and fix"
+              shell: |
+                # Validate and fix systemd drop-in configurations before join
+                echo "=== Systemd Drop-in Validation and Fix ==="
+                echo "Timestamp: $(date)"
+                
+                if [ -f /tmp/validate_systemd_dropins.sh ]; then
+                  echo "Running systemd validation..."
+                  if ! /tmp/validate_systemd_dropins.sh validate kubelet; then
+                    echo "Found invalid systemd configurations, fixing..."
+                    /tmp/validate_systemd_dropins.sh fix kubelet
+                  fi
+                  
+                  echo "Ensuring proper kubelet join configuration..."
+                  /tmp/validate_systemd_dropins.sh ensure-join "{{ control_plane_ip }}"
+                else
+                  echo "Systemd validator not found - running fallback fix..."
+                  if [ -f /tmp/fix_kubelet_systemd_config.sh ]; then
+                    /tmp/fix_kubelet_systemd_config.sh
+                  fi
+                fi
+              register: systemd_fix_result
+              failed_when: false
+              become: true
+
         - name: "Pre-join kubelet config validation and remediation"
           block:
             - name: "Check if kubelet config already exists"
@@ -2537,6 +2566,8 @@
         - /tmp/kubeadm-join.sh
         - /tmp/validate_join_prerequisites.sh
         - /tmp/enhanced_kubeadm_join.sh
+        - /tmp/validate_systemd_dropins.sh
+        - /tmp/fix_kubelet_systemd_config.sh
       when: not kubelet_conf.stat.exists
 
 # Final cluster validation for post-wipe worker integration
