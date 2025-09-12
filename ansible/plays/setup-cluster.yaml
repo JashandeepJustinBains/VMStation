@@ -1499,7 +1499,7 @@
               - API server accessible: {{ api_health_check.rc == 0 }}
               - API health status: {{ api_health_check.stdout | default('failed') }}
               - RBAC configuration: {{ control_plane_rbac_status.stdout }}
-              - Ready for worker joins: {{ api_health_check.status == 200 and 'rbac_ready' in control_plane_rbac_status.stdout }}
+              - Ready for worker joins: {{ (api_health_check.rc == 0) and ('rbac_ready' in (control_plane_rbac_status.stdout | default(''))) }}
               
       when: not kubelet_conf.stat.exists
 
