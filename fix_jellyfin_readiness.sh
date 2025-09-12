@@ -68,7 +68,25 @@ if ip addr show cni0 >/dev/null 2>&1; then
         fi
     fi
 else
-    warn "No cni0 bridge found - Flannel may not be properly initialized"
+    warn "No cni0 bridge found - checking if Flannel is properly initialized"
+    
+    # Check if Flannel daemonset is running
+    FLANNEL_READY=$(kubectl get ds -n kube-flannel kube-flannel -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
+    FLANNEL_DESIRED=$(kubectl get ds -n kube-flannel kube-flannel -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
+    
+    if [ "$FLANNEL_READY" != "$FLANNEL_DESIRED" ] || [ "$FLANNEL_DESIRED" = "0" ]; then
+        warn "Flannel DaemonSet is not fully ready ($FLANNEL_READY/$FLANNEL_DESIRED)"
+        warn "This may cause networking issues for Jellyfin pod"
+        
+        # Try to restart Flannel to fix networking
+        if [ -f "scripts/fix_cni_bridge_conflict.sh" ]; then
+            warn "Running CNI fix to ensure Flannel is properly initialized..."
+            sudo ./scripts/fix_cni_bridge_conflict.sh || warn "CNI fix had issues"
+            sleep 30
+        fi
+    else
+        info "Flannel DaemonSet appears ready, cni0 bridge should be created when pods start"
+    fi
 fi
 
 info "Checking current Jellyfin pod status..."
@@ -166,8 +184,24 @@ for i in $(seq 1 $timeout); do
 done
 
 # Wait for pod to be ready with extended timeout for network issues
-info "Waiting for pod to become ready (extended timeout for network resolution)..."
-if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=600s; then
+info "Waiting for pod to become ready (extended timeout for CNI network resolution)..."
+info "This may take up to 20 minutes due to CNI bridge conflicts and network routing issues..."
+
+# First, ensure CNI is properly functioning
+info "Checking and fixing CNI bridge configuration before waiting for pod readiness..."
+if [ -f "scripts/fix_cni_bridge_conflict.sh" ]; then
+    info "Running CNI bridge fix to ensure network connectivity..."
+    if sudo ./scripts/fix_cni_bridge_conflict.sh; then
+        info "✓ CNI bridge fix completed successfully"
+        # Wait for network to stabilize after CNI fix
+        sleep 30
+    else
+        warn "CNI bridge fix had issues, but continuing with extended timeouts"
+    fi
+fi
+
+# Extended timeout to handle CNI networking issues
+if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=1200s; then
     info "✓ Jellyfin pod is now ready!"
     
     # Show final status
