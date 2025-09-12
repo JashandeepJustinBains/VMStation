@@ -242,33 +242,105 @@ else
 fi
 
 echo
-info "Step 2: Fix kube-proxy CrashLoopBackOff on homelab node"
+info "Step 2: Fix kube-proxy CrashLoopBackOff and iptables compatibility issues"
 
-# Find crashlooping kube-proxy pods
-CRASHLOOP_PROXY=$(kubectl get pods -n kube-system -l component=kube-proxy -o wide | grep "CrashLoopBackOff" | grep "homelab" || echo "")
+# Function to check and fix iptables/nftables compatibility
+fix_iptables_compatibility() {
+    info "Checking iptables/nftables compatibility on cluster nodes"
+    
+    # Check if we're experiencing nftables compatibility issues
+    local iptables_error=$(kubectl logs -n kube-system -l component=kube-proxy --tail=100 2>/dev/null | grep -i "nf_tables.*incompatible" | head -1 || echo "")
+    
+    if [ -n "$iptables_error" ]; then
+        warn "Detected iptables/nftables compatibility issue:"
+        echo "$iptables_error"
+        
+        info "Applying iptables compatibility fix to kube-proxy configuration"
+        
+        # Get current kube-proxy configmap
+        if kubectl get configmap kube-proxy -n kube-system >/dev/null 2>&1; then
+            # Patch the kube-proxy configmap to use iptables mode explicitly
+            info "Updating kube-proxy to use legacy iptables mode"
+            
+            # Create a patch for the configmap
+            kubectl patch configmap kube-proxy -n kube-system --patch '{
+                "data": {
+                    "config.conf": "apiVersion: kubeproxy.config.k8s.io/v1alpha1\nbindAddress: 0.0.0.0\nclientConnection:\n  acceptContentTypes: \"\"\n  burst: 10\n  contentType: application/vnd.kubernetes.protobuf\n  kubeconfig: /var/lib/kube-proxy/kubeconfig.conf\n  qps: 5\nclusterCIDR: \"10.244.0.0/16\"\nconfigSyncPeriod: 15m0s\nconntrack:\n  maxPerCore: 32768\n  min: 131072\n  tcpCloseWaitTimeout: 1h0m0s\n  tcpEstablishedTimeout: 24h0m0s\nenabledProfilingMode: false\nhealthzBindAddress: 0.0.0.0:10256\nhostnameOverride: \"\"\niptables:\n  masqueradeAll: false\n  masqueradeBit: 14\n  minSyncPeriod: 0s\n  syncPeriod: 30s\nkind: KubeProxyConfiguration\nmetricsBindAddress: 127.0.0.1:10249\nmode: \"iptables\"\nnodePortAddresses: null\noomscoreadj: -999\nportRange: \"\"\nresourceContainer: /kube-proxy\nudpIdleTimeout: 250ms\nwinkernel:\n  enableDSR: false\n  networkName: \"\"\n  sourceVip: \"\""
+                }
+            }' || warn "Failed to patch kube-proxy configmap"
+            
+        else
+            warn "kube-proxy configmap not found - creating basic configuration"
+            
+            # Create a basic kube-proxy configmap with iptables mode
+            cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-proxy
+  namespace: kube-system
+data:
+  config.conf: |
+    apiVersion: kubeproxy.config.k8s.io/v1alpha1
+    kind: KubeProxyConfiguration
+    mode: "iptables"
+    clusterCIDR: "10.244.0.0/16"
+    iptables:
+      minSyncPeriod: 0s
+      syncPeriod: 30s
+    healthzBindAddress: 0.0.0.0:10256
+    metricsBindAddress: 127.0.0.1:10249
+EOF
+        fi
+    else
+        info "No iptables/nftables compatibility issues detected in logs"
+    fi
+}
+
+# Find crashlooping kube-proxy pods (check all nodes, not just homelab)
+CRASHLOOP_PROXY=$(kubectl get pods -n kube-system -l component=kube-proxy -o wide | grep "CrashLoopBackOff" || echo "")
 
 if [ -n "$CRASHLOOP_PROXY" ]; then
-    PROXY_POD=$(echo "$CRASHLOOP_PROXY" | awk '{print $1}')
-    warn "Found crashlooping kube-proxy pod: $PROXY_POD"
+    warn "Found crashlooping kube-proxy pods:"
+    echo "$CRASHLOOP_PROXY"
+    
+    # Get the first crashlooping pod for log analysis
+    PROXY_POD=$(echo "$CRASHLOOP_PROXY" | head -1 | awk '{print $1}')
+    PROXY_NODE=$(echo "$CRASHLOOP_PROXY" | head -1 | awk '{print $7}')
+    
+    warn "Analyzing logs from crashlooping kube-proxy pod: $PROXY_POD on node $PROXY_NODE"
     
     # Get logs to understand the issue
     echo "Getting logs from crashlooping kube-proxy..."
     kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | head -20 || echo "No previous logs available"
     
+    # Check for specific error patterns
+    local nftables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "nf_tables.*incompatible" || echo "")
+    local iptables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "iptables.*failed" || echo "")
+    
+    if [ -n "$nftables_error" ]; then
+        error "Detected nftables compatibility issue: $nftables_error"
+        fix_iptables_compatibility
+    elif [ -n "$iptables_error" ]; then
+        error "Detected iptables issue: $iptables_error"
+        fix_iptables_compatibility
+    fi
+    
     # Common fixes for kube-proxy issues
-    info "Applying kube-proxy fixes for homelab node"
+    info "Applying kube-proxy fixes for affected nodes"
     
-    # Delete the crashlooping pod to force recreation
-    kubectl delete pod -n kube-system "$PROXY_POD" --force --grace-period=0
+    # Delete all crashlooping pods to force recreation
+    echo "$CRASHLOOP_PROXY" | while read line; do
+        local pod_name=$(echo "$line" | awk '{print $1}')
+        info "Deleting crashlooping pod: $pod_name"
+        kubectl delete pod -n kube-system "$pod_name" --force --grace-period=0 2>/dev/null || true
+    done
     
-    echo "Waiting for new kube-proxy pod to start..."
+    echo "Waiting for new kube-proxy pods to start..."
     sleep 15
     
-    # Check if there are networking issues specific to homelab node
-    # Sometimes kube-proxy fails due to CNI configuration issues
-    info "Checking homelab node networking configuration"
-    
-    # Restart kube-proxy daemonset to ensure clean state
+    # Restart kube-proxy daemonset to ensure clean state with new configuration
+    info "Restarting kube-proxy daemonset with updated configuration"
     kubectl rollout restart daemonset/kube-proxy -n kube-system
     
     # Wait for rollout to complete
@@ -280,16 +352,28 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     
     # Check the new pod status
     sleep 10
-    NEW_PROXY_STATUS=$(kubectl get pods -n kube-system -l component=kube-proxy -o wide | grep "homelab" || echo "")
-    if echo "$NEW_PROXY_STATUS" | grep -q "Running"; then
-        info "✓ kube-proxy on homelab is now running"
+    NEW_PROXY_STATUS=$(kubectl get pods -n kube-system -l component=kube-proxy -o wide)
+    echo "Updated kube-proxy pod status:"
+    echo "$NEW_PROXY_STATUS"
+    
+    # Count running vs total
+    RUNNING_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c "Running" || echo "0")
+    TOTAL_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c kube-proxy || echo "0")
+    
+    if [ "$RUNNING_PROXY" -eq "$TOTAL_PROXY" ] && [ "$TOTAL_PROXY" -gt 0 ]; then
+        info "✓ All kube-proxy pods are now running ($RUNNING_PROXY/$TOTAL_PROXY)"
     else
-        warn "kube-proxy on homelab still has issues:"
-        echo "$NEW_PROXY_STATUS"
+        warn "Some kube-proxy pods still have issues ($RUNNING_PROXY/$TOTAL_PROXY running)"
+        
+        # Show any remaining problematic pods
+        echo "$NEW_PROXY_STATUS" | grep -v "Running" | grep kube-proxy || true
     fi
     
 else
-    info "No crashlooping kube-proxy pods found on homelab node"
+    info "No crashlooping kube-proxy pods found"
+    
+    # Still check for iptables compatibility in current logs
+    fix_iptables_compatibility
 fi
 
 echo

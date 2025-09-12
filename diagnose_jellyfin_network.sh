@@ -152,7 +152,75 @@ echo "=== iptables NAT rules (CNI-related) ==="
 sudo iptables -t nat -L | grep -A 5 -B 5 -E "(CNI|FLANNEL|10.244)" || echo "No CNI-related iptables rules found"
 
 echo
-info "Step 5: Suggested actions"
+info "Step 5: Checking for specific issues from problem statement"
+
+echo "=== kubectl Configuration Check ==="
+# Check if kubectl works on worker nodes (simulate the problem from the statement)
+if kubectl get nodes >/dev/null 2>&1; then
+    info "✓ kubectl can access cluster from this node"
+else
+    error "✗ kubectl cannot access cluster - connection refused error detected"
+    echo "This matches the problem statement issue on storage node"
+    echo "Fix: Run ./scripts/fix_worker_kubectl_config.sh"
+fi
+
+echo
+echo "=== kube-proxy Status Check ==="
+# Check for CrashLoopBackOff specifically
+CRASHLOOP_PROXY=$(kubectl get pods -n kube-system -l component=kube-proxy 2>/dev/null | grep "CrashLoopBackOff" || echo "")
+if [ -n "$CRASHLOOP_PROXY" ]; then
+    error "✗ Found kube-proxy pods in CrashLoopBackOff:"
+    echo "$CRASHLOOP_PROXY"
+    echo "This matches the problem statement issue on homelab node"
+    echo "Fix: Run ./scripts/fix_remaining_pod_issues.sh"
+else
+    info "✓ No kube-proxy pods in CrashLoopBackOff"
+fi
+
+echo
+echo "=== iptables Compatibility Check ==="
+# Check for the specific nftables error from problem statement
+if command -v iptables >/dev/null 2>&1; then
+    IPTABLES_ERROR=$(iptables -t nat -L KUBE-SEP 2>&1 | grep "nf_tables.*incompatible" || echo "")
+    if [ -n "$IPTABLES_ERROR" ]; then
+        error "✗ Detected iptables/nftables incompatibility issue:"
+        echo "$IPTABLES_ERROR"
+        echo "This matches the problem statement iptables error"
+        echo "Fix: Run ./scripts/fix_iptables_compatibility.sh"
+    else
+        info "✓ No iptables/nftables compatibility issues detected"
+    fi
+else
+    warn "iptables command not available for testing"
+fi
+
+echo
+echo "=== NodePort Service Test ==="
+# Test NodePort 30096 specifically mentioned in problem statement
+if kubectl get service -n jellyfin jellyfin-service >/dev/null 2>&1; then
+    JELLYFIN_NODEPORT=$(kubectl get service -n jellyfin jellyfin-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null)
+    if [ "$JELLYFIN_NODEPORT" = "30096" ]; then
+        info "Testing NodePort 30096 connectivity (mentioned in problem statement)"
+        
+        # Get node IPs
+        NODE_IPS=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+        
+        for node_ip in $NODE_IPS; do
+            if timeout 5 curl -s --connect-timeout 3 "http://$node_ip:30096/" >/dev/null 2>&1; then
+                info "✓ NodePort 30096 accessible on $node_ip"
+            else
+                error "✗ NodePort 30096 connection refused on $node_ip"
+                echo "This matches the problem statement curl failure"
+                echo "Fix: Run ./scripts/fix_cluster_communication.sh"
+            fi
+        done
+    fi
+else
+    warn "Jellyfin service not found - cannot test NodePort 30096"
+fi
+
+echo
+info "Step 6: Suggested actions"
 
 echo
 echo "Based on the diagnostic results above:"
@@ -190,10 +258,13 @@ fi
 
 echo
 echo "=== Common Solutions ==="
-echo "1. CNI Bridge Fix: ./scripts/fix_cni_bridge_conflict.sh"
-echo "2. Restart Flannel: kubectl delete pods -n kube-flannel --all"
-echo "3. Enhanced Jellyfin Fix: ./fix_jellyfin_readiness.sh"
-echo "4. Check containerd: sudo systemctl restart containerd"
+echo "1. Complete cluster communication fix: ./scripts/fix_cluster_communication.sh"
+echo "2. kubectl configuration fix: ./scripts/fix_worker_kubectl_config.sh"
+echo "3. iptables compatibility fix: ./scripts/fix_iptables_compatibility.sh"
+echo "4. CNI Bridge Fix: ./scripts/fix_cni_bridge_conflict.sh"
+echo "5. kube-proxy and pod issues: ./scripts/fix_remaining_pod_issues.sh"
+echo "6. Cluster validation: ./scripts/validate_cluster_communication.sh"
+echo "7. Enhanced Jellyfin Fix: ./fix_jellyfin_readiness.sh"
 
 echo
 info "Diagnostic complete. Review the output above to identify the root cause."
