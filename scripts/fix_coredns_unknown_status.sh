@@ -90,6 +90,39 @@ echo "Flannel DaemonSet status:"
 kubectl get daemonset -n kube-flannel
 
 echo
+info "Checking and restarting any crashed flannel pods..."
+
+# Check for crashed flannel pods
+CRASHED_FLANNEL=$(kubectl get pods -n kube-flannel --no-headers | grep -E "(CrashLoopBackOff|Error)" | awk '{print $1}' || true)
+
+if [ -n "$CRASHED_FLANNEL" ]; then
+    warn "Found crashed flannel pods: $CRASHED_FLANNEL"
+    
+    for pod in $CRASHED_FLANNEL; do
+        node_name=$(kubectl get pod -n kube-flannel "$pod" -o jsonpath='{.spec.nodeName}')
+        echo "Crashed flannel pod $pod on node: $node_name"
+        
+        # Show recent logs for troubleshooting
+        echo "Recent logs from crashed pod:"
+        kubectl logs -n kube-flannel "$pod" --tail=15 || echo "Could not retrieve logs"
+        echo
+        
+        # Delete the crashed pod to force restart
+        echo "Restarting crashed flannel pod: $pod"
+        kubectl delete pod -n kube-flannel "$pod" --force --grace-period=0
+    done
+    
+    echo "Waiting 30 seconds for flannel pods to restart..."
+    sleep 30
+    
+    # Show updated status
+    echo "Updated flannel pod status:"
+    kubectl get pods -n kube-flannel -o wide
+else
+    info "No crashed flannel pods found"
+fi
+
+echo
 echo "Checking CNI configuration on nodes..."
 for node in $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}'); do
     echo "Node: $node"
@@ -116,6 +149,48 @@ for node in $CONTROL_PLANE_NODES; do
     kubectl taint node "$node" node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || echo "  Taint not present or already removed"
     kubectl taint node "$node" node-role.kubernetes.io/master:NoSchedule- 2>/dev/null || echo "  Legacy master taint not present"
 done
+
+# Fix 1.5: Configure CoreDNS node affinity to prefer control-plane
+echo
+info "Configuring CoreDNS to prefer control-plane nodes..."
+kubectl patch deployment coredns -n kube-system --type='merge' -p='
+{
+  "spec": {
+    "template": {
+      "spec": {
+        "affinity": {
+          "nodeAffinity": {
+            "preferredDuringSchedulingIgnoredDuringExecution": [
+              {
+                "weight": 100,
+                "preference": {
+                  "matchExpressions": [
+                    {
+                      "key": "node-role.kubernetes.io/control-plane",
+                      "operator": "Exists"
+                    }
+                  ]
+                }
+              },
+              {
+                "weight": 90,
+                "preference": {
+                  "matchExpressions": [
+                    {
+                      "key": "node-role.kubernetes.io/master",
+                      "operator": "Exists"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}'
+echo "CoreDNS node affinity configured to prefer control-plane nodes"
 
 # Fix 2: Ensure CoreDNS has the right replica count for the cluster size
 echo

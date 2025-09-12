@@ -926,10 +926,85 @@
         else
           echo "CoreDNS already has correct replica count: $current_replicas"
         fi
+
+    - name: "Configure CoreDNS node affinity to prefer control-plane"
+      shell: |
+        echo "Configuring CoreDNS to prefer control-plane nodes..."
+        # Patch CoreDNS deployment with node affinity for control-plane
+        kubectl patch deployment coredns -n kube-system --type='merge' -p='
+        {
+          "spec": {
+            "template": {
+              "spec": {
+                "affinity": {
+                  "nodeAffinity": {
+                    "preferredDuringSchedulingIgnoredDuringExecution": [
+                      {
+                        "weight": 100,
+                        "preference": {
+                          "matchExpressions": [
+                            {
+                              "key": "node-role.kubernetes.io/control-plane",
+                              "operator": "Exists"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "weight": 90,
+                        "preference": {
+                          "matchExpressions": [
+                            {
+                              "key": "node-role.kubernetes.io/master",
+                              "operator": "Exists"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }'
+        echo "CoreDNS node affinity configured to prefer control-plane nodes"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: coredns_scale
       failed_when: false
+
+    - name: "Check and restart crashed flannel pods"
+      shell: |
+        echo "=== Checking for crashed flannel pods ==="
+        
+        # Get all flannel pods and check their status
+        crashed_pods=$(timeout 30 kubectl get pods -n kube-flannel --no-headers | grep -E "(CrashLoopBackOff|Error)" | awk '{print $1}' || true)
+        
+        if [ -n "$crashed_pods" ]; then
+          echo "Found crashed flannel pods: $crashed_pods"
+          for pod in $crashed_pods; do
+            echo "Analyzing crashed pod: $pod"
+            
+            # Get pod node and show logs
+            node_name=$(timeout 30 kubectl get pod -n kube-flannel "$pod" -o jsonpath='{.spec.nodeName}')
+            echo "  Pod is on node: $node_name"
+            
+            # Show recent logs for troubleshooting
+            echo "  Recent logs from $pod:"
+            timeout 30 kubectl logs -n kube-flannel "$pod" --tail=10 || echo "    Could not retrieve logs"
+            
+            # Delete the crashed pod to force restart
+            echo "  Restarting crashed flannel pod: $pod"
+            timeout 30 kubectl delete pod -n kube-flannel "$pod" --force --grace-period=0
+          done
+          
+          # Wait a moment for pods to restart
+          echo "Waiting 30 seconds for flannel pods to restart..."
+          sleep 30
+        else
+          echo "No crashed flannel pods found"
+        fi
 
     - name: "Check Flannel namespace and resources"
       shell: |
