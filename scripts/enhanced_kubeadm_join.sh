@@ -506,6 +506,28 @@ fix_containerd_filesystem() {
 prepare_for_join() {
     info "Preparing system for join..."
     
+    # Validate and fix systemd drop-in configurations before join
+    info "Validating systemd drop-in configurations..."
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local validator="$script_dir/validate_systemd_dropins.sh"
+    
+    if [ -f "$validator" ]; then
+        if ! bash "$validator" validate kubelet; then
+            warn "Found invalid systemd configurations, fixing them..."
+            if bash "$validator" fix kubelet; then
+                info "✓ Systemd configurations fixed successfully"
+            else
+                error "Failed to fix systemd configurations"
+                return 1
+            fi
+        else
+            info "✓ Systemd configurations are valid"
+        fi
+    else
+        warn "Systemd validator not found at $validator"
+        warn "Proceeding without validation (manual fix may be needed)"
+    fi
+    
     # Stop kubelet if running and prevent auto-restart during join
     info "Stopping kubelet service and preventing auto-restart during join..."
     systemctl stop kubelet 2>/dev/null || true
@@ -569,6 +591,18 @@ prepare_for_join() {
     info "Creating temporary kubelet bootstrap configuration..."
     local kubelet_dropin_dir="/etc/systemd/system/kubelet.service.d"
     mkdir -p "$kubelet_dropin_dir"
+    
+    # Remove any existing malformed configuration files that could cause issues
+    info "Removing any existing malformed systemd drop-in files..."
+    for file in "$kubelet_dropin_dir"/*.conf; do
+        if [ -f "$file" ]; then
+            # Check if file has content without proper section headers
+            if grep -q "Environment=\|ExecStart=" "$file" && ! grep -q "^\[Service\]" "$file"; then
+                warn "Removing malformed systemd drop-in: $file"
+                rm -f "$file"
+            fi
+        fi
+    done
     
     # Create a bootstrap kubelet configuration that doesn't require config.yaml
     cat > "$kubelet_dropin_dir/20-bootstrap-kubeadm.conf" << 'EOF'
