@@ -9,7 +9,7 @@
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     verification_timeout: 300
   tasks:
-    - name: "Debug: show kubeconfig_path and check file"
+    - name: Debug show kubeconfig_path and check file
       block:
         - name: "Show kubeconfig_path variable"
           ansible.builtin.debug:
@@ -21,7 +21,7 @@
           register: kubeconfig_file
           failed_when: false
 
-        - name: "Debug: kubeconfig file stat result"
+        - name: "Debug kubeconfig file stat result"
           ansible.builtin.debug:
             var: kubeconfig_file
       when: kubeconfig_path is defined
