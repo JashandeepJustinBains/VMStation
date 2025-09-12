@@ -1475,13 +1475,12 @@
           delegate_to: localhost
           
         - name: "Verify control-plane cluster status"
-          uri:
-            url: "https://{{ control_plane_ip }}:6443/healthz"
-            method: GET
-            validate_certs: false
-            timeout: 10
-          delegate_to: localhost
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw /healthz
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          delegate_to: "{{ control_plane_ip }}"
           register: api_health_check
+          failed_when: api_health_check.rc != 0
           
         - name: "Ensure control-plane has proper RBAC configuration"
           shell: |
@@ -1497,8 +1496,8 @@
           debug:
             msg: |
               Control-Plane Readiness Check:
-              - API server accessible: {{ api_health_check.status == 200 }}
-              - API health status: {{ api_health_check.status | default('failed') }}
+              - API server accessible: {{ api_health_check.rc == 0 }}
+              - API health status: {{ api_health_check.stdout | default('failed') }}
               - RBAC configuration: {{ control_plane_rbac_status.stdout }}
               - Ready for worker joins: {{ api_health_check.status == 200 and 'rbac_ready' in control_plane_rbac_status.stdout }}
               
