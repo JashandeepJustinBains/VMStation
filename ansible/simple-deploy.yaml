@@ -63,15 +63,80 @@
           {% endfor %}
 
     - name: "Wait for flannel to be ready on all nodes"
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: DaemonSet
-        namespace: kube-flannel
-        name: kube-flannel-ds
-        wait: true
-        wait_condition:
-          type: Ready
-        wait_timeout: 300
+      block:
+        - name: "Check for CNI bridge conflicts before flannel wait"
+          shell: |
+            # Check for CNI bridge IP conflicts that prevent flannel/coredns from starting
+            cni_conflicts=$(kubectl get events --all-namespaces --field-selector reason=FailedCreatePodSandBox 2>/dev/null | grep "failed to set bridge addr.*already has an IP address different" | wc -l || echo "0")
+            
+            # Also check for ContainerCreating pods stuck due to CNI issues
+            stuck_pods=$(kubectl get pods --all-namespaces --field-selector status.phase=Pending 2>/dev/null | grep ContainerCreating | wc -l || echo "0")
+            
+            # Check for CoreDNS pods specifically stuck due to CNI issues
+            coredns_stuck=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --field-selector status.phase=Pending 2>/dev/null | wc -l || echo "0")
+            
+            if [ "$cni_conflicts" -gt 0 ] || [ "$stuck_pods" -gt 3 ] || [ "$coredns_stuck" -gt 0 ]; then
+              echo "CNI_BRIDGE_CONFLICTS_DETECTED=true"
+              echo "Found indicators of CNI issues:"
+              echo "- CNI bridge conflict events: $cni_conflicts"
+              echo "- Pods stuck in ContainerCreating: $stuck_pods"  
+              echo "- CoreDNS pods stuck: $coredns_stuck"
+              exit 1
+            else
+              echo "No CNI bridge conflicts detected"
+              echo "CNI status looks healthy for flannel wait"
+              exit 0
+            fi
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: cni_conflict_check
+          failed_when: false
+          
+        - name: "Wait for flannel DaemonSet with timeout protection"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: DaemonSet
+            namespace: kube-flannel
+            name: kube-flannel-ds
+            wait: true
+            wait_condition:
+              type: Ready
+            wait_timeout: 120
+          register: flannel_wait_result
+          failed_when: false
+          when: '"CNI_BRIDGE_CONFLICTS_DETECTED=true" not in cni_conflict_check.stdout'
+          
+        - name: "Handle CNI conflicts detected during flannel wait"
+          debug:
+            msg: |
+              === CNI Bridge Conflicts Detected ===
+              Flannel cannot be ready due to CNI bridge IP conflicts.
+              Setting flag for post-deployment fixes.
+              Deployment will continue and apply CNI bridge fix automatically.
+          when: '"CNI_BRIDGE_CONFLICTS_DETECTED=true" in cni_conflict_check.stdout'
+          
+        - name: "Set CNI conflict flag for post-deployment handling"
+          shell: echo "CNI_CONFLICT_DETECTED=true" > /tmp/cni_conflict_detected
+          when: '"CNI_BRIDGE_CONFLICTS_DETECTED=true" in cni_conflict_check.stdout'
+          
+        - name: "Handle flannel wait timeout"
+          debug:
+            msg: |
+              === Flannel Wait Timeout ===
+              Flannel DaemonSet did not become ready within 120 seconds.
+              This may indicate CNI issues that will be handled by post-deployment fixes.
+              Continuing deployment to allow fixes to run.
+          when: 
+            - '"CNI_BRIDGE_CONFLICTS_DETECTED=true" not in cni_conflict_check.stdout'
+            - flannel_wait_result.failed | default(false)
+            
+        - name: "Display flannel readiness status"
+          debug:
+            msg: |
+              Flannel Readiness Check Complete:
+              - CNI conflicts detected: {{ "Yes" if "CNI_BRIDGE_CONFLICTS_DETECTED=true" in cni_conflict_check.stdout else "No" }}
+              - Flannel wait completed: {{ "Yes" if not (flannel_wait_result.failed | default(false)) else "No (timeout)" }}
+              - Post-deployment fixes required: {{ "Yes" if "CNI_BRIDGE_CONFLICTS_DETECTED=true" in cni_conflict_check.stdout or (flannel_wait_result.failed | default(false)) else "No" }}
       ignore_errors: yes
 
     - name: "Check if any critical pods are failing"
