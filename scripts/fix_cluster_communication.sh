@@ -10,6 +10,26 @@
 
 set -e
 
+# CLI flags
+NON_INTERACTIVE=false
+COLLECT_LOGS=true
+
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --non-interactive|-y)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --no-collect-logs)
+            COLLECT_LOGS=false
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 # Color output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -132,7 +152,39 @@ initial_diagnosis() {
     fi
     
     echo
-    read -p "Press Enter to continue with fixes, or Ctrl+C to abort..."
+    if [ "$NON_INTERACTIVE" = false ]; then
+        read -p "Press Enter to continue with fixes, or Ctrl+C to abort..."
+    else
+        info "Non-interactive mode: continuing without user prompt"
+    fi
+}
+
+# Collect diagnostics (kubectl output + pod logs) to a timestamped directory
+collect_diagnostics() {
+    if [ "$COLLECT_LOGS" != true ]; then
+        warn "Skipping diagnostics collection (disabled)"
+        return
+    fi
+
+    local outdir="/tmp/fix-cluster-diag-$(date +%s)"
+    mkdir -p "$outdir"
+    info "Collecting diagnostics to $outdir"
+
+    kubectl get nodes -o wide > "$outdir"/nodes.txt 2>&1 || true
+    kubectl get pods --all-namespaces -o wide > "$outdir"/pods.txt 2>&1 || true
+    kubectl get events --all-namespaces --sort-by='.lastTimestamp' > "$outdir"/events.txt 2>&1 || true
+
+    # collect logs and describe for known system components that often fail
+    for ns in kube-system kube-flannel kube-system monitoring jellyfin; do
+        kubectl -n "$ns" get pods -o name 2>/dev/null | while read -r p; do
+            name=$(echo "$p" | sed 's#pod/##')
+            kubectl -n "$ns" describe pod "$name" > "$outdir/${ns}-${name}-describe.txt" 2>&1 || true
+            kubectl -n "$ns" logs "$name" --all-containers=true > "$outdir/${ns}-${name}-logs.txt" 2>&1 || true
+        done
+    done
+
+    info "Diagnostics collected. Tarball: ${outdir}.tar.gz"
+    tar -czf "${outdir}.tar.gz" -C "$(dirname "$outdir")" "$(basename "$outdir")" || true
 }
 
 # Main execution
@@ -152,32 +204,43 @@ main() {
     echo
     info "Step 1: Fixing iptables/nftables compatibility issues"
     if ! run_fix_script "fix_iptables_compatibility.sh" "iptables/nftables compatibility fix"; then
-        warn "iptables compatibility fix had issues, but continuing..."
+        warn "iptables compatibility fix had issues, attempting diagnostics and retries"
         overall_success=false
+        collect_diagnostics
     fi
     
     # Fix 2: CNI bridge conflicts (run before pod fixes)
     echo
     info "Step 2: Fixing CNI bridge conflicts"
     if ! run_fix_script "fix_cni_bridge_conflict.sh" "CNI bridge conflict fix"; then
-        warn "CNI bridge fix had issues, but continuing..."
+        warn "CNI bridge fix had issues, attempting diagnostics and retrying flannel daemonset restart"
         overall_success=false
+        collect_diagnostics
+        kubectl -n kube-flannel rollout restart daemonset kube-flannel-ds 2>/dev/null || kubectl -n kube-system rollout restart daemonset kube-flannel-ds 2>/dev/null || true
+        sleep 8
     fi
     
     # Fix 3: kube-proxy and remaining pod issues
     echo
     info "Step 3: Fixing kube-proxy and pod issues"
     if ! run_fix_script "fix_remaining_pod_issues.sh" "kube-proxy and pod issues fix"; then
-        warn "Pod issues fix had issues, but continuing..."
+        warn "Pod issues fix had issues, attempting diagnostics and daemonset restarts"
         overall_success=false
+        collect_diagnostics
+        # Try restarting kube-proxy and flannel daemonsets as a remediation attempt
+        kubectl -n kube-system rollout restart daemonset kube-proxy || true
+        kubectl -n kube-flannel rollout restart daemonset kube-flannel-ds 2>/dev/null || kubectl -n kube-system rollout restart daemonset kube-flannel-ds 2>/dev/null || true
+        info "Requested daemonset restarts; waiting briefly for pods to come up"
+        sleep 12
     fi
     
     # Fix 4: kubectl configuration on worker nodes
     echo
     info "Step 4: Fixing kubectl configuration on worker nodes"
     if ! run_fix_script "fix_worker_kubectl_config.sh" "kubectl worker node configuration"; then
-        warn "kubectl configuration had issues, but continuing..."
+        warn "kubectl configuration had issues, collecting diagnostics"
         overall_success=false
+        collect_diagnostics
     fi
     
     # Wait for services to stabilize
@@ -189,8 +252,9 @@ main() {
     echo
     info "=== Final Validation ==="
     if ! run_fix_script "validate_cluster_communication.sh" "cluster communication validation"; then
-        warn "Validation found remaining issues"
+        warn "Validation found remaining issues, collecting diagnostics"
         overall_success=false
+        collect_diagnostics
     fi
     
     # Final summary

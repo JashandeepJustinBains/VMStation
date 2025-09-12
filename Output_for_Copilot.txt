@@ -1,182 +1,241 @@
+root@masternode:/srv/monitoring_data/VMStation# sudo ./scripts/fix_cluster_communication.sh
+=== VMStation Cluster Communication Master Fix ===
+Timestamp: Fri 12 Sep 2025 06:42:28 PM EDT
+This script will fix the following issues:
+  - kubectl connection refused errors on worker nodes
+  - kube-proxy CrashLoopBackOff problems
+  - iptables/nftables compatibility issues
+  - NodePort service connectivity failures
+  - CNI bridge conflicts
 
-TASK [Reload systemd and restart containerd and kubelet] *******************************************************************************************************************************************************
-skipping: [storagenodet3500] => (item=containerd)
-skipping: [storagenodet3500] => (item=kubelet)
-skipping: [storagenodet3500]
-changed: [homelab] => (item=containerd)
-changed: [homelab] => (item=kubelet)
+[INFO] Checking prerequisites...
+[SUCCESS] ✅ Prerequisites check passed
+[INFO] === Initial Problem Diagnosis ===
+[INFO] ✅ kubectl can access the cluster
+Current cluster status:
+NAME               STATUS   ROLES           AGE     VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME
+homelab            Ready    <none>          4h29m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.27
+masternode         Ready    control-plane   6h59m   v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-32-amd64                containerd://1.6.20
+storagenodet3500   Ready    <none>          6h24m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-34-amd64                containerd://1.6.20
 
-TASK [Register kubeadm flags file existence] *******************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-ok: [homelab]
+Current pod issues:
+No problematic pods found
 
-TASK [Enhanced kubelet validation for post-wipe workers] *******************************************************************************************************************************************************
-skipping: [storagenodet3500]
-fatal: [homelab]: FAILED! => {"changed": true, "cmd": "echo \"=== Post-Join Kubelet Validation for Wiped Worker ===\"\necho \"Timestamp: $(date)\"\necho \"\"\n\n# Check if kubelet is active\nif ! systemctl is-active kubelet >/dev/null 2>&1; then\n  echo \"ERROR: kubelet is not running after join\"\n  exit 1\nfi\necho \"✓ kubelet service is active\"\n\n# Check kubelet logs for standalone mode indicators\nif journalctl -u kubelet --no-pager --since \"10 minutes ago\" | grep -q \"standalone\"; then\n  echo \"ERROR: kubelet is still in standalone mode\"\n  echo \"This indicates the join failed to properly connect to control-plane\"\n  exit 1\nfi\necho \"✓ kubelet is not in standalone mode\"\n\n# Check for successful cluster connection\nif journalctl -u kubelet --no-pager --since \"10 minutes ago\" | grep -q \"Started kubelet\"; then\n  if ! journalctl -u kubelet --no-pager --since \"10 minutes ago\" | grep -q \"No API server defined\"; then\n    echo \"✓ kubelet successfully connected to cluster\"\n    \n    # Additional validation for wiped workers\n    if [ -f /etc/kubernetes/kubelet.conf ]; then\n      server_ip=$(grep \"server:\" /etc/kubernetes/kubelet.conf | awk '{print $2}' | cut -d':' -f1 | sed 's|https://||')\n      if [ \"$server_ip\" = \"192.168.4.63\" ]; then\n        echo \"✓ kubelet.conf points to correct control-plane: $server_ip\"\n      else\n        echo \"WARNING: kubelet.conf server mismatch - expected 192.168.4.63, got $server_ip\"\n      fi\n    else\n      echo \"ERROR: kubelet.conf not found after successful join\"\n      exit 1\n    fi\n    \n    exit 0\n  else\n    echo \"ERROR: kubelet started but no API server connection\"\n    exit 1\n  fi\nelse\n  echo \"WARNING: kubelet status unclear\"\n  exit 1\nfi\n", "delta": "0:00:00.016211", "end": "2025-09-12 14:07:26.178505", "failed_when_result": true, "msg": "non-zero return code", "rc": 1, "start": "2025-09-12 14:07:26.162294", "stderr": "", "stderr_lines": [], "stdout": "=== Post-Join Kubelet Validation for Wiped Worker ===\nTimestamp: Fri 12 Sep 2025 02:07:26 PM EDT\n\nERROR: kubelet is not running after join", "stdout_lines": ["=== Post-Join Kubelet Validation for Wiped Worker ===", "Timestamp: Fri 12 Sep 2025 02:07:26 PM EDT", "", "ERROR: kubelet is not running after join"]}
+[INFO] Checking for iptables compatibility issues...
+[INFO] ✅ iptables NAT table accessible
 
-TASK [Display kubelet validation results] **********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Checking CNI bridge configuration...
+[INFO] ✅ CNI bridge IP is correct: 10.244.0.1/16
 
-TASK [Verify node appears in cluster from control plane] *******************************************************************************************************************************************************
-skipping: [storagenodet3500]
+Press Enter to continue with fixes, or Ctrl+C to abort...
 
-TASK [Display cluster integration status] **********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] === Starting Cluster Communication Fixes ===
 
-TASK [Wait for Flannel DaemonSet to be ready on control plane] *************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Step 1: Fixing iptables/nftables compatibility issues
+[INFO] Running: iptables/nftables compatibility fix
+Script: fix_iptables_compatibility.sh
+=== iptables/nftables Compatibility Fix ===
+Timestamp: Fri 12 Sep 2025 06:42:34 PM EDT
 
-TASK [Check CNI configuration file exists] *********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Checking for existing iptables/nftables compatibility issues
+[INFO] No compatibility issues detected
+[INFO] No iptables compatibility issues detected
+[INFO] Detecting iptables backend configuration
+Current iptables alternative: /usr/sbin/iptables-nft
+[WARN] System is using nftables backend for iptables
+[WARN] System is using nftables backend but no immediate issues detected
+Consider switching to legacy iptables for better Kubernetes compatibility
+[SUCCESS] ✅ iptables/nftables compatibility fix completed successfully
 
-TASK [Validate CNI configuration syntax] ***********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Step 2: Fixing CNI bridge conflicts
+[INFO] Running: CNI bridge conflict fix
+Script: fix_cni_bridge_conflict.sh
+[INFO] Backing up CNI configuration and state to /tmp/cni-backup-1757716954
+[INFO] Inspecting current cni0 bridge
+[INFO] cni0 exists with IP: 10.244.0.1/16
+[INFO] cni0 already matches desired bridge IP. No action needed.
+[SUCCESS] ✅ CNI bridge conflict fix completed successfully
 
-TASK [Enhanced pre-join CNI preparation] ***********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Step 3: Fixing kube-proxy and pod issues
+[INFO] Running: kube-proxy and pod issues fix
+Script: fix_remaining_pod_issues.sh
+=== VMStation Remaining Pod Issues Fix ===
+Timestamp: Fri 12 Sep 2025 06:42:34 PM EDT
 
-TASK [Create CNI directories on worker nodes] ******************************************************************************************************************************************************************
-skipping: [storagenodet3500] => (item=/opt/cni/bin)
-skipping: [storagenodet3500] => (item=/etc/cni/net.d)
-skipping: [storagenodet3500] => (item=/var/lib/cni/networks)
-skipping: [storagenodet3500] => (item=/var/lib/cni/results)
-skipping: [storagenodet3500]
+[INFO] Step 1: Fix Jellyfin readiness probe issues
+Current jellyfin status: Ready=false, Restarts=2
+[WARN] Jellyfin pod has readiness issues - applying fixes
+[INFO] Ensuring jellyfin volume directories exist with correct permissions
+[DEBUG] Fixed /srv/media permissions
+[DEBUG] Fixed /var/lib/jellyfin permissions
+[INFO] Cleaning up existing Jellyfin resources to prevent conflicts
+service "jellyfin-service" deleted from jellyfin namespace
+pod "jellyfin" deleted from jellyfin namespace
+[INFO] Updating jellyfin pod configuration with improved health checks
+pod/jellyfin created
+[INFO] Ensuring Jellyfin service exists
+service/jellyfin-service created
+[INFO] Waiting for pod jellyfin/jellyfin to be ready (timeout: 300s)
+  Still waiting... Status: Running, Ready: false (30/300s)
+  Still waiting... Status: Running, Ready: false (60/300s)
+  Still waiting... Status: Running, Ready: false (90/300s)
+  Still waiting... Status: Running, Ready: false (120/300s)
+  Still waiting... Status: Running, Ready: false (150/300s)
+  Still waiting... Status: Running, Ready: false (180/300s)
+  Still waiting... Status: Running, Ready: false (210/300s)
+  Still waiting... Status: Running, Ready: false (240/300s)
+  Still waiting... Status: Running, Ready: false (270/300s)
+  Still waiting... Status: Running, Ready: false (300/300s)
+[WARN] Timeout waiting for pod jellyfin/jellyfin
+[WARN] ⚠️  kube-proxy and pod issues fix completed with warnings or errors
+[WARN] Pod issues fix had issues, but continuing...
 
-TASK [Download and install Flannel CNI plugin binary on worker nodes] ******************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Step 4: Fixing kubectl configuration on worker nodes
+[INFO] Running: kubectl worker node configuration
+Script: fix_worker_kubectl_config.sh
+=== Worker Node kubectl Configuration Fix ===
+Timestamp: Fri 12 Sep 2025 06:48:47 PM EDT
+Control Plane IP: 192.168.4.63
 
-TASK [Fallback: Download Flannel CNI plugin with curl on worker nodes] *****************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Detected control plane node (found /etc/kubernetes/admin.conf)
+[INFO] Running on control plane node - kubectl should already be configured
+[INFO] Validating kubectl configuration
+[INFO] ✓ kubectl client is working
+[INFO] ✓ kubectl can connect to cluster
+Current cluster nodes:
+NAME               STATUS   ROLES           AGE     VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME
+homelab            Ready    <none>          4h36m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.27
+masternode         Ready    control-plane   7h5m    v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-32-amd64                containerd://1.6.20
+storagenodet3500   Ready    <none>          6h31m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-34-amd64                containerd://1.6.20
+[INFO] ✓ Control plane kubectl configuration is working
+[INFO] Setting up kubectl for all relevant users
 
-TASK [Enhanced fallback: Download Flannel CNI plugin with wget on worker nodes] ********************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] kubectl configuration setup complete!
 
-TASK [Verify Flannel CNI plugin download succeeded on worker nodes] ********************************************************************************************************************************************
-skipping: [storagenodet3500]
+To use kubectl, ensure your KUBECONFIG is set:
+  export KUBECONFIG=/root/.kube/config
+  # or for regular users:
+  export KUBECONFIG=$HOME/.kube/config
+[SUCCESS] ✅ kubectl worker node configuration completed successfully
 
-TASK [Post-download verification: Ensure flannel binary is executable and valid on worker nodes] ***************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] Waiting for services to stabilize...
 
-TASK [Download and install additional CNI plugins on worker nodes] *********************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] === Final Validation ===
+[INFO] Running: cluster communication validation
+Script: validate_cluster_communication.sh
+=== VMStation Cluster Communication Validation ===
+Timestamp: Fri 12 Sep 2025 06:49:17 PM EDT
 
-TASK [Create basic CNI configuration for worker nodes BEFORE containerd restart] *******************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] === Step 1: kubectl Connectivity Tests ===
+[INFO] Test 1: kubectl client version check
+[ERROR] ❌ FAIL: kubectl client version check
+[WARN] ⚠️  cluster communication validation completed with warnings or errors
+[WARN] Validation found remaining issues
 
-TASK [Create Flannel subnet environment directory] *************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+[INFO] === Fix Summary ===
+[WARN] ⚠️  Some fixes completed with warnings or errors
 
-TASK [Restart containerd AFTER CNI configuration is ready] *****************************************************************************************************************************************************
-skipping: [storagenodet3500]
+Common remaining issues and solutions:
+1. If kubectl still fails: manually copy kubeconfig from control plane
+2. If NodePort not accessible: check firewall settings
+3. If pods still crash: check pod logs for specific errors
+4. If networking fails: consider cluster restart
 
-TASK [Wait for containerd to fully initialize] *****************************************************************************************************************************************************************
-skipping: [storagenodet3500]
+For detailed diagnostics, run:
+  ./scripts/validate_cluster_communication.sh
+  kubectl get pods --all-namespaces
+  kubectl get events --all-namespaces --sort-by='.lastTimestamp'
 
-TASK [Initialize containerd image filesystem for kubelet] ******************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Display containerd image filesystem status] **************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Verify containerd is ready for kubelet] ******************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Starting kubeadm join process] ***************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Stop kubelet service before join] ************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Remove any stale kubelet configuration files] ************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Ensure kubelet service is enabled for post-join management] **********************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Wait for kubelet to fully stop] **************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Join cluster with retry logic] ***************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Capture kubelet logs for troubleshooting] ****************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Display failure diagnostics] *****************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Cleaning up after failed join] ***************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Stop services for comprehensive cleanup] *****************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Clean up networking rules] *******************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Remove Kubernetes state directories] *********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Reset systemd services] **********************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Restart containerd and prepare for retry] ****************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Wait for containerd to be fully ready after restart] *****************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Reinitialize containerd image filesystem after cleanup] **************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Recreate CNI directories] ********************************************************************************************************************************************************************************
-skipping: [storagenodet3500] => (item=/etc/cni/net.d)
-skipping: [storagenodet3500] => (item=/run/flannel)
-skipping: [storagenodet3500]
-
-TASK [Recreate basic CNI configuration] ************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Enable kubelet for kubeadm join] *************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Verify containerd is running before retry] ***************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Wait before retry to ensure system stability] ************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Stop kubelet service before retry] ***********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Remove any stale kubelet configuration files before retry] ***********************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Wait for kubelet to fully stop before retry] *************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Retry join after thorough cleanup] ***********************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Display join result] *************************************************************************************************************************************************************************************
-skipping: [storagenodet3500]
-
-TASK [Remove join command and cleanup temporary files] *********************************************************************************************************************************************************
-skipping: [storagenodet3500] => (item=/tmp/kubeadm-join.sh)
-skipping: [storagenodet3500] => (item=/tmp/validate_join_prerequisites.sh)
-skipping: [storagenodet3500] => (item=/tmp/enhanced_kubeadm_join.sh)
-skipping: [storagenodet3500]
-
-PLAY [Post-Wipe Worker Integration Validation] *****************************************************************************************************************************************************************
-
-TASK [Gathering Facts] *****************************************************************************************************************************************************************************************
-ok: [masternode]
-
-TASK [Final cluster status check after post-wipe worker joins] *************************************************************************************************************************************************
-changed: [masternode]
-
-TASK [Display final cluster integration summary] ***************************************************************************************************************************************************************
-ok: [masternode] => {
-    "msg": "=== Final Cluster Status After Post-Wipe Worker Integration ===\\n          Timestamp: Fri 12 Sep 2025 02:07:28 PM EDT\\n          \\n          Cluster Nodes:\\n          NAME               STATUS   ROLES           AGE    VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION   CONTAINER-RUNTIME\\n          masternode         Ready    control-plane   144m   v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)   6.1.0-32-amd64   containerd://1.6.20\\n          storagenodet3500   Ready    <none>          109m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)   6.1.0-34-amd64   containerd://1.6.20\\n          \\n          Node Readiness Status:\\n          NAME               STATUS        READY\\n          masternode         PIDPressure   False\\n          storagenodet3500   PIDPressure   False\\n          \\n          Flannel DaemonSet Status:\\n          NAME              DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE    CONTAINERS     IMAGES                              SELECTOR\\n          kube-flannel-ds   2         2         2       2            2           <none>          144m   kube-flannel   docker.io/flannel/flannel:v0.24.2   app=flannel,k8s-app=flannel\\n          \\n          Pod Network Status:\\n          NAME                    READY   STATUS    RESTARTS   AGE    IP             NODE               NOMINATED NODE   READINESS GATES\\n          kube-flannel-ds-f68pp   1/1     Running   0          105m   192.168.4.61   storagenodet3500   <none>           <none>\\n          kube-flannel-ds-q6zn9   1/1     Running   0          105m   192.168.4.63   masternode         <none>           <none>\\n          \\n          Cluster Summary:\\n          - Total nodes: 2\\n          - Ready nodes: 2\\n          - Control-plane: 1\\n          - Storage nodes: 1\\n          - Compute nodes: 1\\n          \\n          ✅ POST-WIPE WORKER INTEGRATION SUCCESSFUL\\n          All wiped workers successfully joined control-plane cluster\n\n====================================\nPOST-WIPE WORKER JOIN PROCESS COMPLETE\n====================================\n\nThe enhanced worker join process has:\n✓ Detected post-wipe worker states\n✓ Validated control-plane readiness\n✓ Generated fresh join tokens (2h TTL)\n✓ Performed enhanced reset and cleanup\n✓ Successfully joined workers to control-plane\n✓ Verified kubelet cluster connectivity (NOT standalone)\n✓ Confirmed node registration in cluster\n\nWorkers are now managed by the control-plane using TLS certificates.\nNo standalone mode detected - cluster formation successful!\n"
-}
-
+=== Master Fix Complete ===
+Timestamp: Fri 12 Sep 2025 06:49:17 PM EDT
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -o wide --all-namespaces
+NAMESPACE      NAME                                 READY   STATUS             RESTARTS        AGE     IP             NODE               NOMINATED NODE   READINESS GATES
+jellyfin       jellyfin                             0/1     Running            1 (84s ago)     7m27s   10.244.0.15    storagenodet3500   <none>           <none>
+kube-flannel   kube-flannel-ds-n8htq                0/1     CrashLoopBackOff   7 (42s ago)     21m     192.168.4.62   homelab            <none>           <none>
+kube-flannel   kube-flannel-ds-nfrtq                1/1     Running            0               21m     192.168.4.63   masternode         <none>           <none>
+kube-flannel   kube-flannel-ds-xp7fl                1/1     Running            0               22m     192.168.4.61   storagenodet3500   <none>           <none>
+kube-system    coredns-68444cf7cd-85vlv             1/1     Running            0               7h6m    10.244.0.2     masternode         <none>           <none>
+kube-system    etcd-masternode                      1/1     Running            5               7h6m    192.168.4.63   masternode         <none>           <none>
+kube-system    kube-apiserver-masternode            1/1     Running            13 (7h4m ago)   7h6m    192.168.4.63   masternode         <none>           <none>
+kube-system    kube-controller-manager-masternode   1/1     Running            34 (7h4m ago)   7h6m    192.168.4.63   masternode         <none>           <none>
+kube-system    kube-proxy-cgfkw                     1/1     Running            0               22m     192.168.4.61   storagenodet3500   <none>           <none>
+kube-system    kube-proxy-nggrw                     1/1     Running            0               21m     192.168.4.63   masternode         <none>           <none>
+kube-system    kube-proxy-zs88s                     0/1     CrashLoopBackOff   7 (60s ago)     22m     192.168.4.62   homelab            <none>           <none>
+kube-system    kube-scheduler-masternode            1/1     Running            34 (7h4m ago)   7h6m    192.168.4.63   masternode         <none>           <none>
+monitoring     grafana-79747fbd7-pgsck              1/1     Running            0               4h30m   10.244.0.3     masternode         <none>           <none>
+monitoring     prometheus-5bbc459489-x75vg          1/1     Running            0               4h30m   10.244.0.4     masternode         <none>           <none>
+root@masternode:/srv/monitoring_data/VMStation# kubectl logs jellyfin -n jellyfin
+[22:48:47] [INF] [1] Main: Jellyfin version: 10.10.7
+[22:48:47] [INF] [1] Main: Environment Variables: ["[JELLYFIN_SERVICE_SERVICE_PORT_HTTPS, 8920]", "[JELLYFIN_SERVICE_PORT_8096_TCP_ADDR, 10.99.226.212]", "[JELLYFIN_SERVICE_SERVICE_PORT, 8096]", "[JELLYFIN_DATA_DIR, /config]", "[JELLYFIN_SERVICE_PORT, tcp://10.99.226.212:8096]", "[JELLYFIN_FFMPEG, /usr/lib/jellyfin-ffmpeg/ffmpeg]", "[JELLYFIN_SERVICE_PORT_8920_TCP_ADDR, 10.99.226.212]", "[JELLYFIN_SERVICE_SERVICE_HOST, 10.99.226.212]", "[JELLYFIN_SERVICE_PORT_8920_TCP, tcp://10.99.226.212:8920]", "[JELLYFIN_SERVICE_PORT_8096_TCP, tcp://10.99.226.212:8096]", "[JELLYFIN_WEB_DIR, /jellyfin/jellyfin-web]", "[JELLYFIN_CACHE_DIR, /cache]", "[JELLYFIN_SERVICE_PORT_8096_TCP_PROTO, tcp]", "[JELLYFIN_PublishedServerUrl, http://192.168.4.61:30096]", "[JELLYFIN_SERVICE_PORT_8920_TCP_PORT, 8920]", "[JELLYFIN_SERVICE_PORT_8920_TCP_PROTO, tcp]", "[JELLYFIN_SERVICE_PORT_8096_TCP_PORT, 8096]", "[JELLYFIN_LOG_DIR, /config/log]", "[JELLYFIN_SERVICE_SERVICE_PORT_HTTP, 8096]", "[JELLYFIN_CONFIG_DIR, /config/config]"]
+[22:48:47] [INF] [1] Main: Arguments: ["/jellyfin/jellyfin.dll"]
+[22:48:47] [INF] [1] Main: Operating system: Debian GNU/Linux 12 (bookworm)
+[22:48:47] [INF] [1] Main: Architecture: X64
+[22:48:47] [INF] [1] Main: 64-Bit Process: True
+[22:48:47] [INF] [1] Main: User Interactive: True
+[22:48:47] [INF] [1] Main: Processor count: 1
+[22:48:47] [INF] [1] Main: Program data path: /config
+[22:48:47] [INF] [1] Main: Log directory path: /config/log
+[22:48:47] [INF] [1] Main: Config directory path: /config/config
+[22:48:47] [INF] [1] Main: Cache path: /cache
+[22:48:47] [INF] [1] Main: Temp directory path: /tmp/jellyfin
+[22:48:47] [INF] [1] Main: Web resources path: /jellyfin/jellyfin-web
+[22:48:47] [INF] [1] Main: Application directory: /jellyfin/
+[22:48:47] [INF] [1] Emby.Server.Implementations.AppBase.BaseConfigurationManager: Setting cache path: /cache
+[22:48:47] [INF] [1] Emby.Server.Implementations.ApplicationHost: Loading assemblies
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Defined LAN subnets: ["127.0.0.1/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Defined LAN exclusions: []
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Used LAN subnets: ["127.0.0.1/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Filtered interface addresses: ["127.0.0.1", "10.244.0.15"]
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Bind Addresses ["0.0.0.0"]
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Remote IP filter is Allowlist
+[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Filtered subnets: []
+[22:48:51] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: TMDb 10.10.7.0
+[22:48:51] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: Studio Images 10.10.7.0
+[22:48:51] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: OMDb 10.10.7.0
+[22:48:52] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: MusicBrainz 10.10.7.0
+[22:48:52] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: AudioDB 10.10.7.0
+[22:48:52] [WRN] [1] Microsoft.AspNetCore.DataProtection.Repositories.EphemeralXmlRepository: Using an in-memory repository. Keys will not be persisted to storage.
+[22:48:52] [WRN] [1] Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager: Neither user profile nor HKLM registry available. Using an ephemeral key repository. Protected data will be unavailable when application exits.
+[22:48:52] [INF] [1] Main: Kestrel is listening on 0.0.0.0
+[22:48:52] [WRN] [1] Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager: No XML encryptor configured. Key {54d1ee51-284b-463d-9767-6900db634bb1} may be persisted to storage in unencrypted form.
+[22:48:53] [WRN] [1] Microsoft.AspNetCore.StaticFiles.StaticFileMiddleware: The WebRootPath was not found: /wwwroot. Static files may be unavailable.
+[22:48:53] [INF] [1] Emby.Server.Implementations.ApplicationHost: Running startup tasks
+[22:48:53] [INF] [8] Emby.Server.Implementations.IO.LibraryMonitor: Watching directory /media/Movies
+[22:48:53] [INF] [8] Emby.Server.Implementations.IO.LibraryMonitor: Watching directory /media/TV Shows
+[22:48:53] [INF] [1] Emby.Server.Implementations.ScheduledTasks.TaskManager: Daily trigger for Generate Trickplay Images set to fire at 2025-09-13 03:00:00.000 +00:00, which is 04:11:06.6569623 from now.
+[22:48:53] [INF] [1] Emby.Server.Implementations.ScheduledTasks.TaskManager: Daily trigger for Extract Chapter Images set to fire at 2025-09-13 02:00:00.000 +00:00, which is 03:11:06.6481088 from now.
+[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Found ffmpeg version 7.0.2
+[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available decoders: ["libdav1d", "av1", "av1_cuvid", "av1_qsv", "h264", "h264_qsv", "h264_cuvid", "hevc", "hevc_qsv", "hevc_cuvid", "mpeg2video", "mpeg2_qsv", "mpeg2_cuvid", "mpeg4", "mpeg4_cuvid", "msmpeg4", "vc1_qsv", "vc1_cuvid", "vp8", "libvpx", "vp8_cuvid", "vp8_qsv", "vp9", "libvpx-vp9", "vp9_cuvid", "vp9_qsv", "aac", "ac3", "ac4", "dca", "flac", "mp3", "truehd"]
+[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available encoders: ["libsvtav1", "av1_nvenc", "av1_qsv", "av1_amf", "av1_vaapi", "libx264", "h264_amf", "h264_nvenc", "h264_qsv", "h264_v4l2m2m", "h264_vaapi", "libx265", "hevc_amf", "hevc_nvenc", "hevc_qsv", "hevc_vaapi", "mjpeg_qsv", "mjpeg_vaapi", "aac", "libfdk_aac", "ac3", "alac", "dca", "flac", "libmp3lame", "libopus", "truehd", "libvorbis", "srt"]
+[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available filters: ["bwdif_cuda", "deinterlace_qsv", "deinterlace_vaapi", "flip_vulkan", "hwupload_cuda", "hwupload_vaapi", "libplacebo", "overlay_opencl", "overlay_qsv", "overlay_vaapi", "overlay_vulkan", "overlay_cuda", "procamp_vaapi", "scale_cuda", "scale_opencl", "scale_qsv", "scale_vaapi", "scale_vulkan", "tonemapx", "tonemap_cuda", "tonemap_opencl", "tonemap_vaapi", "transpose_cuda", "transpose_opencl", "transpose_vaapi", "transpose_vulkan", "vpp_qsv", "yadif_cuda", "zscale", "alphasrc"]
+[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available hwaccel types: ["cuda", "vaapi", "qsv", "drm", "opencl", "vulkan"]
+[22:48:56] [INF] [8] Emby.Server.Implementations.ScheduledTasks.TaskManager: Clean up collections and playlists Completed after 0 minute(s) and 0 seconds
+[22:48:56] [INF] [8] Emby.Server.Implementations.ScheduledTasks.TaskManager: Clean Transcode Directory Completed after 0 minute(s) and 0 seconds
+[22:49:14] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: FFmpeg: /usr/lib/jellyfin-ffmpeg/ffmpeg
+[22:49:14] [INF] [1] Emby.Server.Implementations.ApplicationHost: ServerId: 6877a13a13684a05a7c7ca43bf5d02c8
+[22:49:14] [INF] [1] Emby.Server.Implementations.ApplicationHost: Core startup complete
+[22:49:14] [INF] [1] Main: Startup complete 0:00:27.9672657
+[22:49:17] [ERR] [10] Emby.Server.Implementations.Updates.InstallationManager: An error occurred while accessing the plugin manifest: https://repo.jellyfin.org/files/plugin/manifest.json
+System.Net.Http.HttpRequestException: Resource temporarily unavailable (repo.jellyfin.org:443)
+ ---> System.Net.Sockets.SocketException (11): Resource temporarily unavailable
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at Jellyfin.Networking.HappyEyeballs.HttpClientExtension.AttemptConnection(AddressFamily addressFamily, SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+   at Jellyfin.Networking.HappyEyeballs.HttpClientExtension.OnConnect(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.AddHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.DecompressionHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at System.Net.Http.Json.HttpClientJsonExtensions.<FromJsonAsyncCore>g__Core|12_0[TValue,TJsonOptions](HttpClient client, Task`1 responseTask, Boolean usingResponseHeadersRead, CancellationTokenSource linkedCTS, Func`4 deserializeMethod, TJsonOptions jsonOptions, CancellationToken cancellationToken)
+   at Emby.Server.Implementations.Updates.InstallationManager.GetPackages(String manifestName, String manifest, Boolean filterIncompatible, CancellationToken cancellationToken)
+[22:49:17] [INF] [10] Emby.Server.Implementations.ScheduledTasks.TaskManager: Update Plugins Completed after 0 minute(s) and 20 seconds
