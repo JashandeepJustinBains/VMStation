@@ -77,6 +77,19 @@ log_both() {
     echo "$1" | tee -a "$LOG_FILE"
 }
 
+# Dump helpful diagnostics on error for Ansible visibility
+on_error_dump() {
+    echo "\n===== ENHANCED JOIN FAILURE DUMP =====" | tee -a "$LOG_FILE"
+    echo "Last 200 lines of join log:" | tee -a "$LOG_FILE"
+    tail -n 200 "$LOG_FILE" 2>/dev/null | tee -a "$LOG_FILE"
+    echo "\nRecent kubelet journal (last 200 lines):" | tee -a "$LOG_FILE"
+    journalctl -u kubelet --no-pager -n 200 2>/dev/null | tee -a "$LOG_FILE"
+    echo "===== END DUMP =====\n" | tee -a "$LOG_FILE"
+}
+
+# Install ERR trap so failed runs dump diagnostics for Ansible
+trap 'on_error_dump' ERR
+
 # Function to check if node is already joined
 check_existing_join() {
     info "Checking existing join status..."

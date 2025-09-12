@@ -1,218 +1,141 @@
-root@masternode:~# kubectl get pods -o wide --all-namespaces
-NAMESPACE      NAME                                 READY   STATUS              RESTARTS         AGE     IP             NODE         NOMINATED NODE   READINESS GATES
-kube-flannel   kube-flannel-ds-gjh88                1/1     Running             0                6m4s    192.168.4.63   masternode   <none>           <none>
-kube-system    coredns-68444cf7cd-85vlv             0/1     ContainerCreating   0                6m4s    <none>         masternode   <none>           <none>
-kube-system    etcd-masternode                      1/1     Running             5                6m18s   192.168.4.63   masternode   <none>           <none>
-kube-system    kube-apiserver-masternode            1/1     Running             13 (3m40s ago)   6m18s   192.168.4.63   masternode   <none>           <none>
-kube-system    kube-controller-manager-masternode   1/1     Running             34 (4m ago)      6m18s   192.168.4.63   masternode   <none>           <none>
-kube-system    kube-proxy-hfcqt                     1/1     Running             0                6m4s    192.168.4.63   masternode   <none>           <none>
-kube-system    kube-scheduler-masternode            1/1     Running             34 (3m58s ago)   6m18s   192.168.4.63   masternode   <none>           <none>
-root@masternode:~# kubectl describe pod coredns-68444cf7cd-85vlv -n kube-system
-Name:                 coredns-68444cf7cd-85vlv
-Namespace:            kube-system
-Priority:             2000000000
-Priority Class Name:  system-cluster-critical
-Service Account:      coredns
-Node:                 masternode/192.168.4.63
-Start Time:           Fri, 12 Sep 2025 11:43:36 -0400
-Labels:               k8s-app=kube-dns
-                      pod-template-hash=68444cf7cd
-Annotations:          <none>
-Status:               Pending
-IP:
-IPs:                  <none>
-Controlled By:        ReplicaSet/coredns-68444cf7cd
-Containers:
-  coredns:
-    Container ID:
-    Image:         registry.k8s.io/coredns/coredns:v1.11.1
-    Image ID:
-    Ports:         53/UDP (dns), 53/TCP (dns-tcp), 9153/TCP (metrics)
-    Host Ports:    0/UDP (dns), 0/TCP (dns-tcp), 0/TCP (metrics)
-    Args:
-      -conf
-      /etc/coredns/Corefile
-    State:          Waiting
-      Reason:       ContainerCreating
-    Ready:          False
-    Restart Count:  0
-    Limits:
-      memory:  170Mi
-    Requests:
-      cpu:        100m
-      memory:     70Mi
-    Liveness:     http-get http://:8080/health delay=60s timeout=5s period=10s #success=1 #failure=5
-    Readiness:    http-get http://:8181/ready delay=0s timeout=1s period=10s #success=1 #failure=3
-    Environment:  <none>
-    Mounts:
-      /etc/coredns from config-volume (ro)
-      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-dnqcs (ro)
-Conditions:
-  Type                        Status
-  PodReadyToStartContainers   False
-  Initialized                 True
-  Ready                       False
-  ContainersReady             False
-  PodScheduled                True
-Volumes:
-  config-volume:
-    Type:      ConfigMap (a volume populated by a ConfigMap)
-    Name:      coredns
-    Optional:  false
-  kube-api-access-dnqcs:
-    Type:                    Projected (a volume that contains injected data from multiple sources)
-    TokenExpirationSeconds:  3607
-    ConfigMapName:           kube-root-ca.crt
-    Optional:                false
-    DownwardAPI:             true
-QoS Class:                   Burstable
-Node-Selectors:              kubernetes.io/os=linux
-Tolerations:                 node-role.kubernetes.io/control-plane:NoSchedule op=Exists
-                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
-                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
-Events:
-  Type     Reason                  Age                    From               Message
-  ----     ------                  ----                   ----               -------
-  Normal   Scheduled               6m27s                  default-scheduler  Successfully assigned kube-system/coredns-68444cf7cd-85vlv to masternode
-  Warning  FailedCreatePodSandBox  6m27s                  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "c8cc0013df5ac741509983227706f458b8b6409d1f0fbe02571bcd480b392bb5": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Warning  FailedCreatePodSandBox  6m26s                  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "b73f871d4f69ca23a7104aa500f5d3843a5781abc62b0ea2105675bcff25f8ac": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Warning  FailedCreatePodSandBox  5m49s (x4 over 6m26s)  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_1": name "coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_1" is reserved for "b73f871d4f69ca23a7104aa500f5d3843a5781abc62b0ea2105675bcff25f8ac"
-  Warning  FailedCreatePodSandBox  5m37s                  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "6c134e2ab6aef24516dd89c9cb715076d547adb37c4eb0c79c567acde12fa970": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Warning  FailedCreatePodSandBox  4m44s (x5 over 5m37s)  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_1": name "coredns-68444cf7cd-85vlv_kube-system_1bca2941-ba01-4d20-ae9e-1b1debd95dee_1" is reserved for "6c134e2ab6aef24516dd89c9cb715076d547adb37c4eb0c79c567acde12fa970"
-  Warning  FailedCreatePodSandBox  4m29s                  kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "e73e9c478e6f007d8d46116dc5d0fc111582fc377867205263344237560e902a": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
-  Normal   SandboxChanged          84s (x31 over 6m27s)   kubelet            Pod sandbox changed, it will be killed and re-created.
+1.
+root@storagenodeT3500:~# # On the worker
+sudo ls -l /tmp/kubeadm-join-*.log
+sudo sed -n '1,200p' /tmp/kubeadm-join-*.log
+sudo sed -n '200,400p' /tmp/kubeadm-join-*.log
+# or just
+sudo tail -n +1 /tmp/kubeadm-join-*.log
+-rw-r--r-- 1 root root 262 Sep 11 16:43 /tmp/kubeadm-join-20250911-164339.log
+-rw-r--r-- 1 root root 262 Sep 11 17:00 /tmp/kubeadm-join-20250911-170008.log
+-rw-r--r-- 1 root root 262 Sep 11 17:19 /tmp/kubeadm-join-20250911-171906.log
+-rw-r--r-- 1 root root 262 Sep 11 18:17 /tmp/kubeadm-join-20250911-181722.log
+-rw-r--r-- 1 root root 262 Sep 11 18:34 /tmp/kubeadm-join-20250911-183414.log
+-rw-r--r-- 1 root root 262 Sep 11 18:53 /tmp/kubeadm-join-20250911-185335.log
+-rw-r--r-- 1 root root 262 Sep 12 12:14 /tmp/kubeadm-join-20250912-121458.log
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 7cxxkg.6keexohhde3ltzc0 --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 16:43:39 EDT 2025
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token z2vjhm.pk06n1w0vvlgyrev --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 17:00:08 EDT 2025
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token tkkgpv.8p6ikmwdg9sj7xje --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 17:19:06 EDT 2025
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 8x759m.l2gjl6t7eqjjmj0a --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 18:17:22 EDT 2025
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token x0qvtj.d9gvr65qwvytxdqb --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 18:34:14 EDT 2025
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 501c8t.k9lntrbuwxf6ruff --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 18:53:35 EDT 2025
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 61n19o.54ysv9uf5icbnj94 --discovery-token-ca-cert-hash sha256:00bbe219ecec7b05f790aa8a5382fd9cdc4ec5f2dca29554a5f2e2999ff1ad88
+Timestamp: Fri Sep 12 12:14:58 EDT 2025
+==> /tmp/kubeadm-join-20250911-164339.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 7cxxkg.6keexohhde3ltzc0 --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 16:43:39 EDT 2025
 
+==> /tmp/kubeadm-join-20250911-170008.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token z2vjhm.pk06n1w0vvlgyrev --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 17:00:08 EDT 2025
 
+==> /tmp/kubeadm-join-20250911-171906.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token tkkgpv.8p6ikmwdg9sj7xje --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 17:19:06 EDT 2025
 
-TASK [Wait for CoreDNS to stabilize after Flannel setup] **************************************************************************************************************************************
-Pausing for 30 seconds
-(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
-ok: [masternode]
+==> /tmp/kubeadm-join-20250911-181722.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 8x759m.l2gjl6t7eqjjmj0a --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 18:17:22 EDT 2025
 
-TASK [Check CoreDNS pod status and fix if needed] *********************************************************************************************************************************************
-changed: [masternode]
+==> /tmp/kubeadm-join-20250911-183414.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token x0qvtj.d9gvr65qwvytxdqb --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 18:34:14 EDT 2025
 
-TASK [Display CoreDNS fix results] ************************************************************************************************************************************************************
-ok: [masternode] => {
-    "msg": "CoreDNS Post-Flannel Validation Results:\n=== Post-Flannel CoreDNS Validation ===\\n              CoreDNS pods status:\\n                coredns-68444cf7cd-85vlv: Status=Pending, IP=<none>\\n                  ↳ CNI bridge IP conflict detected for this pod\\n              === CNI Bridge Conflict Detected ===\\n              CoreDNS pods cannot start due to CNI bridge IP conflict.\\n              This requires CNI bridge reset, which will be handled by post-deployment fixes.\\n              Skipping CoreDNS rollout wait to avoid hanging the deployment.\\n              \\n              The deployment will complete and run fix_cni_bridge_conflict.sh automatically.\\n              === Final CoreDNS Status ===\\n              NAME                       READY   STATUS              RESTARTS   AGE     IP       NODE         NOMINATED NODE   READINESS GATES\\n              coredns-68444cf7cd-85vlv   0/1     ContainerCreating   0          5m36s   <none>   masternode   <none>           <none>\n\n\n"
-}
+==> /tmp/kubeadm-join-20250911-185335.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 501c8t.k9lntrbuwxf6ruff --discovery-token-ca-cert-hash sha256:26304d60f1824517cf030fc7aeb71f9d678874099c138200279ff5ecd2f68ac8
+Timestamp: Thu Sep 11 18:53:35 EDT 2025
 
-TASK [Wait for API server to be ready] ********************************************************************************************************************************************************
-ok: [masternode]
+==> /tmp/kubeadm-join-20250912-121458.log <==
+=== Enhanced Kubeadm Join Process Started ===
+Command: kubeadm join 192.168.4.63:6443 --token 61n19o.54ysv9uf5icbnj94 --discovery-token-ca-cert-hash sha256:00bbe219ecec7b05f790aa8a5382fd9cdc4ec5f2dca29554a5f2e2999ff1ad88
+Timestamp: Fri Sep 12 12:14:58 EDT 2025
 
-TASK [Verify API server accessibility using kubectl] ******************************************************************************************************************************************
-changed: [masternode]
+2.
+Sep 12 11:41:39 storagenodeT3500 kubelet[76271]: E0912 11:41:39.018316   76271 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"jellyfin\" with CrashLoopBackOff: \"back-off 5m0s restarting failed container=jellyfin pod=jellyfin_jellyfin(a9acf74c-22f2-4c12-b1c8-2b1d3ec6a56f)\"" pod="jellyfin/jellyfin" podUID="a9acf74c-22f2-4c12-b1c8-2b1d3ec6a56f"
 
-TASK [Validate kubernetes-admin RBAC permissions] *********************************************************************************************************************************************
-changed: [masternode]
+3.
+root@storagenodeT3500:~# # On the worker (copy the join command printed earlier)
+sudo kubeadm join 192.168.4.63:6443 --token 61n19o.54ysv9uf5icbnj94 --discovery-token-ca-cert-hash sha256:00bbe219ecec7b05f790aa8a5382fd9cdc4ec5f2dca29554a5f2e2999ff1ad88 --v=5
+I0912 12:17:42.901085  451173 join.go:413] [preflight] found NodeName empty; using OS hostname as NodeName
+I0912 12:17:42.901377  451173 initconfiguration.go:122] detected and using CRI socket: unix:///var/run/containerd/containerd.sock
+[preflight] Running pre-flight checks
+I0912 12:17:42.901523  451173 preflight.go:93] [preflight] Running general checks
+I0912 12:17:42.901609  451173 checks.go:280] validating the existence of file /etc/kubernetes/kubelet.conf
+I0912 12:17:42.901637  451173 checks.go:280] validating the existence of file /etc/kubernetes/bootstrap-kubelet.conf
+I0912 12:17:42.901715  451173 checks.go:104] validating the container runtime
+I0912 12:17:42.930104  451173 checks.go:639] validating whether swap is enabled or not
+I0912 12:17:42.930198  451173 checks.go:370] validating the presence of executable crictl
+I0912 12:17:42.930238  451173 checks.go:370] validating the presence of executable conntrack
+I0912 12:17:42.930264  451173 checks.go:370] validating the presence of executable ip
+I0912 12:17:42.930304  451173 checks.go:370] validating the presence of executable iptables
+I0912 12:17:42.930332  451173 checks.go:370] validating the presence of executable mount
+I0912 12:17:42.930369  451173 checks.go:370] validating the presence of executable nsenter
+I0912 12:17:42.930406  451173 checks.go:370] validating the presence of executable ethtool
+I0912 12:17:42.930438  451173 checks.go:370] validating the presence of executable tc
+I0912 12:17:42.930466  451173 checks.go:370] validating the presence of executable touch
+I0912 12:17:42.930496  451173 checks.go:516] running all checks
+I0912 12:17:42.947731  451173 checks.go:401] checking whether the given node name is valid and reachable using net.LookupHost
+I0912 12:17:42.948059  451173 checks.go:605] validating kubelet version
+I0912 12:17:43.004064  451173 checks.go:130] validating if the "kubelet" service is enabled and active
+I0912 12:17:43.028781  451173 checks.go:203] validating availability of port 10250
+I0912 12:17:43.029000  451173 checks.go:280] validating the existence of file /etc/kubernetes/pki/ca.crt
+I0912 12:17:43.029019  451173 checks.go:430] validating if the connectivity type is via proxy or direct
+I0912 12:17:43.029065  451173 checks.go:329] validating the contents of file /proc/sys/net/bridge/bridge-nf-call-iptables
+I0912 12:17:43.029118  451173 checks.go:329] validating the contents of file /proc/sys/net/ipv4/ip_forward
+I0912 12:17:43.029156  451173 join.go:532] [preflight] Discovering cluster-info
+I0912 12:17:43.029183  451173 token.go:80] [discovery] Created cluster-info discovery client, requesting info from "192.168.4.63:6443"
+I0912 12:17:43.045942  451173 token.go:118] [discovery] Requesting info from "192.168.4.63:6443" again to validate TLS against the pinned public key
+I0912 12:17:43.062311  451173 token.go:135] [discovery] Cluster info signature and contents are valid and TLS certificate validates against pinned roots, will use API Server "192.168.4.63:6443"
+I0912 12:17:43.062328  451173 discovery.go:52] [discovery] Using provided TLSBootstrapToken as authentication credentials for the join process
+I0912 12:17:43.062341  451173 join.go:546] [preflight] Fetching init configuration
+I0912 12:17:43.062353  451173 join.go:592] [preflight] Retrieving KubeConfig objects
+[preflight] Reading configuration from the cluster...
+[preflight] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+I0912 12:17:43.079070  451173 kubeproxy.go:55] attempting to download the KubeProxyConfiguration from ConfigMap "kube-proxy"
+I0912 12:17:43.086414  451173 kubelet.go:74] attempting to download the KubeletConfiguration from ConfigMap "kubelet-config"
+I0912 12:17:43.094406  451173 initconfiguration.go:114] skip CRI socket detection, fill with the default CRI socket unix:///var/run/containerd/containerd.sock
+I0912 12:17:43.094647  451173 interface.go:432] Looking for default routes with IPv4 addresses
+I0912 12:17:43.094664  451173 interface.go:437] Default route transits interface "enp5s0"
+I0912 12:17:43.094855  451173 interface.go:209] Interface enp5s0 is up
+I0912 12:17:43.094930  451173 interface.go:257] Interface "enp5s0" has 3 addresses :[192.168.4.61/24 fd91:176e:252c:1:baac:6fff:fe7e:6c9d/64 fe80::baac:6fff:fe7e:6c9d/64].
+I0912 12:17:43.094957  451173 interface.go:224] Checking addr  192.168.4.61/24.
+I0912 12:17:43.094978  451173 interface.go:231] IP found 192.168.4.61
+I0912 12:17:43.095007  451173 interface.go:263] Found valid IPv4 address 192.168.4.61 for interface "enp5s0".
+I0912 12:17:43.095028  451173 interface.go:443] Found active IP 192.168.4.61
+I0912 12:17:43.105693  451173 preflight.go:104] [preflight] Running configuration dependant checks
+I0912 12:17:43.105725  451173 controlplaneprepare.go:225] [download-certs] Skipping certs download
+I0912 12:17:43.105756  451173 kubelet.go:121] [kubelet-start] writing bootstrap kubelet config file at /etc/kubernetes/bootstrap-kubelet.conf
+I0912 12:17:43.106996  451173 kubelet.go:136] [kubelet-start] writing CA certificate at /etc/kubernetes/pki/ca.crt
+I0912 12:17:43.108003  451173 kubelet.go:157] [kubelet-start] Checking for an existing Node in the cluster with name "storagenodet3500" and status "Ready"
+I0912 12:17:43.115060  451173 kubelet.go:172] [kubelet-start] Stopping the kubelet
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"
+[kubelet-start] Starting the kubelet
+[kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...
+I0912 12:17:45.535414  451173 cert_rotation.go:137] Starting client certificate rotation controller
+I0912 12:17:45.536578  451173 kubelet.go:220] [kubelet-start] preserving the crisocket information for the node
+I0912 12:17:45.536605  451173 patchnode.go:31] [patchnode] Uploading the CRI Socket information "unix:///var/run/containerd/containerd.sock" to the Node API object "storagenodet3500" as an annotation
 
-TASK [Check current authorization mode] *******************************************************************************************************************************************************
-changed: [masternode]
+This node has joined the cluster:
+* Certificate signing request was sent to apiserver and a response was received.
+* The Kubelet was informed of the new secure connection details.
 
-TASK [Display current authorization mode] *****************************************************************************************************************************************************
-ok: [masternode] => {
-    "msg": "Current Kubernetes authorization mode: "
-}
-
-TASK [Fix kubernetes-admin RBAC if needed] ****************************************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Backup API server manifest] *************************************************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Update authorization mode from AlwaysAllow to Node,RBAC] ********************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Wait for API server to restart after authorization fix] *********************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Verify API server health after authorization fix] ***************************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Apply RBAC fix after authorization mode change] *****************************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Skip RBAC fix for AlwaysAllow mode (no longer needed after fix)] ************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Wait for API server pod to be Ready] ****************************************************************************************************************************************************
-changed: [masternode]
-
-TASK [Check cluster-info configmap RBAC permissions] ******************************************************************************************************************************************
-changed: [masternode]
-
-TASK [Create RBAC rule for anonymous access to cluster-info configmap] ************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Verify cluster-info configmap accessibility] ********************************************************************************************************************************************
-changed: [masternode]
-
-TASK [Check existing tokens and clean up old ones if needed] **********************************************************************************************************************************
-changed: [masternode]
-
-TASK [Generate fresh join command with enhanced validation] ***********************************************************************************************************************************
-changed: [masternode]
-
-TASK [Validate join command contains correct control-plane IP] ********************************************************************************************************************************
-skipping: [masternode]
-
-TASK [Save enhanced join command for wiped workers] *******************************************************************************************************************************************
-changed: [masternode]
-
-TASK [Display join command info] **************************************************************************************************************************************************************
-ok: [masternode] => {
-    "msg": "Join Command Generated:\n- Timestamp: 2025-09-12T15:48:37Z\n- Control-plane: 192.168.4.63:6443\n- Token TTL: 2 hours\n- Ready for wiped workers: Yes\n"
-}
-
-PLAY [Join Worker Nodes] **********************************************************************************************************************************************************************
-
-TASK [Gathering Facts] ************************************************************************************************************************************************************************
-ok: [storagenodet3500]
-ok: [homelab]
-
-TASK [Check if node is joined] ****************************************************************************************************************************************************************
-ok: [storagenodet3500]
-ok: [homelab]
-
-TASK [Check for existing cluster artifacts] ***************************************************************************************************************************************************
-ok: [storagenodet3500]
-ok: [homelab]
-
-TASK [Check for clean post-wipe state indicators] *********************************************************************************************************************************************
-ok: [storagenodet3500] => (item=/etc/kubernetes)
-ok: [homelab] => (item=/etc/kubernetes)
-ok: [storagenodet3500] => (item=/var/lib/kubelet)
-ok: [storagenodet3500] => (item=/etc/cni/net.d)
-ok: [homelab] => (item=/var/lib/kubelet)
-ok: [storagenodet3500] => (item=/var/lib/containerd)
-ok: [homelab] => (item=/etc/cni/net.d)
-ok: [homelab] => (item=/var/lib/containerd)
-
-TASK [Detect if worker was aggressively wiped] ************************************************************************************************************************************************
-ok: [storagenodet3500]
-ok: [homelab]
-
-TASK [Display worker state detection] *********************************************************************************************************************************************************
-ok: [storagenodet3500] => {
-    "msg": "Worker Node State Analysis:\n- Kubelet config exists: False\n- Cluster artifacts exist: False\n- Post-wipe state detected: False\n- Node requires fresh join: True\n"
-}
-ok: [homelab] => {
-    "msg": "Worker Node State Analysis:\n- Kubelet config exists: False\n- Cluster artifacts exist: False\n- Post-wipe state detected: False\n- Node requires fresh join: True\n"
-}
-
-TASK [Check control-plane API server accessibility] *******************************************************************************************************************************************
-ok: [storagenodet3500 -> localhost]
-ok: [homelab -> localhost]
-
-TASK [Verify control-plane cluster status] ****************************************************************************************************************************************************
-changed: [storagenodet3500 -> masternode(192.168.4.63)]
-changed: [homelab -> masternode(192.168.4.63)]
-
-TASK [Ensure control-plane has proper RBAC configuration] *************************************************************************************************************************************
-changed: [storagenodet3500 -> masternode(192.168.4.63)]
-changed: [homelab -> masternode(192.168.4.63)]
-
-TASK [Display control-plane readiness status] *************************************************************************************************************************************************
-fatal: [storagenodet3500]: FAILED! => {"msg": "The task includes an option with an undefined variable. The error was: 'dict object' has no attribute 'status'. 'dict object' has no attribute 'status'\n\nThe error appears to be in '/srv/monitoring_data/VMStation/ansible/plays/setup-cluster.yaml': line 1495, column 11, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n\n        - name: \"Display control-plane readiness status\"\n          ^ here\n"}
-fatal: [homelab]: FAILED! => {"msg": "The task includes an option with an undefined variable. The error was: 'dict object' has no attribute 'status'. 'dict object' has no attribute 'status'\n\nThe error appears to be in '/srv/monitoring_data/VMStation/ansible/plays/setup-cluster.yaml': line 1495, column 11, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n\n        - name: \"Display control-plane readiness status\"\n          ^ here\n"}
-
+Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
