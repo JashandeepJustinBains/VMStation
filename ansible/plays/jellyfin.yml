@@ -234,19 +234,35 @@
       register: jellyfin_service_info
       failed_when: false
 
-    - name: Wait for Jellyfin pod to be ready
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Pod
-        name: jellyfin
-        namespace: jellyfin
-        wait: true
-        wait_condition:
-          type: Ready
-          status: "True"
-        wait_timeout: 600
-      register: jellyfin_ready_check
-      ignore_errors: yes
+    - name: "Wait for Jellyfin pod to be ready (with improved error handling)"
+      block:
+        - name: "Check if storage node is ready before deploying Jellyfin"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Node
+            name: "{{ actual_jellyfin_node | default(jellyfin_node_name | default('storagenodet3500')) }}"
+          register: storage_node_ready
+          
+        - name: "Verify storage node is in Ready state"
+          fail:
+            msg: "Target storage node {{ actual_jellyfin_node | default(jellyfin_node_name | default('storagenodet3500')) }} is not Ready. Node status: {{ storage_node_ready.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first | default('Unknown') }}"
+          when: 
+            - storage_node_ready.resources | length == 0 or
+              (storage_node_ready.resources[0].status.conditions | selectattr('type', 'equalto', 'Ready') | selectattr('status', 'equalto', 'True') | list | length == 0)
+              
+        - name: "Wait for Jellyfin pod to be ready"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            name: jellyfin
+            namespace: jellyfin
+            wait: true
+            wait_condition:
+              type: Ready
+              status: "True"
+            wait_timeout: "{{ jellyfin_readiness_timeout | default(300) }}"  # Reduced default timeout
+          register: jellyfin_ready_check
+          ignore_errors: yes
 
     - name: Get updated Jellyfin pod status after wait
       kubernetes.core.k8s_info:

@@ -908,7 +908,7 @@
       when: flannel_exists.rc != 0
       failed_when: false
 
-    - name: "Ensure CoreDNS has correct replica count and remove control-plane taints"
+    - name: "Ensure CoreDNS has correct replica count and proper scheduling"
       shell: |
         # Remove NoSchedule taint from control-plane to allow CoreDNS scheduling
         control_plane_nodes=$(timeout 30 kubectl get nodes -l node-role.kubernetes.io/control-plane --no-headers -o custom-columns=":metadata.name")
@@ -926,6 +926,37 @@
         else
           echo "CoreDNS already has correct replica count: $current_replicas"
         fi
+        
+        # Configure CoreDNS to prefer control-plane nodes
+        echo "Patching CoreDNS deployment to prefer control-plane nodes..."
+        timeout 60 kubectl patch deployment coredns -n kube-system -p '{
+          "spec": {
+            "template": {
+              "spec": {
+                "affinity": {
+                  "nodeAffinity": {
+                    "preferredDuringSchedulingIgnoredDuringExecution": [{
+                      "weight": 100,
+                      "preference": {
+                        "matchExpressions": [{
+                          "key": "node-role.kubernetes.io/control-plane",
+                          "operator": "Exists"
+                        }]
+                      }
+                    }]
+                  }
+                },
+                "tolerations": [{
+                  "key": "node-role.kubernetes.io/control-plane",
+                  "operator": "Exists",
+                  "effect": "NoSchedule"
+                }]
+              }
+            }
+          }
+        }' || echo "CoreDNS patch failed - may already be configured"
+        
+        echo "CoreDNS configuration completed"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: coredns_scale

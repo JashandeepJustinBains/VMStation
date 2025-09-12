@@ -120,8 +120,13 @@ if ! ./scripts/check_coredns_status.sh >/dev/null 2>&1; then
     if ./scripts/fix_coredns_unknown_status.sh; then
         info "CoreDNS fix applied successfully"
     else
-        warn "CoreDNS fix failed - manual intervention may be needed"
-        echo "Run: ./scripts/fix_coredns_unknown_status.sh"
+        warn "CoreDNS fix failed - trying enhanced homelab node fix..."
+        if ./scripts/fix_homelab_node_issues.sh; then
+            info "Homelab node issues resolved"
+        else
+            warn "Cluster networking issues persist - manual intervention may be needed"
+            echo "Run: ./scripts/fix_homelab_node_issues.sh"
+        fi
     fi
 else
     info "CoreDNS status check passed"
