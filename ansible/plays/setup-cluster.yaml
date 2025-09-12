@@ -892,7 +892,7 @@
         else
           echo "CNI cleanup helper not found on control-plane; skipping"
         fi
-      delegate_to: "{{ control_plane_ip | default(groups['monitoring_nodes'][0]) }}"
+      delegate_to: "{{ control_plane_host | default(groups['monitoring_nodes'][0]) }}"
       run_once: true
       failed_when: false
 
@@ -1433,7 +1433,10 @@
   hosts: storage_nodes:compute_nodes
   become: true
   vars:
-    control_plane_ip: "{{ groups['monitoring_nodes'][0] }}"
+  # Inventory hostname of the control-plane (used for delegate_to)
+  control_plane_host: "{{ groups['monitoring_nodes'][0] }}"
+  # Control-plane reachable address: prefer explicit ansible_host from inventory, fall back to the inventory name
+  control_plane_ip: "{{ hostvars[groups['monitoring_nodes'][0]]['ansible_host'] | default(groups['monitoring_nodes'][0]) }}"
   tasks:
     - name: "Detect post-wipe worker state"
       block:
@@ -1491,7 +1494,7 @@
           shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw /healthz
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
-          delegate_to: "{{ control_plane_ip }}"
+          delegate_to: "{{ control_plane_host }}"
           register: api_health_check
           failed_when: api_health_check.rc != 0
           
@@ -1502,7 +1505,7 @@
             echo "rbac_ready" || echo "rbac_missing"
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
-          delegate_to: "{{ control_plane_ip }}"
+          delegate_to: "{{ control_plane_host }}"
           register: control_plane_rbac_status
           
         - name: "Display control-plane readiness status"
@@ -1601,7 +1604,7 @@
       slurp:
         src: /tmp/kubeadm-join.sh
       register: join_command_content
-      delegate_to: "{{ control_plane_ip }}"
+      delegate_to: "{{ control_plane_host }}"
       when: not kubelet_conf.stat.exists
       
     - name: "Write join command to worker"
@@ -1964,7 +1967,7 @@
             kubectl get nodes {{ ansible_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
-          delegate_to: "{{ control_plane_ip }}"
+          delegate_to: "{{ control_plane_host }}"
           register: node_status
           retries: 10
           delay: 15
