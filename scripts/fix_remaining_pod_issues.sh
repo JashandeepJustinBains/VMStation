@@ -101,6 +101,14 @@ if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
             debug "Fixed /var/lib/jellyfin permissions"
         fi
         
+        # Clean up any existing Jellyfin resources that might conflict
+        info "Cleaning up existing Jellyfin resources to prevent conflicts"
+        kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true
+        kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true
+        kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true
+        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true
+        sleep 5  # Give time for resources to be cleaned up
+        
         # Update jellyfin pod with improved health checks
         info "Updating jellyfin pod configuration with improved health checks"
         
@@ -193,6 +201,33 @@ spec:
       path: /var/lib/jellyfin
       type: DirectoryOrCreate
   restartPolicy: Always
+EOF
+        
+        # Also ensure the service exists (in case it was cleaned up)
+        info "Ensuring Jellyfin service exists"
+        cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-service
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+    component: media-server
+spec:
+  type: NodePort
+  ports:
+  - port: 8096
+    targetPort: 8096
+    nodePort: 30096
+    name: http
+  - port: 8920
+    targetPort: 8920
+    nodePort: 30920
+    name: https
+  selector:
+    app: jellyfin
+    component: media-server
 EOF
         
         # Wait for the pod to be recreated and become ready
