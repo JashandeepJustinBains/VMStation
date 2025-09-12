@@ -1790,6 +1790,27 @@
           until: node_ready_check.stdout == "True"
           failed_when: node_ready_check.stdout != "True"
           when: not (skip_join_process | default(false))
+
+        - name: "Fallback: run simple kubeadm join script if node not detected"
+          command:
+            argv:
+              - /bin/bash
+              - -lc
+              - "/tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5"
+          register: simple_join
+          changed_when: simple_join.rc == 0
+          failed_when: simple_join.rc != 0
+          when: not (skip_join_process | default(false)) and (detected_node_name is defined and detected_node_name.stdout == "")
+
+        - name: "Confirm node appears after fallback join"
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+          delegate_to: "{{ control_plane_host }}"
+          register: node_ready_check_fallback
+          retries: 12
+          delay: 10
+          until: node_ready_check_fallback.stdout == "True"
+          failed_when: node_ready_check_fallback.stdout != "True"
+          when: not (skip_join_process | default(false)) and (detected_node_name is defined and detected_node_name.stdout == "")
           
         - name: "Display join skip message"
           debug:
