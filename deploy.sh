@@ -124,8 +124,21 @@ if ! ./scripts/check_coredns_status.sh >/dev/null 2>&1; then
         if ./scripts/fix_homelab_node_issues.sh; then
             info "Homelab node issues resolved"
         else
-            warn "Cluster networking issues persist - manual intervention may be needed"
-            echo "Run: ./scripts/fix_homelab_node_issues.sh"
+            warn "Standard fixes failed - checking for CNI bridge conflicts..."
+            
+            # Check for ContainerCreating pods as indicator of CNI issues
+            STUCK_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
+            if [ "$STUCK_PODS" -gt 0 ]; then
+                warn "Found $STUCK_PODS pods stuck in ContainerCreating - applying CNI bridge fix"
+                if ./scripts/fix_cni_bridge_conflict.sh; then
+                    info "CNI bridge conflict resolved"
+                else
+                    error "CNI bridge fix failed - manual intervention required"
+                fi
+            else
+                warn "Cluster networking issues persist - manual intervention may be needed"
+                echo "Run: ./scripts/fix_homelab_node_issues.sh"
+            fi
         fi
     fi
 else

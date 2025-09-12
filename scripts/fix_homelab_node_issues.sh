@@ -25,6 +25,40 @@ echo "=== Homelab Node Issue Remediation ==="
 echo "Timestamp: $(date)"
 echo
 
+# Step 0: Check for CNI bridge IP conflicts (common root cause)
+info "Step 0: Checking for CNI bridge IP conflicts"
+
+# Check for ContainerCreating pods which often indicate CNI issues
+CONTAINER_CREATING_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
+
+if [ "$CONTAINER_CREATING_PODS" -gt 0 ]; then
+    warn "Found $CONTAINER_CREATING_PODS pods stuck in ContainerCreating - checking for CNI bridge conflicts"
+    
+    # Check for the specific CNI bridge error in events
+    CNI_BRIDGE_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to set bridge addr.*cni0.*already has an IP address" | tail -1)
+    
+    if [ -n "$CNI_BRIDGE_ERRORS" ]; then
+        error "CNI bridge IP conflict detected!"
+        echo "Error: $CNI_BRIDGE_ERRORS"
+        echo
+        warn "Applying CNI bridge fix before proceeding with other fixes..."
+        
+        if [ -f "./scripts/fix_cni_bridge_conflict.sh" ]; then
+            ./scripts/fix_cni_bridge_conflict.sh
+            echo
+            info "CNI bridge fix applied - continuing with remaining fixes..."
+        else
+            error "CNI bridge fix script not found - manual intervention required"
+            echo "Please run: sudo ip link delete cni0 && sudo systemctl restart containerd"
+            echo "Then restart flannel pods: kubectl delete pods -n kube-flannel --all"
+        fi
+    else
+        info "No CNI bridge conflicts detected in recent events"
+    fi
+else
+    info "No pods stuck in ContainerCreating"
+fi
+
 # Step 1: Identify problematic pods on homelab node
 info "Step 1: Identifying problematic pods on homelab node"
 

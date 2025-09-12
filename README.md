@@ -440,6 +440,7 @@ kubectl apply --dry-run=client -f k8s/
 
 ### Troubleshooting Tools
 - **Service enablement**: `./scripts/fix_kubernetes_service_enablement.sh` - **NEW!** Enables disabled kubelet/containerd services
+- **CNI bridge conflicts**: `./scripts/fix_cni_bridge_conflict.sh` - **NEW!** Fixes CNI bridge IP conflicts causing ContainerCreating errors
 - **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
 - **RHEL 10 fixes validation**: `./scripts/validate_rhel10_fixes.sh`
 - **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
@@ -534,6 +535,22 @@ If CoreDNS pods show "Unknown" status with no IP after running `deploy.sh full`:
 # - Missing IP addresses on CoreDNS pods
 # - DNS resolution failures preventing other pods from starting
 # - Control-plane taint issues preventing CoreDNS scheduling
+```
+
+#### CNI Bridge IP Conflicts ⚡ **NEW!**
+If pods are stuck in ContainerCreating due to CNI bridge IP conflicts:
+```bash
+# Check for CNI bridge conflicts
+./scripts/check_cni_bridge_conflict.sh
+
+# Fix CNI bridge IP conflicts 
+./scripts/fix_cni_bridge_conflict.sh
+
+# This fixes:
+# - Pods stuck in "ContainerCreating" state
+# - CNI bridge (cni0) IP address conflicts with Flannel subnet
+# - "failed to set bridge addr" errors in pod events
+# - Automatic integration with existing fix scripts
 ```
 
 📖 **Documentation**: See [docs/COREDNS_UNKNOWN_STATUS_FIX.md](./docs/COREDNS_UNKNOWN_STATUS_FIX.md) for detailed information.
