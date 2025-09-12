@@ -1,8 +1,285 @@
-# Manual Kubernetes Cluster Setup Troubleshooting
+# Enhanced Kubernetes Worker Node Troubleshooting Guide
 
-This guide addresses common issues encountered when manually setting up Kubernetes clusters, particularly the crictl and kubelet configuration problems mentioned in the deploy.sh error scenarios.
+This guide provides comprehensive troubleshooting steps for worker node join failures, focusing on the enhanced remediation capabilities added to VMStation.
 
-## Common Issues
+## Quick Diagnostic Commands
+
+Before applying fixes, run these diagnostic commands to identify the root cause:
+
+```bash
+# Quick diagnostic scan
+sudo ./scripts/quick_join_diagnostics.sh
+
+# Comprehensive diagnostic gathering (for complex issues)
+sudo ./scripts/gather_worker_diagnostics.sh
+```
+
+## Common Issues and Solutions
+
+### 1. crictl ↔ containerd Communication Failures
+
+**Symptoms:**
+- crictl commands fail with "connection refused" or socket permission errors
+- Error: `connect: permission denied` when running crictl
+- Warning: `runtime connect using default endpoints`
+
+**Root Causes:**
+- Missing or incorrect `/etc/crictl.yaml` configuration
+- Incorrect containerd socket permissions
+- Missing containerd group or user not in containerd group
+
+**Enhanced Fix (Automatic):**
+The Ansible playbook now automatically handles crictl configuration and socket permissions during cluster setup.
+
+**Manual Fix:**
+```bash
+# 1. Create/fix crictl configuration
+sudo mkdir -p /etc
+sudo cat > /etc/crictl.yaml << 'EOF'
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+debug: false
+EOF
+
+# 2. Fix containerd socket permissions
+sudo groupadd containerd 2>/dev/null || true
+sudo usermod -a -G containerd root
+sudo chgrp containerd /run/containerd/containerd.sock
+sudo chmod 660 /run/containerd/containerd.sock
+
+# 3. Test crictl communication
+sudo crictl version
+sudo crictl info
+```
+
+**Verification:**
+```bash
+# Should return version information without errors
+sudo crictl version
+
+# Should show imageFilesystem with non-zero capacity
+sudo crictl info | grep -A5 imageFilesystem
+```
+
+### 2. Missing kubelet config.yaml After Join Attempts
+
+**Symptoms:**
+- kubelet service fails to start with: `failed to load Kubelet config file /var/lib/kubelet/config.yaml: no such file or directory`
+- kubeadm join appears to succeed but kubelet remains in failed state
+- Node does not appear in `kubectl get nodes` on control plane
+
+**Root Causes:**
+- kubeadm join failed to complete the TLS Bootstrap process
+- Join token expired during the join process
+- containerd filesystem capacity issues preventing kubelet startup
+- Network connectivity issues during certificate exchange
+
+**Enhanced Fix (Automatic Token Refresh):**
+```bash
+# The enhanced join script now automatically handles token refresh
+export MASTER_IP="192.168.4.63"  # Your control plane IP
+export TOKEN_REFRESH_RETRIES=2
+sudo ./scripts/enhanced_kubeadm_join.sh "<your-original-join-command>"
+```
+
+**Manual Fix (Generate Fresh Token):**
+```bash
+# 1. On control plane, generate fresh join token
+kubeadm token create --ttl=2h --print-join-command
+
+# 2. On worker node, use the new join command with enhanced script
+sudo ./scripts/enhanced_kubeadm_join.sh "<new-join-command>"
+```
+
+**Pre-Join Validation:**
+The system now automatically validates kubelet configuration before attempting join:
+- Checks if kubelet config already exists and is valid
+- Validates that kubelet.conf points to correct control plane
+- Skips join if kubelet is already properly connected to cluster
+
+### 3. containerd "invalid capacity 0 on image filesystem" Error
+
+**Symptoms:**
+- kubelet logs show: `"invalid capacity 0 on image filesystem"`
+- TLS Bootstrap fails with filesystem-related errors
+- crictl commands work but kubelet cannot start
+
+**Root Causes:**
+- containerd image filesystem not properly initialized
+- Filesystem capacity detection issues after containerd restart
+- Corrupted containerd metadata
+
+**Enhanced Fix (Automatic Detection and Repair):**
+The enhanced join script now automatically detects and fixes this issue during join:
+
+```bash
+# Manual fix for stubborn cases
+sudo ./scripts/manual_containerd_filesystem_fix.sh
+```
+
+**Manual Fix Steps:**
+```bash
+# 1. Stop containerd and kubelet
+sudo systemctl stop kubelet containerd
+
+# 2. Clear containerd state
+sudo rm -rf /var/lib/containerd/io.containerd.*
+
+# 3. Restart containerd and initialize filesystem
+sudo systemctl start containerd
+sleep 10
+
+# 4. Initialize image filesystem
+sudo ctr namespace create k8s.io
+sudo ctr --namespace k8s.io images ls
+sudo crictl info
+
+# 5. Verify filesystem shows capacity
+sudo crictl info | grep -A10 imageFilesystem
+```
+
+### 4. Token Expiry During Join Process
+
+**Symptoms:**
+- Join fails with authentication errors: `401 Unauthorized` or `403 Forbidden`
+- Error messages about invalid or expired tokens
+- TLS Bootstrap timeouts
+
+**Enhanced Solution:**
+The enhanced join script now automatically detects token expiry and refreshes tokens:
+
+**Automatic Handling:**
+- Script detects token expiry patterns in join output
+- Automatically connects to control plane via SSH
+- Generates fresh join token with 2-hour TTL
+- Retries join with new token
+
+**Manual Token Refresh:**
+```bash
+# On control plane
+kubeadm token list  # Check existing tokens
+kubeadm token create --ttl=2h --print-join-command
+
+# On worker
+sudo ./scripts/enhanced_kubeadm_join.sh "<new-join-command>"
+```
+
+## Enhanced Ansible Integration
+
+### Automatic Pre-Join Validation
+
+The Ansible playbook now includes comprehensive pre-join validation:
+
+```yaml
+- name: "Pre-join kubelet config validation and remediation"
+  # Automatically checks and fixes kubelet configuration issues
+  # Skips join if kubelet already properly connected
+  # Backs up and resets invalid configurations
+```
+
+### Improved Error Reporting
+
+Join failures now provide comprehensive diagnostic information:
+- Complete join log contents
+- Recent kubelet and containerd logs
+- Configuration file contents
+- Socket permission status
+- Specific remediation steps
+
+### Enhanced Failure Recovery
+
+The playbook now includes:
+- Automatic backup of invalid configurations
+- Comprehensive cleanup on join failures
+- Detailed failure diagnostics collection
+- Specific remediation guidance
+
+## Diagnostic Tools
+
+### Quick Diagnostics
+```bash
+# Fast diagnostic scan
+sudo ./scripts/quick_join_diagnostics.sh [CONTROL_PLANE_IP]
+```
+
+### Comprehensive Diagnostics
+```bash
+# Gather all diagnostic information
+sudo ./scripts/gather_worker_diagnostics.sh [CONTROL_PLANE_IP] [WORKER_IPS] [OUTPUT_DIR]
+
+# Example
+sudo ./scripts/gather_worker_diagnostics.sh 192.168.4.63 "192.168.4.61,192.168.4.62"
+```
+
+This creates a comprehensive diagnostic package including:
+- Service status and logs from all nodes
+- Configuration files
+- Network and runtime status
+- Join attempt logs
+- Summary report with analysis guidance
+
+### Enhanced Join Process
+```bash
+# Use enhanced join with automatic error recovery
+sudo ./scripts/enhanced_kubeadm_join.sh "<join-command>"
+```
+
+Features:
+- Automatic crictl configuration and socket permission fixes
+- containerd filesystem issue detection and repair
+- Token expiry detection and automatic refresh
+- Comprehensive retry logic with cleanup between attempts
+- Post-wipe worker state detection
+- Enhanced monitoring and validation
+
+## Troubleshooting Workflow
+
+1. **Quick Assessment:**
+   ```bash
+   sudo ./scripts/quick_join_diagnostics.sh
+   ```
+
+2. **Apply Automatic Fixes:**
+   ```bash
+   sudo ./scripts/enhanced_kubeadm_join.sh "<join-command>"
+   ```
+
+3. **For Persistent Issues:**
+   ```bash
+   sudo ./scripts/gather_worker_diagnostics.sh
+   # Review the generated DIAGNOSTIC_SUMMARY.txt
+   ```
+
+4. **Manual Intervention (if needed):**
+   - Check specific log files mentioned in diagnostics
+   - Apply targeted fixes based on root cause
+   - Use manual scripts for specific issues
+
+## Prevention
+
+To prevent these issues in future deployments:
+
+1. **Use Enhanced Ansible Playbook:**
+   - Includes automatic crictl configuration
+   - Handles socket permissions properly
+   - Validates configurations before join
+
+2. **Monitor containerd Health:**
+   - Verify crictl communication after containerd restarts
+   - Check filesystem capacity regularly
+
+3. **Token Management:**
+   - Use longer TTL tokens for complex deployments
+   - Implement automatic token refresh for retry scenarios
+
+## Related Documentation
+
+- [Enhanced Join Process Details](./ENHANCED_JOIN_PROCESS.md)
+- [Post-Wipe Worker Join Process](./POST_WIPE_WORKER_JOIN.md)
+- [containerd Timeout Fix Guide](./containerd-timeout-fix.md)
+
+## Legacy Issues (Now Fixed)
 
 ### 1. crictl Connection Failures
 
