@@ -17,8 +17,25 @@ infrastructure_mode: kubernetes
 # === Kubernetes Configuration ===
 kubernetes_version: "1.29"
 pod_network_cidr: "10.244.0.0/16"
+service_network_cidr: "10.96.0.0/12"
 cert_manager_version: "v1.13.3"
 helm_version: "3.13.3"
+
+# === Cluster Bootstrap Configuration ===
+# Control plane endpoint for kubeadm
+control_plane_endpoint: "192.168.4.63:6443"
+
+# Container runtime settings
+container_runtime: containerd
+cri_socket: "unix:///var/run/containerd/containerd.sock"
+
+# kubeadm configuration
+kubeadm_config_path: "/etc/kubernetes/kubeadm-config.yaml"
+kubeconfig_path: "/etc/kubernetes/admin.conf"
+join_command_file: "/tmp/kubeadm-join-command.sh"
+
+# Cluster bootstrap behavior
+cluster_bootstrap_mode: false  # Set to true when using cluster-bootstrap.yml
 
 # === Kubernetes Authorization Configuration ===
 # Controls the authorization mode for the Kubernetes API server

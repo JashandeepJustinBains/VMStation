@@ -1,0 +1,207 @@
+---
+# VMStation Kubernetes Cluster Bootstrap
+# Main playbook for setting up a complete Kubernetes cluster with kubeadm
+# Builds upon existing setup-cluster.yaml with kubeadm-specific enhancements
+
+- name: "Include existing system preparation and package installation"
+  import_playbook: ../plays/setup-cluster.yaml
+  vars:
+    cluster_bootstrap_mode: true
+
+- name: "Kubernetes Control Plane Bootstrap"
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    kubeadm_config_path: "/etc/kubernetes/kubeadm-config.yaml"
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    join_command_file: "/tmp/kubeadm-join-command.sh"
+  tasks:
+    - name: "Check if cluster is already initialized"
+      stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_exists
+
+    - name: "Generate kubeadm configuration from template"
+      template:
+        src: "{{ playbook_dir }}/../../manifests/kubeadm-config.yaml.j2"
+        dest: "{{ kubeadm_config_path }}"
+        owner: root
+        group: root
+        mode: '0600'
+      when: not kubeconfig_exists.stat.exists
+
+    - name: "Initialize Kubernetes control plane with kubeadm"
+      shell: |
+        kubeadm init --config={{ kubeadm_config_path }} --upload-certs
+      register: kubeadm_init_result
+      when: not kubeconfig_exists.stat.exists
+      failed_when: kubeadm_init_result.rc != 0
+      retries: 2
+      delay: 30
+
+    - name: "Display kubeadm init output"
+      debug:
+        msg: "{{ kubeadm_init_result.stdout_lines }}"
+      when: not kubeconfig_exists.stat.exists and kubeadm_init_result is defined
+
+    - name: "Create .kube directory for root user"
+      file:
+        path: /root/.kube
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: "Copy kubeconfig for root user"
+      copy:
+        src: "{{ kubeconfig_path }}"
+        dest: /root/.kube/config
+        owner: root
+        group: root
+        mode: '0600'
+        remote_src: true
+
+    - name: "Generate join command for worker nodes"
+      shell: kubeadm token create --print-join-command
+      register: join_command_output
+      when: not kubeconfig_exists.stat.exists or join_command_output is not defined
+
+    - name: "Save join command to file with secure permissions"
+      copy:
+        content: "{{ join_command_output.stdout }}"
+        dest: "{{ join_command_file }}"
+        owner: root
+        group: root
+        mode: '0600'
+      when: join_command_output.stdout is defined
+
+    - name: "Apply Flannel CNI"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ playbook_dir }}/../../manifests/cni/flannel.yaml"
+        kubeconfig: "{{ kubeconfig_path }}"
+      retries: 3
+      delay: 10
+
+    - name: "Wait for CoreDNS pods to be running"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+        label_selectors:
+          - k8s-app=kube-dns
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: coredns_pods
+      until: 
+        - coredns_pods.resources | length > 0
+        - coredns_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
+      retries: 30
+      delay: 10
+
+    - name: "Fetch join command for worker nodes"
+      fetch:
+        src: "{{ join_command_file }}"
+        dest: "/tmp/kubeadm-join-command-{{ inventory_hostname }}.sh"
+        flat: yes
+      when: join_command_output.stdout is defined
+
+- name: "Join Worker Nodes to Cluster"
+  hosts: storage_nodes:compute_nodes
+  become: true
+  serial: 1
+  vars:
+    join_command_file: "/tmp/kubeadm-join-command.sh"
+    max_retries: 3
+  tasks:
+    - name: "Check if node is already joined to cluster"
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf_exists
+
+    - name: "Copy join command to worker node"
+      copy:
+        src: "/tmp/kubeadm-join-command-{{ groups['monitoring_nodes'][0] }}.sh"
+        dest: "{{ join_command_file }}"
+        owner: root
+        group: root
+        mode: '0700'
+      when: not kubelet_conf_exists.stat.exists
+      delegate_to: localhost
+
+    - name: "Join worker node to cluster with retries"
+      shell: "{{ join_command_file }}"
+      register: join_result
+      when: not kubelet_conf_exists.stat.exists
+      retries: "{{ max_retries }}"
+      delay: 30
+      until: join_result.rc == 0
+      failed_when: false
+
+    - name: "Handle join failures with cleanup and retry"
+      block:
+        - name: "Reset failed join attempt"
+          shell: kubeadm reset --force
+          when: join_result.rc != 0
+
+        - name: "Clean up failed join artifacts"
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/kubernetes/kubelet.conf
+            - /var/lib/kubelet/pki
+          when: join_result.rc != 0
+
+        - name: "Retry join after cleanup"
+          shell: "{{ join_command_file }}"
+          register: join_retry_result
+          when: join_result.rc != 0
+          retries: 2
+          delay: 45
+          until: join_retry_result.rc == 0
+
+        - name: "Fail if join still unsuccessful"
+          fail:
+            msg: "Failed to join worker node after {{ max_retries }} attempts and cleanup"
+          when: 
+            - join_result.rc != 0 
+            - join_retry_result is defined 
+            - join_retry_result.rc != 0
+      when: not kubelet_conf_exists.stat.exists and join_result.rc != 0
+
+    - name: "Verify node joined successfully"
+      shell: systemctl is-active kubelet
+      register: kubelet_status
+      retries: 5
+      delay: 10
+      until: kubelet_status.rc == 0
+
+    - name: "Clean up join command file"
+      file:
+        path: "{{ join_command_file }}"
+        state: absent
+
+- name: "Verify Cluster Status"
+  hosts: monitoring_nodes
+  become: true
+  tasks:
+    - name: "Wait for all nodes to be Ready"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: cluster_nodes
+      until: 
+        - cluster_nodes.resources | length == groups['all'] | length
+        - cluster_nodes.resources | map(attribute='status.conditions') | 
+          map('selectattr', 'type', 'equalto', 'Ready') |
+          map('map', attribute='status') | map('first') | list | unique == ['True']
+      retries: 20
+      delay: 15
+      failed_when: false
+
+    - name: "Display cluster node status"
+      debug:
+        msg: "Node {{ item.metadata.name }} is {{ item.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first }}"
+      loop: "{{ cluster_nodes.resources }}"
+      when: cluster_nodes.resources is defined
