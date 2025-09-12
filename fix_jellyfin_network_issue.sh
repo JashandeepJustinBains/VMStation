@@ -193,7 +193,7 @@ if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
         
         # Wait for pod to become ready
         info "Waiting for pod to become ready (this may take up to 10 minutes)..."
-        if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=600s; then
+        if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=150s; then
             info "✓ Jellyfin pod is now ready!"
         else
             error "Pod did not become ready within timeout"
