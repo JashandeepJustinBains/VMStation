@@ -440,6 +440,8 @@ kubectl apply --dry-run=client -f k8s/
 
 ### Troubleshooting Tools
 - **Pod health validation**: `./scripts/validate_pod_health.sh` - **NEW!** Quick validation of all pod health status
+- **Jellyfin readiness fix**: `./fix_jellyfin_readiness.sh` - **NEW!** Fixes jellyfin probe configuration and readiness issues
+- **Jellyfin config test**: `./test_jellyfin_config.sh` - **NEW!** Validates jellyfin pod configuration
 - **Remaining pod fixes**: `./scripts/fix_remaining_pod_issues.sh` - **NEW!** Fixes jellyfin readiness and kube-proxy crashloop issues
 - **Pod diagnostics**: `./scripts/diagnose_remaining_pod_issues.sh` - **NEW!** Detailed analysis of pod failures
 - **Service enablement**: `./scripts/fix_kubernetes_service_enablement.sh` - **NEW!** Enables disabled kubelet/containerd services
@@ -589,6 +591,27 @@ If pods are stuck in ContainerCreating due to CNI bridge IP conflicts:
 - ✅ Forces rescheduling of stuck CoreDNS pods
 - ✅ Validates DNS resolution functionality
 - ✅ Enables other pending pods to start correctly
+
+#### Jellyfin Pod Readiness Issues ⚡ **NEW!**
+If Jellyfin shows 0/1 Ready status with probe failures:
+
+```bash
+# Quick fix for Jellyfin readiness issues
+./fix_jellyfin_readiness.sh
+
+# Test configuration after fix
+./test_jellyfin_config.sh
+
+# Check jellyfin status
+kubectl get pods -n jellyfin -o wide
+kubectl describe pod -n jellyfin jellyfin
+```
+
+**Common fixes include**:
+- ✅ **Incorrect probe paths** - Updates health check endpoints from `/web/index.html` to `/`
+- ✅ **Volume permission issues** - Ensures host directories have correct permissions for UID 1000
+- ✅ **Configuration inconsistencies** - Applies consistent security context and resource limits
+- ✅ **Network connectivity** - Validates pod networking and service configuration
 
 #### General Deployment Issues
 ```bash

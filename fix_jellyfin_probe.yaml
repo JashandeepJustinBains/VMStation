@@ -1,14 +1,6 @@
 ---
-# VMStation Jellyfin Namespace
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: jellyfin
-  labels:
-    name: jellyfin
-    vmstation.io/component: media
----
-# Jellyfin Pod (using hostPath volumes instead of PVCs)
+# Fix Jellyfin probe configuration
+# This patch updates the pod to use the correct health check endpoint
 apiVersion: v1
 kind: Pod
 metadata:
@@ -18,34 +10,39 @@ metadata:
     app: jellyfin
     component: media-server
 spec:
-  # Schedule on storage node explicitly
   nodeSelector:
     kubernetes.io/hostname: storagenodet3500
-  # Security context: Run as non-root user for better security
   securityContext:
     runAsUser: 1000
     runAsGroup: 1000
     fsGroup: 1000
-    seccompProfile:
-      type: RuntimeDefault
   containers:
   - name: jellyfin
     image: jellyfin/jellyfin:latest
     imagePullPolicy: IfNotPresent
     ports:
-    - containerPort: 8096
-      name: http
-    - containerPort: 8920
-      name: https
-    - containerPort: 1900
-      name: dlna
+    - name: http
+      containerPort: 8096
+      protocol: TCP
+    - name: https
+      containerPort: 8920
+      protocol: TCP
+    - name: dlna
+      containerPort: 1900
       protocol: UDP
-    - containerPort: 7359
-      name: discovery
+    - name: discovery
+      containerPort: 7359
       protocol: UDP
     env:
     - name: JELLYFIN_PublishedServerUrl
       value: "http://192.168.4.61:30096"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "2"
     volumeMounts:
     - name: jellyfin-config
       mountPath: /config
@@ -54,14 +51,7 @@ spec:
     - name: jellyfin-media
       mountPath: /media
       readOnly: true
-    resources:
-      requests:
-        cpu: 500m
-        memory: 512Mi
-      limits:
-        cpu: "2"
-        memory: 2Gi
-    # Health checks using root endpoint for better compatibility
+    # Fixed probe configuration - use root endpoint instead of /web/index.html
     livenessProbe:
       httpGet:
         path: /
@@ -85,17 +75,16 @@ spec:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 60
-      periodSeconds: 15
-      timeoutSeconds: 10
-      failureThreshold: 20
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
       capabilities:
         drop:
         - ALL
-  # Use hostPath volumes directly (no PVCs needed)
   volumes:
   - name: jellyfin-config
     hostPath:
@@ -109,27 +98,3 @@ spec:
       path: /srv/media
       type: DirectoryOrCreate
   restartPolicy: Always
----
-# Jellyfin Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: jellyfin-service
-  namespace: jellyfin
-  labels:
-    app: jellyfin
-    component: media-server
-spec:
-  type: NodePort
-  ports:
-  - port: 8096
-    targetPort: 8096
-    nodePort: 30096
-    name: http
-  - port: 8920
-    targetPort: 8920
-    nodePort: 30920
-    name: https
-  selector:
-    app: jellyfin
-    component: media-server
