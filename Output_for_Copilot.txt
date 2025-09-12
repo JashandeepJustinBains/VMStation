@@ -970,6 +970,87 @@ ok: [192.168.4.63] => {
 }
 
 TASK [Wait for flannel to be ready on all nodes] **********************************************************************************************************************************************
+HANGS HERE
+
+
+root@masternode:~# kubectl describe pod coredns-68444cf7cd-vq79r -n kube-system
+Name:                 coredns-68444cf7cd-vq79r
+Namespace:            kube-system
+Priority:             2000000000
+Priority Class Name:  system-cluster-critical
+Service Account:      coredns
+Node:                 masternode/192.168.4.63
+Start Time:           Thu, 11 Sep 2025 21:58:33 -0400
+Labels:               k8s-app=kube-dns
+                      pod-template-hash=68444cf7cd
+Annotations:          <none>
+Status:               Pending
+IP:
+IPs:                  <none>
+Controlled By:        ReplicaSet/coredns-68444cf7cd
+Containers:
+  coredns:
+    Container ID:
+    Image:         registry.k8s.io/coredns/coredns:v1.11.1
+    Image ID:
+    Ports:         53/UDP (dns), 53/TCP (dns-tcp), 9153/TCP (metrics)
+    Host Ports:    0/UDP (dns), 0/TCP (dns-tcp), 0/TCP (metrics)
+    Args:
+      -conf
+      /etc/coredns/Corefile
+    State:          Waiting
+      Reason:       ContainerCreating
+    Ready:          False
+    Restart Count:  0
+    Limits:
+      memory:  170Mi
+    Requests:
+      cpu:        100m
+      memory:     70Mi
+    Liveness:     http-get http://:8080/health delay=60s timeout=5s period=10s #success=1 #failure=5
+    Readiness:    http-get http://:8181/ready delay=0s timeout=1s period=10s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /etc/coredns from config-volume (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6q8xk (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   False
+  Initialized                 True
+  Ready                       False
+  ContainersReady             False
+  PodScheduled                True
+Volumes:
+  config-volume:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      coredns
+    Optional:  false
+  kube-api-access-6q8xk:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              kubernetes.io/os=linux
+Tolerations:                 node-role.kubernetes.io/control-plane:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason                  Age                   From               Message
+  ----     ------                  ----                  ----               -------
+  Normal   Scheduled               20m                   default-scheduler  Successfully assigned kube-system/coredns-68444cf7cd-vq79r to masternode
+  Warning  FailedCreatePodSandBox  20m                   kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "23876f3217b3512647b3ba3b6d1667d4dbba339bbce6fde0d2d8df6feb3e5dee": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
+  Warning  FailedCreatePodSandBox  20m                   kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "809d4801a440ea859f79317215423b7b10de8368f17503ff427196b681b3b9cf": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
+  Warning  FailedCreatePodSandBox  20m                   kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "64210ba2477479c4669127c0898ec617817014e2984760b276b7fad735597ea0": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
+  Warning  FailedCreatePodSandBox  19m (x2 over 20m)     kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1": name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1" is reserved for "809d4801a440ea859f79317215423b7b10de8368f17503ff427196b681b3b9cf"
+  Warning  FailedCreatePodSandBox  19m                   kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "bf6ca3e732f901f0ee0a23652201c41859344395b4372b4ffe5481abc12019d5": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
+  Warning  FailedCreatePodSandBox  18m (x4 over 19m)     kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1": name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1" is reserved for "bf6ca3e732f901f0ee0a23652201c41859344395b4372b4ffe5481abc12019d5"
+  Warning  FailedCreatePodSandBox  18m                   kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "d2fca323a070fffdaa5fa9e425a955acaf71b88d3630d0490eb63ca3640ff635": plugin type="bridge" failed (add): failed to set bridge addr: "cni0" already has an IP address different from 10.244.0.1/16
+  Warning  FailedCreatePodSandBox  18m (x2 over 18m)     kubelet            Failed to create pod sandbox: rpc error: code = Unknown desc = failed to reserve sandbox name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1": name "coredns-68444cf7cd-vq79r_kube-system_c002f635-edb4-4087-8d49-097dc080494f_1" is reserved for "d2fca323a070fffdaa5fa9e425a955acaf71b88d3630d0490eb63ca3640ff635"
+  Normal   SandboxChanged          4m57s (x90 over 20m)  kubelet            Pod sandbox changed, it will be killed and re-created.
+root@masternode:~#
+
 
 
 
