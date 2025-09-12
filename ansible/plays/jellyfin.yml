@@ -198,7 +198,6 @@
                 initialDelaySeconds: 60
                 periodSeconds: 15
                 timeoutSeconds: 10
-                failureThreshold: 20
                 failureThreshold: 30
               securityContext:
                 allowPrivilegeEscalation: false
