@@ -1770,47 +1770,36 @@
           failed_when: false
           when: not (skip_join_process | default(false))
 
-        - name: "Detect node name on control plane by internal IP"
-          shell: >
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-            get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' \
-            | grep -F '{{ ansible_host }}' | cut -d'|' -f1 || true
-          delegate_to: "{{ control_plane_host }}"
-          register: detected_node_name
-          changed_when: false
-          failed_when: detected_node_name.stdout == ""
-          when: not (skip_join_process | default(false))
-
-        - name: "Confirm detected node is Ready on control plane"
-          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes {{ detected_node_name.stdout }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
-          delegate_to: "{{ control_plane_host }}"
-          register: node_ready_check
-          retries: 12
-          delay: 10
-          until: node_ready_check.stdout == "True"
-          failed_when: node_ready_check.stdout != "True"
-          when: not (skip_join_process | default(false))
-
-        - name: "Fallback: run simple kubeadm join script if node not detected"
-          command:
-            argv:
-              - /bin/bash
-              - -lc
-              - "/tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5"
+        - name: "If enhanced join failed, run simple kubeadm join script on worker"
+          become: true
+          delegate_to: "{{ inventory_hostname }}"
+          shell: |
+            # run the provided kubeadm join script under bash to preserve quoting
+            bash -lc '/tmp/kubeadm-join.sh 2>&1 | tee /tmp/kubeadm-join.exec.log'
           register: simple_join
+          failed_when: false
           changed_when: simple_join.rc == 0
-          failed_when: simple_join.rc != 0
-          when: not (skip_join_process | default(false)) and (detected_node_name is defined and detected_node_name.stdout == "")
+          when: not (skip_join_process | default(false)) and (enhanced_join_result is not defined or enhanced_join_result.rc != 0)
 
-        - name: "Confirm node appears after fallback join"
-          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+        - name: "Wait for node to appear on control-plane by inventory name"
           delegate_to: "{{ control_plane_host }}"
-          register: node_ready_check_fallback
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ inventory_hostname }} -o name || true
+          register: node_by_name
           retries: 12
           delay: 10
-          until: node_ready_check_fallback.stdout == "True"
-          failed_when: node_ready_check_fallback.stdout != "True"
-          when: not (skip_join_process | default(false)) and (detected_node_name is defined and detected_node_name.stdout == "")
+          until: node_by_name.stdout != ""
+          failed_when: false
+          when: not (skip_join_process | default(false))
+
+        - name: "Verify node becomes Ready on control-plane"
+          delegate_to: "{{ control_plane_host }}"
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || true
+          register: node_ready_check_by_name
+          retries: 12
+          delay: 5
+          until: node_ready_check_by_name.stdout == "True"
+          failed_when: false
+          when: not (skip_join_process | default(false))
           
         - name: "Display join skip message"
           debug:
