@@ -462,12 +462,12 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     echo "Updated kube-proxy pod status:"
     echo "$NEW_PROXY_STATUS"
     
-    # Count running vs total
-    RUNNING_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c "Running" 2>/dev/null || echo "0")
-    TOTAL_PROXY=$(echo "$NEW_PROXY_STATUS" | grep -c kube-proxy 2>/dev/null || echo "0")
-    # Ensure single integers
-    RUNNING_PROXY=$(echo "$RUNNING_PROXY" | tr -d ' \n\r' | head -1)
-    TOTAL_PROXY=$(echo "$TOTAL_PROXY" | tr -d ' \n\r' | head -1)
+    # Count running vs total - improved counting
+    RUNNING_PROXY=$(echo "$NEW_PROXY_STATUS" | grep "Running" | wc -l)
+    TOTAL_PROXY=$(echo "$NEW_PROXY_STATUS" | grep "kube-proxy" | wc -l)
+    # Normalize to integers
+    RUNNING_PROXY=$((RUNNING_PROXY + 0))
+    TOTAL_PROXY=$((TOTAL_PROXY + 0))
     
     if [ "$RUNNING_PROXY" -eq "$TOTAL_PROXY" ] && [ "$TOTAL_PROXY" -gt 0 ]; then
         info "✓ All kube-proxy pods are now running ($RUNNING_PROXY/$TOTAL_PROXY)"
@@ -488,11 +488,11 @@ else
         info "Checking if kube-proxy DaemonSet needs to be recreated..."
         # This will be caught by the DaemonSet check we added above
     else
-        RUNNING_PROXY=$(echo "$EXISTING_PROXY" | grep -c "Running" 2>/dev/null || echo "0")
-        TOTAL_PROXY=$(echo "$EXISTING_PROXY" | grep -c kube-proxy 2>/dev/null || echo "0")
-        # Ensure single integers
-        RUNNING_PROXY=$(echo "$RUNNING_PROXY" | tr -d ' \n\r' | head -1)
-        TOTAL_PROXY=$(echo "$TOTAL_PROXY" | tr -d ' \n\r' | head -1)
+        RUNNING_PROXY=$(echo "$EXISTING_PROXY" | grep "Running" | wc -l)
+        TOTAL_PROXY=$(echo "$EXISTING_PROXY" | grep "kube-proxy" | wc -l)
+        # Normalize to integers
+        RUNNING_PROXY=$((RUNNING_PROXY + 0))
+        TOTAL_PROXY=$((TOTAL_PROXY + 0))
         if [ "$RUNNING_PROXY" -eq "$TOTAL_PROXY" ] && [ "$TOTAL_PROXY" -gt 0 ]; then
             info "✓ All kube-proxy pods are running ($RUNNING_PROXY/$TOTAL_PROXY)"
         else
@@ -544,11 +544,11 @@ echo
 info "Step 4: Restart any remaining problematic pods"
 
 # Restart CoreDNS if it's not ready
-COREDNS_READY=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $2}' | grep -c "1/1" 2>/dev/null || echo "0")
-COREDNS_TOTAL=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | wc -l 2>/dev/null)
-# Ensure single integers 
-COREDNS_READY=$(echo "$COREDNS_READY" | tr -d ' \n\r' | head -1)
-COREDNS_TOTAL=$(echo "$COREDNS_TOTAL" | tr -d ' \n\r' | head -1)
+COREDNS_READY=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers 2>/dev/null | awk '{print $2}' | grep "1/1" | wc -l)
+COREDNS_TOTAL=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers 2>/dev/null | wc -l)
+# Normalize to integers
+COREDNS_READY=$((COREDNS_READY + 0))
+COREDNS_TOTAL=$((COREDNS_TOTAL + 0))
 
 if [ "$COREDNS_READY" -lt "$COREDNS_TOTAL" ]; then
     warn "CoreDNS pods are not all ready ($COREDNS_READY/$COREDNS_TOTAL)"
@@ -583,12 +583,12 @@ echo
 echo "=== Monitoring Pods ==="
 kubectl get pods -n monitoring -o wide 2>/dev/null || echo "No monitoring namespace found"
 
-# Count remaining issues
-REMAINING_CRASHLOOP=$(kubectl get pods --all-namespaces | grep -c "CrashLoopBackOff" 2>/dev/null || echo "0")
-REMAINING_PENDING=$(kubectl get pods --all-namespaces | grep -c "Pending\|ContainerCreating" 2>/dev/null || echo "0")
-# Ensure we have single integers
-REMAINING_CRASHLOOP=$(echo "$REMAINING_CRASHLOOP" | tr -d ' \n\r' | head -1)
-REMAINING_PENDING=$(echo "$REMAINING_PENDING" | tr -d ' \n\r' | head -1)
+# Count remaining issues - improved version to handle all edge cases
+REMAINING_CRASHLOOP=$(kubectl get pods --all-namespaces 2>/dev/null | grep "CrashLoopBackOff" | wc -l)
+REMAINING_PENDING=$(kubectl get pods --all-namespaces 2>/dev/null | grep "Pending\|ContainerCreating" | wc -l)
+# Ensure we have single integers by using arithmetic expansion to normalize
+REMAINING_CRASHLOOP=$((REMAINING_CRASHLOOP + 0))
+REMAINING_PENDING=$((REMAINING_PENDING + 0))
 JELLYFIN_FINAL_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || echo "false")
 
 echo

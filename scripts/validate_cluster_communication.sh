@@ -83,12 +83,12 @@ info "=== Step 2: Node Status Validation ==="
 
 run_test_with_output "All nodes are Ready" "kubectl get nodes --no-headers | grep -v NotReady"
 
-# Get node count for further tests
-NODE_COUNT=$(kubectl get nodes --no-headers | wc -l 2>/dev/null || echo "0")
-READY_COUNT=$(kubectl get nodes --no-headers | grep -c " Ready " 2>/dev/null || echo "0")
-# Ensure single integers
-NODE_COUNT=$(echo "$NODE_COUNT" | tr -d ' \n\r' | head -1)
-READY_COUNT=$(echo "$READY_COUNT" | tr -d ' \n\r' | head -1)
+# Get node count for further tests - improved counting
+NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l)
+READY_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | grep " Ready " | wc -l)
+# Normalize to integers
+NODE_COUNT=$((NODE_COUNT + 0))
+READY_COUNT=$((READY_COUNT + 0))
 
 info "Cluster has $NODE_COUNT nodes, $READY_COUNT are Ready"
 
