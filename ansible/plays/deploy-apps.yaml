@@ -405,24 +405,42 @@
             name: admin-user
             namespace: kubernetes-dashboard
 
-    - name: "Wait for applications to be ready"
-      kubernetes.core.k8s_info:
-        api_version: v1
-        kind: Pod
-        namespace: "{{ monitoring_namespace }}"
-        label_selectors:
-          - app.kubernetes.io/name={{ item }}
-        wait: true
-        wait_condition:
-          type: Ready
-          status: "True"
-        wait_timeout: 600
-      loop:
-        - prometheus
-        - grafana
-        - loki
-      register: app_readiness_results
-      ignore_errors: yes
+    - name: "Wait for applications to be ready (with improved error handling)"
+      block:
+        - name: "Check if cluster networking is stable before waiting"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: kube-system
+            label_selectors:
+              - k8s-app=kube-dns
+          register: coredns_check
+          
+        - name: "Verify at least one CoreDNS pod is running"
+          fail:
+            msg: "CoreDNS is not running - cluster networking is unstable. Run: ./scripts/fix_homelab_node_issues.sh"
+          when: 
+            - coredns_check.resources | length == 0 or 
+              (coredns_check.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == 0)
+        
+        - name: "Wait for applications to be ready with reduced timeout"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: "{{ monitoring_namespace }}"
+            label_selectors:
+              - app.kubernetes.io/name={{ item }}
+            wait: true
+            wait_condition:
+              type: Ready
+              status: "True"
+            wait_timeout: 300  # Reduced from 600 to 300 seconds
+          loop:
+            - prometheus
+            - grafana
+            - loki
+          register: app_readiness_results
+          ignore_errors: yes
 
     - name: "Check pod status for troubleshooting"
       kubernetes.core.k8s_info:
