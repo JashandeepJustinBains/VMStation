@@ -74,7 +74,7 @@ run_test_with_output() {
 # Test 1: kubectl Basic Connectivity
 info "=== Step 1: kubectl Connectivity Tests ==="
 
-run_test "kubectl client version check" "kubectl version --client --short"
+run_test "kubectl client version check" "kubectl version --client"
 run_test "kubectl cluster connectivity" "timeout 10 kubectl get nodes"
 run_test "kubectl API server health" "timeout 10 kubectl get --raw /healthz"
 

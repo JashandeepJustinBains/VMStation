@@ -65,13 +65,13 @@ spec:
         cpu: "2"
         memory: 2Gi
     # Health checks using root endpoint for better compatibility
-    # Extended timeouts to handle potential network routing delays
+    # Extended timeouts to handle potential network routing delays in mixed OS clusters
     livenessProbe:
       httpGet:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 180
+      initialDelaySeconds: 240
       periodSeconds: 60
       timeoutSeconds: 30
       failureThreshold: 5
@@ -80,20 +80,20 @@ spec:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 120
+      initialDelaySeconds: 180
       periodSeconds: 30
       timeoutSeconds: 15
-      failureThreshold: 5
+      failureThreshold: 10
     startupProbe:
       httpGet:
         path: /
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 60
+      initialDelaySeconds: 120
       periodSeconds: 15
       timeoutSeconds: 10
-      # Increased failure threshold to handle CNI networking delays
-      failureThreshold: 40
+      # Increased failure threshold to handle CNI networking delays in mixed OS
+      failureThreshold: 30
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
