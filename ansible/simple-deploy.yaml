@@ -26,6 +26,78 @@
 # Step 1: Setup Kubernetes cluster
 - import_playbook: plays/setup-cluster.yaml
 
+# Step 1.5: Validate cluster readiness before application deployment
+- name: "Cluster Readiness Validation"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: false
+  tasks:
+    - name: "Check cluster node status"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_nodes
+
+    - name: "Check flannel pod status"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-flannel
+        label_selectors:
+          - app=flannel
+      register: flannel_pods
+      failed_when: false
+
+    - name: "Display cluster status"
+      debug:
+        msg: |
+          === Cluster Status Check ===
+          Total nodes: {{ cluster_nodes.resources | length }}
+          {% for node in cluster_nodes.resources %}
+          - {{ node.metadata.name }}: {{ node.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first | default('Unknown') }}
+          {% endfor %}
+          
+          Flannel pods: {{ flannel_pods.resources | length if flannel_pods.resources else 0 }}
+          {% for pod in flannel_pods.resources | default([]) %}
+          - {{ pod.metadata.name }} on {{ pod.spec.nodeName }}: {{ pod.status.phase }}
+          {% endfor %}
+
+    - name: "Wait for flannel to be ready on all nodes"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: DaemonSet
+        namespace: kube-flannel
+        name: kube-flannel-ds
+        wait: true
+        wait_condition:
+          type: Ready
+        wait_timeout: 300
+      ignore_errors: yes
+
+    - name: "Check if any critical pods are failing"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+      register: system_pods
+
+    - name: "Display system pod issues"
+      debug:
+        msg: |
+          === System Pod Status ===
+          {% for pod in system_pods.resources %}
+          {% if pod.status.phase != 'Running' and pod.status.phase != 'Succeeded' %}
+          - {{ pod.metadata.name }}: {{ pod.status.phase }}
+          {% if pod.status.containerStatuses is defined %}
+          {% for container in pod.status.containerStatuses %}
+          {% if container.state.waiting is defined %}
+            Container {{ container.name }}: {{ container.state.waiting.reason | default('Unknown') }}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+
 # Step 2: Deploy core monitoring stack
 - import_playbook: plays/deploy-apps.yaml
 
@@ -74,7 +146,7 @@
           
           Cluster Nodes: {{ cluster_nodes.resources | length }}
           {% for node in cluster_nodes.resources %}
-          - {{ node.metadata.name }}: {{ node.status.addresses[0].address }} ({{ node.status.conditions[-1].type }})
+          - {{ node.metadata.name }}: {{ node.status.addresses[0].address }} ({{ node.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first | default('Unknown') }})
           {% endfor %}
           
           Namespaces: 
@@ -83,6 +155,11 @@
           {% endfor %}
           
           Monitoring: {{ 'Running' if prometheus_pods.resources else 'Not Ready' }}
+          {% if prometheus_pods.resources %}
+          {% for pod in prometheus_pods.resources %}
+          - {{ pod.metadata.name }}: {{ pod.status.phase | default('Unknown') }}
+          {% endfor %}
+          {% endif %}
           
           {% if jellyfin_enabled | default(true) %}
           Jellyfin: Enabled
@@ -92,3 +169,10 @@
           - Grafana: http://{{ groups['monitoring_nodes'][0] }}:30300  
           - Prometheus: http://{{ groups['monitoring_nodes'][0] }}:30090
           - Jellyfin: http://{{ groups['storage_nodes'][0] }}:30096
+          
+          {% if prometheus_pods.resources | length == 0 %}
+          
+          ⚠️  WARNING: Some applications may not be ready yet.
+          Check status with: kubectl get pods --all-namespaces
+          For troubleshooting: kubectl describe pod -n <namespace> <pod-name>
+          {% endif %}

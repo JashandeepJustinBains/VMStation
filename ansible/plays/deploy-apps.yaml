@@ -19,6 +19,37 @@
         kind: Namespace
         state: present
 
+    - name: "Check and fix flannel pod issues"
+      block:
+        - name: "Get flannel pod status"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: kube-flannel
+            label_selectors:
+              - app=flannel
+          register: flannel_status
+
+        - name: "Restart crashlooping flannel pods"
+          kubernetes.core.k8s:
+            state: absent
+            api_version: v1
+            kind: Pod
+            name: "{{ item.metadata.name }}"
+            namespace: "{{ item.metadata.namespace }}"
+          loop: "{{ flannel_status.resources }}"
+          when: 
+            - item.status.phase == 'Running'
+            - item.status.containerStatuses is defined
+            - item.status.containerStatuses | selectattr('restartCount', 'greaterthan', 5) | list | length > 0
+          ignore_errors: yes
+
+        - name: "Wait for flannel to stabilize"
+          pause:
+            seconds: 30
+          when: flannel_status.resources | selectattr('status.phase', 'equalto', 'Running') | selectattr('status.containerStatuses.0.restartCount', 'greaterthan', 5) | list | length > 0
+      ignore_errors: yes
+
     - name: "Deploy Prometheus"
       kubernetes.core.k8s:
         state: present
@@ -49,6 +80,7 @@
                 containers:
                 - name: prometheus
                   image: prom/prometheus:latest
+                  imagePullPolicy: IfNotPresent
                   ports:
                   - containerPort: 9090
                   args:
@@ -57,6 +89,26 @@
                     - --web.console.libraries=/etc/prometheus/console_libraries
                     - --web.console.templates=/etc/prometheus/consoles
                     - --web.enable-lifecycle
+                  resources:
+                    requests:
+                      memory: "256Mi"
+                      cpu: "100m"
+                    limits:
+                      memory: "1Gi"
+                      cpu: "500m"
+                  readinessProbe:
+                    httpGet:
+                      path: /-/ready
+                      port: 9090
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                  livenessProbe:
+                    httpGet:
+                      path: /-/healthy
+                      port: 9090
+                    initialDelaySeconds: 60
+                    periodSeconds: 30
                   volumeMounts:
                   - name: config-volume
                     mountPath: /etc/prometheus/
@@ -150,11 +202,34 @@
                 containers:
                 - name: grafana
                   image: grafana/grafana:latest
+                  imagePullPolicy: IfNotPresent
                   ports:
                   - containerPort: 3000
                   env:
                   - name: GF_SECURITY_ADMIN_PASSWORD
                     value: "admin"
+                  - name: GF_INSTALL_PLUGINS
+                    value: ""
+                  resources:
+                    requests:
+                      memory: "128Mi"
+                      cpu: "100m"
+                    limits:
+                      memory: "512Mi"
+                      cpu: "500m"
+                  readinessProbe:
+                    httpGet:
+                      path: /api/health
+                      port: 3000
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                  livenessProbe:
+                    httpGet:
+                      path: /api/health
+                      port: 3000
+                    initialDelaySeconds: 60
+                    periodSeconds: 30
                   volumeMounts:
                   - name: storage
                     mountPath: /var/lib/grafana
@@ -210,10 +285,31 @@
                 containers:
                 - name: loki
                   image: grafana/loki:latest
+                  imagePullPolicy: IfNotPresent
                   ports:
                   - containerPort: 3100
                   args:
                     - -config.file=/etc/loki/local-config.yaml
+                  resources:
+                    requests:
+                      memory: "128Mi"
+                      cpu: "100m"
+                    limits:
+                      memory: "512Mi"
+                      cpu: "500m"
+                  readinessProbe:
+                    httpGet:
+                      path: /ready
+                      port: 3100
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                    timeoutSeconds: 5
+                  livenessProbe:
+                    httpGet:
+                      path: /ready
+                      port: 3100
+                    initialDelaySeconds: 60
+                    periodSeconds: 30
                   volumeMounts:
                   - name: storage
                     mountPath: /tmp/loki
@@ -320,12 +416,55 @@
         wait_condition:
           type: Ready
           status: "True"
-        wait_timeout: 300
+        wait_timeout: 600
       loop:
         - prometheus
         - grafana
         - loki
+      register: app_readiness_results
       ignore_errors: yes
+
+    - name: "Check pod status for troubleshooting"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ monitoring_namespace }}"
+        label_selectors:
+          - app.kubernetes.io/name={{ item.item }}
+      loop: "{{ app_readiness_results.results }}"
+      when: item.failed | default(false)
+      register: failed_pod_status
+      ignore_errors: yes
+
+    - name: "Display troubleshooting information for failed pods"
+      debug:
+        msg: |
+          === Troubleshooting {{ item.item.item }} ===
+          {% for pod in item.resources | default([]) %}
+          Pod: {{ pod.metadata.name }}
+          Status: {{ pod.status.phase | default('Unknown') }}
+          {% if pod.status.conditions is defined %}
+          Conditions:
+          {% for condition in pod.status.conditions %}
+          - {{ condition.type }}: {{ condition.status }} ({{ condition.reason | default('') }})
+          {% endfor %}
+          {% endif %}
+          {% if pod.status.containerStatuses is defined %}
+          Container Status:
+          {% for container in pod.status.containerStatuses %}
+          - {{ container.name }}: {{ container.state.keys() | first }}
+          {% if container.state.waiting is defined %}
+            Reason: {{ container.state.waiting.reason | default('Unknown') }}
+            Message: {{ container.state.waiting.message | default('') }}
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+          {% endfor %}
+          
+          Check with: kubectl describe pod -n {{ monitoring_namespace }} <pod-name>
+          Check logs: kubectl logs -n {{ monitoring_namespace }} <pod-name>
+      loop: "{{ failed_pod_status.results | default([]) }}"
+      when: failed_pod_status is defined and item.resources is defined
 
     - name: "Display deployment status"
       debug:
