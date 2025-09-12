@@ -702,6 +702,81 @@ sudo systemctl restart kubelet
 - **Logs**: Use `kubectl logs` and `journalctl` for debugging
 - **Community**: Kubernetes and Helm communities for platform-specific issues
 
+## Troubleshooting
+
+### Common Issues and Fixes
+
+#### 1. Cluster Networking Problems
+If you experience Flannel CrashLoopBackOff, CoreDNS issues, or pods stuck in ContainerCreating:
+
+```bash
+# Check overall cluster status
+./scripts/vmstation_status.sh
+
+# Fix homelab node networking issues  
+./scripts/fix_homelab_node_issues.sh
+
+# Fix CoreDNS-specific issues
+./scripts/fix_coredns_unknown_status.sh
+```
+
+#### 2. Application Deployment Hanging
+If `deploy.sh full` hangs on "wait for applications to be ready":
+
+```bash
+# Check cluster networking first
+./scripts/check_coredns_status.sh
+
+# Apply fixes and redeploy applications
+./scripts/fix_homelab_node_issues.sh
+./deploy.sh apps
+```
+
+#### 3. Jellyfin Not Deploying
+If Jellyfin doesn't appear in the cluster:
+
+```bash
+# Check storage node readiness
+kubectl get nodes storagenodet3500 -o wide
+
+# Deploy Jellyfin specifically
+./deploy.sh jellyfin
+
+# Check deployment status
+kubectl get pods -n jellyfin -o wide
+```
+
+#### 4. Pods on Wrong Nodes
+If CoreDNS runs on homelab instead of masternode:
+
+```bash
+# Apply CoreDNS scheduling fix
+./scripts/fix_homelab_node_issues.sh
+
+# Verify CoreDNS is on control-plane
+kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+```
+
+### Comprehensive Status Check
+
+For a complete overview of cluster health and recommendations:
+
+```bash
+./scripts/vmstation_status.sh
+```
+
+### Emergency Recovery
+
+If the cluster is completely broken:
+
+```bash
+# Reset and rebuild cluster
+./deploy.sh spindown  # Remove all infrastructure
+./deploy.sh full      # Fresh deployment with fixes
+```
+
+For detailed troubleshooting information, see [docs/HOMELAB_NODE_FIXES.md](./docs/HOMELAB_NODE_FIXES.md).
+
 ## Legacy Files
 
 The previous complex deployment system (with 85% more code) has been moved to the `legacy/` directory. This includes:
