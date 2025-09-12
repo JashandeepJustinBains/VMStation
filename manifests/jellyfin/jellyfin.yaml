@@ -64,36 +64,39 @@ spec:
       limits:
         cpu: "2"
         memory: 2Gi
-    # Health checks using root endpoint for better compatibility
-    # Extended timeouts to handle potential network routing delays
+    # Health checks using exec probes to avoid CNI networking issues
+    # These probes check if Jellyfin is responding locally within the container
     livenessProbe:
-      httpGet:
-        path: /
-        port: 8096
-        scheme: HTTP
+      exec:
+        command:
+        - sh
+        - -c
+        - "wget -q --spider http://localhost:8096/ || exit 1"
       initialDelaySeconds: 180
       periodSeconds: 60
       timeoutSeconds: 30
       failureThreshold: 5
     readinessProbe:
-      httpGet:
-        path: /
-        port: 8096
-        scheme: HTTP
+      exec:
+        command:
+        - sh
+        - -c
+        - "wget -q --spider http://localhost:8096/ || exit 1"
       initialDelaySeconds: 120
       periodSeconds: 30
       timeoutSeconds: 15
       failureThreshold: 5
     startupProbe:
-      httpGet:
-        path: /
-        port: 8096
-        scheme: HTTP
+      exec:
+        command:
+        - sh
+        - -c
+        - "wget -q --spider http://localhost:8096/ || exit 1"
       initialDelaySeconds: 60
       periodSeconds: 15
       timeoutSeconds: 10
-      # Increased failure threshold to handle CNI networking delays
-      failureThreshold: 40
+      # Reasonable failure threshold for startup
+      failureThreshold: 30
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false

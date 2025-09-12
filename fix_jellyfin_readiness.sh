@@ -62,8 +62,10 @@ if ip addr show cni0 >/dev/null 2>&1; then
                     # Wait for network to stabilize
                     sleep 30
                 else
-                    warn "CNI bridge fix failed, proceeding with extended probe timeouts"
+                    warn "CNI bridge fix failed, but proceeding with exec-based health probes"
                 fi
+            else
+                warn "CNI bridge fix script not found, but using exec-based health probes to work around networking issues"
             fi
         fi
     fi
@@ -95,7 +97,8 @@ if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
     if [ -n "$NETWORK_ERRORS" ]; then
         warn "Detected network connectivity errors:"
         echo "$NETWORK_ERRORS"
-        warn "Will recreate pod with network-optimized configuration"
+        warn "This indicates CNI networking issues preventing health probes from reaching the pod"
+        warn "Will recreate pod with exec-based health probes to work around this issue"
         
         # Delete the problematic pod
         kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true
@@ -146,8 +149,8 @@ else
     echo "  sudo chmod 755 /var/lib/jellyfin /srv/media"
 fi
 
-# Apply the fixed pod configuration with network-optimized settings
-info "Applying network-optimized Jellyfin pod configuration..."
+# Apply the fixed pod configuration with network-robust exec-based health probes
+info "Applying network-robust Jellyfin pod configuration..."
 kubectl apply -f manifests/jellyfin/jellyfin.yaml
 
 # Wait for pod to be created
@@ -241,4 +244,4 @@ fi
 
 echo
 info "Jellyfin readiness issue has been resolved!"
-info "The pod now uses network-optimized configuration to handle connectivity issues"
+info "The pod now uses exec-based health probes that work around CNI networking issues"
