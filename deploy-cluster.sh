@@ -189,10 +189,15 @@ run_post_deployment_fixes() {
     if is_running_on_control_plane; then
         info "Running post-deployment fixes locally (already on control plane)..."
         
-        # Clean up any existing PVC resources that might conflict with hostPath
-        info "Cleaning up any conflicting PVC resources for Jellyfin..."
+        # Clean up any existing Jellyfin resources that might conflict
+        info "Cleaning up any conflicting Jellyfin resources..."
         kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true
         kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true
+        # Clean up existing services and deployments to prevent port conflicts
+        kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true
+        kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true
+        kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true
+        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true
         
         for script in "${fix_scripts[@]}"; do
             if [ -f "$script" ]; then
@@ -212,10 +217,15 @@ run_post_deployment_fixes() {
         # Copy scripts to control plane
         local temp_dir="/tmp/vmstation-fixes"
         
-        # First clean up any conflicting PVCs
-        info "Cleaning up any conflicting PVC resources for Jellyfin on remote control plane..."
+        # First clean up any conflicting Jellyfin resources
+        info "Cleaning up any conflicting Jellyfin resources on remote control plane..."
         ssh root@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true" || true
         ssh root@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true" || true
+        # Clean up existing services and deployments to prevent port conflicts
+        ssh root@$control_plane_ip "kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true" || true
+        ssh root@$control_plane_ip "kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true" || true
+        ssh root@$control_plane_ip "kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true" || true
+        ssh root@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true" || true
         
         for script in "${fix_scripts[@]}"; do
             if [ -f "$script" ]; then

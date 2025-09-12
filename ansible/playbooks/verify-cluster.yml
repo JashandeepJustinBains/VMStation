@@ -248,6 +248,25 @@
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
   tasks:
+    - name: "Clean up any existing Jellyfin resources to prevent conflicts"
+      kubernetes.core.k8s:
+        state: absent
+        kubeconfig: "{{ kubeconfig_path }}"
+        api_version: "{{ item.api_version }}"
+        kind: "{{ item.kind }}"
+        name: "{{ item.name }}"
+        namespace: "{{ item.namespace | default(omit) }}"
+      loop:
+        - { api_version: "v1", kind: "Service", name: "jellyfin-service", namespace: "jellyfin" }
+        - { api_version: "v1", kind: "Service", name: "jellyfin", namespace: "jellyfin" }
+        - { api_version: "apps/v1", kind: "Deployment", name: "jellyfin", namespace: "jellyfin" }
+        - { api_version: "v1", kind: "Pod", name: "jellyfin", namespace: "jellyfin" }
+        - { api_version: "v1", kind: "PersistentVolumeClaim", name: "jellyfin-config-pvc", namespace: "jellyfin" }
+        - { api_version: "v1", kind: "PersistentVolumeClaim", name: "jellyfin-media-pvc", namespace: "jellyfin" }
+        - { api_version: "v1", kind: "PersistentVolume", name: "jellyfin-config-pv" }
+        - { api_version: "v1", kind: "PersistentVolume", name: "jellyfin-media-pv" }
+      ignore_errors: true
+
     - name: "Deploy Jellyfin"
       kubernetes.core.k8s:
         state: present
