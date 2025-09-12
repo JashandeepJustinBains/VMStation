@@ -883,6 +883,19 @@
       register: flannel_exists
       failed_when: false
 
+    - name: "Run CNI bridge cleanup helper on control-plane (if present)"
+      shell: |
+        if [ -x /root/VMStation/scripts/fix_cni_bridge_conflict.sh ]; then
+          /root/VMStation/scripts/fix_cni_bridge_conflict.sh || true
+        elif [ -x /srv/monitoring_data/VMStation/scripts/fix_cni_bridge_conflict.sh ]; then
+          /srv/monitoring_data/VMStation/scripts/fix_cni_bridge_conflict.sh || true
+        else
+          echo "CNI cleanup helper not found on control-plane; skipping"
+        fi
+      delegate_to: "{{ control_plane_ip }}"
+      run_once: true
+      failed_when: false
+
     - name: "Install Flannel CNI"
       shell: |
         timeout 60 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
