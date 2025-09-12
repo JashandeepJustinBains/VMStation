@@ -25,7 +25,6 @@
           ansible.builtin.debug:
             var: kubeconfig_file
       when: kubeconfig_path is defined
-      failed_when: false
 
     - name: "Verify kubectl is working"
       kubernetes.core.k8s_info:
