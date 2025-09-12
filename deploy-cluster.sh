@@ -165,6 +165,26 @@ verify_cluster() {
     fi
 }
 
+is_running_on_control_plane() {
+    local control_plane_ip="192.168.4.63"
+    local current_ip
+    
+    # Get current machine IP addresses
+    current_ip=$(hostname -I 2>/dev/null || ip route get 1 2>/dev/null | awk '{print $7; exit}' || echo "")
+    
+    # Check if any of the current IPs match the control plane IP
+    if echo "$current_ip" | grep -q "$control_plane_ip"; then
+        return 0
+    fi
+    
+    # Also check if we're the control plane by checking for kubeconfig
+    if [ -f "/etc/kubernetes/admin.conf" ]; then
+        return 0
+    fi
+    
+    return 1
+}
+
 run_smoke_test() {
     info "Running smoke test..."
     
@@ -182,19 +202,30 @@ run_smoke_test() {
     # Run smoke test on control plane node
     local control_plane_ip="192.168.4.63"
     
-    info "Copying smoke test script to control plane..."
-    if scp scripts/smoke-test.sh root@$control_plane_ip:/tmp/; then
-        info "Running smoke test on control plane ($control_plane_ip)..."
-        if ssh root@$control_plane_ip "chmod +x /tmp/smoke-test.sh && /tmp/smoke-test.sh"; then
+    # Check if we're already running on the control plane
+    if is_running_on_control_plane; then
+        info "Running smoke test locally (already on control plane)..."
+        if chmod +x scripts/smoke-test.sh && scripts/smoke-test.sh; then
             success "✅ Smoke test passed!"
         else
             error "❌ Smoke test failed!"
             exit 1
         fi
     else
-        error "Failed to copy smoke test script to control plane"
-        info "Make sure SSH access to $control_plane_ip is configured"
-        exit 1
+        info "Copying smoke test script to control plane..."
+        if scp scripts/smoke-test.sh root@$control_plane_ip:/tmp/; then
+            info "Running smoke test on control plane ($control_plane_ip)..."
+            if ssh root@$control_plane_ip "chmod +x /tmp/smoke-test.sh && /tmp/smoke-test.sh"; then
+                success "✅ Smoke test passed!"
+            else
+                error "❌ Smoke test failed!"
+                exit 1
+            fi
+        else
+            error "Failed to copy smoke test script to control plane"
+            info "Make sure SSH access to $control_plane_ip is configured"
+            exit 1
+        fi
     fi
 }
 
