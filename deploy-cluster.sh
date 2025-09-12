@@ -130,6 +130,10 @@ deploy_cluster() {
         if [ "$SKIP_VERIFICATION" = false ] && [ "$DRY_RUN" = false ]; then
             info "Running post-deployment verification..."
             verify_cluster
+            
+            # Run post-deployment fixes for common issues
+            info "Running post-deployment fixes for known issues..."
+            run_post_deployment_fixes
         fi
     else
         error "❌ Cluster deployment failed!"
@@ -163,6 +167,76 @@ verify_cluster() {
         info "Run smoke test for quick diagnosis: $0 smoke-test"
         exit 1
     fi
+}
+
+run_post_deployment_fixes() {
+    info "Running post-deployment fixes for common pod issues..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        info "DRY RUN: Would run post-deployment fixes on control plane"
+        return 0
+    fi
+    
+    # Check if fix scripts exist
+    local fix_scripts=(
+        "scripts/fix_homelab_node_issues.sh"
+        "scripts/fix_remaining_pod_issues.sh"
+    )
+    
+    local control_plane_ip="192.168.4.63"
+    
+    # Check if we're already running on the control plane
+    if is_running_on_control_plane; then
+        info "Running post-deployment fixes locally (already on control plane)..."
+        
+        # Clean up any existing PVC resources that might conflict with hostPath
+        info "Cleaning up any conflicting PVC resources for Jellyfin..."
+        kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true
+        kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true
+        
+        for script in "${fix_scripts[@]}"; do
+            if [ -f "$script" ]; then
+                info "Running fix script: $script"
+                if chmod +x "$script" && "$script"; then
+                    success "✅ Fix script $script completed successfully"
+                else
+                    warn "⚠️ Fix script $script encountered issues (non-critical)"
+                fi
+            else
+                warn "Fix script not found: $script"
+            fi
+        done
+    else
+        info "Copying fix scripts to control plane and running them..."
+        
+        # Copy scripts to control plane
+        local temp_dir="/tmp/vmstation-fixes"
+        
+        # First clean up any conflicting PVCs
+        info "Cleaning up any conflicting PVC resources for Jellyfin on remote control plane..."
+        ssh root@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true" || true
+        ssh root@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true" || true
+        
+        for script in "${fix_scripts[@]}"; do
+            if [ -f "$script" ]; then
+                info "Copying and running: $script"
+                if scp "$script" root@$control_plane_ip:/tmp/; then
+                    local script_name=$(basename "$script")
+                    if ssh root@$control_plane_ip "chmod +x /tmp/$script_name && /tmp/$script_name"; then
+                        success "✅ Remote fix script $script_name completed successfully"
+                    else
+                        warn "⚠️ Remote fix script $script_name encountered issues (non-critical)"
+                    fi
+                    # Clean up
+                    ssh root@$control_plane_ip "rm -f /tmp/$script_name" || true
+                else
+                    warn "Failed to copy fix script $script to control plane"
+                fi
+            fi
+        done
+    fi
+    
+    info "Post-deployment fixes completed"
 }
 
 is_running_on_control_plane() {

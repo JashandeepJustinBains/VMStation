@@ -282,7 +282,7 @@
 
     - name: "Test Jellyfin web interface"
       uri:
-        url: "http://192.168.4.61:30096/health"
+        url: "http://192.168.4.61:30096/web/index.html"
         method: GET
         return_content: yes
         status_code: [200, 404]  # 404 is acceptable for health endpoint
