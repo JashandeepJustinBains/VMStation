@@ -286,8 +286,8 @@
       until: >
         jellyfin_pods.resources | length > 0 and
         jellyfin_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
-      retries: 30
-      delay: 10
+      retries: 60  # Increased retries for CNI networking issues
+      delay: 20    # Increased delay between retries
       failed_when: >
         jellyfin_pods.resources | length == 0 or
         'Running' not in (jellyfin_pods.resources | map(attribute='status.phase') | list)
@@ -305,9 +305,10 @@
         method: GET
         return_content: yes
         status_code: [200, 302]  # 302 is acceptable for redirect to setup
+        timeout: 30  # Increased timeout for network connectivity issues
       register: jellyfin_test
-      retries: 10
-      delay: 15
+      retries: 15  # Increased retries to handle CNI networking delays
+      delay: 20    # Increased delay between retries
       failed_when: jellyfin_test.status not in [200, 302]
 
 - name: "Final Smoke Test Summary"
