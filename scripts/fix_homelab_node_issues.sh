@@ -237,13 +237,22 @@ if [ "$REMAINING_ISSUES" -eq 0 ]; then
     info "✅ No remaining crashlooping pods detected"
     echo "Cluster networking should now be stable for application deployment."
 else
-    warn "⚠️  $REMAINING_ISSUES pods still have issues - may need additional investigation"
-    echo "Check with: kubectl get pods --all-namespaces | grep -E '(CrashLoopBackOff|Error|Unknown)'"
+    warn "⚠️  $REMAINING_ISSUES pods still have issues - running additional fixes"
+    
+    # Run the additional pod fixes if available
+    if [ -f "./scripts/fix_remaining_pod_issues.sh" ]; then
+        echo
+        info "Running additional pod issue fixes..."
+        ./scripts/fix_remaining_pod_issues.sh
+    else
+        echo "Check with: kubectl get pods --all-namespaces | grep -E '(CrashLoopBackOff|Error|Unknown)'"
+    fi
 fi
 
 echo
 echo "Next steps:"
 echo "1. Monitor flannel and CoreDNS stability: kubectl get pods -n kube-system -l k8s-app=kube-dns"
 echo "2. Wait a few minutes for any remaining pods to stabilize"
-echo "3. Run application deployment: ./deploy.sh apps"
-echo "4. Check for Jellyfin deployment: kubectl get pods -n jellyfin"
+echo "3. Check Jellyfin status: kubectl get pods -n jellyfin -o wide"
+echo "4. If Jellyfin shows 0/1 ready, run: ./scripts/fix_remaining_pod_issues.sh"
+echo "5. Access Jellyfin at: http://192.168.4.61:30096 (once ready)"

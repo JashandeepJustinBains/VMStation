@@ -439,6 +439,9 @@ kubectl apply --dry-run=client -f k8s/
 ```
 
 ### Troubleshooting Tools
+- **Pod health validation**: `./scripts/validate_pod_health.sh` - **NEW!** Quick validation of all pod health status
+- **Remaining pod fixes**: `./scripts/fix_remaining_pod_issues.sh` - **NEW!** Fixes jellyfin readiness and kube-proxy crashloop issues
+- **Pod diagnostics**: `./scripts/diagnose_remaining_pod_issues.sh` - **NEW!** Detailed analysis of pod failures
 - **Service enablement**: `./scripts/fix_kubernetes_service_enablement.sh` - **NEW!** Enables disabled kubelet/containerd services
 - **CNI bridge conflicts**: `./scripts/fix_cni_bridge_conflict.sh` - **NEW!** Fixes CNI bridge IP conflicts causing ContainerCreating errors
 - **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
@@ -452,6 +455,31 @@ kubectl apply --dry-run=client -f k8s/
 - **Network debugging**: `kubectl exec -it <pod-name> -- /bin/bash`
 
 #### Monitoring Stack Issues (CrashLoopBackOff, etc.)
+
+##### Quick Fix for Common Pod Failures ⚡ **NEW!**
+For immediate fixes to pods stuck in CrashLoopBackOff or not ready:
+
+```bash
+# Validate current pod health status
+./scripts/validate_pod_health.sh
+
+# Diagnose specific pod failures
+./scripts/diagnose_remaining_pod_issues.sh
+
+# Fix remaining pod issues (jellyfin readiness, kube-proxy crashloop, etc.)
+./scripts/fix_remaining_pod_issues.sh
+
+# For monitoring pods specifically
+./scripts/fix_k8s_monitoring_pods.sh
+```
+
+**Common fixes include**:
+- ✅ **Jellyfin 0/1 Ready** - Health check endpoint fixes and volume permission corrections
+- ✅ **kube-proxy CrashLoopBackOff** - Network configuration fixes for worker nodes
+- ✅ **ContainerCreating pods** - CNI bridge IP conflict resolution
+- ✅ **Grafana Init:CrashLoopBackOff** - Permission fixes for UID 472:472
+- ✅ **Loki CrashLoopBackOff** - Configuration fixes for max_retries errors
+- ✅ **Step-by-step remediation** - Exact commands for config/manifest/permission fixes
 
 ##### Quick Fix for Common Pod Failures ⚡ **NEW!**
 For immediate fixes to monitoring pods stuck in CrashLoopBackOff:
@@ -746,6 +774,12 @@ If `deploy.sh full` hangs on "wait for applications to be ready":
 
 # Apply fixes and redeploy applications
 ./scripts/fix_homelab_node_issues.sh
+
+# If jellyfin shows 0/1 Ready or CrashLoopBackOff
+./scripts/fix_remaining_pod_issues.sh
+
+# Check overall pod health
+./scripts/validate_pod_health.sh
 ./deploy.sh apps
 ```
 
