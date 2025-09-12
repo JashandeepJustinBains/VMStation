@@ -104,6 +104,25 @@
       retries: 30
       delay: 10
 
+- name: "Apply Node Labels"
+  hosts: all
+  become: true
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+  tasks:
+    - name: "Apply node labels using kubectl"
+      shell: |
+        {% for label in node_labels | default([]) %}
+        kubectl label node {{ inventory_hostname }} {{ label }} --overwrite
+        {% endfor %}
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      when: 
+        - node_labels is defined
+        - node_labels | length > 0
+      delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+      ignore_errors: yes
+
 - name: "Join Worker Nodes to Cluster"
   hosts: storage_nodes:compute_nodes
   become: true
