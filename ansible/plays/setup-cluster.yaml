@@ -1770,8 +1770,19 @@
           failed_when: false
           when: not (skip_join_process | default(false))
 
-        - name: "Confirm worker appears and is Ready on control plane after join"
-          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+        - name: "Detect node name on control plane by internal IP"
+          shell: >
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf \
+            get nodes -o jsonpath='{range .items[*]}{.metadata.name}"|"{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' \
+            | awk -F'"|"' '/{{ ansible_host }}$/ {print $1}'
+          delegate_to: "{{ control_plane_host }}"
+          register: detected_node_name
+          changed_when: false
+          failed_when: detected_node_name.stdout == ""
+          when: not (skip_join_process | default(false))
+
+        - name: "Confirm detected node is Ready on control plane"
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes {{ detected_node_name.stdout }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
           delegate_to: "{{ control_plane_host }}"
           register: node_ready_check
           retries: 12
