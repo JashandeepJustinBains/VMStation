@@ -520,6 +520,31 @@ kubectl cluster-info
 kubectl get nodes
 ```
 
+#### CoreDNS "Unknown" Status After Flannel Regeneration ⚡ **NEW!**
+If CoreDNS pods show "Unknown" status with no IP after running `deploy.sh full`:
+```bash
+# Quick status check
+./scripts/check_coredns_status.sh
+
+# Automated fix for CoreDNS networking issues
+./scripts/fix_coredns_unknown_status.sh
+
+# This fixes:
+# - CoreDNS pods stuck in "Unknown" status
+# - Missing IP addresses on CoreDNS pods
+# - DNS resolution failures preventing other pods from starting
+# - Control-plane taint issues preventing CoreDNS scheduling
+```
+
+📖 **Documentation**: See [docs/COREDNS_UNKNOWN_STATUS_FIX.md](./docs/COREDNS_UNKNOWN_STATUS_FIX.md) for detailed information.
+
+**Key Features of this fix**:
+- ✅ Automatically integrated into `deploy.sh full` workflow
+- ✅ Removes control-plane taints that prevent CoreDNS scheduling  
+- ✅ Forces rescheduling of stuck CoreDNS pods
+- ✅ Validates DNS resolution functionality
+- ✅ Enables other pending pods to start correctly
+
 #### General Deployment Issues
 ```bash
 # Check cluster status
