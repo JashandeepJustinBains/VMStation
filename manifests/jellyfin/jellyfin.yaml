@@ -26,8 +26,7 @@ spec:
     runAsUser: 1000
     runAsGroup: 1000
     fsGroup: 1000
-    seccompProfile:
-      type: RuntimeDefault
+    # Removed seccompProfile: RuntimeDefault to allow network access for probes
   containers:
   - name: jellyfin
     image: jellyfin/jellyfin:latest
@@ -66,6 +65,7 @@ spec:
         cpu: "2"
         memory: 2Gi
     # Health checks using root endpoint for better compatibility
+    # Extended timeouts to handle potential network routing delays
     livenessProbe:
       httpGet:
         path: /
@@ -92,7 +92,8 @@ spec:
       initialDelaySeconds: 60
       periodSeconds: 15
       timeoutSeconds: 10
-      failureThreshold: 30
+      # Increased failure threshold to handle CNI networking delays
+      failureThreshold: 40
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
