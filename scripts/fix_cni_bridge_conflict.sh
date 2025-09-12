@@ -17,8 +17,12 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Check if we have kubectl access
-if ! kubectl get nodes >/dev/null 2>&1; then
-    error "Cannot access Kubernetes cluster"
+if ! timeout 30 kubectl get nodes >/dev/null 2>&1; then
+    error "Cannot access Kubernetes cluster or kubectl timed out"
+    echo "Please ensure:"
+    echo "  1. kubectl is properly configured"
+    echo "  2. The cluster is accessible"
+    echo "  3. You are running this from the control plane node"
     exit 1
 fi
 
@@ -31,14 +35,14 @@ echo
 info "Step 1: Diagnosing CNI bridge configuration on all nodes"
 
 # Get all cluster nodes
-NODES=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
+NODES=$(timeout 30 kubectl get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
 
 for node in $NODES; do
     echo
     echo "=== Node: $node ==="
     
     # Check if this is a node we can access directly (control plane)
-    if [ "$node" = "masternode" ] || kubectl get nodes "$node" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' | grep -q ""; then
+    if [ "$node" = "masternode" ] || timeout 30 kubectl get nodes "$node" -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' 2>/dev/null | grep -q ""; then
         echo "Checking CNI bridge configuration on control plane node..."
         
         # Check current bridge configuration
@@ -70,11 +74,11 @@ done
 info "Step 2: Checking current pod status"
 
 echo "Pods stuck in ContainerCreating:"
-kubectl get pods --all-namespaces | grep "ContainerCreating" || echo "No pods currently stuck in ContainerCreating"
+timeout 30 kubectl get pods --all-namespaces 2>/dev/null | grep "ContainerCreating" || echo "No pods currently stuck in ContainerCreating"
 
 echo
 echo "Recent pod creation errors:"
-kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to create pod sandbox" | tail -5 || echo "No recent pod sandbox creation errors found"
+timeout 30 kubectl get events --all-namespaces --sort-by='.lastTimestamp' 2>/dev/null | grep -i "failed to create pod sandbox" | tail -5 || echo "No recent pod sandbox creation errors found"
 
 # Step 3: Fix the CNI bridge configuration
 info "Step 3: Applying CNI bridge fix"
@@ -125,14 +129,18 @@ sleep 10
 info "Step 5: Restarting Flannel pods to recreate CNI bridge"
 
 # Delete flannel pods to force recreation with clean network state
-kubectl delete pods -n kube-flannel --all --force --grace-period=0
+timeout 60 kubectl delete pods -n kube-flannel --all --force --grace-period=0
 
 echo "Waiting for Flannel pods to recreate..."
 sleep 20
 
 # Check if Flannel DaemonSet is ready
 info "Waiting for Flannel DaemonSet to be ready..."
-kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel --timeout=120s
+if timeout 120 kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel; then
+    info "Flannel DaemonSet is ready"
+else
+    warn "Flannel DaemonSet rollout timed out - may still be recovering"
+fi
 
 # Step 6: Verify the CNI bridge is now correctly configured
 info "Step 6: Verifying CNI bridge fix"
@@ -167,7 +175,7 @@ kubectl get pods --all-namespaces | grep -E "(ContainerCreating|Pending)" || ech
 # Try to create a test pod to verify networking
 info "Testing pod creation with clean CNI bridge..."
 
-cat <<EOF | kubectl apply -f -
+cat <<EOF | timeout 30 kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -184,12 +192,12 @@ EOF
 # Wait and check if test pod starts successfully
 sleep 10
 
-TEST_POD_STATUS=$(kubectl get pod cni-test -n kube-system -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+TEST_POD_STATUS=$(timeout 30 kubectl get pod cni-test -n kube-system -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
 if [ "$TEST_POD_STATUS" = "Running" ] || [ "$TEST_POD_STATUS" = "Succeeded" ]; then
     info "✓ Test pod created successfully - CNI bridge fix worked"
     
     # Get the pod IP to verify networking
-    TEST_POD_IP=$(kubectl get pod cni-test -n kube-system -o jsonpath='{.status.podIP}' 2>/dev/null)
+    TEST_POD_IP=$(timeout 30 kubectl get pod cni-test -n kube-system -o jsonpath='{.status.podIP}' 2>/dev/null)
     if [ -n "$TEST_POD_IP" ]; then
         echo "Test pod IP: $TEST_POD_IP"
         if echo "$TEST_POD_IP" | grep -q "10.244."; then
@@ -198,35 +206,39 @@ if [ "$TEST_POD_STATUS" = "Running" ] || [ "$TEST_POD_STATUS" = "Succeeded" ]; t
     fi
 else
     warn "Test pod status: $TEST_POD_STATUS - CNI issues may persist"
-    kubectl describe pod cni-test -n kube-system 2>/dev/null || true
+    timeout 30 kubectl describe pod cni-test -n kube-system 2>/dev/null || true
 fi
 
 # Clean up test pod
-kubectl delete pod cni-test -n kube-system --ignore-not-found
+timeout 30 kubectl delete pod cni-test -n kube-system --ignore-not-found
 
 # Step 8: Restart CoreDNS and other stuck pods
 info "Step 8: Restarting CoreDNS and other system pods"
 
 # Restart CoreDNS deployment to clear any stuck pods
-kubectl rollout restart deployment/coredns -n kube-system
+timeout 60 kubectl rollout restart deployment/coredns -n kube-system
 
 echo "Waiting for CoreDNS to be ready..."
-kubectl rollout status deployment/coredns -n kube-system --timeout=120s
+if timeout 120 kubectl rollout status deployment/coredns -n kube-system; then
+    info "CoreDNS is ready"
+else
+    warn "CoreDNS rollout timed out - may still be recovering"
+fi
 
 # Final status check
 echo
 info "=== CNI Bridge Fix Complete ==="
 
 echo "Final cluster status:"
-kubectl get nodes -o wide
+timeout 30 kubectl get nodes -o wide 2>/dev/null || echo "Failed to get cluster status"
 
 echo
 echo "Final pod status (focusing on previously stuck pods):"
-kubectl get pods --all-namespaces | grep -E "(kube-system|kube-flannel)" | grep -E "(coredns|flannel)"
+timeout 30 kubectl get pods --all-namespaces 2>/dev/null | grep -E "(kube-system|kube-flannel)" | grep -E "(coredns|flannel)" || echo "Failed to get pod status"
 
 echo
 echo "Any remaining ContainerCreating pods:"
-kubectl get pods --all-namespaces | grep "ContainerCreating" || echo "✓ No pods stuck in ContainerCreating"
+timeout 30 kubectl get pods --all-namespaces 2>/dev/null | grep "ContainerCreating" || echo "✓ No pods stuck in ContainerCreating"
 
 echo
 if ip addr show cni0 >/dev/null 2>&1; then

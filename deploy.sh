@@ -112,37 +112,52 @@ esac
 
 info "Running post-deployment cluster validation..."
 
-# Check for CoreDNS issues that can occur after flannel regeneration
-if ! ./scripts/check_coredns_status.sh >/dev/null 2>&1; then
-    warn "CoreDNS networking issues detected after deployment"
-    info "Automatically applying CoreDNS fix..."
+# Check if CNI conflict was detected during deployment
+if [ -f "/tmp/cni_conflict_detected" ]; then
+    warn "CNI bridge conflict was detected during deployment"
+    info "Applying CNI bridge fix to resolve CoreDNS pod creation issues..."
     
-    if ./scripts/fix_coredns_unknown_status.sh; then
-        info "CoreDNS fix applied successfully"
+    if ./scripts/fix_cni_bridge_conflict.sh; then
+        info "CNI bridge conflict resolved successfully"
+        rm -f /tmp/cni_conflict_detected
     else
-        warn "CoreDNS fix failed - trying enhanced homelab node fix..."
-        if ./scripts/fix_homelab_node_issues.sh; then
-            info "Homelab node issues resolved"
-        else
-            warn "Standard fixes failed - checking for CNI bridge conflicts..."
-            
-            # Check for ContainerCreating pods as indicator of CNI issues
-            STUCK_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
-            if [ "$STUCK_PODS" -gt 0 ]; then
-                warn "Found $STUCK_PODS pods stuck in ContainerCreating - applying CNI bridge fix"
-                if ./scripts/fix_cni_bridge_conflict.sh; then
-                    info "CNI bridge conflict resolved"
-                else
-                    error "CNI bridge fix failed - manual intervention required"
-                fi
-            else
-                warn "Cluster networking issues persist - manual intervention may be needed"
-                echo "Run: ./scripts/fix_homelab_node_issues.sh"
-            fi
-        fi
+        error "CNI bridge fix failed - manual intervention required"
+        echo "The deployment detected a CNI bridge IP conflict that prevents pod creation."
+        echo "Please run: sudo ./scripts/fix_cni_bridge_conflict.sh"
     fi
 else
-    info "CoreDNS status check passed"
+    # Check for CoreDNS issues that can occur after flannel regeneration
+    if ! ./scripts/check_coredns_status.sh >/dev/null 2>&1; then
+        warn "CoreDNS networking issues detected after deployment"
+        info "Automatically applying CoreDNS fix..."
+        
+        if ./scripts/fix_coredns_unknown_status.sh; then
+            info "CoreDNS fix applied successfully"
+        else
+            warn "CoreDNS fix failed - trying enhanced homelab node fix..."
+            if ./scripts/fix_homelab_node_issues.sh; then
+                info "Homelab node issues resolved"
+            else
+                warn "Standard fixes failed - checking for CNI bridge conflicts..."
+                
+                # Check for ContainerCreating pods as indicator of CNI issues
+                STUCK_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
+                if [ "$STUCK_PODS" -gt 0 ]; then
+                    warn "Found $STUCK_PODS pods stuck in ContainerCreating - applying CNI bridge fix"
+                    if ./scripts/fix_cni_bridge_conflict.sh; then
+                        info "CNI bridge conflict resolved"
+                    else
+                        error "CNI bridge fix failed - manual intervention required"
+                    fi
+                else
+                    warn "Cluster networking issues persist - manual intervention may be needed"
+                    echo "Run: ./scripts/fix_homelab_node_issues.sh"
+                fi
+            fi
+        fi
+    else
+        info "CoreDNS status check passed"
+    fi
 fi
 
 info "Deployment completed successfully!"
