@@ -1433,10 +1433,10 @@
   hosts: storage_nodes:compute_nodes
   become: true
   vars:
-  # Inventory hostname of the control-plane (used for delegate_to)
-  control_plane_host: "{{ groups['monitoring_nodes'][0] }}"
-  # Control-plane reachable address: prefer explicit ansible_host from inventory, fall back to the inventory name
-  control_plane_ip: "{{ hostvars[groups['monitoring_nodes'][0]]['ansible_host'] | default(groups['monitoring_nodes'][0]) }}"
+    # Inventory hostname of the control-plane (used for delegate_to)
+    control_plane_host: "{{ groups['monitoring_nodes'][0] }}"
+    # Control-plane reachable address: prefer explicit ansible_host from inventory, fall back to the inventory name
+    control_plane_ip: "{{ hostvars[groups['monitoring_nodes'][0]]['ansible_host'] | default(groups['monitoring_nodes'][0]) }}"
   tasks:
     - name: "Detect post-wipe worker state"
       block:
