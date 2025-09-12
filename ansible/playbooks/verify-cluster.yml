@@ -117,6 +117,17 @@
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
   tasks:
+    - name: "Ensure node labels are applied for monitoring deployment"
+      shell: |
+        {% for label in hostvars[item]['node_labels'] | default([]) %}
+        kubectl label node {{ item }} {{ label }} --overwrite || true
+        {% endfor %}
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      loop: "{{ groups['all'] }}"
+      when: hostvars[item]['node_labels'] is defined
+      ignore_errors: yes
+
     - name: "Check existing Prometheus Deployment selector"
       kubernetes.core.k8s_info:
         api_version: apps/v1
