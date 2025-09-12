@@ -1,3 +1,125 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# fix_cni_bridge_conflict.sh
+# Idempotent helper to resolve CNI bridge IP conflicts (cni0 mismatch)
+# Run this on the control-plane node as root.
+# It will:
+#  - back up current /etc/cni/net.d and /var/lib/cni state
+#  - stop kubelet to prevent constant pod sandbox churn
+#  - remove the cni0 bridge and flush CNI state
+#  - restart containerd and kubelet so the CNI plugin (flannel) recreates the correct bridge
+#  - wait for flannel DaemonSet and CoreDNS to reach Running
+
+DESIRED_BRIDGE_CIDR="10.244.0.1/16"
+BACKUP_DIR="/tmp/cni-backup-$(date +%s)"
+
+info() { echo -e "[INFO] $*"; }
+warn() { echo -e "[WARN] $*"; }
+err() { echo -e "[ERROR] $*"; exit 1; }
+
+if [ "$EUID" -ne 0 ]; then
+  err "This script must be run as root on the control-plane node"
+fi
+
+info "Backing up CNI configuration and state to $BACKUP_DIR"
+mkdir -p "$BACKUP_DIR"
+if [ -d /etc/cni/net.d ]; then
+  cp -a /etc/cni/net.d "$BACKUP_DIR/" || true
+fi
+if [ -d /var/lib/cni ]; then
+  cp -a /var/lib/cni "$BACKUP_DIR/" || true
+fi
+
+info "Inspecting current cni0 bridge"
+if ip link show cni0 >/dev/null 2>&1; then
+  current_ip=$(ip -4 addr show dev cni0 | awk '/inet /{print $2; exit}') || true
+  info "cni0 exists with IP: ${current_ip:-<none>}"
+  if [ "${current_ip:-}" != "${DESIRED_BRIDGE_CIDR}" ]; then
+    warn "cni0 IP (${current_ip:-none}) does not match desired ${DESIRED_BRIDGE_CIDR}. Proceeding to reset CNI bridge."
+  else
+    info "cni0 already matches desired bridge IP. No action needed."
+    exit 0
+  fi
+else
+  warn "cni0 bridge not present. Flannel should create it when pods start. Exiting." 
+  exit 0
+fi
+
+info "Stopping kubelet to avoid pod sandbox churn"
+systemctl stop kubelet || warn "Failed to stop kubelet; continuing"
+
+info "Stopping containerd"
+systemctl stop containerd || warn "Failed to stop containerd; continuing"
+
+info "Removing cni0 bridge and flushing CNI state"
+# bring down and delete bridge if present
+ip link set dev cni0 down 2>/dev/null || true
+ip addr flush dev cni0 2>/dev/null || true
+ip link delete cni0 2>/dev/null || true
+
+# Remove per-pod CNI network state so plugins can reinitialize cleanly
+if [ -d /var/lib/cni ]; then
+  info "Backing up and clearing /var/lib/cni"
+  mv /var/lib/cni "$BACKUP_DIR/" || true
+fi
+
+if [ -d /var/lib/cni/networks ]; then
+  info "Backing up and clearing /var/lib/cni/networks"
+  mv /var/lib/cni/networks "$BACKUP_DIR/" || true
+fi
+
+info "Starting containerd"
+systemctl start containerd || err "Failed to start containerd"
+
+info "Waiting 5s for containerd socket"
+sleep 5
+
+info "Starting kubelet"
+systemctl start kubelet || err "Failed to start kubelet"
+
+info "Waiting for flannel DaemonSet pods to become Ready (up to 2 minutes)"
+timeout=120
+interval=5
+elapsed=0
+while [ $elapsed -lt $timeout ]; do
+  # check flannel daemonset pods ready count
+  ds_ready=$(kubectl get ds -n kube-flannel kube-flannel -o jsonpath='{.status.numberReady}' 2>/dev/null || echo 0)
+  ds_desired=$(kubectl get ds -n kube-flannel kube-flannel -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo 0)
+  if [ -n "$ds_ready" ] && [ -n "$ds_desired" ] && [ "$ds_ready" -ge "$ds_desired" ] && [ "$ds_desired" -ne 0 ]; then
+    info "Flannel daemonset ready: $ds_ready/$ds_desired"
+    break
+  fi
+  sleep $interval
+  elapsed=$((elapsed + interval))
+done
+
+if [ $elapsed -ge $timeout ]; then
+  warn "Flannel did not reach Ready state in time. Check daemonset logs: kubectl -n kube-flannel logs ds/kube-flannel"
+fi
+
+info "Waiting for CoreDNS to obtain IP and become Running (up to 2 minutes)"
+timeout=120
+interval=5
+elapsed=0
+while [ $elapsed -lt $timeout ]; do
+  coredns_ready=$(kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
+  if [ "$coredns_ready" = "Running" ]; then
+    info "CoreDNS is Running"
+    break
+  fi
+  sleep $interval
+  elapsed=$((elapsed + interval))
+done
+
+if [ $elapsed -ge $timeout ]; then
+  warn "CoreDNS did not reach Running state in time. Inspect: kubectl -n kube-system describe pod -l k8s-app=kube-dns"
+fi
+
+info "CNI reset script completed. Backups saved under $BACKUP_DIR"
+info "If pods still fail, run: kubectl -n kube-system describe pod <pod> and check kubelet logs: journalctl -u kubelet -n 200"
+
+exit 0
 #!/bin/bash
 
 # Fix CNI Bridge IP Conflict Issue
