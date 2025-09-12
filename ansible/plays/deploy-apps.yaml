@@ -39,15 +39,43 @@
             namespace: "{{ item.metadata.namespace }}"
           loop: "{{ flannel_status.resources }}"
           when: 
-            - item.status.phase == 'Running'
-            - item.status.containerStatuses is defined
-            - item.status.containerStatuses | selectattr('restartCount', 'greaterthan', 5) | list | length > 0
+            - >
+              (item.status.phase == 'Running' and 
+               item.status.containerStatuses is defined and 
+               item.status.containerStatuses | selectattr('restartCount', 'greaterthan', 5) | list | length > 0) or
+              (item.status.containerStatuses is defined and
+               item.status.containerStatuses | selectattr('state.waiting.reason', 'defined') | 
+               selectattr('state.waiting.reason', 'equalto', 'CrashLoopBackOff') | list | length > 0)
           ignore_errors: yes
 
         - name: "Wait for flannel to stabilize"
           pause:
             seconds: 30
-          when: flannel_status.resources | selectattr('status.phase', 'equalto', 'Running') | selectattr('status.containerStatuses.0.restartCount', 'greaterthan', 5) | list | length > 0
+          when: >
+            flannel_status.resources | selectattr('status.phase', 'equalto', 'Running') | 
+            selectattr('status.containerStatuses.0.restartCount', 'greaterthan', 5) | list | length > 0 or
+            flannel_status.resources | selectattr('status.containerStatuses.0.state.waiting.reason', 'defined') |
+            selectattr('status.containerStatuses.0.state.waiting.reason', 'equalto', 'CrashLoopBackOff') | list | length > 0
+
+        - name: "Check and fix CoreDNS scheduling issues"
+          shell: |
+            # Check if CoreDNS is scheduled on non-control-plane nodes
+            coredns_on_workers=$(kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].spec.nodeName}' | 
+                                 xargs -n1 kubectl get node -o jsonpath='{.metadata.labels.node-role\.kubernetes\.io/control-plane}' 2>/dev/null | 
+                                 grep -c "null" || echo "0")
+            
+            if [ "$coredns_on_workers" -gt 0 ]; then
+              echo "CoreDNS pods found on worker nodes, forcing rescheduling..."
+              
+              # Restart CoreDNS deployment to trigger rescheduling with node affinity
+              kubectl rollout restart deployment/coredns -n kube-system
+              
+              echo "Waiting for CoreDNS rescheduling..."
+              kubectl rollout status deployment/coredns -n kube-system --timeout=180s
+            else
+              echo "CoreDNS is properly scheduled on control-plane nodes"
+            fi
+          ignore_errors: yes
       ignore_errors: yes
 
     - name: "Deploy Prometheus"
