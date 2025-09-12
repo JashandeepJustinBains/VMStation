@@ -118,7 +118,6 @@
         - name: "Set CNI conflict flag for post-deployment handling"
           shell: echo "CNI_CONFLICT_DETECTED=true" > /tmp/cni_conflict_detected
           when: '"CNI_BRIDGE_CONFLICTS_DETECTED=true" in cni_conflict_check.stdout'
-          delegate_to: localhost
           
         - name: "Handle flannel wait timeout"
           debug:
