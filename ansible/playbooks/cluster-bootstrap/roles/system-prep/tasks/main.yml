@@ -1,0 +1,94 @@
+---
+# System preparation tasks for Kubernetes cluster nodes
+# Extracted common tasks from the existing setup-cluster.yaml
+
+- name: "Install system prerequisites"
+  block:
+    - name: "Update package cache (Debian/Ubuntu)"
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+      
+    - name: "Install required packages (Debian/Ubuntu)"
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - software-properties-common
+        state: present
+      when: ansible_os_family == 'Debian'
+      
+    - name: "Install required packages (RHEL/CentOS)"
+      package:
+        name:
+          - curl
+          - gnupg
+          - yum-utils
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+- name: "Configure kernel modules and sysctl"
+  block:
+    - name: "Load required kernel modules"
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - br_netfilter
+        - overlay
+        
+    - name: "Persist kernel modules"
+      copy:
+        content: |
+          br_netfilter
+          overlay
+        dest: /etc/modules-load.d/kubernetes.conf
+        owner: root
+        group: root
+        mode: '0644'
+        
+    - name: "Configure sysctl for Kubernetes"
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/kubernetes.conf
+        reload: yes
+      loop:
+        - { name: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { name: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { name: "net.ipv4.ip_forward", value: "1" }
+
+- name: "Disable swap permanently"
+  block:
+    - name: "Turn off swap"
+      command: swapoff -a
+      
+    - name: "Comment out swap entries in fstab"
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s.*)$'
+        replace: '# \1'
+        backup: yes
+
+- name: "Configure time synchronization"
+  block:
+    - name: "Install NTP service (Debian/Ubuntu)"
+      apt:
+        name: ntp
+        state: present
+      when: ansible_os_family == 'Debian'
+      
+    - name: "Install chrony (RHEL/CentOS)"
+      package:
+        name: chrony
+        state: present
+      when: ansible_os_family == 'RedHat'
+      
+    - name: "Enable and start time sync service"
+      systemd:
+        name: "{{ 'ntp' if ansible_os_family == 'Debian' else 'chronyd' }}"
+        enabled: yes
+        state: started
