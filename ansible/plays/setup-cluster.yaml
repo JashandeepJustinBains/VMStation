@@ -1415,7 +1415,7 @@
               # Command generated at: {{ ansible_date_time.iso8601 }}
               # Control-plane IP: {{ ansible_default_ipv4.address }}
               # Token TTL: 2 hours
-              {{ join_command.stdout }} "$@"
+              {{ join_command.stdout }} --node-name {{ inventory_hostname }} "$@"
             dest: /tmp/kubeadm-join.sh
             mode: '0755'
 
