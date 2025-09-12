@@ -441,6 +441,8 @@ kubectl apply --dry-run=client -f k8s/
 ### Troubleshooting Tools
 - **Pod health validation**: `./scripts/validate_pod_health.sh` - **NEW!** Quick validation of all pod health status
 - **Jellyfin readiness fix**: `./fix_jellyfin_readiness.sh` - **NEW!** Fixes jellyfin probe configuration and readiness issues
+- **Jellyfin network fix**: `./fix_jellyfin_network_issue.sh` - **NEW!** Fixes "no route to host" network connectivity issues
+- **Jellyfin network test**: `./test_jellyfin_network.sh` - **NEW!** Tests network connectivity and CNI bridge configuration
 - **Jellyfin config test**: `./test_jellyfin_config.sh` - **NEW!** Validates jellyfin pod configuration
 - **Remaining pod fixes**: `./scripts/fix_remaining_pod_issues.sh` - **NEW!** Fixes jellyfin readiness and kube-proxy crashloop issues
 - **Pod diagnostics**: `./scripts/diagnose_remaining_pod_issues.sh` - **NEW!** Detailed analysis of pod failures
@@ -801,6 +803,9 @@ If `deploy.sh full` hangs on "wait for applications to be ready":
 # If jellyfin shows 0/1 Ready or CrashLoopBackOff
 ./scripts/fix_remaining_pod_issues.sh
 
+# For Jellyfin "no route to host" network issues specifically
+./fix_jellyfin_network_issue.sh
+
 # Check overall pod health
 ./scripts/validate_pod_health.sh
 ./deploy.sh apps
@@ -820,7 +825,21 @@ kubectl get nodes storagenodet3500 -o wide
 kubectl get pods -n jellyfin -o wide
 ```
 
-#### 4. Pods on Wrong Nodes
+#### 4. Jellyfin Pod Network Connectivity Issues
+If Jellyfin pod shows 0/1 Ready with "no route to host" probe failures:
+
+```bash
+# Quick test to identify the issue
+./test_jellyfin_network.sh
+
+# Apply network connectivity fix
+./fix_jellyfin_network_issue.sh
+
+# Verify the fix worked
+kubectl get pods -n jellyfin
+```
+
+#### 5. Pods on Wrong Nodes
 If CoreDNS runs on homelab instead of masternode:
 
 ```bash
