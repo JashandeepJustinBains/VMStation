@@ -1923,6 +1923,50 @@
         - name: "Wait for kubelet to stabilize after join"
           pause:
             seconds: 15
+
+        - name: "Post-join remediation: ensure kubeadm flags env and fix CRI/socket perms"
+          become: true
+          block:
+            - name: "Ensure /var/lib/kubelet directory exists"
+              file:
+                path: /var/lib/kubelet
+                state: directory
+                owner: root
+                group: root
+                mode: '0755'
+
+            - name: "Ensure kubeadm-flags.env exists with minimal safe defaults"
+              copy:
+                dest: /var/lib/kubelet/kubeadm-flags.env
+                content: 'KUBELET_KUBEADM_ARGS="--container-runtime-endpoint=unix:///run/containerd/containerd.sock"\n'
+                owner: root
+                group: root
+                mode: '0644'
+              when: not (kubeadm_flags_file is defined and kubeadm_flags_file.stat.exists)
+
+            - name: "Fix containerd socket permissions"
+              file:
+                path: /run/containerd/containerd.sock
+                owner: root
+                group: containerd
+                mode: '0660'
+              ignore_errors: true
+
+            - name: "Reload systemd and restart containerd and kubelet"
+              systemd:
+                name: '{{ item }}'
+                state: restarted
+                enabled: yes
+              loop:
+                - containerd
+                - kubelet
+              ignore_errors: true
+
+            - name: "Register kubeadm flags file existence"
+              stat:
+                path: /var/lib/kubelet/kubeadm-flags.env
+              register: kubeadm_flags_file
+          when: not skip_join_process | default(false)
             
         - name: "Enhanced kubelet validation for post-wipe workers"
           shell: |
