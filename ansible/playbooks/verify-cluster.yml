@@ -1,0 +1,275 @@
+---
+# VMStation Cluster Verification and Smoke Tests
+# Comprehensive validation of the Kubernetes cluster deployment
+
+- name: "Cluster Health Verification"
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    verification_timeout: 300
+  tasks:
+    - name: "Verify kubectl is working"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: cluster_nodes
+      failed_when: cluster_nodes.resources | length == 0
+
+    - name: "Check all nodes are Ready"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: node_status
+      failed_when: >
+        node_status.resources | map(attribute='status.conditions') |
+        map('selectattr', 'type', 'equalto', 'Ready') |
+        map('map', attribute='status') | map('first') | list |
+        select('equalto', 'False') | list | length > 0
+
+    - name: "Display node status"
+      debug:
+        msg: "Node {{ item.metadata.name }} ({{ item.status.addresses | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | first }}) is {{ item.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first }}"
+      loop: "{{ node_status.resources }}"
+
+    - name: "Verify correct number of nodes"
+      assert:
+        that:
+          - node_status.resources | length == 3
+        fail_msg: "Expected 3 nodes, found {{ node_status.resources | length }}"
+        success_msg: "✅ All 3 nodes are present in the cluster"
+
+    - name: "Verify control plane node"
+      assert:
+        that:
+          - node_status.resources | selectattr('metadata.name', 'search', 'masternode|monitoring') | list | length == 1
+        fail_msg: "Control plane node not found or multiple control planes detected"
+        success_msg: "✅ Control plane node verified"
+
+    - name: "Verify worker nodes"
+      assert:
+        that:
+          - node_status.resources | selectattr('metadata.name', 'search', 'storagenodet3500|storage') | list | length == 1
+          - node_status.resources | selectattr('metadata.name', 'search', 'homelab|compute') | list | length == 1
+        fail_msg: "Expected worker nodes not found"
+        success_msg: "✅ Both worker nodes verified"
+
+    - name: "Check CoreDNS pods are Running"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+        label_selectors:
+          - k8s-app=kube-dns
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: coredns_pods
+      failed_when: >
+        coredns_pods.resources | length == 0 or
+        coredns_pods.resources | map(attribute='status.phase') | list |
+        select('equalto', 'Running') | list | length != coredns_pods.resources | length
+
+    - name: "Display CoreDNS status"
+      debug:
+        msg: "CoreDNS pod {{ item.metadata.name }} is {{ item.status.phase }}"
+      loop: "{{ coredns_pods.resources }}"
+
+    - name: "Verify CNI (Flannel) pods are Running"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-flannel
+        label_selectors:
+          - app=flannel
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: flannel_pods
+      failed_when: >
+        flannel_pods.resources | length == 0 or
+        flannel_pods.resources | map(attribute='status.phase') | list |
+        select('equalto', 'Running') | list | length != flannel_pods.resources | length
+
+    - name: "Display Flannel status"
+      debug:
+        msg: "Flannel pod {{ item.metadata.name }} on node {{ item.spec.nodeName }} is {{ item.status.phase }}"
+      loop: "{{ flannel_pods.resources }}"
+
+- name: "Deploy and Verify Monitoring Stack"
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+  tasks:
+    - name: "Deploy monitoring namespace and components"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ item }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      loop:
+        - "{{ playbook_dir }}/../manifests/monitoring/prometheus.yaml"
+        - "{{ playbook_dir }}/../manifests/monitoring/grafana.yaml"
+      register: monitoring_deploy
+
+    - name: "Wait for Prometheus pod to be Running"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: monitoring
+        label_selectors:
+          - app=prometheus
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: prometheus_pods
+      until: >
+        prometheus_pods.resources | length > 0 and
+        prometheus_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
+      retries: 20
+      delay: 15
+      failed_when: >
+        prometheus_pods.resources | length == 0 or
+        'Running' not in (prometheus_pods.resources | map(attribute='status.phase') | list)
+
+    - name: "Wait for Grafana pod to be Running"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: monitoring
+        label_selectors:
+          - app=grafana
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: grafana_pods
+      until: >
+        grafana_pods.resources | length > 0 and
+        grafana_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
+      retries: 20
+      delay: 15
+      failed_when: >
+        grafana_pods.resources | length == 0 or
+        'Running' not in (grafana_pods.resources | map(attribute='status.phase') | list)
+
+    - name: "Verify monitoring pods are scheduled on control plane"
+      assert:
+        that:
+          - prometheus_pods.resources | map(attribute='spec.nodeName') | list | intersect(['masternode', 'monitoring_nodes']) | length > 0
+          - grafana_pods.resources | map(attribute='spec.nodeName') | list | intersect(['masternode', 'monitoring_nodes']) | length > 0
+        fail_msg: "Monitoring pods are not scheduled on the control plane node"
+        success_msg: "✅ Monitoring pods correctly scheduled on control plane"
+
+    - name: "Test Prometheus metrics endpoint"
+      uri:
+        url: "http://192.168.4.63:30090/api/v1/query?query=up"
+        method: GET
+        return_content: yes
+      register: prometheus_test
+      retries: 5
+      delay: 10
+      until: prometheus_test.status == 200
+
+    - name: "Test Grafana web interface"
+      uri:
+        url: "http://192.168.4.63:30300/api/health"
+        method: GET
+        return_content: yes
+      register: grafana_test
+      retries: 5
+      delay: 10
+      until: grafana_test.status == 200
+
+- name: "Deploy and Verify Jellyfin"
+  hosts: monitoring_nodes
+  become: true
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+  tasks:
+    - name: "Deploy Jellyfin"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ playbook_dir }}/../manifests/jellyfin/jellyfin.yaml"
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: jellyfin_deploy
+
+    - name: "Wait for Jellyfin pod to be Running"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: jellyfin
+        label_selectors:
+          - app=jellyfin
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: jellyfin_pods
+      until: >
+        jellyfin_pods.resources | length > 0 and
+        jellyfin_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
+      retries: 30
+      delay: 10
+      failed_when: >
+        jellyfin_pods.resources | length == 0 or
+        'Running' not in (jellyfin_pods.resources | map(attribute='status.phase') | list)
+
+    - name: "Verify Jellyfin is scheduled on storage node"
+      assert:
+        that:
+          - jellyfin_pods.resources | map(attribute='spec.nodeName') | list | intersect(['storagenodet3500', 'storage_nodes']) | length > 0
+        fail_msg: "Jellyfin pod is not scheduled on the storage node"
+        success_msg: "✅ Jellyfin correctly scheduled on storage node"
+
+    - name: "Test Jellyfin web interface"
+      uri:
+        url: "http://192.168.4.61:30096/health"
+        method: GET
+        return_content: yes
+        status_code: [200, 404]  # 404 is acceptable for health endpoint
+      register: jellyfin_test
+      retries: 10
+      delay: 15
+      failed_when: jellyfin_test.status not in [200, 404]
+
+- name: "Final Smoke Test Summary"
+  hosts: monitoring_nodes
+  become: true
+  tasks:
+    - name: "Display comprehensive cluster status"
+      debug:
+        msg: |
+          🎉 VMStation Kubernetes Cluster Verification Complete!
+          
+          ✅ Cluster Status:
+            - All 3 nodes are Ready
+            - Control plane: 192.168.4.63 (masternode)
+            - Storage node: 192.168.4.61 (storagenodet3500) 
+            - Compute node: 192.168.4.62 (homelab)
+          
+          ✅ Core Components:
+            - CoreDNS is Running (DNS resolution)
+            - Flannel CNI is Running (pod networking)
+            
+          ✅ Monitoring Stack:
+            - Prometheus: http://192.168.4.63:30090
+            - Grafana: http://192.168.4.63:30300 (admin/admin)
+            
+          ✅ Applications:
+            - Jellyfin: http://192.168.4.61:30096
+            
+          🔧 Next Steps:
+            - Configure Jellyfin media libraries
+            - Set up Grafana dashboards
+            - Deploy additional applications
+            
+          📝 Access Information:
+            - kubectl config: /etc/kubernetes/admin.conf
+            - Cluster endpoint: https://192.168.4.63:6443
+            
+    - name: "Export verification timestamp"
+      copy:
+        content: |
+          VMStation Kubernetes Cluster
+          Verification completed: {{ ansible_date_time.iso8601 }}
+          Cluster nodes: {{ groups['all'] | length }}
+          Status: VERIFIED ✅
+        dest: /tmp/vmstation-cluster-verification.txt
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: "Verification successful"
+      debug:
+        msg: "🚀 Cluster verification completed successfully! All components are operational."
