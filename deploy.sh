@@ -110,6 +110,23 @@ case "${1:-full}" in
         ;;
 esac
 
+info "Running post-deployment cluster validation..."
+
+# Check for CoreDNS issues that can occur after flannel regeneration
+if ! ./scripts/check_coredns_status.sh >/dev/null 2>&1; then
+    warn "CoreDNS networking issues detected after deployment"
+    info "Automatically applying CoreDNS fix..."
+    
+    if ./scripts/fix_coredns_unknown_status.sh; then
+        info "CoreDNS fix applied successfully"
+    else
+        warn "CoreDNS fix failed - manual intervention may be needed"
+        echo "Run: ./scripts/fix_coredns_unknown_status.sh"
+    fi
+else
+    info "CoreDNS status check passed"
+fi
+
 info "Deployment completed successfully!"
 echo
 info "Access URLs:"
@@ -119,3 +136,4 @@ info "  - Jellyfin: http://192.168.4.61:30096"
 
 echo
 info "To check status: kubectl get pods --all-namespaces"
+info "To check CoreDNS: ./scripts/check_coredns_status.sh"

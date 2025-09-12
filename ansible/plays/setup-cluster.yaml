@@ -908,8 +908,16 @@
       when: flannel_exists.rc != 0
       failed_when: false
 
-    - name: "Ensure CoreDNS has correct replica count"
+    - name: "Ensure CoreDNS has correct replica count and remove control-plane taints"
       shell: |
+        # Remove NoSchedule taint from control-plane to allow CoreDNS scheduling
+        control_plane_nodes=$(timeout 30 kubectl get nodes -l node-role.kubernetes.io/control-plane --no-headers -o custom-columns=":metadata.name")
+        for node in $control_plane_nodes; do
+          echo "Removing NoSchedule taint from control-plane node: $node"
+          timeout 30 kubectl taint node "$node" node-role.kubernetes.io/control-plane:NoSchedule- 2>/dev/null || echo "  Taint not present or already removed"
+          timeout 30 kubectl taint node "$node" node-role.kubernetes.io/master:NoSchedule- 2>/dev/null || echo "  Legacy master taint not present"
+        done
+        
         # Check current CoreDNS replica count
         current_replicas=$(timeout 30 kubectl get deployment coredns -n kube-system -o jsonpath='{.spec.replicas}')
         if [ "$current_replicas" != "1" ]; then
@@ -1029,6 +1037,109 @@
           This is expected behavior in a single-node control plane setup.
           
           CNI Configuration Ready: Worker nodes can now join the cluster.
+
+    - name: "Post-Flannel CoreDNS validation and fix"
+      block:
+        - name: "Wait for CoreDNS to stabilize after Flannel setup"
+          pause:
+            seconds: 30
+
+        - name: "Check CoreDNS pod status and fix if needed"
+          shell: |
+            echo "=== Post-Flannel CoreDNS Validation ==="
+            
+            # Check CoreDNS pod status
+            coredns_pods=$(timeout 30 kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].metadata.name}')
+            
+            if [ -z "$coredns_pods" ]; then
+              echo "ERROR: No CoreDNS pods found!"
+              exit 1
+            fi
+            
+            issues_found=false
+            
+            echo "CoreDNS pods status:"
+            for pod in $coredns_pods; do
+              pod_status=$(timeout 30 kubectl get pod -n kube-system "$pod" -o jsonpath='{.status.phase}')
+              pod_ip=$(timeout 30 kubectl get pod -n kube-system "$pod" -o jsonpath='{.status.podIP}')
+              
+              echo "  $pod: Status=$pod_status, IP=${pod_ip:-<none>}"
+              
+              if [ "$pod_status" = "Unknown" ] || [ -z "$pod_ip" ] || [ "$pod_ip" = "null" ]; then
+                echo "    ↳ This pod has issues - will be restarted"
+                issues_found=true
+              fi
+            done
+            
+            if [ "$issues_found" = "true" ]; then
+              echo "=== Fixing CoreDNS issues ==="
+              
+              # Delete stuck CoreDNS pods to force rescheduling
+              for pod in $coredns_pods; do
+                pod_status=$(timeout 30 kubectl get pod -n kube-system "$pod" -o jsonpath='{.status.phase}')
+                pod_ip=$(timeout 30 kubectl get pod -n kube-system "$pod" -o jsonpath='{.status.podIP}')
+                
+                if [ "$pod_status" = "Unknown" ] || [ -z "$pod_ip" ] || [ "$pod_ip" = "null" ]; then
+                  echo "Deleting stuck CoreDNS pod: $pod"
+                  timeout 60 kubectl delete pod -n kube-system "$pod" --force --grace-period=0
+                fi
+              done
+              
+              # Wait for new pods to be scheduled
+              echo "Waiting for CoreDNS to be rescheduled..."
+              timeout 300 kubectl rollout status deployment/coredns -n kube-system
+              
+              # Verify new pods have IPs
+              echo "Verifying new CoreDNS pods have IP addresses..."
+              for i in {1..10}; do
+                all_have_ips=true
+                current_coredns_pods=$(timeout 30 kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].metadata.name}')
+                
+                for pod in $current_coredns_pods; do
+                  pod_ip=$(timeout 30 kubectl get pod -n kube-system "$pod" -o jsonpath='{.status.podIP}')
+                  pod_status=$(timeout 30 kubectl get pod -n kube-system "$pod" -o jsonpath='{.status.phase}')
+                  
+                  if [ -z "$pod_ip" ] || [ "$pod_ip" = "null" ] || [ "$pod_status" != "Running" ]; then
+                    all_have_ips=false
+                    break
+                  fi
+                done
+                
+                if [ "$all_have_ips" = "true" ]; then
+                  echo "✓ All CoreDNS pods now have IP addresses"
+                  break
+                fi
+                
+                echo "  Waiting for CoreDNS pods to get IPs... (attempt $i/10)"
+                sleep 10
+              done
+              
+              if [ "$all_have_ips" != "true" ]; then
+                echo "WARNING: Some CoreDNS pods still don't have IPs after fixes"
+                echo "This may require manual intervention"
+              fi
+              
+            else
+              echo "✓ CoreDNS pods are healthy"
+            fi
+            
+            echo "=== Final CoreDNS Status ==="
+            timeout 30 kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: coredns_fix_result
+          failed_when: false
+
+        - name: "Display CoreDNS fix results"
+          debug:
+            msg: |
+              CoreDNS Post-Flannel Validation Results:
+              {{ coredns_fix_result.stdout_lines | join('\n              ') }}
+              
+              {% if coredns_fix_result.rc != 0 %}
+              WARNING: CoreDNS validation/fix encountered issues.
+              After cluster setup completes, run: ./scripts/fix_coredns_unknown_status.sh
+              {% endif %}
 
     - name: "Wait for API server to be ready"
       wait_for:
