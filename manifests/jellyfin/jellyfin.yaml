@@ -46,6 +46,10 @@ spec:
     env:
     - name: JELLYFIN_PublishedServerUrl
       value: "http://192.168.4.61:30096"
+    - name: JELLYFIN_HTTP_BIND_ADDRESS
+      value: "0.0.0.0"
+    - name: JELLYFIN_HTTP_PORT
+      value: "8096"
     volumeMounts:
     - name: jellyfin-config
       mountPath: /config
@@ -88,7 +92,7 @@ spec:
       initialDelaySeconds: 60
       periodSeconds: 15
       timeoutSeconds: 10
-      failureThreshold: 20
+      failureThreshold: 30
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
