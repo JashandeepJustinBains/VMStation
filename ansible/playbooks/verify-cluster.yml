@@ -9,7 +9,7 @@
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     verification_timeout: 300
   tasks:
-    - name: Debug show kubeconfig_path and check file
+    - name: "Debug show kubeconfig_path and check file"
       block:
         - name: "Show kubeconfig_path variable"
           ansible.builtin.debug:
