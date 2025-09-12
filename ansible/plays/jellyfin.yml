@@ -156,20 +156,31 @@
                 readOnly: false
               livenessProbe:
                 httpGet:
-                  path: /health
+                  path: /web/index.html
                   port: 8096
-                initialDelaySeconds: 120
-                periodSeconds: 30
-                timeoutSeconds: 10
-                failureThreshold: 3
+                  scheme: HTTP
+                initialDelaySeconds: 180
+                periodSeconds: 60
+                timeoutSeconds: 30
+                failureThreshold: 5
               readinessProbe:
                 httpGet:
-                  path: /health
+                  path: /web/index.html
                   port: 8096
-                initialDelaySeconds: 60
+                  scheme: HTTP
+                initialDelaySeconds: 120
+                periodSeconds: 30
+                timeoutSeconds: 15
+                failureThreshold: 5
+              startupProbe:
+                httpGet:
+                  path: /web/index.html
+                  port: 8096
+                  scheme: HTTP
+                initialDelaySeconds: 30
                 periodSeconds: 10
                 timeoutSeconds: 5
-                failureThreshold: 3
+                failureThreshold: 30
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: false
@@ -180,7 +191,7 @@
             - name: media
               hostPath:
                 path: "{{ jellyfin_media_path | default('/srv/media') }}"
-                type: Directory
+                type: DirectoryOrCreate
             - name: config
               hostPath:
                 path: "{{ jellyfin_config_path | default('/var/lib/jellyfin') }}"
