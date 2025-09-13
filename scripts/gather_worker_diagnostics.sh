@@ -21,15 +21,35 @@ debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 CONTROL_PLANE_IP="${1:-192.168.4.63}"
 WORKER_NODES="${2:-192.168.4.61,192.168.4.62}"
 OUTPUT_DIR="${3:-/tmp/worker-diagnostics-$(date +%Y%m%d-%H%M%S)}"
-SSH_USER="${SSH_USER:-root}"
+SSH_USER="${SSH_USER:-}"  # No default - will be determined per node
 SSH_OPTS="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+
+# Function to get SSH user for a given IP
+get_ssh_user_for_ip() {
+    local ip="$1"
+    case "$ip" in
+        "192.168.4.62")  # homelab node
+            echo "jashandeepjustinbains"
+            ;;
+        "192.168.4.61")  # storagenodet3500 node
+            echo "root"
+            ;;
+        "192.168.4.63")  # masternode/control plane
+            echo "root"
+            ;;
+        *)
+            warn "Unknown IP $ip, defaulting to root user"
+            echo "root"
+            ;;
+    esac
+}
 
 echo "=== VMStation Worker Diagnostics Gathering ==="
 echo "Timestamp: $(date)"
 echo "Control plane: $CONTROL_PLANE_IP"
 echo "Worker nodes: $WORKER_NODES"
 echo "Output directory: $OUTPUT_DIR"
-echo "SSH user: $SSH_USER"
+echo "SSH user: Determined per node IP"
 echo ""
 
 # Create output directory
@@ -40,9 +60,10 @@ run_remote() {
     local host="$1"
     local command="$2"
     local output_file="$3"
+    local ssh_user=$(get_ssh_user_for_ip "$host")
     
-    info "Running on $host: $command"
-    if ssh $SSH_OPTS "$SSH_USER@$host" "$command" > "$output_file" 2>&1; then
+    info "Running on ${ssh_user}@$host: $command"
+    if ssh $SSH_OPTS "${ssh_user}@$host" "$command" > "$output_file" 2>&1; then
         debug "✓ Command completed successfully"
     else
         warn "Command failed or partially failed"
@@ -54,9 +75,10 @@ copy_remote() {
     local host="$1"
     local remote_path="$2"
     local local_path="$3"
+    local ssh_user=$(get_ssh_user_for_ip "$host")
     
-    info "Copying from $host:$remote_path to $local_path"
-    if scp $SSH_OPTS "$SSH_USER@$host:$remote_path" "$local_path" 2>/dev/null; then
+    info "Copying from ${ssh_user}@$host:$remote_path to $local_path"
+    if scp $SSH_OPTS "${ssh_user}@$host:$remote_path" "$local_path" 2>/dev/null; then
         debug "✓ File copied successfully"
     else
         warn "File not found or copy failed: $remote_path"
@@ -340,8 +362,9 @@ create_tarball() {
         
         # Try to copy to control plane if possible
         if [ "$CONTROL_PLANE_IP" != "localhost" ] && [ "$CONTROL_PLANE_IP" != "127.0.0.1" ]; then
+            local control_plane_ssh_user=$(get_ssh_user_for_ip "$CONTROL_PLANE_IP")
             info "Attempting to copy tarball to control plane..."
-            if scp $SSH_OPTS "$tarball_path" "$SSH_USER@$CONTROL_PLANE_IP:/tmp/"; then
+            if scp $SSH_OPTS "$tarball_path" "${control_plane_ssh_user}@$CONTROL_PLANE_IP:/tmp/"; then
                 info "✅ Tarball copied to control plane: $CONTROL_PLANE_IP:/tmp/$(basename "$tarball_path")"
             else
                 warn "Failed to copy tarball to control plane"
