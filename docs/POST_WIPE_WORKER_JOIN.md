@@ -202,6 +202,8 @@ compute-worker     Ready    <none>          5m    v1.29.0   192.168.4.62   <none
 | "Control-plane not ready" | API server issues | Restart control-plane services |
 | "Containerd filesystem error" | Corrupted containerd state | Run: `sudo systemctl restart containerd` |
 | "kubelet in standalone mode" | Join failed silently | Check network connectivity and tokens |
+| "Node name conflicts during join" | Multiple workers using same node name | Fixed in v2.1+ - join commands now use worker hostnames |
+| "Workers fail to appear in kubectl get nodes" | Node name mismatch in join process | Verify worker joins with correct hostname (ansible_hostname) |
 
 ### Manual Recovery
 
