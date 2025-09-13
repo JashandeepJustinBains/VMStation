@@ -36,10 +36,18 @@ sudo ./fix_jellyfin_cni_bridge_conflict.sh
 ```
 
 This script specifically addresses the Jellyfin pod creation issue:
-1. ✅ Fixes CNI bridge IP conflicts on storagenodet3500
-2. ✅ Resolves "cni0 already has an IP address different from 10.244.2.1/24" error  
-3. ✅ Restarts Flannel networking components
-4. ✅ Monitors Jellyfin pod creation to verify fix
+1. ✅ Detects missing Flannel subnet allocation on worker nodes (ROOT CAUSE)
+2. ✅ Forces Flannel DaemonSet restart to allocate missing subnets  
+3. ✅ Fixes CNI bridge IP conflicts on storagenodet3500
+4. ✅ Resolves "cni0 already has an IP address different from 10.244.2.1/24" error  
+5. ✅ Triggers CNI state reset on worker nodes
+6. ✅ Restarts Flannel networking components
+7. ✅ Monitors Jellyfin pod creation to verify fix
+
+**Enhanced Fix (Latest Version):**
+- Now properly handles worker node subnet allocation issues
+- Identifies and fixes the root cause: missing Flannel subnet annotations
+- Works from control plane to fix worker node CNI conflicts
 
 ### General CNI Communication Fix
 ```bash
@@ -90,9 +98,20 @@ If the quick fix doesn't work:
 For detailed technical information, see: [`docs/cni-pod-communication-fix.md`](docs/cni-pod-communication-fix.md)
 
 ## What This Fixes
-- CNI bridge IP conflicts on worker nodes (specific fix: fix_jellyfin_cni_bridge_conflict.sh)
+- **CNI bridge IP conflicts on worker nodes** (specific fix: fix_jellyfin_cni_bridge_conflict.sh)
+- **Missing Flannel subnet allocation** (NEW: root cause detection and fix)
+- **Worker node CNI state conflicts** (NEW: cross-node CNI reset capability)
 - Flannel networking configuration issues
 - Pod-to-pod communication failures
 - Jellyfin health probe failures  
 - Mixed-OS environment compatibility issues
 - "cni0 already has an IP address different from 10.244.x.x/24" errors
+
+### Specific Problem Statement Fix
+The enhanced `fix_jellyfin_cni_bridge_conflict.sh` now addresses the exact scenario:
+- ❌ **Before**: `No Flannel subnet annotation found for storagenodet3500`
+- ❌ **Before**: `failed to set bridge addr: cni0 already has IP different from 10.244.2.1/24`
+- ❌ **Before**: Jellyfin pod stuck in Pending state with CNI errors
+- ✅ **After**: Script detects missing subnet allocation and forces Flannel to allocate one
+- ✅ **After**: Script triggers worker node CNI reset from control plane
+- ✅ **After**: Jellyfin pod creates successfully with proper networking
