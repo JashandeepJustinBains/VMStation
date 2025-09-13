@@ -76,12 +76,12 @@ get_coredns_ip() {
         if [ -z "$coredns_ip" ]; then
             # Default Kubernetes DNS service IP
             coredns_ip="10.96.0.10"
-            warn "Cannot determine CoreDNS IP from cluster, using default: $coredns_ip"
+            warn "Cannot determine CoreDNS IP from cluster, using default: $coredns_ip" >&2
         fi
     else
         # kubectl not available, use default
         coredns_ip="10.96.0.10"
-        warn "kubectl not available, using default CoreDNS IP: $coredns_ip"
+        warn "kubectl not available, using default CoreDNS IP: $coredns_ip" >&2
     fi
     
     echo "$coredns_ip"
@@ -178,7 +178,7 @@ fix_resolv_conf() {
     # Add original nameservers (excluding any existing cluster DNS entries)
     if [ -f "/etc/resolv.conf" ]; then
         grep "^nameserver" /etc/resolv.conf | grep -v "$coredns_ip" >> "$temp_resolv" || true
-        grep "^search\|^domain" /etc/resolv.conf | grep -v "cluster.local" >> "$temp_resolv" || true
+        grep -E "^search|^domain" /etc/resolv.conf | grep -v "cluster.local" >> "$temp_resolv" || true
     fi
     
     # Add fallback DNS if no nameservers were found
@@ -235,12 +235,12 @@ test_dns_resolution() {
     
     # Test 2: kubectl version check (the original failing command)
     echo "  2. kubectl version check (original failing command):"
-    if timeout 15 kubectl version --short >/dev/null 2>&1; then
+    if timeout 15 kubectl version --client >/dev/null 2>&1; then
         info "    ✅ kubectl version command successful"
     else
         error "    ❌ kubectl version command still fails"
         echo "    Debugging kubectl connection:"
-        kubectl version --short 2>&1 | head -5 || true
+        kubectl version --client 2>&1 | head -5 || true
     fi
     
     # Test 3: General cluster connectivity
@@ -255,8 +255,10 @@ test_dns_resolution() {
     echo "  4. CoreDNS pod status:"
     if command -v kubectl >/dev/null 2>&1; then
         local coredns_status
-        coredns_status=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers 2>/dev/null | awk '{print $3}' | grep -c "Running" || echo "0")
-        if [ "$coredns_status" -gt 0 ]; then
+        coredns_status=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers 2>/dev/null | awk '{print $3}' | grep -c "Running" 2>/dev/null || echo "0")
+        # Clean up any potential newlines or extra characters
+        coredns_status=$(echo "$coredns_status" | tr -d '\n\r' | head -c 10)
+        if [ "$coredns_status" -gt 0 ] 2>/dev/null; then
             info "    ✅ $coredns_status CoreDNS pod(s) running"
         else
             warn "    ⚠️ No CoreDNS pods running or accessible"
@@ -293,7 +295,7 @@ show_config_summary() {
     
     echo ""
     echo "To verify the fix worked:"
-    echo "  kubectl version --short"
+    echo "  kubectl version --client"
     echo "  kubectl get nodes"
     echo "  nslookup kubernetes.default.svc.cluster.local"
 }
@@ -374,7 +376,7 @@ main() {
     info "🎉 Cluster DNS configuration fix completed!"
     echo ""
     info "The kubectl command should now work properly:"
-    info "  kubectl version --short"
+    info "  kubectl version --client"
     echo ""
     info "If you still experience issues:"
     info "  1. Check kubelet logs: journalctl -u kubelet -f"
