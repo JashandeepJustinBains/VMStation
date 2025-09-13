@@ -286,9 +286,12 @@ else
 fi
 
 # Fix 5b: Restart Flannel pod on target node
-if [ -n "$FLANNEL_POD" ]; then
-    info "Restarting Flannel pod on $TARGET_NODE"
-    kubectl delete pod -n kube-flannel "$FLANNEL_POD" --force --grace-period=0
+# Re-query for current Flannel pod name (may have changed due to previous operations)
+CURRENT_FLANNEL_POD=$(kubectl get pods -n kube-flannel -o wide 2>/dev/null | grep "$TARGET_NODE" | awk '{print $1}' | head -1)
+
+if [ -n "$CURRENT_FLANNEL_POD" ]; then
+    info "Restarting Flannel pod on $TARGET_NODE: $CURRENT_FLANNEL_POD"
+    kubectl delete pod -n kube-flannel "$CURRENT_FLANNEL_POD" --force --grace-period=0
     
     # Wait for new Flannel pod
     info "Waiting for new Flannel pod to start..."
