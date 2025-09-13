@@ -6,6 +6,28 @@ Pods on the same Kubernetes worker node cannot communicate with each other, show
 - Both pods are on storagenodet3500 worker node
 - Jellyfin health probes fail due to network unreachability
 
+## DNS Configuration Issue - NEW FIX
+**Problem**: `kubectl version --short` fails with "dial tcp: lookup hort on 192.168.4.1:53: no such host"
+- The cluster is using router gateway (192.168.4.1) instead of CoreDNS for DNS resolution
+- This prevents kubectl and other cluster components from working properly
+
+### DNS Fix (One-Command Solution)
+```bash
+sudo ./scripts/fix_cluster_dns_configuration.sh
+```
+
+This script will:
+1. ✅ Configure kubelet to use cluster DNS (CoreDNS) instead of router DNS
+2. ✅ Fix systemd-resolved configuration for cluster DNS
+3. ✅ Update /etc/resolv.conf with proper DNS order
+4. ✅ Restart kubelet service
+5. ✅ Test that kubectl commands work properly
+
+### Validate DNS Fix
+```bash
+sudo ./scripts/test_dns_fix.sh
+```
+
 ## Quick Solution
 
 ### One-Command Fix
