@@ -151,6 +151,10 @@ test_*.sh
 demo_*.sh
 *_output.txt
 
+# Ignore diagnosis artifacts and test outputs
+ansible/artifacts/arc-network-diagnosis/*/
+!ansible/artifacts/arc-network-diagnosis/README.md
+
 # Allow essential infrastructure scripts but block temporary testing scripts
 !/scripts/manual_containerd_filesystem_fix.sh
 !/scripts/quick_join_diagnostics.sh  
@@ -159,6 +163,7 @@ demo_*.sh
 !/scripts/enhanced_kubeadm_join.sh
 !/scripts/test_worker_setup_fixes.sh
 !/scripts/test_nodeport_external_access_fix.sh
+!/scripts/test_diagnosis_no_hang.sh
 
 # Block temporary testing/fix scripts (use /tmp for these)
 /tmp/test_*.sh
