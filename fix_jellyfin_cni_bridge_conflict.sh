@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# Fix Jellyfin CNI Bridge IP Conflict
-# Addresses the specific issue from the problem statement where Jellyfin pod
-# fails with: "cni0" already has an IP address different from 10.244.2.1/24
-# This prevents pods from being created on storagenodet3500
+# Fix Jellyfin CNI Bridge IP Conflict and kube-proxy CrashLoopBackOff Issues
+# Addresses the specific issues from the problem statement:
+# 1. Jellyfin pod fails with: "cni0" already has an IP address different from 10.244.2.1/24
+# 2. kube-proxy pods in CrashLoopBackOff state (e.g., kube-proxy-mll5g on homelab node)
+# This prevents pods from being created on storagenodet3500 and causes cluster instability
 
 set -e
 
@@ -30,11 +31,13 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "================================================================"
-echo "    Fix Jellyfin CNI Bridge IP Conflict - VMStation Cluster    "
+echo "  Fix Jellyfin CNI Bridge & kube-proxy Issues - VMStation      "
 echo "================================================================"
-echo "Problem: cni0 bridge has wrong IP, preventing pod creation"
+echo "Problems addressed:"
+echo "  1. cni0 bridge IP conflicts preventing pod creation"
+echo "  2. kube-proxy CrashLoopBackOff issues (e.g., on homelab node)"
 echo "Error: failed to set bridge addr: cni0 already has IP different from 10.244.2.1/24"
-echo "Target: storagenodet3500 worker node"
+echo "Target: storagenodet3500 worker node + cluster-wide kube-proxy"
 echo "Timestamp: $(date)"
 echo
 
@@ -83,9 +86,12 @@ if timeout 30 kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
             echo
         fi
     elif [ "$POD_STATUS" = "Running" ]; then
-        success "✓ Jellyfin pod is already running - no action needed"
+        success "✓ Jellyfin pod is already running"
         kubectl get pod -n jellyfin jellyfin -o wide
-        exit 0
+        
+        # Still check for kube-proxy issues even if Jellyfin is running
+        warn "Checking for kube-proxy CrashLoopBackOff issues even though Jellyfin is running..."
+        JELLYFIN_ALREADY_RUNNING=true
     else
         warn "Jellyfin pod status: $POD_STATUS"
     fi
@@ -185,11 +191,15 @@ else
     error "No Flannel pod found on storagenodet3500"
 fi
 
-# Step 5: Apply the targeted fix
-info "Step 5: Applying CNI bridge IP conflict fix"
+# Step 5: Apply the targeted fix (skip if Jellyfin already running)
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" = true ]; then
+    info "Step 5: Skipping CNI bridge fix - Jellyfin already running, going directly to kube-proxy check"
+else
+    info "Step 5: Applying CNI bridge IP conflict fix"
+fi
 
 # Handle the critical case: worker node missing subnet allocation
-if [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]; then
+if [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ] && [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
     error "CRITICAL: Worker node storagenodet3500 has no Flannel subnet allocation"
     warn "This is the root cause of the CNI bridge IP conflict!"
     
@@ -221,7 +231,7 @@ if [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]; then
 fi
 
 # Apply standard CNI bridge fixes if needed
-if [ "${CNI_BRIDGE_CONFLICT:-false}" = true ] || [ "${CNI_BRIDGE_OK:-false}" != true ]; then
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${CNI_BRIDGE_CONFLICT:-false}" = true ] || [ "${CNI_BRIDGE_OK:-false}" != true ]); then
     warn "Applying CNI bridge conflict resolution on control plane"
     
     # Stop kubelet temporarily to prevent constant pod sandbox failures
@@ -267,10 +277,14 @@ else
 fi
 
 # Step 6: Handle worker node CNI state reset
-info "Step 6: Ensuring worker node CNI state is reset for new subnet"
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
+    info "Step 6: Ensuring worker node CNI state is reset for new subnet"
+else
+    info "Step 6: Skipping worker node CNI reset - Jellyfin already running"
+fi
 
 # If we fixed subnet allocation, we need to ensure the worker node resets its CNI state
-if [ "${SUBNET_ALLOCATION_FIXED:-false}" = true ] || [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]; then
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_FIXED:-false}" = true ] || [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]); then
     warn "Worker node subnet allocation was missing/fixed - need to reset worker node CNI state"
     
     info "Creating temporary pod on worker node to trigger CNI reset"
@@ -327,130 +341,219 @@ if [ -n "$FLANNEL_POD" ]; then
 fi
 
 # Step 8: Wait for network to stabilize and delete stuck Jellyfin pod
-info "Step 8: Waiting for network to stabilize"
-sleep 20
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
+    info "Step 8: Waiting for network to stabilize"
+    sleep 20
 
-if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
-    POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null)
-    if [ "$POD_STATUS" = "Pending" ]; then
-        info "Deleting stuck Jellyfin pod to trigger recreation with fixed networking"
-        kubectl delete pod -n jellyfin jellyfin --force --grace-period=0
-        
-        # Wait for pod to be fully deleted
-        while kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; do
-            sleep 2
-        done
-        
-        success "Stuck Jellyfin pod deleted"
+    if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
+        POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null)
+        if [ "$POD_STATUS" = "Pending" ]; then
+            info "Deleting stuck Jellyfin pod to trigger recreation with fixed networking"
+            kubectl delete pod -n jellyfin jellyfin --force --grace-period=0
+            
+            # Wait for pod to be fully deleted
+            while kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; do
+                sleep 2
+            done
+            
+            success "Stuck Jellyfin pod deleted"
+        fi
     fi
+else
+    info "Step 8: Skipping Jellyfin pod handling - already running"
 fi
 
 # Step 9: Recreate Jellyfin pod with fixed networking
-info "Step 9: Creating Jellyfin pod with fixed networking"
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
+    info "Step 9: Creating Jellyfin pod with fixed networking"
 
-if ! kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
-    info "Applying Jellyfin manifest to create pod"
-    kubectl apply -f manifests/jellyfin/jellyfin.yaml
-    
-    success "Jellyfin manifest applied"
+    if ! kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
+        info "Applying Jellyfin manifest to create pod"
+        kubectl apply -f manifests/jellyfin/jellyfin.yaml
+        
+        success "Jellyfin manifest applied"
+    fi
+else
+    info "Step 9: Skipping Jellyfin pod creation - already running"
 fi
 
 # Step 10: Monitor pod creation and verify fix
-info "Step 10: Monitoring Jellyfin pod creation and verifying fix"
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
+    info "Step 10: Monitoring Jellyfin pod creation and verifying fix"
 
-info "Waiting for Jellyfin pod to be created..."
-for i in {1..30}; do  # Wait up to 2.5 minutes for pod creation
-    if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
-        success "✓ Jellyfin pod created"
-        break
-    fi
-    if [ $i -eq 30 ]; then
-        error "Jellyfin pod not created within timeout"
+    info "Waiting for Jellyfin pod to be created..."
+    for i in {1..30}; do  # Wait up to 2.5 minutes for pod creation
+        if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
+            success "✓ Jellyfin pod created"
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            error "Jellyfin pod not created within timeout"
+            exit 1
+        fi
+        sleep 5
+    done
+else
+    info "Step 10: Skipping Jellyfin monitoring - already running, going to kube-proxy check"
+    # Jump directly to kube-proxy check
+    POD_STATUS="Running"
+fi
+
+# Jellyfin monitoring loop (skip if already running)
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
+    # Monitor pod status changes
+    info "Monitoring pod status (will wait up to 5 minutes for Running status)..."
+
+    for i in {1..60}; do  # Wait up to 5 minutes
+        POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        POD_IP=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.podIP}' 2>/dev/null || echo "")
+        
+        case "$POD_STATUS" in
+            "Pending")
+                if [ $((i % 6)) -eq 0 ]; then  # Check events every 30 seconds
+                    echo "Pod still Pending, checking for CNI errors..."
+                    RECENT_CNI_ERRORS=$(kubectl get events -n jellyfin --sort-by='.lastTimestamp' 2>/dev/null | \
+                                       grep -E "(failed to set bridge addr|cni0 already has|sandbox)" | tail -1 || echo "")
+                    if [ -n "$RECENT_CNI_ERRORS" ]; then
+                        error "✗ CNI bridge errors still occurring:"
+                        echo "$RECENT_CNI_ERRORS"
+                        error "The fix may not have been successful"
+                        break
+                    else
+                        info "No recent CNI errors detected, pod may be starting normally..."
+                    fi
+                fi
+                ;;
+            "Running")
+                success "🎉 Jellyfin pod is now Running!"
+                echo "Pod IP: ${POD_IP:-<not assigned yet>}"
+                
+                # Verify pod is ready
+                if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=30s; then
+                    success "✓ Jellyfin pod is Ready!"
+                    
+                    # Show final status
+                    echo
+                    echo "=== Final Jellyfin Pod Status ==="
+                    kubectl get pod -n jellyfin jellyfin -o wide
+                    
+                    echo
+                    echo "=== Access Information ==="
+                    NODE_PORT=$(kubectl get service -n jellyfin jellyfin-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30096")
+                    echo "Jellyfin UI: http://192.168.4.61:${NODE_PORT}"
+                    echo "Pod IP: ${POD_IP}"
+                    
+                    success "CNI bridge IP conflict successfully resolved!"
+                    exit 0
+                else
+                    warn "Pod is Running but not Ready yet - health probes may still be starting"
+                    success "CNI bridge IP conflict appears to be resolved (pod creation succeeded)"
+                    exit 0
+                fi
+                ;;
+            "Failed"|"Error")
+                error "✗ Pod failed to start: $POD_STATUS"
+                break
+                ;;
+            *)
+                if [ $((i % 12)) -eq 0 ]; then  # Update every minute
+                    info "Pod status: $POD_STATUS (${i}/60 checks)"
+                fi
+                ;;
+        esac
+        
+        sleep 5
+    done
+
+    # If we get here, either the pod didn't start or there were issues
+    POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+
+    if [ "$POD_STATUS" = "Pending" ]; then
+        error "Pod is still Pending after 5 minutes"
+        echo
+        echo "=== Diagnostic Information ==="
+        echo "Pod events:"
+        kubectl get events -n jellyfin --sort-by='.lastTimestamp' | tail -10
+        echo
+        echo "Pod description:"
+        kubectl describe pod -n jellyfin jellyfin | tail -20
+        
+        warn "The CNI bridge fix may need additional steps or manual intervention"
+        exit 1
+    else
+        warn "Pod status: $POD_STATUS - may need additional troubleshooting"
         exit 1
     fi
-    sleep 5
-done
 
-# Monitor pod status changes
-info "Monitoring pod status (will wait up to 5 minutes for Running status)..."
+fi  # End of Jellyfin monitoring conditional
 
-for i in {1..60}; do  # Wait up to 5 minutes
-    POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
-    POD_IP=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.podIP}' 2>/dev/null || echo "")
+# Step 11: Check and fix kube-proxy CrashLoopBackOff issues (addresses problem statement)
+info "Step 11: Checking for kube-proxy CrashLoopBackOff issues"
+
+# Find any crashlooping kube-proxy pods
+CRASHLOOP_PROXY=$(timeout 30 kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide 2>/dev/null | grep "CrashLoopBackOff" || echo "")
+
+if [ -n "$CRASHLOOP_PROXY" ]; then
+    error "Found kube-proxy pods in CrashLoopBackOff state:"
+    echo "$CRASHLOOP_PROXY"
     
-    case "$POD_STATUS" in
-        "Pending")
-            if [ $((i % 6)) -eq 0 ]; then  # Check events every 30 seconds
-                echo "Pod still Pending, checking for CNI errors..."
-                RECENT_CNI_ERRORS=$(kubectl get events -n jellyfin --sort-by='.lastTimestamp' 2>/dev/null | \
-                                   grep -E "(failed to set bridge addr|cni0 already has|sandbox)" | tail -1 || echo "")
-                if [ -n "$RECENT_CNI_ERRORS" ]; then
-                    error "✗ CNI bridge errors still occurring:"
-                    echo "$RECENT_CNI_ERRORS"
-                    error "The fix may not have been successful"
-                    break
-                else
-                    info "No recent CNI errors detected, pod may be starting normally..."
-                fi
-            fi
-            ;;
-        "Running")
-            success "🎉 Jellyfin pod is now Running!"
-            echo "Pod IP: ${POD_IP:-<not assigned yet>}"
-            
-            # Verify pod is ready
-            if kubectl wait --for=condition=ready pod/jellyfin -n jellyfin --timeout=30s; then
-                success "✓ Jellyfin pod is Ready!"
-                
-                # Show final status
-                echo
-                echo "=== Final Jellyfin Pod Status ==="
-                kubectl get pod -n jellyfin jellyfin -o wide
-                
-                echo
-                echo "=== Access Information ==="
-                NODE_PORT=$(kubectl get service -n jellyfin jellyfin-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30096")
-                echo "Jellyfin UI: http://192.168.4.61:${NODE_PORT}"
-                echo "Pod IP: ${POD_IP}"
-                
-                success "CNI bridge IP conflict successfully resolved!"
-                exit 0
-            else
-                warn "Pod is Running but not Ready yet - health probes may still be starting"
-                success "CNI bridge IP conflict appears to be resolved (pod creation succeeded)"
-                exit 0
-            fi
-            ;;
-        "Failed"|"Error")
-            error "✗ Pod failed to start: $POD_STATUS"
-            break
-            ;;
-        *)
-            if [ $((i % 12)) -eq 0 ]; then  # Update every minute
-                info "Pod status: $POD_STATUS (${i}/60 checks)"
-            fi
-            ;;
-    esac
+    warn "This is a separate issue from the CNI bridge conflict and needs to be fixed"
+    info "Running comprehensive kube-proxy fix..."
     
-    sleep 5
-done
-
-# If we get here, either the pod didn't start or there were issues
-POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
-
-if [ "$POD_STATUS" = "Pending" ]; then
-    error "Pod is still Pending after 5 minutes"
-    echo
-    echo "=== Diagnostic Information ==="
-    echo "Pod events:"
-    kubectl get events -n jellyfin --sort-by='.lastTimestamp' | tail -10
-    echo
-    echo "Pod description:"
-    kubectl describe pod -n jellyfin jellyfin | tail -20
+    # Check if the fix script exists
+    if [ -f "./scripts/fix_remaining_pod_issues.sh" ]; then
+        info "Calling fix_remaining_pod_issues.sh to handle kube-proxy CrashLoopBackOff"
+        ./scripts/fix_remaining_pod_issues.sh || warn "kube-proxy fix script encountered issues"
+    else
+        warn "fix_remaining_pod_issues.sh not found - applying basic kube-proxy fix"
+        
+        # Basic kube-proxy restart fix
+        info "Attempting basic kube-proxy restart"
+        
+        # Delete crashlooping pods
+        echo "$CRASHLOOP_PROXY" | while read -r line; do
+            if [ -n "$line" ]; then
+                pod_name=$(echo "$line" | awk '{print $1}')
+                info "Deleting crashlooping kube-proxy pod: $pod_name"
+                kubectl delete pod -n kube-system "$pod_name" --force --grace-period=0 2>/dev/null || true
+            fi
+        done
+        
+        # Restart the DaemonSet
+        info "Restarting kube-proxy DaemonSet"
+        kubectl rollout restart daemonset/kube-proxy -n kube-system || warn "Failed to restart kube-proxy DaemonSet"
+        
+        # Wait for rollout
+        if timeout 120 kubectl rollout status daemonset/kube-proxy -n kube-system; then
+            success "kube-proxy DaemonSet restart completed"
+        else
+            warn "kube-proxy restart timed out"
+        fi
+    fi
     
-    warn "The CNI bridge fix may need additional steps or manual intervention"
-    exit 1
+    # Verify the fix
+    sleep 10
+    NEW_CRASHLOOP_PROXY=$(timeout 30 kubectl get pods -n kube-system -l k8s-app=kube-proxy 2>/dev/null | grep "CrashLoopBackOff" || echo "")
+    
+    if [ -z "$NEW_CRASHLOOP_PROXY" ]; then
+        success "✓ kube-proxy CrashLoopBackOff issue resolved"
+    else
+        warn "⚠️  kube-proxy CrashLoopBackOff issue persists - may need manual intervention"
+        echo "Remaining problematic pods:"
+        echo "$NEW_CRASHLOOP_PROXY"
+    fi
+    
 else
-    warn "Pod status: $POD_STATUS - may need additional troubleshooting"
-    exit 1
+    success "✓ No kube-proxy CrashLoopBackOff issues detected"
 fi
+
+# Final comprehensive status check
+echo
+info "=== Final Cluster Status Check ==="
+kubectl get pods --all-namespaces -o wide | grep -E "(jellyfin|kube-proxy)" || echo "No jellyfin or kube-proxy pods found"
+
+success "CNI bridge and kube-proxy fix complete!"
+echo
+echo "If issues persist, consider running:"
+echo "  kubectl logs -n kube-system -l k8s-app=kube-proxy"
+echo "  kubectl get events --all-namespaces --sort-by='.lastTimestamp'"
