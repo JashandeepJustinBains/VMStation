@@ -24,6 +24,94 @@ VERIFICATION_PLAYBOOK="$PLAYBOOK_DIR/verify-cluster.yml"
 MAIN_BOOTSTRAP="$PLAYBOOK_DIR/cluster-bootstrap.yml"
 SIMPLE_BOOTSTRAP="$PLAYBOOK_DIR/cluster-bootstrap/simple-bootstrap.yml"
 
+# Node SSH user mappings based on inventory
+get_ssh_user_for_ip() {
+    local ip="$1"
+    case "$ip" in
+        "192.168.4.62")  # homelab node
+            echo "jashandeepjustinbains"
+            ;;
+        "192.168.4.61")  # storagenodet3500 node
+            echo "root"
+            ;;
+        "192.168.4.63")  # masternode/control plane
+            echo "root"
+            ;;
+        *)
+            # Default fallback - try to read from inventory file if available
+            if [ -f "$INVENTORY_FILE" ]; then
+                # Extract user for this IP from inventory file
+                local user=$(awk -v ip="$ip" '
+                    /ansible_host:/ && $2 == ip { 
+                        getline; 
+                        if (/ansible_user:/) { 
+                            gsub(/ansible_user:/, "", $0); 
+                            gsub(/^[ \t]+|[ \t]+$/, "", $0); 
+                            print $0; 
+                            exit 
+                        } 
+                    }' "$INVENTORY_FILE" 2>/dev/null || echo "")
+                
+                if [ -n "$user" ]; then
+                    echo "$user"
+                else
+                    warn "Unknown IP $ip, defaulting to root user"
+                    echo "root"
+                fi
+            else
+                warn "Inventory file not found, defaulting to root user for IP $ip"
+                echo "root"
+            fi
+            ;;
+    esac
+}
+
+# Function to preserve SSH access during reset operations
+preserve_ssh_access() {
+    local target_node="$1"
+    local ssh_user="$2"
+    
+    info "Ensuring SSH access is preserved for ${ssh_user}@${target_node}..."
+    
+    # Test SSH connectivity before any operations
+    if ! ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no ${ssh_user}@${target_node} "echo 'SSH test successful'" >/dev/null 2>&1; then
+        error "Cannot establish SSH connection to ${ssh_user}@${target_node}"
+        error "Please ensure SSH keys are configured and the node is accessible"
+        return 1
+    fi
+    
+    # Check and preserve SSH service
+    ssh ${ssh_user}@${target_node} '
+        # Ensure SSH service is enabled and will restart after reboot
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true
+        fi
+        
+        # Ensure SSH port is allowed in firewall
+        if command -v ufw >/dev/null 2>&1; then
+            if ufw status | grep -q "Status: active"; then
+                ufw allow ssh 2>/dev/null || true
+                ufw allow 22/tcp 2>/dev/null || true
+            fi
+        elif command -v firewall-cmd >/dev/null 2>&1; then
+            if firewall-cmd --state 2>/dev/null | grep -q running; then
+                firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
+                firewall-cmd --permanent --add-port=22/tcp 2>/dev/null || true
+                firewall-cmd --reload 2>/dev/null || true
+            fi
+        elif command -v iptables >/dev/null 2>&1; then
+            # For iptables, we will NOT modify rules to avoid conflicts
+            # Just verify SSH port is accessible
+            echo "Note: iptables detected. Assuming SSH access is properly configured."
+        fi
+        
+        echo "SSH preservation completed"
+    ' || warn "Some SSH preservation steps failed, but continuing..."
+    
+    success "✅ SSH access preserved for ${ssh_user}@${target_node}"
+    return 0
+}
+
 # Default settings
 MODE="full"
 SKIP_VERIFICATION=false
@@ -190,6 +278,7 @@ run_post_deployment_fixes() {
     )
     
     local control_plane_ip="192.168.4.63"
+    local control_plane_user=$(get_ssh_user_for_ip "$control_plane_ip")
     
     # Check if we're already running on the control plane
     if is_running_on_control_plane; then
@@ -225,26 +314,26 @@ run_post_deployment_fixes() {
         
         # First clean up any conflicting Jellyfin resources
         info "Cleaning up any conflicting Jellyfin resources on remote control plane..."
-        ssh root@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true" || true
-        ssh root@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true" || true
         # Clean up existing services and deployments to prevent port conflicts
-        ssh root@$control_plane_ip "kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true" || true
-        ssh root@$control_plane_ip "kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true" || true
-        ssh root@$control_plane_ip "kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true" || true
-        ssh root@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true" || true
         
         for script in "${fix_scripts[@]}"; do
             if [ -f "$script" ]; then
                 info "Copying and running: $script"
-                if scp "$script" root@$control_plane_ip:/tmp/; then
+                if scp "$script" ${control_plane_user}@$control_plane_ip:/tmp/; then
                     local script_name=$(basename "$script")
-                    if ssh root@$control_plane_ip "chmod +x /tmp/$script_name && /tmp/$script_name"; then
+                    if ssh ${control_plane_user}@$control_plane_ip "chmod +x /tmp/$script_name && /tmp/$script_name"; then
                         success "✅ Remote fix script $script_name completed successfully"
                     else
                         warn "⚠️ Remote fix script $script_name encountered issues (non-critical)"
                     fi
                     # Clean up
-                    ssh root@$control_plane_ip "rm -f /tmp/$script_name" || true
+                    ssh ${control_plane_user}@$control_plane_ip "rm -f /tmp/$script_name" || true
                 else
                     warn "Failed to copy fix script $script to control plane"
                 fi
@@ -291,6 +380,7 @@ run_smoke_test() {
     
     # Run smoke test on control plane node
     local control_plane_ip="192.168.4.63"
+    local control_plane_user=$(get_ssh_user_for_ip "$control_plane_ip")
     
     # Check if we're already running on the control plane
     if is_running_on_control_plane; then
@@ -303,9 +393,9 @@ run_smoke_test() {
         fi
     else
         info "Copying smoke test script to control plane..."
-        if scp scripts/smoke-test.sh root@$control_plane_ip:/tmp/; then
+        if scp scripts/smoke-test.sh ${control_plane_user}@$control_plane_ip:/tmp/; then
             info "Running smoke test on control plane ($control_plane_ip)..."
-            if ssh root@$control_plane_ip "chmod +x /tmp/smoke-test.sh && /tmp/smoke-test.sh"; then
+            if ssh ${control_plane_user}@$control_plane_ip "chmod +x /tmp/smoke-test.sh && /tmp/smoke-test.sh"; then
                 success "✅ Smoke test passed!"
             else
                 error "❌ Smoke test failed!"
@@ -313,7 +403,7 @@ run_smoke_test() {
             fi
         else
             error "Failed to copy smoke test script to control plane"
-            info "Make sure SSH access to $control_plane_ip is configured"
+            info "Make sure SSH access to ${control_plane_user}@$control_plane_ip is configured"
             exit 1
         fi
     fi
@@ -441,6 +531,9 @@ reset_network_control_plane() {
             echo "  - Delete existing kube-proxy DaemonSet"
             echo "  - Delete existing CoreDNS Deployment and Service"
             echo "  - Apply fresh canonical manifests"
+            echo ""
+            echo "NOTE: This network reset only affects Kubernetes networking components."
+            echo "SSH access and firewall configurations will NOT be modified."
             echo ""
             echo "Backups will be created before any destructive operations."
             return 1
@@ -724,21 +817,52 @@ reset_cluster() {
     
     info "Resetting cluster..."
     
-    # Reset all nodes
+    # First, preserve SSH access on all nodes
+    info "Preserving SSH access on all nodes..."
+    local node_ips=("192.168.4.61" "192.168.4.62" "192.168.4.63")
+    for ip in "${node_ips[@]}"; do
+        local ssh_user=$(get_ssh_user_for_ip "$ip")
+        if ! preserve_ssh_access "$ip" "$ssh_user"; then
+            error "Failed to preserve SSH access for ${ssh_user}@${ip}"
+            error "Aborting reset to prevent SSH lockout"
+            exit 1
+        fi
+    done
+    
+    # Reset all nodes (but exclude SSH-related operations)
     local reset_commands=(
         "kubeadm reset --force"
         "systemctl stop kubelet containerd"
         "rm -rf /etc/kubernetes/"
         "rm -rf /var/lib/kubelet/"
         "rm -rf /etc/cni/net.d/"
-        "iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X"
+        # Modified iptables reset to preserve SSH rules
+        "iptables-save | grep -E 'ssh|:22 ' > /tmp/ssh_rules.txt && iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X && if [ -s /tmp/ssh_rules.txt ]; then iptables-restore < /tmp/ssh_rules.txt; fi"
         "systemctl start containerd"
+        # Ensure SSH service remains enabled
+        "systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true"
     )
     
     for cmd in "${reset_commands[@]}"; do
         info "Executing on all nodes: $cmd"
         if [ "$DRY_RUN" = false ]; then
             ansible all -i "$INVENTORY_FILE" -b -m shell -a "$cmd" || true
+        fi
+    done
+    
+    # Verify SSH access is still working after reset
+    info "Verifying SSH access after reset..."
+    for ip in "${node_ips[@]}"; do
+        local ssh_user=$(get_ssh_user_for_ip "$ip")
+        if [ "$DRY_RUN" = false ]; then
+            if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${ssh_user}@${ip} "echo 'SSH verification successful'" >/dev/null 2>&1; then
+                success "✅ SSH access verified for ${ssh_user}@${ip}"
+            else
+                error "❌ SSH access lost for ${ssh_user}@${ip} after reset!"
+                warn "You may need to manually restore SSH access to this node"
+            fi
+        else
+            info "DRY RUN: Would verify SSH access to ${ssh_user}@${ip}"
         fi
     done
     

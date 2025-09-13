@@ -65,9 +65,30 @@ MAX_RETRIES="${MAX_RETRIES:-3}"
 TOKEN_REFRESH_RETRIES="${TOKEN_REFRESH_RETRIES:-2}"
 LOG_FILE="/tmp/kubeadm-join-$(date +%Y%m%d-%H%M%S).log"
 
+# Get the correct SSH user for the master node
+get_master_ssh_user() {
+    case "$MASTER_IP" in
+        "192.168.4.62")  # homelab node
+            echo "jashandeepjustinbains"
+            ;;
+        "192.168.4.61")  # storagenodet3500 node
+            echo "root"
+            ;;
+        "192.168.4.63")  # masternode/control plane
+            echo "root"
+            ;;
+        *)
+            echo "root"  # Default fallback
+            ;;
+    esac
+}
+
+MASTER_SSH_USER=$(get_master_ssh_user)
+
 echo "=== VMStation Enhanced Kubeadm Join Process ==="
 echo "Timestamp: $(date)"
 echo "Master IP: $MASTER_IP"
+echo "Master SSH user: $MASTER_SSH_USER"
 echo "Join timeout: ${JOIN_TIMEOUT}s"
 echo "Log file: $LOG_FILE"
 echo ""
@@ -200,8 +221,8 @@ refresh_join_token() {
     
     # Try to generate new token via SSH
     if command -v ssh >/dev/null 2>&1; then
-        # First try SSH key authentication
-        new_join_command=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no root@"$MASTER_IP" \
+        # First try SSH key authentication with correct user
+        new_join_command=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${MASTER_SSH_USER}@"$MASTER_IP" \
             "kubeadm token create --ttl=2h --print-join-command" 2>/dev/null || echo "")
         
         if [ -z "$new_join_command" ]; then
