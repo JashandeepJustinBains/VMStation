@@ -1,167 +1,343 @@
 1.
-root@masternode:/srv/monitoring_data/VMStation# ls -l /etc/kubernetes/admin.conf && kubectl --kubeconfig=/etc/kubernetes/admin.conf version -short
--rw------- 1 root root 5652 Sep 13 12:39 /etc/kubernetes/admin.conf
-Client Version: v1.34.0
-Kustomize Version: v5.7.1
-Unable to connect to the server: dial tcp: lookup hort on 10.96.0.10:53: no such host
-root@masternode:/srv/monitoring_data/VMStation# ls -l /etc/kubernetes/admin.conf && kubectl --kubeconfig=/etc/kubernetes/admin.conf version --client
--rw------- 1 root root 5652 Sep 13 12:39 /etc/kubernetes/admin.conf
-Client Version: v1.34.0
-Kustomize Version: v5.7.1
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -n kube-system -o wide
+kubectl logs -n kube-system <failing-kube-proxy-pod> --tail=400
+kubectl logs -n kube-system -l k8s-app=kube-dns --tail=400 || true
+kubectl describe deployment coredns -n kube-system
+kubectl get events -n kube-system --sort-by='.lastTimestamp' | tail -n 50
+NAME                                 READY   STATUS             RESTARTS         AGE    IP             NODE               NOMINATED NODE   READINESS GATES
+coredns-777c769ffd-pqj8j             0/1     CrashLoopBackOff   10 (2m36s ago)   33m    10.244.0.24    homelab            <none>           <none>
+etcd-masternode                      1/1     Running            6                128m   192.168.4.63   masternode         <none>           <none>
+kube-apiserver-masternode            1/1     Running            15 (125m ago)    128m   192.168.4.63   masternode         <none>           <none>
+kube-controller-manager-masternode   1/1     Running            36 (125m ago)    128m   192.168.4.63   masternode         <none>           <none>
+kube-proxy-4g9mt                     0/1     CrashLoopBackOff   1 (9s ago)       3m4s   192.168.4.62   homelab            <none>           <none>
+kube-proxy-67kw4                     1/1     Running            0                3m2s   192.168.4.61   storagenodet3500   <none>           <none>
+kube-proxy-hw8p6                     1/1     Running            0                3m6s   192.168.4.63   masternode         <none>           <none>
+kube-scheduler-masternode            1/1     Running            36 (125m ago)    128m   192.168.4.63   masternode         <none>           <none>
+-bash: failing-kube-proxy-pod: No such file or directory
+[INFO] SIGTERM: Shutting down servers then terminating
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[INFO] plugin/kubernetes: waiting for Kubernetes API before starting server
+[WARNING] plugin/kubernetes: starting server with unsynced Kubernetes API
+.:53
+[INFO] plugin/reload: Running configuration SHA512 = 591cf328cccc12bc490481273e738df59329c62c0b729d94e8b61db9961c2fa5f046dd37f1cf888b953814040d180f52594972691cd6ff41be96639138a43908
+CoreDNS-1.11.1
+linux/amd64, go1.20.7, ae2bbc2
+[INFO] plugin/health: Going into lameduck mode for 5s
+[ERROR] plugin/errors: 2 2544043941339297475.8641134993260641654. HINFO: read udp 10.244.0.22:55590->192.168.4.1:53: i/o timeout
+[ERROR] plugin/errors: 2 2544043941339297475.8641134993260641654. HINFO: read udp 10.244.0.22:60565->192.168.4.1:53: i/o timeout
+Name:                   coredns
+Namespace:              kube-system
+CreationTimestamp:      Sat, 13 Sep 2025 12:40:06 -0400
+Labels:                 k8s-app=kube-dns
+Annotations:            deployment.kubernetes.io/revision: 3
+Selector:               k8s-app=kube-dns
+Replicas:               1 desired | 1 updated | 1 total | 0 available | 1 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  1 max unavailable, 25% max surge
+Pod Template:
+  Labels:           k8s-app=kube-dns
+  Annotations:      kubectl.kubernetes.io/restartedAt: 2025-09-13T14:15:10-04:00
+  Service Account:  coredns
+  Containers:
+   coredns:
+    Image:       registry.k8s.io/coredns/coredns:v1.11.1
+    Ports:       53/UDP (dns), 53/TCP (dns-tcp), 9153/TCP (metrics)
+    Host Ports:  0/UDP (dns), 0/TCP (dns-tcp), 0/TCP (metrics)
+    Args:
+      -conf
+      /etc/coredns/Corefile
+    Limits:
+      memory:  170Mi
+    Requests:
+      cpu:        100m
+      memory:     70Mi
+    Liveness:     http-get http://:8080/health delay=60s timeout=5s period=10s #success=1 #failure=5
+    Readiness:    http-get http://:8181/ready delay=0s timeout=1s period=10s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /etc/coredns from config-volume (ro)
+  Volumes:
+   config-volume:
+    Type:               ConfigMap (a volume populated by a ConfigMap)
+    Name:               coredns
+    Optional:           false
+  Priority Class Name:  system-cluster-critical
+  Node-Selectors:       kubernetes.io/os=linux
+  Tolerations:          node-role.kubernetes.io/control-plane:NoSchedule op=Exists
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    False   ProgressDeadlineExceeded
+OldReplicaSets:  coredns-76f75df574 (0/0 replicas created), coredns-68444cf7cd (0/0 replicas created)
+NewReplicaSet:   coredns-777c769ffd (1/1 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  33m   deployment-controller  Scaled up replica set coredns-777c769ffd to 1
+  Normal  ScalingReplicaSet  33m   deployment-controller  Scaled down replica set coredns-68444cf7cd to 0 from 1
+28m         Normal    Created             pod/cni-validation-storagenodet3500   Created container: test
+28m         Normal    Pulled              pod/cni-validation-storagenodet3500   Container image "busybox:1.35" already present on machine
+28m         Normal    Killing             pod/cni-validation-storagenodet3500   Stopping container test
+28m         Warning   Unhealthy           pod/coredns-777c769ffd-pqj8j          Readiness probe failed: Get "http://10.244.0.13:8181/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+27m         Normal    Created             pod/flannel-test-2                    Created container: test
+27m         Normal    Started             pod/flannel-test-2                    Started container test
+27m         Normal    Pulled              pod/flannel-test-1                    Container image "busybox:1.35" already present on machine
+27m         Normal    Created             pod/flannel-test-1                    Created container: test
+27m         Normal    Started             pod/flannel-test-1                    Started container test
+27m         Normal    Pulled              pod/flannel-test-2                    Container image "busybox:1.35" already present on machine
+26m         Normal    Killing             pod/flannel-test-1                    Stopping container test
+26m         Normal    Killing             pod/flannel-test-2                    Stopping container test
+23m         Warning   Unhealthy           pod/coredns-777c769ffd-pqj8j          Readiness probe failed: Get "http://10.244.0.16:8181/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+18m         Normal    Pulling             pod/debug-net                         Pulling image "nicolaka/netshoot"
+18m         Normal    Pulled              pod/debug-net                         Successfully pulled image "nicolaka/netshoot" in 1.074s (1.074s including waiting)
+18m         Normal    Created             pod/debug-net                         Created container: debug
+18m         Normal    Started             pod/debug-net                         Started container debug
+17m         Normal    Pulling             pod/cni-debug                         Pulling image "nicolaka/netshoot"
+17m         Normal    Pulled              pod/cni-debug                         Successfully pulled image "nicolaka/netshoot" in 965ms (965ms including waiting)
+17m         Normal    Created             pod/cni-debug                         Created container: debug
+17m         Normal    Started             pod/cni-debug                         Started container debug
+17m         Normal    Killing             pod/cni-debug                         Stopping container debug
+17m         Normal    Killing             pod/debug-net                         Stopping container debug
+8m34s       Warning   BackOff             pod/kube-proxy-8t6cf                  Back-off restarting failed container kube-proxy in pod kube-proxy-8t6cf_kube-system(e213f1ab-62f2-4b7e-bd44-51c9e13d4d5d)
+8m11s       Warning   BackOff             pod/coredns-777c769ffd-pqj8j          Back-off restarting failed container coredns in pod coredns-777c769ffd-pqj8j_kube-system(451879cb-365b-48ea-b6c0-0f5df1496a43)
+3m20s       Warning   Unhealthy           pod/coredns-777c769ffd-pqj8j          Readiness probe failed: Get "http://10.244.0.22:8181/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+3m6s        Normal    Scheduled           pod/kube-proxy-hw8p6                  Successfully assigned kube-system/kube-proxy-hw8p6 to masternode
+3m6s        Normal    SuccessfulDelete    daemonset/kube-proxy                  Deleted pod: kube-proxy-vfhhh
+3m6s        Normal    SuccessfulCreate    daemonset/kube-proxy                  Created pod: kube-proxy-hw8p6
+3m6s        Normal    Killing             pod/kube-proxy-vfhhh                  Stopping container kube-proxy
+3m5s        Normal    Created             pod/kube-proxy-hw8p6                  Created container: kube-proxy
+3m5s        Normal    Pulled              pod/kube-proxy-hw8p6                  Container image "registry.k8s.io/kube-proxy:v1.29.15" already present on machine
+3m5s        Normal    Started             pod/kube-proxy-hw8p6                  Started container kube-proxy
+3m4s        Normal    Scheduled           pod/kube-proxy-4g9mt                  Successfully assigned kube-system/kube-proxy-4g9mt to homelab
+3m4s        Normal    Killing             pod/kube-proxy-8t6cf                  Stopping container kube-proxy
+3m4s        Normal    SuccessfulDelete    daemonset/kube-proxy                  Deleted pod: kube-proxy-8t6cf
+3m4s        Normal    SuccessfulCreate    daemonset/kube-proxy                  Created pod: kube-proxy-4g9mt
+3m3s        Normal    SuccessfulDelete    daemonset/kube-proxy                  Deleted pod: kube-proxy-czgd8
+3m3s        Normal    Killing             pod/kube-proxy-czgd8                  Stopping container kube-proxy
+3m2s        Normal    Scheduled           pod/kube-proxy-67kw4                  Successfully assigned kube-system/kube-proxy-67kw4 to storagenodet3500
+3m2s        Normal    SuccessfulCreate    daemonset/kube-proxy                  Created pod: kube-proxy-67kw4
+3m1s        Normal    Pulled              pod/kube-proxy-67kw4                  Container image "registry.k8s.io/kube-proxy:v1.29.15" already present on machine
+3m1s        Normal    Created             pod/kube-proxy-67kw4                  Created container: kube-proxy
+3m1s        Normal    Started             pod/kube-proxy-67kw4                  Started container kube-proxy
+92s         Normal    Created             pod/kube-proxy-4g9mt                  Created container: kube-proxy
+92s         Normal    Pulled              pod/kube-proxy-4g9mt                  Container image "registry.k8s.io/kube-proxy:v1.29.15" already present on machine
+92s         Normal    Started             pod/kube-proxy-4g9mt                  Started container kube-proxy
+9s          Normal    Killing             pod/kube-proxy-4g9mt                  Stopping container kube-proxy
+9s          Normal    SandboxChanged      pod/kube-proxy-4g9mt                  Pod sandbox changed, it will be killed and re-created.
+7s          Warning   BackOff             pod/kube-proxy-4g9mt                  Back-off restarting failed container kube-proxy in pod kube-proxy-4g9mt_kube-system(63cd623e-9839-4f82-b56e-a66192386291)
+
 
 2.
-root@masternode:/srv/monitoring_data/VMStation# KUBECONF=/etc/kubernetes/admin.conf; server=$(kubectl --kubeconfig=$KUBECONF config view -o jsonpath='{.clusters[0].cluster.server}'); echo "server=$server"; timeout 5 bash -c "echo > /dev/tcp/$(echo $server | sed -E 's#https?://##; s#:[0-9]+##')/$(echo $server | sed -E 's#.*:([0-9]+)$#\1#') 2>/dev/null" && echo "TCP_OPEN" || echo "TCP_CLOSED"
-server=https://192.168.4.63:6443
-TCP_OPEN
+root@masternode:/srv/monitoring_data/VMStation# kubectl rollout restart daemonset/kube-proxy -n kube-system
+kubectl get pods -n kube-system -l k8s-app=kube-proxy -w
+daemonset.apps/kube-proxy restarted
+NAME               READY   STATUS        RESTARTS      AGE
+kube-proxy-4g9mt   1/1     Running       2 (21s ago)   3m16s
+kube-proxy-67kw4   1/1     Running       0             3m14s
+kube-proxy-hw8p6   1/1     Terminating   0             3m18s
+kube-proxy-hw8p6   0/1     Terminating   0             3m18s
+kube-proxy-2z4dg   0/1     Pending       0             0s
+kube-proxy-2z4dg   0/1     Pending       0             0s
+kube-proxy-2z4dg   0/1     ContainerCreating   0             0s
+kube-proxy-2z4dg   1/1     Running             0             0s
+kube-proxy-67kw4   1/1     Terminating         0             3m14s
+kube-proxy-hw8p6   0/1     Terminating         0             3m18s
+kube-proxy-hw8p6   0/1     Terminating         0             3m18s
+kube-proxy-67kw4   0/1     Terminating         0             3m15s
+kube-proxy-l5t8z   0/1     Pending             0             0s
+kube-proxy-l5t8z   0/1     Pending             0             0s
+kube-proxy-l5t8z   0/1     ContainerCreating   0             0s
+kube-proxy-67kw4   0/1     Terminating         0             3m16s
+kube-proxy-67kw4   0/1     Terminating         0             3m16s
+kube-proxy-l5t8z   1/1     Running             0             2s
+kube-proxy-4g9mt   1/1     Terminating         2 (24s ago)   3m19s
+kube-proxy-4g9mt   0/1     Terminating         2 (24s ago)   3m19s
+kube-proxy-5p8rs   0/1     Pending             0             0s
+kube-proxy-5p8rs   0/1     Pending             0             0s
+kube-proxy-5p8rs   0/1     ContainerCreating   0             0s
+kube-proxy-4g9mt   0/1     Terminating         2 (24s ago)   3m19s
+kube-proxy-4g9mt   0/1     Terminating         2 (24s ago)   3m19s
+kube-proxy-5p8rs   1/1     Running             0             1s
 
 3.
-root@masternode:/srv/monitoring_data/VMStation# kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info >/dev/null && echo "kubectl->cluster:OK" || echo "kubectl->cluster:FAIL"; kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw /healthz || true
-kubectl->cluster:OK
+root@masternode:/srv/monitoring_data/VMStation# sudo iptables -t nat -L KUBE-SERVICES -n -v
+sudo iptables -t nat -L POSTROUTING -n -v
+sudo iptables-save | grep -E 'KUBE-SERVICES|KUBE-MARK-MASQ|MASQUERADE' -n || true
+Chain KUBE-SERVICES (2 references)
+ pkts bytes target     prot opt in     out     source               destination
+    0     0 KUBE-SVC-HY4ESKAZJUQFIF3P  6    --  *      *       0.0.0.0/0            10.110.101.234       /* monitoring/grafana:web cluster IP */ tcp dpt:3000
+    0     0 KUBE-SVC-6IDAIG4NQOQJS2DS  6    --  *      *       0.0.0.0/0            10.101.42.218        /* monitoring/prometheus:web cluster IP */ tcp dpt:9090
+    0     0 KUBE-SVC-NPX46M4PTMTKRN6Y  6    --  *      *       0.0.0.0/0            10.96.0.1            /* default/kubernetes:https cluster IP */ tcp dpt:443
+   49  3190 KUBE-NODEPORTS  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* kubernetes service nodeports; NOTE: this must be the last rule in this chain */ ADDRTYPE match dst-type LOCAL
+Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
+ pkts bytes target     prot opt in     out     source               destination
+16482 1002K KUBE-POSTROUTING  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* kubernetes postrouting rules */
+    0     0 CNI-f0ee528c4a103ce7bd728148  0    --  *      *       10.244.0.8           0.0.0.0/0            /* name: "cni0" id: "a1e8acf2ad023e0eb664ce613306bfe4f7092a2e50d6bdb797a5ce1da1ab5a5c" */
+  120 10750 CNI-3ac01a101d20f190ba1a1d0c  0    --  *      *       10.244.0.9           0.0.0.0/0            /* name: "cni0" id: "89c7937e87fb59155330caf57366a1792c3a671406ca0e8c6fcc02c5cb41eb8b" */
+ 2445  148K FLANNEL-POSTRTG  0    --  *      *       0.0.0.0/0            0.0.0.0/0            /* flanneld masq */
+26::KUBE-SERVICES - [0:0]
+41:-A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+45:-A OUTPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+55:-A KUBE-SERVICES -d 10.96.0.10/32 -p tcp -m comment --comment "kube-system/kube-dns:dns-tcp has no endpoints" -m tcp --dport 53 -j REJECT --reject-with icmp-port-unreachable
+56:-A KUBE-SERVICES -d 10.96.0.10/32 -p tcp -m comment --comment "kube-system/kube-dns:metrics has no endpoints" -m tcp --dport 9153 -j REJECT --reject-with icmp-port-unreachable
+57:-A KUBE-SERVICES -d 10.111.151.101/32 -p tcp -m comment --comment "jellyfin/jellyfin-service:http has no endpoints" -m tcp --dport 8096 -j REJECT --reject-with icmp-port-unreachable
+58:-A KUBE-SERVICES -d 10.111.151.101/32 -p tcp -m comment --comment "jellyfin/jellyfin-service:https has no endpoints" -m tcp --dport 8920 -j REJECT --reject-with icmp-port-unreachable
+59:-A KUBE-SERVICES -d 10.96.0.10/32 -p udp -m comment --comment "kube-system/kube-dns:dns has no endpoints" -m udp --dport 53 -j REJECT --reject-with icmp-port-unreachable
+74::KUBE-MARK-MASQ - [0:0]
+81::KUBE-SERVICES - [0:0]
+85:-A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+86:-A OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+92:-A CNI-3ac01a101d20f190ba1a1d0c ! -d 224.0.0.0/4 -m comment --comment "name: \"cni0\" id: \"89c7937e87fb59155330caf57366a1792c3a671406ca0e8c6fcc02c5cb41eb8b\"" -j MASQUERADE
+94:-A CNI-f0ee528c4a103ce7bd728148 ! -d 224.0.0.0/4 -m comment --comment "name: \"cni0\" id: \"a1e8acf2ad023e0eb664ce613306bfe4f7092a2e50d6bdb797a5ce1da1ab5a5c\"" -j MASQUERADE
+99:-A FLANNEL-POSTRTG -s 10.244.0.0/16 ! -d 224.0.0.0/4 -m comment --comment "flanneld masq" -j MASQUERADE --random-fully
+100:-A FLANNEL-POSTRTG ! -s 10.244.0.0/16 -d 10.244.0.0/16 -m comment --comment "flanneld masq" -j MASQUERADE --random-fully
+101:-A KUBE-EXT-6IDAIG4NQOQJS2DS -m comment --comment "masquerade traffic for monitoring/prometheus:web external destinations" -j KUBE-MARK-MASQ
+103:-A KUBE-EXT-HY4ESKAZJUQFIF3P -m comment --comment "masquerade traffic for monitoring/grafana:web external destinations" -j KUBE-MARK-MASQ
+105:-A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
+110:-A KUBE-POSTROUTING -m comment --comment "kubernetes service traffic requiring SNAT" -j MASQUERADE --random-fully
+111:-A KUBE-SEP-FP6KV3OG5JNGYBQ6 -s 10.244.0.9/32 -m comment --comment "monitoring/grafana:web" -j KUBE-MARK-MASQ
+113:-A KUBE-SEP-KSERYG5HKT6IOJHF -s 192.168.4.63/32 -m comment --comment "default/kubernetes:https" -j KUBE-MARK-MASQ
+115:-A KUBE-SEP-PAEFX75TIHKE2N23 -s 10.244.0.8/32 -m comment --comment "monitoring/prometheus:web" -j KUBE-MARK-MASQ
+117:-A KUBE-SERVICES -d 10.110.101.234/32 -p tcp -m comment --comment "monitoring/grafana:web cluster IP" -m tcp --dport 3000 -j KUBE-SVC-HY4ESKAZJUQFIF3P
+118:-A KUBE-SERVICES -d 10.101.42.218/32 -p tcp -m comment --comment "monitoring/prometheus:web cluster IP" -m tcp --dport 9090 -j KUBE-SVC-6IDAIG4NQOQJS2DS
+119:-A KUBE-SERVICES -d 10.96.0.1/32 -p tcp -m comment --comment "default/kubernetes:https cluster IP" -m tcp --dport 443 -j KUBE-SVC-NPX46M4PTMTKRN6Y
+120:-A KUBE-SERVICES -m comment --comment "kubernetes service nodeports; NOTE: this must be the last rule in this chain" -m addrtype --dst-type LOCAL -j KUBE-NODEPORTS
+121:-A KUBE-SVC-6IDAIG4NQOQJS2DS ! -s 10.244.0.0/16 -d 10.101.42.218/32 -p tcp -m comment --comment "monitoring/prometheus:web cluster IP" -m tcp --dport 9090 -j KUBE-MARK-MASQ
+123:-A KUBE-SVC-HY4ESKAZJUQFIF3P ! -s 10.244.0.0/16 -d 10.110.101.234/32 -p tcp -m comment --comment "monitoring/grafana:web cluster IP" -m tcp --dport 3000 -j KUBE-MARK-MASQ
+125:-A KUBE-SVC-NPX46M4PTMTKRN6Y ! -s 10.244.0.0/16 -d 10.96.0.1/32 -p tcp -m comment --comment "default/kubernetes:https cluster IP" -m tcp --dport 443 -j KUBE-MARK-MASQ
 
-4.
-root@masternode:/srv/monitoring_data/VMStation# kubectl -n kube-system get pods -o wide | egrep 'kube-apiserver|kube-controller-manager' || kubectl -n kube-system get pods -o wide
-kube-apiserver-masternode            1/1     Running            15 (61m ago)     64m   192.168.4.63   masternode         <none>           <none>
-kube-controller-manager-masternode   1/1     Running            36 (61m ago)     64m   192.168.4.63   masternode         <none>           <none>
+
+4. 
+root@masternode:/srv/monitoring_data/VMStation# kubectl rollout restart deployment/coredns -n kube-system
+kubectl get pods -n kube-system -l k8s-app=kube-dns -w
+deployment.apps/coredns restarted
+NAME                       READY   STATUS              RESTARTS   AGE
+coredns-777c769ffd-pqj8j   0/1     Terminating         10         34m
+coredns-784db4cdd8-gszlz   0/1     ContainerCreating   0          0s
+coredns-777c769ffd-pqj8j   0/1     Terminating         10         34m
+coredns-777c769ffd-pqj8j   0/1     Terminating         10         34m
+coredns-777c769ffd-pqj8j   0/1     Terminating         10         34m
+coredns-784db4cdd8-gszlz   0/1     Running             0          1s
+coredns-784db4cdd8-gszlz   1/1     Running             0          1s
 
 5.
-root@masternode:/srv/monitoring_data/VMStation# # show kube-apiserver container logs from container runtime (works if containerd/crictl available)
-sudo crictl ps -a | egrep 'kube-apiserver' && sudo crictl logs $(sudo crictl ps -a | awk '/kube-apiserver/{print $1; exit}')
-# fallback: kubelet journal lines
-sudo journalctl -u kubelet -n 200 --no-pager | egrep 'kube-apiserver|static pod' -n
-0a8f9cb27bdb2       f44c6888a2d24       About an hour ago   Running             kube-apiserver            15                  964a3c85e20a8       kube-apiserver-masternode
-425ec857d3dff       f44c6888a2d24       About an hour ago   Exited              kube-apiserver            14                  964a3c85e20a8       kube-apiserver-masternode
-I0913 16:42:57.210004       1 options.go:222] external host was not specified, using 192.168.4.63
-I0913 16:42:57.212434       1 server.go:148] Version: v1.29.15
-I0913 16:42:57.212479       1 server.go:150] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
-I0913 16:42:57.594792       1 shared_informer.go:311] Waiting for caches to sync for node_authorizer
-I0913 16:42:57.602016       1 plugins.go:157] Loaded 12 mutating admission controller(s) successfully in the following order: NamespaceLifecycle,LimitRanger,ServiceAccount,NodeRestriction,TaintNodesByCondition,Priority,DefaultTolerationSeconds,DefaultStorageClass,StorageObjectInUseProtection,RuntimeClass,DefaultIngressClass,MutatingAdmissionWebhook.
-I0913 16:42:57.602129       1 plugins.go:160] Loaded 13 validating admission controller(s) successfully in the following order: LimitRanger,ServiceAccount,PodSecurity,Priority,PersistentVolumeClaimResize,RuntimeClass,CertificateApproval,CertificateSigning,ClusterTrustBundleAttest,CertificateSubjectRestriction,ValidatingAdmissionPolicy,ValidatingAdmissionWebhook,ResourceQuota.
-I0913 16:42:57.602652       1 instance.go:297] Using reconciler: lease
-I0913 16:42:57.650727       1 handler.go:275] Adding GroupVersion apiextensions.k8s.io v1 to ResourceManager
-W0913 16:42:57.650955       1 genericapiserver.go:742] Skipping API apiextensions.k8s.io/v1beta1 because it has no resources.
-I0913 16:42:57.949972       1 handler.go:275] Adding GroupVersion  v1 to ResourceManager
-I0913 16:42:57.950439       1 instance.go:693] API group "internal.apiserver.k8s.io" is not enabled, skipping.
-I0913 16:42:58.255547       1 instance.go:693] API group "resource.k8s.io" is not enabled, skipping.
-I0913 16:42:58.274917       1 handler.go:275] Adding GroupVersion authentication.k8s.io v1 to ResourceManager
-W0913 16:42:58.274940       1 genericapiserver.go:742] Skipping API authentication.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.274950       1 genericapiserver.go:742] Skipping API authentication.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.275368       1 handler.go:275] Adding GroupVersion authorization.k8s.io v1 to ResourceManager
-W0913 16:42:58.275381       1 genericapiserver.go:742] Skipping API authorization.k8s.io/v1beta1 because it has no resources.
-I0913 16:42:58.276116       1 handler.go:275] Adding GroupVersion autoscaling v2 to ResourceManager
-I0913 16:42:58.276788       1 handler.go:275] Adding GroupVersion autoscaling v1 to ResourceManager
-W0913 16:42:58.276801       1 genericapiserver.go:742] Skipping API autoscaling/v2beta1 because it has no resources.
-W0913 16:42:58.276811       1 genericapiserver.go:742] Skipping API autoscaling/v2beta2 because it has no resources.
-I0913 16:42:58.277980       1 handler.go:275] Adding GroupVersion batch v1 to ResourceManager
-W0913 16:42:58.277994       1 genericapiserver.go:742] Skipping API batch/v1beta1 because it has no resources.
-I0913 16:42:58.278715       1 handler.go:275] Adding GroupVersion certificates.k8s.io v1 to ResourceManager
-W0913 16:42:58.278727       1 genericapiserver.go:742] Skipping API certificates.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.278734       1 genericapiserver.go:742] Skipping API certificates.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.279172       1 handler.go:275] Adding GroupVersion coordination.k8s.io v1 to ResourceManager
-W0913 16:42:58.279183       1 genericapiserver.go:742] Skipping API coordination.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.279247       1 genericapiserver.go:742] Skipping API discovery.k8s.io/v1beta1 because it has no resources.
-I0913 16:42:58.279784       1 handler.go:275] Adding GroupVersion discovery.k8s.io v1 to ResourceManager
-I0913 16:42:58.281145       1 handler.go:275] Adding GroupVersion networking.k8s.io v1 to ResourceManager
-W0913 16:42:58.281158       1 genericapiserver.go:742] Skipping API networking.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.281166       1 genericapiserver.go:742] Skipping API networking.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.281525       1 handler.go:275] Adding GroupVersion node.k8s.io v1 to ResourceManager
-W0913 16:42:58.281536       1 genericapiserver.go:742] Skipping API node.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.281543       1 genericapiserver.go:742] Skipping API node.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.282250       1 handler.go:275] Adding GroupVersion policy v1 to ResourceManager
-W0913 16:42:58.282263       1 genericapiserver.go:742] Skipping API policy/v1beta1 because it has no resources.
-I0913 16:42:58.283673       1 handler.go:275] Adding GroupVersion rbac.authorization.k8s.io v1 to ResourceManager
-W0913 16:42:58.283686       1 genericapiserver.go:742] Skipping API rbac.authorization.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.283694       1 genericapiserver.go:742] Skipping API rbac.authorization.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.284093       1 handler.go:275] Adding GroupVersion scheduling.k8s.io v1 to ResourceManager
-W0913 16:42:58.284108       1 genericapiserver.go:742] Skipping API scheduling.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.284127       1 genericapiserver.go:742] Skipping API scheduling.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.285825       1 handler.go:275] Adding GroupVersion storage.k8s.io v1 to ResourceManager
-W0913 16:42:58.285838       1 genericapiserver.go:742] Skipping API storage.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.285845       1 genericapiserver.go:742] Skipping API storage.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.286781       1 handler.go:275] Adding GroupVersion flowcontrol.apiserver.k8s.io v1beta3 to ResourceManager
-I0913 16:42:58.287793       1 handler.go:275] Adding GroupVersion flowcontrol.apiserver.k8s.io v1 to ResourceManager
-W0913 16:42:58.287805       1 genericapiserver.go:742] Skipping API flowcontrol.apiserver.k8s.io/v1beta2 because it has no resources.
-W0913 16:42:58.287813       1 genericapiserver.go:742] Skipping API flowcontrol.apiserver.k8s.io/v1beta1 because it has no resources.
-I0913 16:42:58.291487       1 handler.go:275] Adding GroupVersion apps v1 to ResourceManager
-W0913 16:42:58.291505       1 genericapiserver.go:742] Skipping API apps/v1beta2 because it has no resources.
-W0913 16:42:58.291515       1 genericapiserver.go:742] Skipping API apps/v1beta1 because it has no resources.
-I0913 16:42:58.292280       1 handler.go:275] Adding GroupVersion admissionregistration.k8s.io v1 to ResourceManager
-W0913 16:42:58.292292       1 genericapiserver.go:742] Skipping API admissionregistration.k8s.io/v1beta1 because it has no resources.
-W0913 16:42:58.292299       1 genericapiserver.go:742] Skipping API admissionregistration.k8s.io/v1alpha1 because it has no resources.
-I0913 16:42:58.292827       1 handler.go:275] Adding GroupVersion events.k8s.io v1 to ResourceManager
-W0913 16:42:58.292839       1 genericapiserver.go:742] Skipping API events.k8s.io/v1beta1 because it has no resources.
-I0913 16:42:58.303873       1 handler.go:275] Adding GroupVersion apiregistration.k8s.io v1 to ResourceManager
-W0913 16:42:58.303892       1 genericapiserver.go:742] Skipping API apiregistration.k8s.io/v1beta1 because it has no resources.
-I0913 16:42:58.690903       1 dynamic_cafile_content.go:157] "Starting controller" name="request-header::/etc/kubernetes/pki/front-proxy-ca.crt"
-I0913 16:42:58.690914       1 dynamic_cafile_content.go:157] "Starting controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
-I0913 16:42:58.691524       1 secure_serving.go:213] Serving securely on [::]:6443
-I0913 16:42:58.691587       1 dynamic_serving_content.go:132] "Starting controller" name="serving-cert::/etc/kubernetes/pki/apiserver.crt::/etc/kubernetes/pki/apiserver.key"
-I0913 16:42:58.706808       1 controller.go:80] Starting OpenAPI V3 AggregationController
-I0913 16:42:58.706861       1 tlsconfig.go:240] "Starting DynamicServingCertificateController"
-I0913 16:42:58.706978       1 controller.go:116] Starting legacy_token_tracking_controller
-I0913 16:42:58.707002       1 shared_informer.go:311] Waiting for caches to sync for configmaps
-I0913 16:42:58.707051       1 system_namespaces_controller.go:67] Starting system namespaces controller
-I0913 16:42:58.707119       1 dynamic_serving_content.go:132] "Starting controller" name="aggregator-proxy-cert::/etc/kubernetes/pki/front-proxy-client.crt::/etc/kubernetes/pki/front-proxy-client.key"
-I0913 16:42:58.708547       1 controller.go:78] Starting OpenAPI AggregationController
-I0913 16:42:58.709007       1 aggregator.go:163] waiting for initial CRD sync...
-I0913 16:42:58.709030       1 apf_controller.go:374] Starting API Priority and Fairness config controller
-I0913 16:42:58.709204       1 apiservice_controller.go:97] Starting APIServiceRegistrationController
-I0913 16:42:58.712569       1 cache.go:32] Waiting for caches to sync for APIServiceRegistrationController controller
-I0913 16:42:58.709232       1 handler_discovery.go:412] Starting ResourceDiscoveryManager
-I0913 16:42:58.709281       1 available_controller.go:423] Starting AvailableConditionController
-I0913 16:42:58.709504       1 cluster_authentication_trust_controller.go:440] Starting cluster_authentication_trust_controller controller
-I0913 16:42:58.709550       1 gc_controller.go:78] Starting apiserver lease garbage collector
-I0913 16:42:58.708552       1 customresource_discovery_controller.go:289] Starting DiscoveryController
-I0913 16:42:58.710440       1 controller.go:133] Starting OpenAPI controller
-I0913 16:42:58.710468       1 controller.go:85] Starting OpenAPI V3 controller
-I0913 16:42:58.710496       1 naming_controller.go:291] Starting NamingConditionController
-I0913 16:42:58.710509       1 establishing_controller.go:76] Starting EstablishingController
-I0913 16:42:58.710521       1 nonstructuralschema_controller.go:192] Starting NonStructuralSchemaConditionController
-I0913 16:42:58.710547       1 apiapproval_controller.go:186] Starting KubernetesAPIApprovalPolicyConformantConditionController
-I0913 16:42:58.710568       1 crd_finalizer.go:266] Starting CRDFinalizer
-I0913 16:42:58.710639       1 dynamic_cafile_content.go:157] "Starting controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
-I0913 16:42:58.710657       1 dynamic_cafile_content.go:157] "Starting controller" name="request-header::/etc/kubernetes/pki/front-proxy-ca.crt"
-I0913 16:42:58.714558       1 crdregistration_controller.go:111] Starting crd-autoregister controller
-I0913 16:42:58.723725       1 shared_informer.go:311] Waiting for caches to sync for crd-autoregister
-I0913 16:42:58.723748       1 cache.go:32] Waiting for caches to sync for AvailableConditionController controller
-I0913 16:42:58.723762       1 shared_informer.go:311] Waiting for caches to sync for cluster_authentication_trust_controller
-I0913 16:42:58.823888       1 shared_informer.go:318] Caches are synced for crd-autoregister
-I0913 16:42:58.824008       1 aggregator.go:165] initial CRD sync complete...
-I0913 16:42:58.824021       1 autoregister_controller.go:141] Starting autoregister controller
-I0913 16:42:58.824031       1 cache.go:32] Waiting for caches to sync for autoregister controller
-I0913 16:42:58.847180       1 shared_informer.go:318] Caches are synced for configmaps
-I0913 16:42:58.847495       1 apf_controller.go:379] Running API Priority and Fairness config worker
-I0913 16:42:58.847643       1 apf_controller.go:382] Running API Priority and Fairness periodic rebalancing process
-I0913 16:42:58.847579       1 controller.go:624] quota admission added evaluator for: leases.coordination.k8s.io
-I0913 16:42:58.895499       1 shared_informer.go:318] Caches are synced for node_authorizer
-I0913 16:42:58.915164       1 cache.go:39] Caches are synced for APIServiceRegistrationController controller
-I0913 16:42:58.923781       1 cache.go:39] Caches are synced for AvailableConditionController controller
-I0913 16:42:58.923909       1 shared_informer.go:318] Caches are synced for cluster_authentication_trust_controller
-I0913 16:42:58.924167       1 cache.go:39] Caches are synced for autoregister controller
-I0913 16:42:59.719165       1 storage_scheduling.go:111] all system priority classes are created successfully or already exist.
-W0913 16:43:00.018709       1 lease.go:265] Resetting endpoints for master service "kubernetes" to [192.168.4.63]
-I0913 16:43:00.019950       1 controller.go:624] quota admission added evaluator for: endpoints
-I0913 16:43:00.025416       1 controller.go:624] quota admission added evaluator for: endpointslices.discovery.k8s.io
-I0913 17:00:52.361199       1 controller.go:624] quota admission added evaluator for: deployments.apps
-I0913 17:19:39.736474       1 controller.go:624] quota admission added evaluator for: namespaces
-I0913 17:19:39.742911       1 controller.go:624] quota admission added evaluator for: serviceaccounts
-I0913 17:19:39.786924       1 controller.go:624] quota admission added evaluator for: daemonsets.apps
-I0913 17:19:39.794926       1 controller.go:624] quota admission added evaluator for: controllerrevisions.apps
-I0913 17:20:01.530079       1 controller.go:624] quota admission added evaluator for: replicasets.apps
-I0913 17:20:01.547824       1 alloc.go:330] "allocated clusterIPs" service="monitoring/prometheus" clusterIPs={"IPv4":"10.101.42.218"}
-I0913 17:20:02.517621       1 alloc.go:330] "allocated clusterIPs" service="monitoring/grafana" clusterIPs={"IPv4":"10.110.101.234"}
-I0913 17:20:33.542886       1 alloc.go:330] "allocated clusterIPs" service="jellyfin/jellyfin-service" clusterIPs={"IPv4":"10.108.154.183"}
-I0913 17:29:02.037505       1 alloc.go:330] "allocated clusterIPs" service="default/test-b-svc" clusterIPs={"IPv4":"10.109.174.85"}
-I0913 17:40:10.972323       1 alloc.go:330] "allocated clusterIPs" service="jellyfin/jellyfin-service" clusterIPs={"IPv4":"10.96.106.235"}
-4:Sep 13 12:40:07 masternode kubelet[1795473]: E0913 12:40:07.284788 1795473 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-apiserver-masternode\" already exists" pod="kube-system/kube-apiserver-masternode"
-7:Sep 13 12:40:07 masternode kubelet[1795473]: I0913 12:40:07.313668 1795473 pod_startup_latency_tracker.go:102] "Observed pod startup duration" pod="kube-system/kube-apiserver-masternode" podStartSLOduration=3.313635886 podStartE2EDuration="3.313635886s" podCreationTimestamp="2025-09-13 12:40:04 -0400 EDT" firstStartedPulling="0001-01-01 00:00:00 +0000 UTC" lastFinishedPulling="0001-01-01 00:00:00 +0000 UTC" observedRunningTime="2025-09-13 12:40:07.313056167 -0400 EDT m=+1.190596074" watchObservedRunningTime="2025-09-13 12:40:07.313635886 -0400 EDT m=+1.191175788"
+root@masternode:/srv/monitoring_data/VMStation# kubectl run --rm -i --tty netshoot --image nicolaka/netshoot --restart=Never -- \
+  sh -c "cat /etc/resolv.conf; ping -c3 10.244.2.5 || true; dig @10.96.0.10 google.com +short || true; dig @8.8.8.8 google.com +short || true"
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+From 10.244.0.27 icmp_seq=1 Destination Host Unreachable
+From 10.244.0.27 icmp_seq=2 Destination Host Unreachable
+From 10.244.0.27 icmp_seq=3 Destination Host Unreachable
+
+--- 10.244.2.5 ping statistics ---
+3 packets transmitted, 0 received, +3 errors, 100% packet loss, time 2042ms
+pipe 3
+;; communications error to 10.96.0.10#53: host unreachable
+;; communications error to 10.96.0.10#53: host unreachable
+;; communications error to 10.96.0.10#53: host unreachable
+
+; <<>> DiG 9.20.10 <<>> @10.96.0.10 google.com +short
+; (1 server found)
+;; global options: +cmd
+;; no servers could be reached
+;; communications error to 8.8.8.8#53: host unreachable
+;; communications error to 8.8.8.8#53: host unreachable
+;; communications error to 8.8.8.8#53: host unreachable
+
+; <<>> DiG 9.20.10 <<>> @8.8.8.8 google.com +short
+; (1 server found)
+;; global options: +cmd
+;; no servers could be reached
+pod "netshoot" deleted from default namespace
 
 
 6.
-root@masternode:/srv/monitoring_data/VMStation# kubectl --kubeconfig=/etc/kubernetes/admin.conf config view -o jsonpath='{.clusters[0].cluster.server}'; host=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf config view -o jsonpath='{.clusters[0].cluster.server}' | sed -E 's#https?://##; s#:[0-9]+##'); ping -c 2 $host || nslookup $host || echo "resolve-failed"
-https://192.168.4.63:6443PING 192.168.4.63 (192.168.4.63) 56(84) bytes of data.
-64 bytes from 192.168.4.63: icmp_seq=1 ttl=64 time=0.051 ms
-64 bytes from 192.168.4.63: icmp_seq=2 ttl=64 time=0.054 ms
+root@masternode:/srv/monitoring_data/VMStation# sudo ethtool -k enp2s0    # view offload state
+sudo ethtool -K enp2s0 gro off gso off tso off
+# capture VXLAN while triggering pod->pod traffic (run capture, then from another terminal run pod ping)
+sudo timeout 20 tcpdump -nni enp2s0 udp port 8472 -c 50 -w /tmp/vxlan.pcap || true
+# quick check pcap
+sudo tcpdump -nn -r /tmp/vxlan.pcap -c 20
+Features for enp2s0:
+rx-checksumming: on
+tx-checksumming: on
+        tx-checksum-ipv4: on
+        tx-checksum-ip-generic: off [fixed]
+        tx-checksum-ipv6: on
+        tx-checksum-fcoe-crc: off [fixed]
+        tx-checksum-sctp: off [fixed]
+scatter-gather: off
+        tx-scatter-gather: off
+        tx-scatter-gather-fraglist: off [fixed]
+tcp-segmentation-offload: off
+        tx-tcp-segmentation: off
+        tx-tcp-ecn-segmentation: off [fixed]
+        tx-tcp-mangleid-segmentation: off
+        tx-tcp6-segmentation: off
+generic-segmentation-offload: off [requested on]
+generic-receive-offload: on
+large-receive-offload: off [fixed]
+rx-vlan-offload: on
+tx-vlan-offload: on
+ntuple-filters: off [fixed]
+receive-hashing: off [fixed]
+highdma: on [fixed]
+rx-vlan-filter: off [fixed]
+vlan-challenged: off [fixed]
+tx-lockless: off [fixed]
+netns-local: off [fixed]
+tx-gso-robust: off [fixed]
+tx-fcoe-segmentation: off [fixed]
+tx-gre-segmentation: off [fixed]
+tx-gre-csum-segmentation: off [fixed]
+tx-ipxip4-segmentation: off [fixed]
+tx-ipxip6-segmentation: off [fixed]
+tx-udp_tnl-segmentation: off [fixed]
+tx-udp_tnl-csum-segmentation: off [fixed]
+tx-gso-partial: off [fixed]
+tx-tunnel-remcsum-segmentation: off [fixed]
+tx-sctp-segmentation: off [fixed]
+tx-esp-segmentation: off [fixed]
+tx-udp-segmentation: off [fixed]
+tx-gso-list: off [fixed]
+fcoe-mtu: off [fixed]
+tx-nocache-copy: off
+loopback: off [fixed]
+rx-fcs: off
+rx-all: off
+tx-vlan-stag-hw-insert: off [fixed]
+rx-vlan-stag-hw-parse: off [fixed]
+rx-vlan-stag-filter: off [fixed]
+l2-fwd-offload: off [fixed]
+hw-tc-offload: off [fixed]
+esp-hw-offload: off [fixed]
+esp-tx-csum-hw-offload: off [fixed]
+rx-udp_tunnel-port-offload: off [fixed]
+tls-hw-tx-offload: off [fixed]
+tls-hw-rx-offload: off [fixed]
+rx-gro-hw: off [fixed]
+tls-hw-record: off [fixed]
+rx-gro-list: off
+macsec-hw-offload: off [fixed]
+rx-udp-gro-forwarding: off
+hsr-tag-ins-offload: off [fixed]
+hsr-tag-rm-offload: off [fixed]
+hsr-fwd-offload: off [fixed]
+hsr-dup-offload: off [fixed]
+tcpdump: /tmp/vxlan.pcap: Permission denied
+reading from file /tmp/vxlan.pcap, link-type EN10MB (Ethernet), snapshot length 262144
 
---- 192.168.4.63 ping statistics ---
-2 packets transmitted, 2 received, 0% packet loss, time 1001ms
-rtt min/avg/max/mdev = 0.051/0.052/0.054/0.001 ms
+7.
+root@masternode:/srv/monitoring_data/VMStation# kubectl -n kube-system logs ds/kube-flannel --tail=200 || true
+kubectl -n kube-system get ds kube-flannel -o wide
+error: error from server (NotFound): daemonsets.apps "kube-flannel" not found in namespace "kube-system"
+Error from server (NotFound): daemonsets.apps "kube-flannel" not found
