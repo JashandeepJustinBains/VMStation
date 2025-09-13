@@ -335,6 +335,7 @@
             - /opt/cni/bin
             - /etc/cni/net.d
             - /var/lib/cni/networks
+            - /var/lib/kubelet
             - /run/flannel
 
         - name: "Create placeholder CNI configuration before containerd starts"
