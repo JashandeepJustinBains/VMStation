@@ -179,6 +179,7 @@ run_post_deployment_fixes() {
     
     # Check if fix scripts exist
     local fix_scripts=(
+        "scripts/fix_cluster_dns_configuration.sh"
         "scripts/fix_homelab_node_issues.sh"
         "scripts/fix_remaining_pod_issues.sh"
     )
