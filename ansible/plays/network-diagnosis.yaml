@@ -134,11 +134,27 @@
         done
       failed_when: false
 
-    - name: "Check if any kube-proxy pods are in CrashLoopBackOff"
+    - name: "Check for kube-proxy pods in problematic states"
       set_fact:
         failing_kube_proxy_pods: "{{ kube_proxy_pods.resources | selectattr('status.phase', 'equalto', 'Running') | selectattr('status.containerStatuses.0.restartCount', 'gt', 5) | list }}"
+        crashloop_pods: "{{ kube_proxy_pods.resources | selectattr('status.containerStatuses.0.state.waiting.reason', 'defined') | selectattr('status.containerStatuses.0.state.waiting.reason', 'equalto', 'CrashLoopBackOff') | list }}"
 
-    - name: "Restart kube-proxy daemonset (rolling restart)"
+    - name: "Save kube-proxy problem analysis"
+      copy:
+        dest: "{{ output_dir }}/kube-proxy-problems.txt"
+        content: |
+          === kube-proxy Problem Analysis ===
+          Failing pods (high restart count): {{ failing_kube_proxy_pods | length }}
+          CrashLoopBackOff pods: {{ crashloop_pods | length }}
+          
+          {% for pod in crashloop_pods %}
+          Pod: {{ pod.metadata.name }}
+          Node: {{ pod.spec.nodeName }}
+          Status: {{ pod.status.containerStatuses.0.state.waiting.reason }}
+          Restart Count: {{ pod.status.containerStatuses.0.restartCount }}
+          {% endfor %}
+
+    - name: "Attempt kube-proxy daemonset restart for failing pods"
       kubernetes.core.k8s:
         state: present
         definition:
@@ -149,21 +165,42 @@
             namespace: kube-system
             annotations:
               deployment.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
-      when: failing_kube_proxy_pods | length > 0
+      when: (failing_kube_proxy_pods | length > 0) or (crashloop_pods | length > 0)
 
-    - name: "Wait for kube-proxy pods to be ready after restart"
+    - name: "Wait for kube-proxy rollout status (with timeout)"
+      shell: timeout 120 kubectl rollout status daemonset/kube-proxy -n kube-system
+      register: kube_proxy_rollout
+      failed_when: false
+      when: (failing_kube_proxy_pods | length > 0) or (crashloop_pods | length > 0)
+
+    - name: "Check kube-proxy status after restart attempt"
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Pod
         namespace: kube-system
         label_selectors:
           - k8s-app=kube-proxy
-        wait: true
-        wait_condition:
-          type: Ready
-          status: "True"
-        wait_timeout: 300
-      when: failing_kube_proxy_pods | length > 0
+      register: kube_proxy_pods_after_restart
+      when: (failing_kube_proxy_pods | length > 0) or (crashloop_pods | length > 0)
+
+    - name: "Save post-restart kube-proxy status"
+      copy:
+        dest: "{{ output_dir }}/kube-proxy-post-restart-status.yaml"
+        content: "{{ kube_proxy_pods_after_restart | to_nice_yaml }}"
+      when: kube_proxy_pods_after_restart is defined
+
+    - name: "Document kube-proxy restart outcome"
+      copy:
+        dest: "{{ output_dir }}/kube-proxy-restart-outcome.txt"
+        content: |
+          === kube-proxy Restart Outcome ===
+          Rollout command exit code: {{ kube_proxy_rollout.rc | default('N/A') }}
+          Rollout stdout: {{ kube_proxy_rollout.stdout | default('N/A') }}
+          Rollout stderr: {{ kube_proxy_rollout.stderr | default('N/A') }}
+          
+          Note: Diagnosis continues regardless of kube-proxy restart success
+          Check kube-proxy-post-restart-status.yaml for current pod states
+      when: kube_proxy_rollout is defined
 
 - name: "C - iptables NAT & POSTROUTING Verification"
   hosts: all
@@ -231,7 +268,7 @@
 
     - name: "Capture VXLAN traffic (background)"
       shell: |
-        timeout 15 tcpdump -nni $(ip route | grep default | awk '{print $5}' | head -1) udp port 8472 -c 100 -w /tmp/vxlan-{{ inventory_hostname }}.pcap 2>&1 || true
+        timeout 15 tcpdump -nni $(ip route | grep default | awk '{print $5}' | head -1) udp port 8472 -c 100 -w /tmp/vxlan-{{ inventory_hostname }}.pcap 2>&1 || echo "VXLAN capture failed or timed out"
       async: 20
       poll: 0
       register: vxlan_capture
@@ -239,15 +276,17 @@
     - name: "Generate test traffic for VXLAN capture"
       shell: |
         # Try to ping a pod on another node to generate VXLAN traffic
-        for pod_ip in $(kubectl get pods -A -o wide | grep -v $(hostname) | awk 'NR>1 {print $7}' | grep -E '^10\.244\.' | head -3); do
+        echo "Attempting to generate VXLAN test traffic..."
+        for pod_ip in $(kubectl get pods -A -o wide 2>/dev/null | grep -v $(hostname) | awk 'NR>1 {print $7}' | grep -E '^10\.244\.' | head -3); do
           if [ ! -z "$pod_ip" ]; then
             echo "Testing connectivity to pod IP: $pod_ip"
-            timeout 5 ping -c 3 $pod_ip || true
+            timeout 5 ping -c 3 $pod_ip 2>&1 || echo "Ping to $pod_ip failed"
           fi
         done
       delegate_to: "{{ groups['monitoring_nodes'][0] }}"
       run_once: true
       become: false
+      failed_when: false
 
     - name: "Wait for VXLAN capture to complete"
       async_status:
@@ -256,6 +295,7 @@
       until: vxlan_capture_result.finished
       retries: 25
       delay: 1
+      failed_when: false
 
     - name: "Analyze captured VXLAN traffic"
       shell: |
@@ -319,13 +359,24 @@
     - name: "Test DNS resolution with debug pod"
       shell: |
         echo "=== DNS Test Results ===" > {{ output_dir }}/dns-test-results.txt
-        kubectl run --rm -i --tty testns-{{ ansible_date_time.epoch }} --image=busybox --restart=Never --timeout=60s -- sh -c "nslookup google.com || true; echo '---'; nslookup kubernetes.default || true" >> {{ output_dir }}/dns-test-results.txt 2>&1 || true
+        echo "Starting DNS test at $(date)" >> {{ output_dir }}/dns-test-results.txt
+        timeout 90 kubectl run testns-{{ ansible_date_time.epoch }} --image=busybox --restart=Never --rm -- sh -c "nslookup google.com 2>&1; echo '---'; nslookup kubernetes.default 2>&1" >> {{ output_dir }}/dns-test-results.txt 2>&1 || echo "DNS test timed out or failed" >> {{ output_dir }}/dns-test-results.txt
+        echo "DNS test completed at $(date)" >> {{ output_dir }}/dns-test-results.txt
       failed_when: false
 
-    - name: "Test pod-to-pod connectivity"
+    - name: "Test pod-to-pod connectivity" 
       shell: |
         echo "=== Pod-to-Pod Connectivity Test ===" >> {{ output_dir }}/dns-test-results.txt
-        kubectl run --rm -i --tty debug-connectivity-{{ ansible_date_time.epoch }} --image=nicolaka/netshoot --restart=Never --timeout=60s -- sh -c "ping -c3 10.244.2.5 || true; sleep 1" >> {{ output_dir }}/dns-test-results.txt 2>&1 || true
+        echo "Starting connectivity test at $(date)" >> {{ output_dir }}/dns-test-results.txt
+        # Get a pod IP to test against
+        POD_IP=$(kubectl get pods -A -o wide | grep Running | grep -v "kube-system\|kube-flannel" | awk 'NR==1{print $7}' | head -1)
+        if [ -n "$POD_IP" ]; then
+          echo "Testing connectivity to pod IP: $POD_IP" >> {{ output_dir }}/dns-test-results.txt
+          timeout 60 kubectl run debug-connectivity-{{ ansible_date_time.epoch }} --image=nicolaka/netshoot --restart=Never --rm -- ping -c3 "$POD_IP" >> {{ output_dir }}/dns-test-results.txt 2>&1 || echo "Pod connectivity test failed or timed out" >> {{ output_dir }}/dns-test-results.txt
+        else
+          echo "No suitable pod IP found for connectivity test" >> {{ output_dir }}/dns-test-results.txt
+        fi
+        echo "Connectivity test completed at $(date)" >> {{ output_dir }}/dns-test-results.txt
       failed_when: false
 
 - name: "Generate Diagnosis Report"

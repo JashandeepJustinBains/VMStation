@@ -102,7 +102,12 @@ info "Artifacts will be stored in: $ARTIFACTS_DIR"
 
 cd "$REPO_ROOT"
 
-if ansible-playbook -i "$INVENTORY_PATH" "$PLAYBOOK_PATH" $VERBOSE $CHECK_MODE $ANSIBLE_OPTS; then
+# Set a reasonable timeout for the entire playbook
+export ANSIBLE_TIMEOUT=30
+export ANSIBLE_HOST_KEY_CHECKING=False
+
+# Run with timeout to prevent indefinite hanging
+if timeout 1800 ansible-playbook -i "$INVENTORY_PATH" "$PLAYBOOK_PATH" $VERBOSE $CHECK_MODE $ANSIBLE_OPTS; then
     info "Network diagnosis completed successfully!"
     
     # Find the latest diagnosis directory
@@ -117,10 +122,38 @@ if ansible-playbook -i "$INVENTORY_PATH" "$PLAYBOOK_PATH" $VERBOSE $CHECK_MODE $
         echo "  cat '$LATEST_DIR/DIAGNOSIS-REPORT.md'"
         echo ""
         info "Key files generated:"
-        ls -la "$LATEST_DIR" | grep -E '\.(txt|yaml|md)$' | awk '{print "  " $9}'
+        ls -la "$LATEST_DIR" 2>/dev/null | grep -E '\.(txt|yaml|md)$' | awk '{print "  " $9}' || echo "  (checking files...)"
     fi
 else
-    error "Network diagnosis failed. Check the Ansible output above for details."
+    warn "Network diagnosis failed or timed out after 30 minutes."
+    echo ""
+    warn "This may indicate severe cluster networking issues or tasks that hang indefinitely."
+    echo ""
+    info "Attempting to collect basic diagnostic information..."
+    
+    # Create a minimal diagnostic report even if the main playbook failed
+    TIMESTAMP=$(date +%s)
+    FALLBACK_DIR="$ARTIFACTS_DIR/$TIMESTAMP-fallback"
+    mkdir -p "$FALLBACK_DIR"
+    
+    echo "=== Fallback Network Diagnosis ===" > "$FALLBACK_DIR/fallback-diagnosis.txt"
+    echo "Timestamp: $(date)" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    echo "Main diagnosis playbook failed or timed out" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    echo "" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    
+    # Basic cluster info
+    echo "=== Basic Cluster Info ===" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    kubectl get nodes -o wide >> "$FALLBACK_DIR/fallback-diagnosis.txt" 2>&1 || echo "Failed to get nodes" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    echo "" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    
+    echo "=== Pod Status ===" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    kubectl get pods --all-namespaces >> "$FALLBACK_DIR/fallback-diagnosis.txt" 2>&1 || echo "Failed to get pods" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    echo "" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    
+    echo "=== kube-proxy Status ===" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide >> "$FALLBACK_DIR/fallback-diagnosis.txt" 2>&1 || echo "Failed to get kube-proxy pods" >> "$FALLBACK_DIR/fallback-diagnosis.txt"
+    
+    info "Fallback diagnosis saved to: $FALLBACK_DIR/fallback-diagnosis.txt"
     exit 1
 fi
 
