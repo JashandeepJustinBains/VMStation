@@ -87,6 +87,10 @@ case "${1:-full}" in
         info "Running spindown in check mode (safe dry-run)..."
         ansible-playbook -i "$INVENTORY" ansible/subsites/00-spindown.yaml --check
         ;;
+    "diagnose"|"network-diagnosis")
+        info "Running comprehensive network diagnosis..."
+        ./scripts/run_network_diagnosis.sh
+        ;;
     "full"|"")
         info "Deploying complete VMStation stack..."
         ansible-playbook -i "$INVENTORY" ansible/simple-deploy.yaml
@@ -96,7 +100,7 @@ case "${1:-full}" in
         ansible-playbook -i "$INVENTORY" ansible/simple-deploy.yaml --check
         ;;
     *)
-        echo "Usage: $0 [cluster|apps|jellyfin|full|check|spindown|spindown-check]"
+        echo "Usage: $0 [cluster|apps|jellyfin|full|check|diagnose|spindown|spindown-check]"
         echo
         echo "Options:"
         echo "  cluster       - Deploy Kubernetes cluster only"
@@ -104,6 +108,7 @@ case "${1:-full}" in
         echo "  jellyfin      - Deploy Jellyfin only"
         echo "  full          - Deploy complete stack (default)"
         echo "  check         - Run in check mode (dry run)"
+        echo "  diagnose      - Run comprehensive network diagnosis"
         echo "  spindown      - DESTRUCTIVE: Remove all Kubernetes infrastructure"
         echo "  spindown-check - Show what spindown would remove (safe)"
         exit 1
