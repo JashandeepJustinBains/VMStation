@@ -1416,7 +1416,8 @@
               # Command generated at: {{ ansible_date_time.iso8601 }}
               # Control-plane IP: {{ ansible_default_ipv4.address }}
               # Token TTL: 2 hours
-              {{ join_command.stdout }} --node-name {{ inventory_hostname }} "$@"
+              # Note: Node name determined at join time - will be replaced with actual hostname
+              {{ join_command.stdout }} --node-name "__WORKER_HOSTNAME__" "$@"
             dest: /tmp/kubeadm-join.sh
             mode: '0755'
 
@@ -1615,6 +1616,13 @@
         mode: '0755'
       when: not kubelet_conf.stat.exists
 
+    - name: "Customize join command with worker node hostname"
+      replace:
+        path: /tmp/kubeadm-join.sh
+        regexp: '__WORKER_HOSTNAME__'
+        replace: '{{ ansible_hostname }}'
+      when: not kubelet_conf.stat.exists
+
     - name: "Copy enhanced join scripts to worker nodes"
       copy:
         src: "{{ item }}"
@@ -1811,9 +1819,9 @@
           changed_when: simple_join.rc == 0
           when: not (skip_join_process | default(false)) and (enhanced_join_result is not defined or enhanced_join_result.rc != 0)
 
-        - name: "Wait for node to appear on control-plane by inventory name"
+        - name: "Wait for node to appear on control-plane by hostname"
           delegate_to: "{{ control_plane_host }}"
-          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ inventory_hostname }} -o name || true
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ ansible_hostname }} -o name || true
           register: node_by_name
           retries: 12
           delay: 10
@@ -1823,7 +1831,7 @@
 
         - name: "Verify node becomes Ready on control-plane"
           delegate_to: "{{ control_plane_host }}"
-          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || true
+          shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get node {{ ansible_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || true
           register: node_ready_check_by_name
           retries: 12
           delay: 5
