@@ -284,6 +284,15 @@ main() {
         collect_diagnostics
     fi
     
+    # Fix 5: NodePort external access (addresses external connectivity issues)
+    echo
+    info "Step 5: Fixing NodePort external access for services like Jellyfin"
+    if ! run_fix_script "fix_nodeport_external_access.sh" "NodePort external access fix"; then
+        warn "NodePort external access fix had issues - external connectivity may still fail"
+        overall_success=false
+        collect_diagnostics
+    fi
+    
     # Final summary
     echo
     info "=== Fix Summary ==="
@@ -296,24 +305,27 @@ main() {
         echo "✅ kube-proxy running correctly"
         echo "✅ iptables compatibility issues resolved"
         echo "✅ CNI networking functional"
-        echo "✅ NodePort services accessible"
+        echo "✅ NodePort services accessible internally and externally"
         
         echo
         echo "You can now test NodePort access with:"
         echo "  curl http://<node-ip>:30096/  # For Jellyfin service"
+        echo "  # From external machines (development desktop):"
+        echo "  curl http://192.168.4.61:30096/  # Jellyfin on storage node"
         
     else
         warn "⚠️  Some fixes completed with warnings or errors"
         echo
         echo "Common remaining issues and solutions:"
         echo "1. If kubectl still fails: manually copy kubeconfig from control plane"
-        echo "2. If NodePort not accessible: check firewall settings"
+        echo "2. If NodePort not accessible: run ./scripts/fix_nodeport_external_access.sh"
         echo "3. If pods still crash: check pod logs for specific errors"
         echo "4. If networking fails: consider cluster restart"
         
         echo
         echo "For detailed diagnostics, run:"
         echo "  ./scripts/validate_cluster_communication.sh"
+        echo "  ./scripts/validate_nodeport_external_access.sh"
         echo "  kubectl get pods --all-namespaces"
         echo "  kubectl get events --all-namespaces --sort-by='.lastTimestamp'"
     fi
