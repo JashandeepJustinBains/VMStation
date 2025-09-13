@@ -160,9 +160,9 @@ kubectl get nodes -o wide
 # Should show all workers as Ready, with correct internal IPs
 # Example output:
 NAME               STATUS   ROLES           AGE   VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION
-control-plane      Ready    control-plane   1h    v1.29.0   192.168.4.63   <none>        Ubuntu 20.04.6 LTS   5.4.0-150-generic
-storage-worker     Ready    <none>          5m    v1.29.0   192.168.4.61   <none>        Ubuntu 20.04.6 LTS   5.4.0-150-generic
-compute-worker     Ready    <none>          5m    v1.29.0   192.168.4.62   <none>        Ubuntu 20.04.6 LTS   5.4.0-150-generic
+control-plane      Ready    control-plane   1h    v1.29.15   192.168.4.63   <none>        Ubuntu 20.04.6 LTS   5.4.0-150-generic
+storage-worker     Ready    <none>          5m    v1.29.15  192.168.4.61   <none>        Ubuntu 20.04.6 LTS   5.4.0-150-generic
+compute-worker     Ready    <none>          5m    v1.29.15  192.168.4.62   <none>        Ubuntu 20.04.6 LTS   5.4.0-150-generic
 ```
 
 ## Troubleshooting

@@ -10,6 +10,10 @@ spec:
   selector:
     matchLabels:
       k8s-app: kube-proxy
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:
@@ -25,7 +29,7 @@ spec:
       hostNetwork: true
       containers:
       - name: kube-proxy
-        image: registry.k8s.io/kube-proxy:v1.29.0
+        image: registry.k8s.io/kube-proxy:v1.29.15
         command:
         - /usr/local/bin/kube-proxy
         - --config=/var/lib/kube-proxy/config.conf
@@ -67,7 +71,4 @@ spec:
         hostPath:
           path: /lib/modules
           type: Directory
-      updateStrategy:
-        type: RollingUpdate
-        rollingUpdate:
-          maxUnavailable: 1
+      
