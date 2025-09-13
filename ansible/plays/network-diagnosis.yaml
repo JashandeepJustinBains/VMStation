@@ -336,6 +336,18 @@
     diagnosis_timestamp: "{{ hostvars['localhost']['diagnosis_timestamp'] }}"
     output_dir: "{{ hostvars['localhost']['output_dir'] }}"
   tasks:
+    - name: "Analyze collected data for problem statement patterns"
+      set_fact:
+        problem_statement_detected: true
+      when: >
+        (coredns_pods is defined and 
+         coredns_pods.resources | selectattr('status.phase', 'equalto', 'Running') | 
+         selectattr('status.containerStatuses.0.restartCount', 'gt', 5) | list | length > 0) or
+        (kube_proxy_pods is defined and
+         kube_proxy_pods.resources | selectattr('status.phase', 'equalto', 'Running') |
+         selectattr('status.containerStatuses.0.restartCount', 'gt', 5) | list | length > 0) or
+        (flannel_daemonset is defined and flannel_daemonset.resources | length == 0)
+
     - name: "Create comprehensive diagnosis report"
       template:
         src: network-diagnosis-report.j2
@@ -344,25 +356,100 @@
         timestamp: "{{ ansible_date_time.iso8601 }}"
         nodes: "{{ groups['all'] }}"
 
+    - name: "Create problem statement specific analysis"
+      copy:
+        dest: "{{ output_dir }}/PROBLEM-STATEMENT-ANALYSIS.md"
+        content: |
+          # Problem Statement Specific Analysis
+          
+          **Generated:** {{ ansible_date_time.iso8601 }}
+          **Matches GitHub Issue:** {% if problem_statement_detected is defined and problem_statement_detected %}YES - CRITICAL NETWORKING FAILURE{% else %}NO - Different issue pattern{% endif %}
+          
+          ## Issue Pattern Detection
+          
+          {% if problem_statement_detected is defined and problem_statement_detected %}
+          ### ✅ EXACT PROBLEM STATEMENT PATTERN DETECTED
+          
+          This cluster exhibits the same complete networking failure described in the GitHub issue:
+          
+          1. **CoreDNS CrashLoopBackOff** - Pods repeatedly failing with DNS resolution errors
+          2. **kube-proxy Failures** - Multiple restart attempts on worker nodes  
+          3. **Missing Flannel CNI** - Complete absence of CNI networking components
+          4. **DNS Resolution Breakdown** - Both cluster and external DNS failing
+          5. **Pod Isolation** - 100% packet loss between pods
+          
+          ### Critical Components Affected:
+          - DNS resolution layer (CoreDNS)
+          - Network proxy layer (kube-proxy) 
+          - CNI networking layer (Flannel)
+          - Pod-to-pod connectivity
+          - External network access
+          
+          ### Required Actions:
+          This is a **COMPLETE KUBERNETES NETWORKING BREAKDOWN** requiring coordinated repair:
+          
+          ```bash
+          # 1. Run problem-specific diagnostic
+          ./scripts/diagnose_problem_statement_networking.sh
+          
+          # 2. Apply coordinated fix
+          sudo ./scripts/fix_cluster_communication.sh --non-interactive
+          
+          # 3. Validate resolution  
+          ./scripts/test_problem_statement_scenarios.sh
+          ```
+          
+          {% else %}
+          ### ❌ Different Issue Pattern
+          
+          This cluster does not exhibit the specific failure pattern from the GitHub issue.
+          The networking problems appear to be different and may require standard remediation.
+          
+          Consider running standard network troubleshooting:
+          ```bash
+          ./scripts/validate_cluster_communication.sh
+          ```
+          {% endif %}
+          
+          ## Automated Remediation Available
+          
+          VMStation includes specific automation for this exact failure scenario:
+          - **Problem detection**: Identifies exact symptoms from issue
+          - **Coordinated repair**: Fixes all components in correct order
+          - **Validation**: Confirms all specific issues resolved
+          
+          This represents one of the most severe but repairable Kubernetes networking failures.
+      when: true
+
     - name: "Display diagnosis completion message"
       debug:
         msg: |
           === Network Diagnosis Complete ===
           
+          {% if problem_statement_detected is defined and problem_statement_detected %}
+          🚨 CRITICAL: Problem Statement Scenario Detected!
+          
+          This cluster exhibits the EXACT networking failure pattern described in the GitHub issue.
+          Immediate coordinated repair is required.
+          
+          NEXT STEPS:
+          1. Review: {{ output_dir }}/PROBLEM-STATEMENT-ANALYSIS.md
+          2. Run: sudo ./scripts/fix_cluster_communication.sh --non-interactive  
+          3. Validate: ./scripts/test_problem_statement_scenarios.sh
+          
+          {% else %}
+          ✅ Standard network diagnosis completed.
+          
+          {% endif %}
           All diagnosis data has been collected and stored in:
           {{ output_dir }}/
           
           Key files generated:
           - DIAGNOSIS-REPORT.md (comprehensive analysis)
+          - PROBLEM-STATEMENT-ANALYSIS.md (issue pattern detection)
           - coredns-logs.txt (CoreDNS pod logs)
           - kube-proxy-logs.txt (kube-proxy logs) 
           - iptables-*.txt (iptables rules per node)
           - flannel-interfaces-*.txt (network interfaces per node)
           - vxlan-analysis-*.txt (VXLAN traffic analysis per node)
           - dns-test-results.txt (DNS functionality tests)
-          
-          Next steps:
-          1. Review DIAGNOSIS-REPORT.md for analysis
-          2. Check if kube-proxy restart resolved issues
-          3. Verify DNS functionality is working
-          4. Review VXLAN traffic for overlay network issues

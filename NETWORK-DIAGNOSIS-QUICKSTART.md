@@ -7,6 +7,19 @@ This automated solution addresses the inter-pod communication issues described i
 - kube-proxy pods are in CrashLoopBackOff state
 - Pod networking is broken preventing DNS resolution
 
+### 🚨 For Exact Problem Statement Scenarios
+
+If you have the **exact symptoms** described in the GitHub issue (CoreDNS CrashLoopBackOff, kube-proxy failures, 100% packet loss, missing Flannel):
+
+```bash
+# Use problem-specific automation
+./scripts/diagnose_problem_statement_networking.sh
+sudo ./scripts/fix_problem_statement_networking.sh
+./scripts/test_problem_statement_scenarios.sh
+```
+
+See: [Problem Statement Networking Fix Guide](docs/problem-statement-networking-fix.md)
+
 ## Quick Usage
 
 ### Option 1: Integrated Command (Recommended)

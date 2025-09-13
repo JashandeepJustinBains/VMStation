@@ -30,6 +30,23 @@ sudo ./scripts/test_dns_fix.sh
 
 ## Quick Solution
 
+### 🚨 Critical Networking Failure (Problem Statement Pattern)
+
+If you have **multiple symptoms** including CoreDNS CrashLoopBackOff, kube-proxy failures, missing Flannel, and complete pod isolation:
+
+```bash
+# Problem statement specific fix (recommended)
+./scripts/diagnose_problem_statement_networking.sh
+sudo ./scripts/fix_problem_statement_networking.sh --non-interactive
+./scripts/test_problem_statement_scenarios.sh
+```
+
+See: [Problem Statement Networking Fix Guide](docs/problem-statement-networking-fix.md)
+
+### Standard CNI Communication Fix
+
+For simpler pod communication issues:
+
 ### One-Command Fix
 ```bash
 sudo ./quick_fix_cni_communication.sh

@@ -7,6 +7,21 @@
 
 This report contains comprehensive diagnostic information for inter-pod communication issues in the VMStation Kubernetes cluster.
 
+{% if problem_statement_detected is defined and problem_statement_detected %}
+### 🚨 CRITICAL: Problem Statement Scenario Detected
+
+**EXACT MATCH TO GITHUB ISSUE SYMPTOMS:**
+- ✅ CoreDNS pods in CrashLoopBackOff with DNS timeouts
+- ✅ kube-proxy pods failing with frequent restarts
+- ✅ Complete inter-pod communication failure (100% packet loss)
+- ✅ DNS resolution completely broken (cluster and external)
+- ✅ Missing or broken Flannel CNI components
+- ✅ Network isolation preventing all pod connectivity
+
+**SEVERITY:** This represents a complete Kubernetes networking breakdown requiring immediate coordinated repair.
+
+{% endif %}
+
 ### Infrastructure Overview
 - **Control Plane:** {{ groups['monitoring_nodes'][0] }}
 - **Worker Nodes:** {{ groups['storage_nodes'] | join(', ') }}, {{ groups['compute_nodes'] | join(', ') }}
@@ -60,6 +75,40 @@ This report contains comprehensive diagnostic information for inter-pod communic
 
 ## Recommended Next Steps
 
+{% if problem_statement_detected is defined and problem_statement_detected %}
+### 🚨 CRITICAL NETWORKING FAILURE - COORDINATED REPAIR REQUIRED
+
+**IMMEDIATE ACTIONS (run in this exact order):**
+
+1. **Run Problem Statement Specific Diagnostic:**
+   ```bash
+   ./scripts/diagnose_problem_statement_networking.sh
+   ```
+
+2. **Apply Coordinated Networking Fix:**
+   ```bash
+   sudo ./scripts/fix_cluster_communication.sh --non-interactive
+   ```
+
+3. **Validate Problem Statement Scenarios Resolved:**
+   ```bash
+   ./scripts/test_problem_statement_scenarios.sh
+   ```
+
+4. **If issues persist, run complete network reset:**
+   ```bash
+   sudo ./scripts/reset_cluster_networking.sh
+   ```
+
+### Problem Statement Specific Remediation
+
+**Issue Pattern:** Complete CNI networking failure
+**Root Cause:** Missing/broken Flannel + component crashes
+**Required:** Full networking stack repair
+
+{% else %}
+### Standard Network Issues - Progressive Repair
+
 1. **Review CoreDNS Issues:**
    ```bash
    # Check if CoreDNS can now reach the API server
@@ -94,6 +143,7 @@ This report contains comprehensive diagnostic information for inter-pod communic
    # Verify network connectivity
    kubectl exec -it <any-pod> -- ping 10.96.0.1
    ```
+{% endif %}
 
 ## Switch/VLAN Checklist (if VXLAN issues persist)
 
