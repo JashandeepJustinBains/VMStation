@@ -159,7 +159,9 @@ if [ -n "$NODE_SUBNET" ]; then
     info "Expected cni0 bridge IP: $EXPECTED_BRIDGE_IP"
 else
     warn "No Flannel subnet annotation found for storagenodet3500"
-    info "This may indicate Flannel hasn't allocated a subnet yet"
+    error "✗ This is the ROOT CAUSE of the CNI bridge conflict!"
+    info "The worker node lacks proper subnet allocation - this must be fixed"
+    WORKER_NODE_SUBNET_MISSING=true
 fi
 
 # Step 4: Check Flannel pod status
@@ -186,8 +188,41 @@ fi
 # Step 5: Apply the targeted fix
 info "Step 5: Applying CNI bridge IP conflict fix"
 
+# Handle the critical case: worker node missing subnet allocation
+if [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]; then
+    error "CRITICAL: Worker node storagenodet3500 has no Flannel subnet allocation"
+    warn "This is the root cause of the CNI bridge IP conflict!"
+    
+    info "Step 5a: Force Flannel to allocate subnet for worker node"
+    
+    # The key fix: restart the Flannel DaemonSet to force subnet allocation
+    info "Restarting Flannel DaemonSet to trigger subnet allocation"
+    kubectl rollout restart daemonset/kube-flannel-ds -n kube-flannel
+    
+    # Wait for Flannel to restart and allocate subnets
+    info "Waiting for Flannel pods to restart and allocate subnets..."
+    if timeout 120 kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel; then
+        success "✓ Flannel DaemonSet restarted successfully"
+        
+        # Wait additional time for subnet allocation
+        sleep 30
+        
+        # Check if subnet is now allocated
+        NEW_NODE_SUBNET=$(kubectl get node storagenodet3500 -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' 2>/dev/null || echo "")
+        if [ -n "$NEW_NODE_SUBNET" ]; then
+            success "✓ Worker node now has allocated subnet: $NEW_NODE_SUBNET"
+            SUBNET_ALLOCATION_FIXED=true
+        else
+            warn "Subnet allocation may still be in progress..."
+        fi
+    else
+        error "Flannel DaemonSet restart failed or timed out"
+    fi
+fi
+
+# Apply standard CNI bridge fixes if needed
 if [ "${CNI_BRIDGE_CONFLICT:-false}" = true ] || [ "${CNI_BRIDGE_OK:-false}" != true ]; then
-    warn "Applying CNI bridge conflict resolution"
+    warn "Applying CNI bridge conflict resolution on control plane"
     
     # Stop kubelet temporarily to prevent constant pod sandbox failures
     info "Temporarily stopping kubelet to prevent pod churn"
@@ -225,12 +260,49 @@ if [ "${CNI_BRIDGE_CONFLICT:-false}" = true ] || [ "${CNI_BRIDGE_OK:-false}" != 
     systemctl start kubelet
     
     success "CNI bridge conflict fix applied"
+elif [ "${SUBNET_ALLOCATION_FIXED:-false}" = true ]; then
+    info "Subnet allocation fixed - skipping CNI bridge reset on control plane"
 else
     info "CNI bridge configuration appears correct, skipping bridge reset"
 fi
 
-# Step 6: Restart Flannel pod on storagenodet3500
-info "Step 6: Restarting Flannel pod on storagenodet3500"
+# Step 6: Handle worker node CNI state reset
+info "Step 6: Ensuring worker node CNI state is reset for new subnet"
+
+# If we fixed subnet allocation, we need to ensure the worker node resets its CNI state
+if [ "${SUBNET_ALLOCATION_FIXED:-false}" = true ] || [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]; then
+    warn "Worker node subnet allocation was missing/fixed - need to reset worker node CNI state"
+    
+    info "Creating temporary pod on worker node to trigger CNI reset"
+    # Create a pod that will fail but trigger CNI operations on the worker node
+    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cni-reset-trigger-storagenodet3500
+  namespace: kube-system
+spec:
+  nodeName: storagenodet3500
+  tolerations:
+  - operator: Exists
+  containers:
+  - name: trigger
+    image: busybox:1.35
+    command: ["sleep", "10"]
+  restartPolicy: Never
+EOF
+    
+    # Wait for the pod creation attempt (will help trigger CNI operations)
+    sleep 10
+    
+    # Delete the trigger pod
+    kubectl delete pod cni-reset-trigger-storagenodet3500 -n kube-system --force --grace-period=0 >/dev/null 2>&1 || true
+    
+    info "CNI reset trigger completed for worker node"
+fi
+
+# Step 7: Restart Flannel pod on storagenodet3500
+info "Step 7: Restarting Flannel pod on storagenodet3500"
 
 if [ -n "$FLANNEL_POD" ]; then
     info "Deleting Flannel pod to force network reconfiguration"
@@ -254,8 +326,8 @@ if [ -n "$FLANNEL_POD" ]; then
     done
 fi
 
-# Step 7: Wait for network to stabilize and delete stuck Jellyfin pod
-info "Step 7: Waiting for network to stabilize"
+# Step 8: Wait for network to stabilize and delete stuck Jellyfin pod
+info "Step 8: Waiting for network to stabilize"
 sleep 20
 
 if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
@@ -273,8 +345,8 @@ if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
     fi
 fi
 
-# Step 8: Recreate Jellyfin pod with fixed networking
-info "Step 8: Creating Jellyfin pod with fixed networking"
+# Step 9: Recreate Jellyfin pod with fixed networking
+info "Step 9: Creating Jellyfin pod with fixed networking"
 
 if ! kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
     info "Applying Jellyfin manifest to create pod"
@@ -283,8 +355,8 @@ if ! kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
     success "Jellyfin manifest applied"
 fi
 
-# Step 9: Monitor pod creation and verify fix
-info "Step 9: Monitoring Jellyfin pod creation and verifying fix"
+# Step 10: Monitor pod creation and verify fix
+info "Step 10: Monitoring Jellyfin pod creation and verifying fix"
 
 info "Waiting for Jellyfin pod to be created..."
 for i in {1..30}; do  # Wait up to 2.5 minutes for pod creation
