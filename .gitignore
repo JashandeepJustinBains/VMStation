@@ -171,3 +171,7 @@ demo_*.sh
 /tmp/integration_*.sh
 /tmp/*_diagnostics.sh
 /tmp/*_remediation.sh
+
+# Allow specific CNI bridge fix test/validation scripts  
+!test_jellyfin_cni_fix.sh
+!validate_cni_fix.sh

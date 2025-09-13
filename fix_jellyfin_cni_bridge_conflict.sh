@@ -21,6 +21,76 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 debug() { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 
+# SSH configuration for worker node access
+SSH_OPTS="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+
+# Function to get SSH user for a given node IP
+get_ssh_user_for_node() {
+    local node_ip="$1"
+    case "$node_ip" in
+        "192.168.4.61")  # storagenodet3500 node
+            echo "root"
+            ;;
+        "192.168.4.62")  # homelab node
+            echo "jashandeepjustinbains"
+            ;;
+        "192.168.4.63")  # masternode/control plane
+            echo "root"
+            ;;
+        *)
+            warn "Unknown node IP $node_ip, defaulting to root user"
+            echo "root"
+            ;;
+    esac
+}
+
+# Function to get node IP from node name
+get_node_ip() {
+    local node_name="$1"
+    case "$node_name" in
+        "storagenodet3500")
+            echo "192.168.4.61"
+            ;;
+        "homelab")
+            echo "192.168.4.62"
+            ;;
+        "masternode")
+            echo "192.168.4.63"
+            ;;
+        *)
+            # Try to get IP from kubectl if available
+            kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo ""
+            ;;
+    esac
+}
+
+# Function to execute command on worker node via SSH
+execute_on_worker_node() {
+    local node_name="$1"
+    local command="$2"
+    local node_ip
+    local ssh_user
+    
+    node_ip=$(get_node_ip "$node_name")
+    if [ -z "$node_ip" ]; then
+        error "Cannot determine IP for node: $node_name"
+        return 1
+    fi
+    
+    ssh_user=$(get_ssh_user_for_node "$node_ip")
+    
+    info "Executing on ${ssh_user}@${node_ip} (${node_name}): $command"
+    
+    # Use printf to properly pass the command to avoid expansion issues
+    if printf '%s\n' "$command" | ssh "$SSH_OPTS" "${ssh_user}@${node_ip}" 'bash -s'; then
+        debug "✓ Command completed successfully on $node_name"
+        return 0
+    else
+        warn "Command failed on $node_name"
+        return 1
+    fi
+}
+
 # Cleanup function for any temporary resources
 cleanup() {
     # Clean up any test pods that might have been created
@@ -283,13 +353,71 @@ else
     info "Step 6: Skipping worker node CNI reset - Jellyfin already running"
 fi
 
-# If we fixed subnet allocation, we need to ensure the worker node resets its CNI state
-if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_FIXED:-false}" = true ] || [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ]); then
-    warn "Worker node subnet allocation was missing/fixed - need to reset worker node CNI state"
+# Enhanced CNI bridge conflict resolution targeting the specific worker node
+if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_FIXED:-false}" = true ] || [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ] || [ "${CNI_BRIDGE_CONFLICT:-false}" = true ]); then
+    warn "Worker node subnet allocation was missing/fixed OR CNI bridge conflict detected - need to reset worker node CNI state"
     
-    info "Creating temporary pod on worker node to trigger CNI reset"
-    # Create a pod that will fail but trigger CNI operations on the worker node
-    cat <<EOF | kubectl apply -f -
+    info "Step 6a: Directly resetting CNI bridge state on storagenodet3500 worker node"
+    
+    # Define the CNI cleanup commands to run on the worker node
+    CNI_CLEANUP_COMMANDS='
+        echo "[INFO] Starting CNI bridge cleanup on worker node"
+        
+        # Stop kubelet to prevent pod churn during cleanup
+        systemctl stop kubelet 2>/dev/null || echo "[WARN] Failed to stop kubelet"
+        
+        # Remove conflicting cni0 bridge if it exists
+        if ip link show cni0 >/dev/null 2>&1; then
+            echo "[INFO] Removing conflicting cni0 bridge"
+            ip link set cni0 down 2>/dev/null || true
+            ip link delete cni0 2>/dev/null || true
+            echo "[SUCCESS] Removed cni0 bridge"
+        else
+            echo "[INFO] No cni0 bridge found to remove"
+        fi
+        
+        # Clear CNI network state
+        if [ -d "/var/lib/cni" ]; then
+            echo "[INFO] Backing up and clearing CNI network state"
+            mv /var/lib/cni "/var/lib/cni.backup.$(date +%s)" 2>/dev/null || true
+            echo "[SUCCESS] CNI state cleared"
+        fi
+        
+        # Remove any conflicting CNI configurations (preserve Flannel)
+        if [ -d "/etc/cni/net.d" ]; then
+            echo "[INFO] Cleaning conflicting CNI configurations"
+            find /etc/cni/net.d -name "*.conflist" -not -name "*flannel*" -delete 2>/dev/null || true
+            find /etc/cni/net.d -name "*.conf" -not -name "*flannel*" -delete 2>/dev/null || true
+            echo "[SUCCESS] CNI configurations cleaned"
+        fi
+        
+        # Restart containerd to clear cached network state
+        echo "[INFO] Restarting containerd to clear network state"
+        systemctl restart containerd
+        sleep 3
+        
+        # Start kubelet
+        echo "[INFO] Starting kubelet"
+        systemctl start kubelet
+        
+        echo "[SUCCESS] CNI bridge cleanup completed on worker node"
+    '
+    
+    # Execute the CNI cleanup on the worker node
+    if execute_on_worker_node "storagenodet3500" "$CNI_CLEANUP_COMMANDS"; then
+        success "✓ CNI bridge state reset completed on storagenodet3500"
+        
+        # Wait for services to stabilize
+        info "Waiting for kubelet and containerd to stabilize on worker node..."
+        sleep 15
+        
+    else
+        error "Failed to reset CNI bridge state on storagenodet3500"
+        warn "Falling back to temporary pod trigger method..."
+        
+        # Fallback to original method
+        info "Creating temporary pod on worker node to trigger CNI reset"
+        cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -305,14 +433,15 @@ spec:
     command: ["sleep", "10"]
   restartPolicy: Never
 EOF
-    
-    # Wait for the pod creation attempt (will help trigger CNI operations)
-    sleep 10
-    
-    # Delete the trigger pod
-    kubectl delete pod cni-reset-trigger-storagenodet3500 -n kube-system --force --grace-period=0 >/dev/null 2>&1 || true
-    
-    info "CNI reset trigger completed for worker node"
+        
+        # Wait for the pod creation attempt
+        sleep 10
+        
+        # Delete the trigger pod
+        kubectl delete pod cni-reset-trigger-storagenodet3500 -n kube-system --force --grace-period=0 >/dev/null 2>&1 || true
+        
+        info "CNI reset trigger completed for worker node"
+    fi
 fi
 
 # Step 7: Restart Flannel pod on storagenodet3500
