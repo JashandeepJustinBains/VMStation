@@ -2,6 +2,61 @@
 
 This directory contains operational scripts for VMStation infrastructure management.
 
+## Cluster Communication Fix Scripts (NEW!)
+
+### `fix_cluster_communication.sh` (Controller Script)
+Advanced cluster communication fix script for Mixed-Linux Kubernetes clusters. Runs on masternode and can optionally execute remote operations on worker nodes.
+
+**Usage:**
+```bash
+# Controller mode - collect diagnostics only
+./scripts/fix_cluster_communication.sh
+
+# Controller mode with remote execution
+./scripts/fix_cluster_communication.sh --remote-exec --nodes "192.168.4.61 192.168.4.62"
+
+# Apply fixes with confirmation
+./scripts/fix_cluster_communication.sh --apply --remote-exec --nodes "192.168.4.61 192.168.4.62"
+
+# Force apply without confirmation
+./scripts/fix_cluster_communication.sh --apply --force --remote-exec --nodes "192.168.4.61 192.168.4.62"
+
+# Get permission fix commands
+./scripts/fix_cluster_communication.sh --delegate-perms
+```
+
+**Copy+paste SSH examples:**
+```bash
+# Manual scp + remote run:
+scp scripts/fix_cluster_helper.sh root@192.168.4.61:/tmp/
+ssh root@192.168.4.61 'bash /tmp/fix_cluster_helper.sh --dry-run'
+
+# Run helper over SSH without copy:
+for node in 192.168.4.61 192.168.4.62; do 
+    ssh root@"$node" 'bash -s' < scripts/fix_cluster_helper.sh -- --dry-run
+done
+```
+
+### `fix_cluster_helper.sh` (Node Helper Script)
+Small script for individual node diagnostics and safe local resets. Can be executed remotely via SSH.
+
+**Usage:**
+```bash
+# Collect diagnostics only
+./scripts/fix_cluster_helper.sh
+./scripts/fix_cluster_helper.sh --dry-run
+
+# Apply safe local fixes
+./scripts/fix_cluster_helper.sh --apply
+```
+
+**Features:**
+- Collects comprehensive node diagnostics (ip/link/route/iptables/cni files)
+- Performs safe local resets (CNI cleanup, service restarts, permission fixes)
+- Handles permission issues gracefully
+- Provides readiness checks after changes
+- Can be executed remotely via SSH from controller script
+
 ## CrashLoopBackOff Fix Scripts (NEW!)
 
 ### `fix_k8s_dashboard_permissions.sh`
@@ -72,6 +127,10 @@ Integration test script that validates and applies both drone and dashboard fixe
    ```
 
 ## Infrastructure Scripts
+
+### Cluster Communication (NEW!)
+- **`fix_cluster_communication.sh`** - **NEW!** Controller script for Mixed-Linux Kubernetes cluster communication fixes
+- **`fix_cluster_helper.sh`** - **NEW!** Node helper script for individual node diagnostics and safe resets
 
 ### Kubernetes (Primary)
 - **`validate_k8s_monitoring.sh`** - Validates Kubernetes monitoring stack health
@@ -181,6 +240,8 @@ Integration test script that validates and applies both drone and dashboard fixe
 ### Fix Scripts
 | Script | Purpose | Infrastructure |
 |--------|---------|----------------|
+| `fix_cluster_communication.sh` | **NEW!** Mixed-Linux cluster communication controller | Kubernetes |
+| `fix_cluster_helper.sh` | **NEW!** Individual node diagnostics and safe resets | Kubernetes |
 | `fix_k8s_monitoring_pods.sh` | Fix Kubernetes pod CrashLoopBackOff issues | Kubernetes |
 | `fix_monitoring_permissions.sh` | Fix monitoring permission issues | Both |
 | `fix_podman_metrics.sh` | Fix Podman metrics issues | Podman (Legacy) |
