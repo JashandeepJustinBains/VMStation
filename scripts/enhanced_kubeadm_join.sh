@@ -257,7 +257,7 @@ validate_kubelet_config() {
     fi
     
     # Check if kubelet config points to correct control plane
-    local config_server=$(grep "server:" /etc/kubernetes/kubelet.conf 2>/dev/null | awk '{print $2}' | sed 's|https://||' | cut -d':' -f1 || echo "")
+    local config_server=$(grep "server:" /etc/kubernetes/kubelet.conf 2>/dev/null | awk '{print $2}' | sed 's|https\?://||' | cut -d':' -f1 || echo "")
     if [ "$config_server" != "$MASTER_IP" ]; then
         error "kubelet config points to wrong server: $config_server (expected: $MASTER_IP)"
         return 1
