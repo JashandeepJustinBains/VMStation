@@ -868,7 +868,10 @@ If the cluster is completely broken:
 ./deploy.sh full      # Fresh deployment with fixes
 ```
 
-For detailed troubleshooting information, see [docs/HOMELAB_NODE_FIXES.md](./docs/HOMELAB_NODE_FIXES.md).
+For detailed troubleshooting information, see:
+- [docs/HOMELAB_NODE_FIXES.md](./docs/HOMELAB_NODE_FIXES.md) - General cluster issues
+- [docs/jellyfin-cni-bridge-fix.md](./docs/jellyfin-cni-bridge-fix.md) - Jellyfin CNI bridge conflicts
+- [README-CNI-FIX.md](./README-CNI-FIX.md) - CNI networking issues
 
 ## Legacy Files
 

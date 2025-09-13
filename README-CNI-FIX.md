@@ -30,7 +30,18 @@ sudo ./scripts/test_dns_fix.sh
 
 ## Quick Solution
 
-### One-Command Fix
+### One-Command Fix for Jellyfin CNI Bridge Conflict
+```bash
+sudo ./fix_jellyfin_cni_bridge_conflict.sh
+```
+
+This script specifically addresses the Jellyfin pod creation issue:
+1. ✅ Fixes CNI bridge IP conflicts on storagenodet3500
+2. ✅ Resolves "cni0 already has an IP address different from 10.244.2.1/24" error  
+3. ✅ Restarts Flannel networking components
+4. ✅ Monitors Jellyfin pod creation to verify fix
+
+### General CNI Communication Fix
 ```bash
 sudo ./quick_fix_cni_communication.sh
 ```
@@ -79,8 +90,9 @@ If the quick fix doesn't work:
 For detailed technical information, see: [`docs/cni-pod-communication-fix.md`](docs/cni-pod-communication-fix.md)
 
 ## What This Fixes
-- CNI bridge IP conflicts on worker nodes
+- CNI bridge IP conflicts on worker nodes (specific fix: fix_jellyfin_cni_bridge_conflict.sh)
 - Flannel networking configuration issues
 - Pod-to-pod communication failures
-- Jellyfin health probe failures
+- Jellyfin health probe failures  
 - Mixed-OS environment compatibility issues
+- "cni0 already has an IP address different from 10.244.x.x/24" errors
