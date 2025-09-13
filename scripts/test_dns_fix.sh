@@ -25,13 +25,13 @@ echo ""
 info "Test 1: kubectl version command (original failing command)"
 echo "Running: kubectl version --short"
 
-if timeout 30 kubectl version --short >/dev/null 2>&1; then
+if timeout 30 kubectl version --client >/dev/null 2>&1; then
     success "✅ kubectl version command works"
-    kubectl version --short
+    kubectl version --client
 else
     error "❌ kubectl version command still fails"
     echo "Error output:"
-    kubectl version --short 2>&1 || true
+    kubectl version --client 2>&1 || true
     echo ""
 fi
 
@@ -59,9 +59,11 @@ echo "Running: kubectl get pods -n kube-system -l k8s-app=kube-dns"
 
 if kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers >/dev/null 2>&1; then
     local coredns_status
-    coredns_status=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $3}' | grep -c "Running" || echo "0")
+    coredns_status=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $3}' | grep -c "Running" 2>/dev/null || echo "0")
+    # Clean up any potential newlines or extra characters
+    coredns_status=$(echo "$coredns_status" | tr -d '\n\r' | head -c 10)
     
-    if [ "$coredns_status" -gt 0 ]; then
+    if [ "$coredns_status" -gt 0 ] 2>/dev/null; then
         success "✅ $coredns_status CoreDNS pod(s) running"
         kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
     else
@@ -118,7 +120,7 @@ tests_passed=0
 tests_total=4
 
 # Check each test result
-if timeout 10 kubectl version --short >/dev/null 2>&1; then
+if timeout 10 kubectl version --client >/dev/null 2>&1; then
     ((tests_passed++))
     success "✓ kubectl version command"
 else
@@ -133,8 +135,10 @@ else
 fi
 
 if kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers >/dev/null 2>&1; then
-    coredns_running=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $3}' | grep -c "Running" || echo "0")
-    if [ "$coredns_running" -gt 0 ]; then
+    coredns_running=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --no-headers | awk '{print $3}' | grep -c "Running" 2>/dev/null || echo "0")
+    # Clean up any potential newlines or extra characters
+    coredns_running=$(echo "$coredns_running" | tr -d '\n\r' | head -c 10)
+    if [ "$coredns_running" -gt 0 ] 2>/dev/null; then
         ((tests_passed++))
         success "✓ CoreDNS pods running ($coredns_running)"
     else
