@@ -2034,7 +2034,7 @@
                 
                 # Additional validation for wiped workers
                 if [ -f /etc/kubernetes/kubelet.conf ]; then
-                  server_ip=$(grep "server:" /etc/kubernetes/kubelet.conf | awk '{print $2}' | cut -d':' -f1 | sed 's|https://||')
+                  server_ip=$(grep "server:" /etc/kubernetes/kubelet.conf | awk '{print $2}' | sed 's|https\?://||' | cut -d':' -f1)
                   if [ "$server_ip" = "{{ control_plane_ip }}" ]; then
                     echo "✓ kubelet.conf points to correct control-plane: $server_ip"
                   else
