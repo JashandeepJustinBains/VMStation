@@ -1,0 +1,368 @@
+---
+# VMStation Inter-Pod Communication Network Diagnosis Playbook
+# Automates the comprehensive network diagnosis and remediation steps
+# Based on the expert diagnosis from copilot-instructions.md
+
+- name: "Network Diagnosis - Preparation"
+  hosts: localhost
+  gather_facts: true
+  become: false
+  vars:
+    diagnosis_dir: "ansible/artifacts/arc-network-diagnosis"
+  tasks:
+    - name: "Set diagnosis timestamp"
+      set_fact:
+        diagnosis_timestamp: "{{ ansible_date_time.epoch }}"
+        output_dir: "{{ diagnosis_dir }}/{{ ansible_date_time.epoch }}"
+
+    - name: "Create diagnosis output directory"
+      file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: "Create diagnosis summary file"
+      copy:
+        dest: "{{ output_dir }}/diagnosis-summary.txt"
+        content: |
+          === VMStation Inter-Pod Communication Diagnosis ===
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          Control Plane: {{ groups['monitoring_nodes'][0] }}
+          Worker Nodes: {{ groups['storage_nodes'] | join(', ') }}, {{ groups['compute_nodes'] | join(', ') }}
+          
+          Diagnosis Steps:
+          A. CoreDNS pod troubleshooting
+          B. kube-proxy crash investigation and restart
+          C. iptables NAT & POSTROUTING verification
+          D. Flannel/VXLAN traffic capture and analysis
+          E. Flannel logs & configuration
+          F. DNS functionality testing
+          
+          Output stored in: {{ output_dir }}
+
+- name: "A - CoreDNS Pod Troubleshooting"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: false
+  vars:
+    diagnosis_timestamp: "{{ hostvars['localhost']['diagnosis_timestamp'] }}"
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Get CoreDNS pods information"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+        label_selectors:
+          - k8s-app=kube-dns
+      register: coredns_pods
+
+    - name: "Save CoreDNS pods info"
+      copy:
+        dest: "{{ output_dir }}/coredns-pods-info.yaml"
+        content: "{{ coredns_pods | to_nice_yaml }}"
+
+    - name: "Get CoreDNS deployment information"
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: coredns
+        namespace: kube-system
+      register: coredns_deployment
+
+    - name: "Save CoreDNS deployment info"
+      copy:
+        dest: "{{ output_dir }}/coredns-deployment-info.yaml"
+        content: "{{ coredns_deployment | to_nice_yaml }}"
+
+    - name: "Get recent events in kube-system namespace"
+      shell: kubectl get events -n kube-system --sort-by='.lastTimestamp' --output=yaml
+      register: kube_system_events
+      failed_when: false
+
+    - name: "Save kube-system events"
+      copy:
+        dest: "{{ output_dir }}/kube-system-events.yaml"
+        content: "{{ kube_system_events.stdout }}"
+
+    - name: "Get CoreDNS pod logs"
+      shell: |
+        for p in $(kubectl -n kube-system get pods -l k8s-app=kube-dns -o name); do
+          echo "=== Logs for $p ===" >> {{ output_dir }}/coredns-logs.txt
+          kubectl logs $p -n kube-system --all-containers --tail=400 >> {{ output_dir }}/coredns-logs.txt 2>&1 || true
+          echo "" >> {{ output_dir }}/coredns-logs.txt
+        done
+      failed_when: false
+
+    - name: "Describe CoreDNS pods"
+      shell: |
+        for p in $(kubectl -n kube-system get pods -l k8s-app=kube-dns -o name); do
+          echo "=== Description for $p ===" >> {{ output_dir }}/coredns-describe.txt
+          kubectl describe $p -n kube-system >> {{ output_dir }}/coredns-describe.txt 2>&1 || true
+          echo "" >> {{ output_dir }}/coredns-describe.txt
+        done
+      failed_when: false
+
+- name: "B - kube-proxy Investigation and Restart"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: false
+  vars:
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Get kube-proxy pods information"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+        label_selectors:
+          - k8s-app=kube-proxy
+      register: kube_proxy_pods
+
+    - name: "Save kube-proxy pods info"
+      copy:
+        dest: "{{ output_dir }}/kube-proxy-pods-info.yaml"
+        content: "{{ kube_proxy_pods | to_nice_yaml }}"
+
+    - name: "Get kube-proxy pod logs"
+      shell: |
+        kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide > {{ output_dir }}/kube-proxy-status.txt
+        for pod in $(kubectl get pods -n kube-system -l k8s-app=kube-proxy -o jsonpath='{.items[*].metadata.name}'); do
+          echo "=== Logs for $pod ===" >> {{ output_dir }}/kube-proxy-logs.txt
+          kubectl logs -n kube-system $pod --tail=400 >> {{ output_dir }}/kube-proxy-logs.txt 2>&1 || true
+          echo "" >> {{ output_dir }}/kube-proxy-logs.txt
+        done
+      failed_when: false
+
+    - name: "Check if any kube-proxy pods are in CrashLoopBackOff"
+      set_fact:
+        failing_kube_proxy_pods: "{{ kube_proxy_pods.resources | selectattr('status.phase', 'equalto', 'Running') | selectattr('status.containerStatuses.0.restartCount', 'gt', 5) | list }}"
+
+    - name: "Restart kube-proxy daemonset (rolling restart)"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: DaemonSet
+          metadata:
+            name: kube-proxy
+            namespace: kube-system
+            annotations:
+              deployment.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+      when: failing_kube_proxy_pods | length > 0
+
+    - name: "Wait for kube-proxy pods to be ready after restart"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+        label_selectors:
+          - k8s-app=kube-proxy
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 300
+      when: failing_kube_proxy_pods | length > 0
+
+- name: "C - iptables NAT & POSTROUTING Verification"
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Check iptables NAT POSTROUTING rules"
+      shell: iptables -t nat -L POSTROUTING -n -v
+      register: iptables_postrouting
+      failed_when: false
+
+    - name: "Check iptables KUBE-SERVICES rules"
+      shell: iptables -t nat -L KUBE-SERVICES -n -v
+      register: iptables_kube_services
+      failed_when: false
+
+    - name: "Get full iptables-save with filtering"
+      shell: iptables-save | grep -E 'MASQUERADE|KUBE-SERVICES|KUBE-MARK-MASQ' -n
+      register: iptables_filtered
+      failed_when: false
+
+    - name: "Check kernel forwarding settings"
+      shell: sysctl net.ipv4.ip_forward net.bridge.bridge-nf-call-iptables
+      register: kernel_forwarding
+      failed_when: false
+
+    - name: "Save iptables and kernel settings for {{ inventory_hostname }}"
+      copy:
+        dest: "{{ output_dir }}/iptables-{{ inventory_hostname }}.txt"
+        content: |
+          === iptables NAT POSTROUTING on {{ inventory_hostname }} ===
+          {{ iptables_postrouting.stdout }}
+          
+          === iptables KUBE-SERVICES on {{ inventory_hostname }} ===
+          {{ iptables_kube_services.stdout }}
+          
+          === iptables filtered rules on {{ inventory_hostname }} ===
+          {{ iptables_filtered.stdout }}
+          
+          === Kernel forwarding settings on {{ inventory_hostname }} ===
+          {{ kernel_forwarding.stdout }}
+      delegate_to: localhost
+      become: false
+
+- name: "D - Flannel/VXLAN Traffic Capture and Analysis"
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Get flannel interface information"
+      shell: |
+        echo "=== flannel.1 interface ===" > /tmp/flannel-interfaces.txt
+        ip -d link show flannel.1 >> /tmp/flannel-interfaces.txt 2>&1 || echo "flannel.1 not found" >> /tmp/flannel-interfaces.txt
+        echo "" >> /tmp/flannel-interfaces.txt
+        echo "=== cni0 interface ===" >> /tmp/flannel-interfaces.txt
+        ip -d link show cni0 >> /tmp/flannel-interfaces.txt 2>&1 || echo "cni0 not found" >> /tmp/flannel-interfaces.txt
+        echo "" >> /tmp/flannel-interfaces.txt
+        echo "=== Primary network interface ===" >> /tmp/flannel-interfaces.txt
+        ip link show $(ip route | grep default | awk '{print $5}' | head -1) >> /tmp/flannel-interfaces.txt 2>&1 || true
+      register: flannel_interfaces
+
+    - name: "Capture VXLAN traffic (background)"
+      shell: |
+        timeout 15 tcpdump -nni $(ip route | grep default | awk '{print $5}' | head -1) udp port 8472 -c 100 -w /tmp/vxlan-{{ inventory_hostname }}.pcap 2>&1 || true
+      async: 20
+      poll: 0
+      register: vxlan_capture
+
+    - name: "Generate test traffic for VXLAN capture"
+      shell: |
+        # Try to ping a pod on another node to generate VXLAN traffic
+        for pod_ip in $(kubectl get pods -A -o wide | grep -v $(hostname) | awk 'NR>1 {print $7}' | grep -E '^10\.244\.' | head -3); do
+          if [ ! -z "$pod_ip" ]; then
+            echo "Testing connectivity to pod IP: $pod_ip"
+            timeout 5 ping -c 3 $pod_ip || true
+          fi
+        done
+      delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+      run_once: true
+      become: false
+
+    - name: "Wait for VXLAN capture to complete"
+      async_status:
+        jid: "{{ vxlan_capture.ansible_job_id }}"
+      register: vxlan_capture_result
+      until: vxlan_capture_result.finished
+      retries: 25
+      delay: 1
+
+    - name: "Analyze captured VXLAN traffic"
+      shell: |
+        if [ -f /tmp/vxlan-{{ inventory_hostname }}.pcap ]; then
+          tcpdump -nn -r /tmp/vxlan-{{ inventory_hostname }}.pcap -c 20 > /tmp/vxlan-analysis-{{ inventory_hostname }}.txt 2>&1 || true
+        else
+          echo "No VXLAN capture file found" > /tmp/vxlan-analysis-{{ inventory_hostname }}.txt
+        fi
+
+    - name: "Fetch interface and VXLAN analysis to control node"
+      fetch:
+        src: "/tmp/flannel-interfaces.txt"
+        dest: "{{ output_dir }}/flannel-interfaces-{{ inventory_hostname }}.txt"
+        flat: yes
+
+    - name: "Fetch VXLAN analysis to control node"
+      fetch:
+        src: "/tmp/vxlan-analysis-{{ inventory_hostname }}.txt"
+        dest: "{{ output_dir }}/vxlan-analysis-{{ inventory_hostname }}.txt"
+        flat: yes
+
+- name: "E - Flannel Logs & Configuration"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: false
+  vars:
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Get flannel logs"
+      shell: |
+        kubectl -n kube-system logs ds/kube-flannel --tail=200 2>&1 || kubectl -n kube-system logs -l app=flannel --tail=200 2>&1 || echo "No flannel logs found"
+      register: flannel_logs
+      failed_when: false
+
+    - name: "Get flannel daemonset information"
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: DaemonSet
+        name: kube-flannel
+        namespace: kube-system
+      register: flannel_daemonset
+      failed_when: false
+
+    - name: "Save flannel logs and configuration"
+      copy:
+        dest: "{{ output_dir }}/flannel-logs-config.txt"
+        content: |
+          === Flannel Logs ===
+          {{ flannel_logs.stdout }}
+          
+          === Flannel DaemonSet Configuration ===
+          {{ flannel_daemonset | to_nice_yaml }}
+
+- name: "F - DNS Testing"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: false
+  vars:
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Test DNS resolution with debug pod"
+      shell: |
+        echo "=== DNS Test Results ===" > {{ output_dir }}/dns-test-results.txt
+        kubectl run --rm -i --tty testns-{{ ansible_date_time.epoch }} --image=busybox --restart=Never --timeout=60s -- sh -c "nslookup google.com || true; echo '---'; nslookup kubernetes.default || true" >> {{ output_dir }}/dns-test-results.txt 2>&1 || true
+      failed_when: false
+
+    - name: "Test pod-to-pod connectivity"
+      shell: |
+        echo "=== Pod-to-Pod Connectivity Test ===" >> {{ output_dir }}/dns-test-results.txt
+        kubectl run --rm -i --tty debug-connectivity-{{ ansible_date_time.epoch }} --image=nicolaka/netshoot --restart=Never --timeout=60s -- sh -c "ping -c3 10.244.2.5 || true; sleep 1" >> {{ output_dir }}/dns-test-results.txt 2>&1 || true
+      failed_when: false
+
+- name: "Generate Diagnosis Report"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    diagnosis_timestamp: "{{ hostvars['localhost']['diagnosis_timestamp'] }}"
+    output_dir: "{{ hostvars['localhost']['output_dir'] }}"
+  tasks:
+    - name: "Create comprehensive diagnosis report"
+      template:
+        src: network-diagnosis-report.j2
+        dest: "{{ output_dir }}/DIAGNOSIS-REPORT.md"
+      vars:
+        timestamp: "{{ ansible_date_time.iso8601 }}"
+        nodes: "{{ groups['all'] }}"
+
+    - name: "Display diagnosis completion message"
+      debug:
+        msg: |
+          === Network Diagnosis Complete ===
+          
+          All diagnosis data has been collected and stored in:
+          {{ output_dir }}/
+          
+          Key files generated:
+          - DIAGNOSIS-REPORT.md (comprehensive analysis)
+          - coredns-logs.txt (CoreDNS pod logs)
+          - kube-proxy-logs.txt (kube-proxy logs) 
+          - iptables-*.txt (iptables rules per node)
+          - flannel-interfaces-*.txt (network interfaces per node)
+          - vxlan-analysis-*.txt (VXLAN traffic analysis per node)
+          - dns-test-results.txt (DNS functionality tests)
+          
+          Next steps:
+          1. Review DIAGNOSIS-REPORT.md for analysis
+          2. Check if kube-proxy restart resolved issues
+          3. Verify DNS functionality is working
+          4. Review VXLAN traffic for overlay network issues
