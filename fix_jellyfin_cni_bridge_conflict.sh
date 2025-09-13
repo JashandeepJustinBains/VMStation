@@ -79,14 +79,27 @@ execute_on_worker_node() {
     
     ssh_user=$(get_ssh_user_for_node "$node_ip")
     
-    info "Executing on ${ssh_user}@${node_ip} (${node_name}): $command"
+    info "Executing on ${ssh_user}@${node_ip} (${node_name})"
+    debug "Command preview: $(echo "$command" | head -3 | tr '\n' '; ')..."
     
-    # Use printf to properly pass the command to avoid expansion issues
-    if printf '%s\n' "$command" | ssh "$SSH_OPTS" "${ssh_user}@${node_ip}" 'bash -s'; then
+    # Create a temporary script file to avoid SSH parsing issues with complex commands
+    local temp_script="/tmp/remote_script_$$_$(date +%s).sh"
+    cat > "$temp_script" << 'SCRIPT_END'
+#!/bin/bash
+set -e
+SCRIPT_END
+    echo "$command" >> "$temp_script"
+    chmod +x "$temp_script"
+    
+    # Copy and execute the script on the remote node
+    if scp -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$temp_script" "${ssh_user}@${node_ip}:/tmp/remote_exec.sh" >/dev/null 2>&1 && \
+       ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "${ssh_user}@${node_ip}" "chmod +x /tmp/remote_exec.sh && /tmp/remote_exec.sh && rm -f /tmp/remote_exec.sh" 2>&1; then
         debug "✓ Command completed successfully on $node_name"
+        rm -f "$temp_script"
         return 0
     else
         warn "Command failed on $node_name"
+        rm -f "$temp_script"
         return 1
     fi
 }
@@ -284,19 +297,30 @@ if [ "${WORKER_NODE_SUBNET_MISSING:-false}" = true ] && [ "${JELLYFIN_ALREADY_RU
     if timeout 120 kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel; then
         success "✓ Flannel DaemonSet restarted successfully"
         
-        # Wait additional time for subnet allocation
+        # Wait additional time for subnet allocation to complete
+        info "Waiting for subnet allocation to complete..."
         sleep 30
         
-        # Check if subnet is now allocated
-        NEW_NODE_SUBNET=$(kubectl get node storagenodet3500 -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' 2>/dev/null || echo "")
-        if [ -n "$NEW_NODE_SUBNET" ]; then
-            success "✓ Worker node now has allocated subnet: $NEW_NODE_SUBNET"
-            SUBNET_ALLOCATION_FIXED=true
-        else
-            warn "Subnet allocation may still be in progress..."
-        fi
+        # Retry checking for subnet allocation multiple times
+        for attempt in {1..6}; do
+            NEW_NODE_SUBNET=$(kubectl get node storagenodet3500 -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' 2>/dev/null || echo "")
+            if [ -n "$NEW_NODE_SUBNET" ]; then
+                success "✓ Worker node now has allocated subnet: $NEW_NODE_SUBNET"
+                SUBNET_ALLOCATION_FIXED=true
+                break
+            else
+                if [ $attempt -lt 6 ]; then
+                    info "Subnet allocation attempt $attempt/6 - waiting 15 seconds..."
+                    sleep 15
+                else
+                    warn "Subnet allocation did not complete after 6 attempts"
+                    warn "Proceeding with CNI reset anyway - subnet may allocate during the process"
+                fi
+            fi
+        done
     else
         error "Flannel DaemonSet restart failed or timed out"
+        warn "Proceeding with CNI reset anyway"
     fi
 fi
 
@@ -359,12 +383,32 @@ if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_F
     
     info "Step 6a: Directly resetting CNI bridge state on storagenodet3500 worker node"
     
+    # Wait for subnet allocation to stabilize before proceeding
+    if [ "${SUBNET_ALLOCATION_FIXED:-false}" = true ]; then
+        info "Subnet was just allocated - waiting 30 seconds for Flannel to stabilize..."
+        sleep 30
+        
+        # Verify subnet allocation is still present
+        FINAL_NODE_SUBNET=$(kubectl get node storagenodet3500 -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' 2>/dev/null || echo "")
+        if [ -n "$FINAL_NODE_SUBNET" ]; then
+            info "Confirmed subnet allocation: $FINAL_NODE_SUBNET"
+            # Expected bridge IP for this subnet
+            EXPECTED_BRIDGE_IP=$(echo "$FINAL_NODE_SUBNET" | sed 's/\.0\/24/.1/')
+            info "Expected cni0 bridge IP after reset: $EXPECTED_BRIDGE_IP"
+        else
+            warn "Subnet allocation disappeared - proceeding with caution"
+        fi
+    fi
+    
     # Define the CNI cleanup commands to run on the worker node
     CNI_CLEANUP_COMMANDS='
         echo "[INFO] Starting CNI bridge cleanup on worker node"
         
         # Stop kubelet to prevent pod churn during cleanup
         systemctl stop kubelet 2>/dev/null || echo "[WARN] Failed to stop kubelet"
+        
+        # Stop containerd to clear network state
+        systemctl stop containerd 2>/dev/null || echo "[WARN] Failed to stop containerd"
         
         # Remove conflicting cni0 bridge if it exists
         if ip link show cni0 >/dev/null 2>&1; then
@@ -376,7 +420,7 @@ if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_F
             echo "[INFO] No cni0 bridge found to remove"
         fi
         
-        # Clear CNI network state
+        # Clear CNI network state completely
         if [ -d "/var/lib/cni" ]; then
             echo "[INFO] Backing up and clearing CNI network state"
             mv /var/lib/cni "/var/lib/cni.backup.$(date +%s)" 2>/dev/null || true
@@ -391,12 +435,12 @@ if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_F
             echo "[SUCCESS] CNI configurations cleaned"
         fi
         
-        # Restart containerd to clear cached network state
-        echo "[INFO] Restarting containerd to clear network state"
-        systemctl restart containerd
-        sleep 3
+        # Start containerd first
+        echo "[INFO] Starting containerd"
+        systemctl start containerd
+        sleep 5
         
-        # Start kubelet
+        # Start kubelet 
         echo "[INFO] Starting kubelet"
         systemctl start kubelet
         
@@ -409,7 +453,24 @@ if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ] && ([ "${SUBNET_ALLOCATION_F
         
         # Wait for services to stabilize
         info "Waiting for kubelet and containerd to stabilize on worker node..."
-        sleep 15
+        sleep 20
+        
+        # Verify that the worker node is back online and Ready
+        info "Verifying worker node status after CNI reset..."
+        for attempt in {1..6}; do
+            NODE_STATUS=$(kubectl get node storagenodet3500 -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+            if [ "$NODE_STATUS" = "True" ]; then
+                success "✓ Worker node is Ready after CNI reset"
+                break
+            else
+                if [ $attempt -lt 6 ]; then
+                    info "Worker node status: $NODE_STATUS - waiting 10 seconds (attempt $attempt/6)..."
+                    sleep 10
+                else
+                    warn "Worker node did not return to Ready state - proceeding anyway"
+                fi
+            fi
+        done
         
     else
         error "Failed to reset CNI bridge state on storagenodet3500"
@@ -456,20 +517,40 @@ if [ -n "$CURRENT_FLANNEL_POD" ]; then
     
     # Wait for new Flannel pod to start
     info "Waiting for new Flannel pod to start..."
-    sleep 15
+    sleep 20
     
-    # Check if new Flannel pod is running
-    for i in {1..24}; do  # Wait up to 2 minutes
+    # Check if new Flannel pod is running with more thorough verification
+    for i in {1..36}; do  # Wait up to 3 minutes
         NEW_FLANNEL_POD=$(kubectl get pods -n kube-flannel -o wide 2>/dev/null | grep "storagenodet3500" | grep "Running" | awk '{print $1}' | head -1)
         if [ -n "$NEW_FLANNEL_POD" ]; then
             success "✓ New Flannel pod is running: $NEW_FLANNEL_POD"
-            break
+            
+            # Verify the pod is truly ready (containers started)
+            FLANNEL_READY=$(kubectl get pod -n kube-flannel "$NEW_FLANNEL_POD" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
+            if [ "$FLANNEL_READY" = "True" ]; then
+                success "✓ Flannel pod is Ready and should have configured networking"
+                break
+            else
+                if [ $i -lt 36 ]; then
+                    debug "Flannel pod running but not ready yet - waiting..."
+                fi
+            fi
         fi
-        if [ $i -eq 24 ]; then
-            warn "Flannel pod taking longer than expected to start"
+        if [ $i -eq 36 ]; then
+            warn "Flannel pod taking longer than expected to become ready"
         fi
         sleep 5
     done
+    
+    # Final verification that subnet annotation is still present after Flannel restart
+    FINAL_SUBNET_CHECK=$(kubectl get node storagenodet3500 -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' 2>/dev/null || echo "")
+    if [ -n "$FINAL_SUBNET_CHECK" ]; then
+        info "✓ Flannel subnet annotation confirmed: $FINAL_SUBNET_CHECK"
+    else
+        warn "⚠ Flannel subnet annotation missing after pod restart - this may cause issues"
+    fi
+else
+    warn "No Flannel pod found on storagenodet3500 - this may indicate a problem"
 fi
 
 # Step 8: Wait for network to stabilize and delete stuck Jellyfin pod
@@ -549,7 +630,16 @@ if [ "${JELLYFIN_ALREADY_RUNNING:-false}" != true ]; then
                     if [ -n "$RECENT_CNI_ERRORS" ]; then
                         error "✗ CNI bridge errors still occurring:"
                         echo "$RECENT_CNI_ERRORS"
-                        error "The fix may not have been successful"
+                        
+                        # Check if this is the same old error pattern
+                        if echo "$RECENT_CNI_ERRORS" | grep -q "different from 10.244.2.1/24"; then
+                            error "The fix may not have been successful - same subnet conflict persists"
+                            
+                            # Additional diagnostic: check current bridge state on worker node if possible
+                            warn "Attempting to diagnose current bridge state on worker node..."
+                            WORKER_BRIDGE_INFO=$(execute_on_worker_node "storagenodet3500" "ip addr show cni0 2>/dev/null | grep 'inet ' || echo 'No cni0 bridge found'" 2>/dev/null || echo "Cannot check worker node bridge")
+                            warn "Worker node bridge status: $WORKER_BRIDGE_INFO"
+                        fi
                         break
                     else
                         info "No recent CNI errors detected, pod may be starting normally..."

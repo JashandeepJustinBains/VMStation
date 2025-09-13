@@ -108,10 +108,10 @@ else
     exit 1
 fi
 
-if sed -n '/CNI_CLEANUP_COMMANDS=/,/execute_on_worker_node/p' ./fix_jellyfin_cni_bridge_conflict.sh | grep -q "systemctl restart containerd"; then
-    success "✓ Containerd restart command found in worker node script"
+if sed -n '/CNI_CLEANUP_COMMANDS=/,/execute_on_worker_node/p' ./fix_jellyfin_cni_bridge_conflict.sh | grep -q "systemctl.*containerd"; then
+    success "✓ Containerd service management found in worker node script"
 else
-    error "✗ Containerd restart command missing from worker node script"
+    error "✗ Containerd service management missing from worker node script"
     exit 1
 fi
 
