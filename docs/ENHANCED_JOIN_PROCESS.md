@@ -104,6 +104,22 @@ The join process provides:
 - **Extended timeouts** - 300s for TLS Bootstrap completion  
 - **Intelligent retries** - Up to 3 attempts with progressive cleanup
 - **Detailed logging** - Comprehensive logs for troubleshooting
+- **Node conflict resolution** - Automatically handles "node already exists" scenarios
+
+### Node Conflict Resolution
+
+When worker nodes are reset and try to rejoin the cluster, they may encounter the error:
+```
+a Node with name "nodename" and status "Ready" already exists in the cluster. You must delete the existing Node or change the name of this new joining Node
+```
+
+The enhanced join process automatically resolves this by:
+1. **Detecting the error** - Identifies "node already exists" join failures
+2. **Extracting node name** - Parses the problematic node name from error output
+3. **Automatic deletion** - SSH to master node and executes `kubectl delete node <nodename>`
+4. **Retry join** - Attempts join again after successful node deletion
+
+This eliminates the need for manual intervention when re-joining reset worker nodes.
 
 ### Post-Join Validation
 
@@ -198,6 +214,24 @@ sudo rm -rf /run/containerd/*
 sudo systemctl start containerd
 sleep 15
 sudo crictl info  # Should work now
+```
+
+#### Issue: "Node already exists in cluster"
+```bash
+# This error occurs when a worker node tries to rejoin with the same hostname
+# after being reset. The error message looks like:
+# "a Node with name 'nodename' and status 'Ready' already exists in the cluster"
+
+# The enhanced join process now automatically handles this by:
+# 1. Detecting the "node already exists" error
+# 2. SSH to master node and deleting the stale node: kubectl delete node <nodename>
+# 3. Retrying the join process automatically
+
+# If manual intervention is needed:
+# On master node:
+kubectl get nodes  # Find the problematic node
+kubectl delete node <nodename>
+# Then retry join on worker node
 ```
 
 #### Issue: "containerd not responding"

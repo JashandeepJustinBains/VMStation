@@ -266,6 +266,77 @@ check_token_expiry() {
     return 1  # Not a token expiry issue
 }
 
+# Function to check if join failure is due to node already existing in cluster
+check_node_already_exists() {
+    local join_output="$1"
+    
+    # Check for the specific "node already exists" error pattern
+    if echo "$join_output" | grep -qi "already exists in the cluster\|You must delete the existing Node"; then
+        return 0  # Node already exists in cluster
+    fi
+    
+    return 1  # Not a node already exists issue
+}
+
+# Function to extract node name from join output error
+extract_node_name_from_error() {
+    local join_output="$1"
+    
+    # Extract node name from error message like:
+    # "a Node with name "storagenodet3500" and status "Ready" already exists in the cluster"
+    local node_name=$(echo "$join_output" | grep -oE 'Node with name "[^"]+' | sed 's/Node with name "//' | head -1)
+    
+    # Alternative pattern for different error message formats
+    if [ -z "$node_name" ]; then
+        node_name=$(echo "$join_output" | grep -oE '"[^"]*" and status "Ready" already exists' | sed 's/"//g' | sed 's/ and status "Ready" already exists//' | head -1)
+    fi
+    
+    # Fallback to hostname if extraction fails
+    if [ -z "$node_name" ]; then
+        node_name=$(hostname)
+        warn "Could not extract node name from error, using hostname: $node_name"
+    fi
+    
+    echo "$node_name"
+}
+
+# Function to delete existing node from cluster via SSH to master
+delete_existing_node() {
+    local node_name="$1"
+    local attempt="$2"
+    
+    info "Attempting to delete existing node '$node_name' from cluster (attempt $attempt)..."
+    
+    if [ -z "$node_name" ]; then
+        error "Node name is empty, cannot delete node"
+        return 1
+    fi
+    
+    # Try to delete node via SSH
+    if command -v ssh >/dev/null 2>&1; then
+        info "Connecting to master node $MASTER_IP as $MASTER_SSH_USER to delete node..."
+        
+        # Execute kubectl delete node command on master
+        local delete_result
+        delete_result=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${MASTER_SSH_USER}@"$MASTER_IP" \
+            "kubectl delete node '$node_name' --ignore-not-found" 2>&1) || true
+        
+        if echo "$delete_result" | grep -qi "deleted\|not found"; then
+            info "✅ Successfully deleted node '$node_name' from cluster"
+            log_both "Node deletion result: $delete_result"
+            return 0
+        else
+            warn "Node deletion attempt completed with result: $delete_result"
+            # Even if the result is unclear, we'll try to proceed with join
+            return 0
+        fi
+    else
+        warn "SSH not available for automatic node deletion"
+        warn "Please manually delete node on control plane: kubectl delete node '$node_name'"
+        return 1
+    fi
+}
+
 # Function to validate kubelet config exists and is correct
 validate_kubelet_config() {
     info "Validating kubelet configuration..."
@@ -878,6 +949,24 @@ EOF
                 return $(perform_join "$new_join_command" $attempt)
             else
                 warn "Failed to refresh token, continuing with original retry logic"
+            fi
+        fi
+        
+        # Check if this is a "node already exists" issue and attempt node deletion
+        if check_node_already_exists "$join_output" && [ $attempt -le $TOKEN_REFRESH_RETRIES ]; then
+            warn "Detected 'node already exists in cluster' issue"
+            local node_name
+            node_name=$(extract_node_name_from_error "$join_output")
+            info "Attempting to delete existing node '$node_name' and retry..."
+            
+            if delete_existing_node "$node_name" $attempt; then
+                info "Node deletion completed, retrying join with same token..."
+                # Wait a moment for cluster state to settle after node deletion
+                sleep 5
+                # Recursive call with same token (but same attempt number)
+                return $(perform_join "$join_command" $attempt)
+            else
+                warn "Failed to delete existing node, continuing with original retry logic"
             fi
         fi
         

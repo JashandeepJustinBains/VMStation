@@ -85,6 +85,22 @@ Before join execution:
 - Tests network connectivity to control-plane
 - Verifies system readiness for kubelet startup
 
+### Node Conflict Resolution
+
+A key enhancement for post-wipe workers handles the common scenario where:
+
+1. **Worker node is aggressively wiped** but keeps the same hostname
+2. **Control-plane still has the old node** registered in the cluster
+3. **Join fails** with "Node already exists in cluster" error
+
+The enhanced process automatically:
+- **Detects** the node conflict error during join attempt
+- **Extracts** the problematic node name from the error message
+- **SSH to control-plane** and executes `kubectl delete node <nodename>`
+- **Retries join** immediately after node deletion
+
+This eliminates manual intervention for the most common post-wipe join failure.
+
 ### Post-Join Verification
 
 After successful join:
@@ -111,11 +127,14 @@ graph TD
     J --> K[Success: Worker Joined Control-Plane]
     
     G --> L{Join Failed?}
-    L -->|Yes| M[Cleanup & Retry]
-    M --> N{Retries Left?}
-    N -->|Yes| F
-    N -->|No| O[Aggressive Reset]
-    O --> F
+    L -->|Yes| M{Node Already Exists?}
+    M -->|Yes| N[Delete Existing Node]
+    N --> G
+    M -->|No| O[Cleanup & Retry]
+    O --> P{Retries Left?}
+    P -->|Yes| F
+    P -->|No| Q[Aggressive Reset]
+    Q --> F
 ```
 
 ## Configuration
