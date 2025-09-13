@@ -99,6 +99,30 @@ run_test "kube-system namespace exists" "kubectl get namespace kube-system"
 run_test "CoreDNS pods are running" "kubectl get pods -n kube-system -l k8s-app=kube-dns | grep -q 'Running'"
 run_test "kube-proxy pods are running" "kubectl get pods -n kube-system -l k8s-app=kube-proxy | grep -q 'Running'"
 
+# Enhanced kube-proxy daemonset readiness analysis
+info "Checking kube-proxy daemonset readiness details..."
+if kubectl get daemonset -n kube-system kube-proxy >/dev/null 2>&1; then
+    PROXY_DESIRED=$(kubectl get daemonset -n kube-system kube-proxy -o jsonpath='{.status.desiredNumberScheduled}')
+    PROXY_CURRENT=$(kubectl get daemonset -n kube-system kube-proxy -o jsonpath='{.status.currentNumberScheduled}')
+    PROXY_READY=$(kubectl get daemonset -n kube-system kube-proxy -o jsonpath='{.status.numberReady}')
+    
+    info "kube-proxy daemonset: DESIRED=$PROXY_DESIRED CURRENT=$PROXY_CURRENT READY=$PROXY_READY"
+    
+    if [ "$PROXY_READY" -lt "$PROXY_DESIRED" ]; then
+        error "❌ kube-proxy readiness issue detected ($PROXY_READY/$PROXY_DESIRED ready)"
+        warn "This matches the inter-pod communication problem pattern"
+        warn "Some kube-proxy pods may be failing readiness probes"
+        
+        # Show current status
+        kubectl get daemonset -n kube-system kube-proxy || true
+        kubectl get pods -n kube-system -l k8s-app=kube-proxy || true
+    else
+        success "✅ kube-proxy daemonset fully ready ($PROXY_READY/$PROXY_DESIRED)"
+    fi
+else
+    warn "kube-proxy daemonset not found"
+fi
+
 # Check for any crashlooping pods
 if ! run_test "No pods in CrashLoopBackOff" "! kubectl get pods --all-namespaces | grep -q CrashLoopBackOff"; then
     warn "Found pods in CrashLoopBackOff state:"
@@ -132,6 +156,26 @@ info "=== Step 5: Service and Endpoint Tests ==="
 
 run_test "kubernetes service exists" "kubectl get service kubernetes"
 run_test "kubernetes endpoints exist" "kubectl get endpoints kubernetes"
+
+# Enhanced service endpoint analysis (addresses "has no endpoints" issue)
+info "Checking for services with missing endpoints..."
+services_without_endpoints=$(kubectl get services --all-namespaces -o json | jq -r '.items[] | select(.spec.selector != null) | "\(.metadata.namespace)/\(.metadata.name)"' | while read svc; do
+    namespace=$(echo "$svc" | cut -d'/' -f1)
+    name=$(echo "$svc" | cut -d'/' -f2)
+    endpoints=$(kubectl get endpoints -n "$namespace" "$name" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || echo "")
+    if [ -z "$endpoints" ]; then
+        echo "$namespace/$name"
+    fi
+done)
+
+if [ -n "$services_without_endpoints" ]; then
+    error "❌ Found services with no endpoints (matches inter-pod communication issue):"
+    echo "$services_without_endpoints"
+    warn "This indicates pods are not ready or don't match service selectors"
+    warn "Services with no endpoints will show REJECT rules in iptables"
+else
+    success "✅ All services have valid endpoints"
+fi
 
 # Check if there are any services with NodePort
 NODEPORT_SERVICES=$(kubectl get services --all-namespaces -o wide | grep NodePort || echo "")
@@ -221,6 +265,24 @@ if command -v iptables >/dev/null 2>&1; then
         warn "This may cause kube-proxy to fail"
     else
         success "No iptables/nftables compatibility issues detected"
+    fi
+    
+    # Enhanced analysis for KUBE-EXTERNAL-SERVICES (addresses "has no endpoints" reject rules)
+    info "Checking KUBE-EXTERNAL-SERVICES for reject rules..."
+    external_services_rules=$(sudo iptables -t nat -L KUBE-EXTERNAL-SERVICES -n -v 2>/dev/null || echo "Chain not found")
+    reject_rules=$(echo "$external_services_rules" | grep "REJECT" | grep "has no endpoints" || echo "")
+    
+    if [ -n "$reject_rules" ]; then
+        error "❌ Found REJECT rules for services with no endpoints:"
+        echo "$reject_rules"
+        warn "This matches the inter-pod communication issue pattern"
+        warn "Services are configured but backend pods are not ready"
+    else
+        if echo "$external_services_rules" | grep -q "KUBE-EXTERNAL-SERVICES"; then
+            success "✅ KUBE-EXTERNAL-SERVICES chain exists with no reject rules"
+        else
+            warn "⚠️  KUBE-EXTERNAL-SERVICES chain not found"
+        fi
     fi
 else
     warn "iptables command not available for testing"
