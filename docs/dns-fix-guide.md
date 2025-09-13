@@ -38,7 +38,7 @@ sudo ./scripts/test_dns_fix.sh
 ```
 
 **Expected results after fix:**
-- ✅ `kubectl version --short` works without errors
+- ✅ `kubectl version --client` works without errors
 - ✅ `kubectl get nodes` shows cluster nodes
 - ✅ CoreDNS pods are running
 - ✅ Cluster DNS resolution works for internal services

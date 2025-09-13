@@ -34,7 +34,7 @@
         HELM_INSTALL_DIR: /usr/local/bin
 
     - name: Verify Helm installation
-      command: helm version --short
+      command: helm version --client
       register: helm_version_output
 
     - name: Display Helm version

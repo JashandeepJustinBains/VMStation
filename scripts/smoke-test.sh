@@ -37,7 +37,7 @@ export KUBECONFIG="$KUBECONFIG"
 
 # Test 1: Check kubectl connectivity
 info "Testing kubectl connectivity..."
-if kubectl version --short >/dev/null 2>&1; then
+if kubectl version --client >/dev/null 2>&1; then
     success "✅ kubectl connectivity verified"
 else
     error "❌ kubectl connectivity failed"

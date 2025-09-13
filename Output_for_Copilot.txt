@@ -1,241 +1,167 @@
-root@masternode:/srv/monitoring_data/VMStation# sudo ./scripts/fix_cluster_communication.sh
-=== VMStation Cluster Communication Master Fix ===
-Timestamp: Fri 12 Sep 2025 06:42:28 PM EDT
-This script will fix the following issues:
-  - kubectl connection refused errors on worker nodes
-  - kube-proxy CrashLoopBackOff problems
-  - iptables/nftables compatibility issues
-  - NodePort service connectivity failures
-  - CNI bridge conflicts
+1.
+root@masternode:/srv/monitoring_data/VMStation# ls -l /etc/kubernetes/admin.conf && kubectl --kubeconfig=/etc/kubernetes/admin.conf version -short
+-rw------- 1 root root 5652 Sep 13 12:39 /etc/kubernetes/admin.conf
+Client Version: v1.34.0
+Kustomize Version: v5.7.1
+Unable to connect to the server: dial tcp: lookup hort on 10.96.0.10:53: no such host
+root@masternode:/srv/monitoring_data/VMStation# ls -l /etc/kubernetes/admin.conf && kubectl --kubeconfig=/etc/kubernetes/admin.conf version --client
+-rw------- 1 root root 5652 Sep 13 12:39 /etc/kubernetes/admin.conf
+Client Version: v1.34.0
+Kustomize Version: v5.7.1
 
-[INFO] Checking prerequisites...
-[SUCCESS] ✅ Prerequisites check passed
-[INFO] === Initial Problem Diagnosis ===
-[INFO] ✅ kubectl can access the cluster
-Current cluster status:
-NAME               STATUS   ROLES           AGE     VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME
-homelab            Ready    <none>          4h29m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.27
-masternode         Ready    control-plane   6h59m   v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-32-amd64                containerd://1.6.20
-storagenodet3500   Ready    <none>          6h24m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-34-amd64                containerd://1.6.20
+2.
+root@masternode:/srv/monitoring_data/VMStation# KUBECONF=/etc/kubernetes/admin.conf; server=$(kubectl --kubeconfig=$KUBECONF config view -o jsonpath='{.clusters[0].cluster.server}'); echo "server=$server"; timeout 5 bash -c "echo > /dev/tcp/$(echo $server | sed -E 's#https?://##; s#:[0-9]+##')/$(echo $server | sed -E 's#.*:([0-9]+)$#\1#') 2>/dev/null" && echo "TCP_OPEN" || echo "TCP_CLOSED"
+server=https://192.168.4.63:6443
+TCP_OPEN
 
-Current pod issues:
-No problematic pods found
+3.
+root@masternode:/srv/monitoring_data/VMStation# kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info >/dev/null && echo "kubectl->cluster:OK" || echo "kubectl->cluster:FAIL"; kubectl --kubeconfig=/etc/kubernetes/admin.conf get --raw /healthz || true
+kubectl->cluster:OK
 
-[INFO] Checking for iptables compatibility issues...
-[INFO] ✅ iptables NAT table accessible
+4.
+root@masternode:/srv/monitoring_data/VMStation# kubectl -n kube-system get pods -o wide | egrep 'kube-apiserver|kube-controller-manager' || kubectl -n kube-system get pods -o wide
+kube-apiserver-masternode            1/1     Running            15 (61m ago)     64m   192.168.4.63   masternode         <none>           <none>
+kube-controller-manager-masternode   1/1     Running            36 (61m ago)     64m   192.168.4.63   masternode         <none>           <none>
 
-[INFO] Checking CNI bridge configuration...
-[INFO] ✅ CNI bridge IP is correct: 10.244.0.1/16
+5.
+root@masternode:/srv/monitoring_data/VMStation# # show kube-apiserver container logs from container runtime (works if containerd/crictl available)
+sudo crictl ps -a | egrep 'kube-apiserver' && sudo crictl logs $(sudo crictl ps -a | awk '/kube-apiserver/{print $1; exit}')
+# fallback: kubelet journal lines
+sudo journalctl -u kubelet -n 200 --no-pager | egrep 'kube-apiserver|static pod' -n
+0a8f9cb27bdb2       f44c6888a2d24       About an hour ago   Running             kube-apiserver            15                  964a3c85e20a8       kube-apiserver-masternode
+425ec857d3dff       f44c6888a2d24       About an hour ago   Exited              kube-apiserver            14                  964a3c85e20a8       kube-apiserver-masternode
+I0913 16:42:57.210004       1 options.go:222] external host was not specified, using 192.168.4.63
+I0913 16:42:57.212434       1 server.go:148] Version: v1.29.15
+I0913 16:42:57.212479       1 server.go:150] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
+I0913 16:42:57.594792       1 shared_informer.go:311] Waiting for caches to sync for node_authorizer
+I0913 16:42:57.602016       1 plugins.go:157] Loaded 12 mutating admission controller(s) successfully in the following order: NamespaceLifecycle,LimitRanger,ServiceAccount,NodeRestriction,TaintNodesByCondition,Priority,DefaultTolerationSeconds,DefaultStorageClass,StorageObjectInUseProtection,RuntimeClass,DefaultIngressClass,MutatingAdmissionWebhook.
+I0913 16:42:57.602129       1 plugins.go:160] Loaded 13 validating admission controller(s) successfully in the following order: LimitRanger,ServiceAccount,PodSecurity,Priority,PersistentVolumeClaimResize,RuntimeClass,CertificateApproval,CertificateSigning,ClusterTrustBundleAttest,CertificateSubjectRestriction,ValidatingAdmissionPolicy,ValidatingAdmissionWebhook,ResourceQuota.
+I0913 16:42:57.602652       1 instance.go:297] Using reconciler: lease
+I0913 16:42:57.650727       1 handler.go:275] Adding GroupVersion apiextensions.k8s.io v1 to ResourceManager
+W0913 16:42:57.650955       1 genericapiserver.go:742] Skipping API apiextensions.k8s.io/v1beta1 because it has no resources.
+I0913 16:42:57.949972       1 handler.go:275] Adding GroupVersion  v1 to ResourceManager
+I0913 16:42:57.950439       1 instance.go:693] API group "internal.apiserver.k8s.io" is not enabled, skipping.
+I0913 16:42:58.255547       1 instance.go:693] API group "resource.k8s.io" is not enabled, skipping.
+I0913 16:42:58.274917       1 handler.go:275] Adding GroupVersion authentication.k8s.io v1 to ResourceManager
+W0913 16:42:58.274940       1 genericapiserver.go:742] Skipping API authentication.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.274950       1 genericapiserver.go:742] Skipping API authentication.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.275368       1 handler.go:275] Adding GroupVersion authorization.k8s.io v1 to ResourceManager
+W0913 16:42:58.275381       1 genericapiserver.go:742] Skipping API authorization.k8s.io/v1beta1 because it has no resources.
+I0913 16:42:58.276116       1 handler.go:275] Adding GroupVersion autoscaling v2 to ResourceManager
+I0913 16:42:58.276788       1 handler.go:275] Adding GroupVersion autoscaling v1 to ResourceManager
+W0913 16:42:58.276801       1 genericapiserver.go:742] Skipping API autoscaling/v2beta1 because it has no resources.
+W0913 16:42:58.276811       1 genericapiserver.go:742] Skipping API autoscaling/v2beta2 because it has no resources.
+I0913 16:42:58.277980       1 handler.go:275] Adding GroupVersion batch v1 to ResourceManager
+W0913 16:42:58.277994       1 genericapiserver.go:742] Skipping API batch/v1beta1 because it has no resources.
+I0913 16:42:58.278715       1 handler.go:275] Adding GroupVersion certificates.k8s.io v1 to ResourceManager
+W0913 16:42:58.278727       1 genericapiserver.go:742] Skipping API certificates.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.278734       1 genericapiserver.go:742] Skipping API certificates.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.279172       1 handler.go:275] Adding GroupVersion coordination.k8s.io v1 to ResourceManager
+W0913 16:42:58.279183       1 genericapiserver.go:742] Skipping API coordination.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.279247       1 genericapiserver.go:742] Skipping API discovery.k8s.io/v1beta1 because it has no resources.
+I0913 16:42:58.279784       1 handler.go:275] Adding GroupVersion discovery.k8s.io v1 to ResourceManager
+I0913 16:42:58.281145       1 handler.go:275] Adding GroupVersion networking.k8s.io v1 to ResourceManager
+W0913 16:42:58.281158       1 genericapiserver.go:742] Skipping API networking.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.281166       1 genericapiserver.go:742] Skipping API networking.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.281525       1 handler.go:275] Adding GroupVersion node.k8s.io v1 to ResourceManager
+W0913 16:42:58.281536       1 genericapiserver.go:742] Skipping API node.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.281543       1 genericapiserver.go:742] Skipping API node.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.282250       1 handler.go:275] Adding GroupVersion policy v1 to ResourceManager
+W0913 16:42:58.282263       1 genericapiserver.go:742] Skipping API policy/v1beta1 because it has no resources.
+I0913 16:42:58.283673       1 handler.go:275] Adding GroupVersion rbac.authorization.k8s.io v1 to ResourceManager
+W0913 16:42:58.283686       1 genericapiserver.go:742] Skipping API rbac.authorization.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.283694       1 genericapiserver.go:742] Skipping API rbac.authorization.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.284093       1 handler.go:275] Adding GroupVersion scheduling.k8s.io v1 to ResourceManager
+W0913 16:42:58.284108       1 genericapiserver.go:742] Skipping API scheduling.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.284127       1 genericapiserver.go:742] Skipping API scheduling.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.285825       1 handler.go:275] Adding GroupVersion storage.k8s.io v1 to ResourceManager
+W0913 16:42:58.285838       1 genericapiserver.go:742] Skipping API storage.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.285845       1 genericapiserver.go:742] Skipping API storage.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.286781       1 handler.go:275] Adding GroupVersion flowcontrol.apiserver.k8s.io v1beta3 to ResourceManager
+I0913 16:42:58.287793       1 handler.go:275] Adding GroupVersion flowcontrol.apiserver.k8s.io v1 to ResourceManager
+W0913 16:42:58.287805       1 genericapiserver.go:742] Skipping API flowcontrol.apiserver.k8s.io/v1beta2 because it has no resources.
+W0913 16:42:58.287813       1 genericapiserver.go:742] Skipping API flowcontrol.apiserver.k8s.io/v1beta1 because it has no resources.
+I0913 16:42:58.291487       1 handler.go:275] Adding GroupVersion apps v1 to ResourceManager
+W0913 16:42:58.291505       1 genericapiserver.go:742] Skipping API apps/v1beta2 because it has no resources.
+W0913 16:42:58.291515       1 genericapiserver.go:742] Skipping API apps/v1beta1 because it has no resources.
+I0913 16:42:58.292280       1 handler.go:275] Adding GroupVersion admissionregistration.k8s.io v1 to ResourceManager
+W0913 16:42:58.292292       1 genericapiserver.go:742] Skipping API admissionregistration.k8s.io/v1beta1 because it has no resources.
+W0913 16:42:58.292299       1 genericapiserver.go:742] Skipping API admissionregistration.k8s.io/v1alpha1 because it has no resources.
+I0913 16:42:58.292827       1 handler.go:275] Adding GroupVersion events.k8s.io v1 to ResourceManager
+W0913 16:42:58.292839       1 genericapiserver.go:742] Skipping API events.k8s.io/v1beta1 because it has no resources.
+I0913 16:42:58.303873       1 handler.go:275] Adding GroupVersion apiregistration.k8s.io v1 to ResourceManager
+W0913 16:42:58.303892       1 genericapiserver.go:742] Skipping API apiregistration.k8s.io/v1beta1 because it has no resources.
+I0913 16:42:58.690903       1 dynamic_cafile_content.go:157] "Starting controller" name="request-header::/etc/kubernetes/pki/front-proxy-ca.crt"
+I0913 16:42:58.690914       1 dynamic_cafile_content.go:157] "Starting controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
+I0913 16:42:58.691524       1 secure_serving.go:213] Serving securely on [::]:6443
+I0913 16:42:58.691587       1 dynamic_serving_content.go:132] "Starting controller" name="serving-cert::/etc/kubernetes/pki/apiserver.crt::/etc/kubernetes/pki/apiserver.key"
+I0913 16:42:58.706808       1 controller.go:80] Starting OpenAPI V3 AggregationController
+I0913 16:42:58.706861       1 tlsconfig.go:240] "Starting DynamicServingCertificateController"
+I0913 16:42:58.706978       1 controller.go:116] Starting legacy_token_tracking_controller
+I0913 16:42:58.707002       1 shared_informer.go:311] Waiting for caches to sync for configmaps
+I0913 16:42:58.707051       1 system_namespaces_controller.go:67] Starting system namespaces controller
+I0913 16:42:58.707119       1 dynamic_serving_content.go:132] "Starting controller" name="aggregator-proxy-cert::/etc/kubernetes/pki/front-proxy-client.crt::/etc/kubernetes/pki/front-proxy-client.key"
+I0913 16:42:58.708547       1 controller.go:78] Starting OpenAPI AggregationController
+I0913 16:42:58.709007       1 aggregator.go:163] waiting for initial CRD sync...
+I0913 16:42:58.709030       1 apf_controller.go:374] Starting API Priority and Fairness config controller
+I0913 16:42:58.709204       1 apiservice_controller.go:97] Starting APIServiceRegistrationController
+I0913 16:42:58.712569       1 cache.go:32] Waiting for caches to sync for APIServiceRegistrationController controller
+I0913 16:42:58.709232       1 handler_discovery.go:412] Starting ResourceDiscoveryManager
+I0913 16:42:58.709281       1 available_controller.go:423] Starting AvailableConditionController
+I0913 16:42:58.709504       1 cluster_authentication_trust_controller.go:440] Starting cluster_authentication_trust_controller controller
+I0913 16:42:58.709550       1 gc_controller.go:78] Starting apiserver lease garbage collector
+I0913 16:42:58.708552       1 customresource_discovery_controller.go:289] Starting DiscoveryController
+I0913 16:42:58.710440       1 controller.go:133] Starting OpenAPI controller
+I0913 16:42:58.710468       1 controller.go:85] Starting OpenAPI V3 controller
+I0913 16:42:58.710496       1 naming_controller.go:291] Starting NamingConditionController
+I0913 16:42:58.710509       1 establishing_controller.go:76] Starting EstablishingController
+I0913 16:42:58.710521       1 nonstructuralschema_controller.go:192] Starting NonStructuralSchemaConditionController
+I0913 16:42:58.710547       1 apiapproval_controller.go:186] Starting KubernetesAPIApprovalPolicyConformantConditionController
+I0913 16:42:58.710568       1 crd_finalizer.go:266] Starting CRDFinalizer
+I0913 16:42:58.710639       1 dynamic_cafile_content.go:157] "Starting controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
+I0913 16:42:58.710657       1 dynamic_cafile_content.go:157] "Starting controller" name="request-header::/etc/kubernetes/pki/front-proxy-ca.crt"
+I0913 16:42:58.714558       1 crdregistration_controller.go:111] Starting crd-autoregister controller
+I0913 16:42:58.723725       1 shared_informer.go:311] Waiting for caches to sync for crd-autoregister
+I0913 16:42:58.723748       1 cache.go:32] Waiting for caches to sync for AvailableConditionController controller
+I0913 16:42:58.723762       1 shared_informer.go:311] Waiting for caches to sync for cluster_authentication_trust_controller
+I0913 16:42:58.823888       1 shared_informer.go:318] Caches are synced for crd-autoregister
+I0913 16:42:58.824008       1 aggregator.go:165] initial CRD sync complete...
+I0913 16:42:58.824021       1 autoregister_controller.go:141] Starting autoregister controller
+I0913 16:42:58.824031       1 cache.go:32] Waiting for caches to sync for autoregister controller
+I0913 16:42:58.847180       1 shared_informer.go:318] Caches are synced for configmaps
+I0913 16:42:58.847495       1 apf_controller.go:379] Running API Priority and Fairness config worker
+I0913 16:42:58.847643       1 apf_controller.go:382] Running API Priority and Fairness periodic rebalancing process
+I0913 16:42:58.847579       1 controller.go:624] quota admission added evaluator for: leases.coordination.k8s.io
+I0913 16:42:58.895499       1 shared_informer.go:318] Caches are synced for node_authorizer
+I0913 16:42:58.915164       1 cache.go:39] Caches are synced for APIServiceRegistrationController controller
+I0913 16:42:58.923781       1 cache.go:39] Caches are synced for AvailableConditionController controller
+I0913 16:42:58.923909       1 shared_informer.go:318] Caches are synced for cluster_authentication_trust_controller
+I0913 16:42:58.924167       1 cache.go:39] Caches are synced for autoregister controller
+I0913 16:42:59.719165       1 storage_scheduling.go:111] all system priority classes are created successfully or already exist.
+W0913 16:43:00.018709       1 lease.go:265] Resetting endpoints for master service "kubernetes" to [192.168.4.63]
+I0913 16:43:00.019950       1 controller.go:624] quota admission added evaluator for: endpoints
+I0913 16:43:00.025416       1 controller.go:624] quota admission added evaluator for: endpointslices.discovery.k8s.io
+I0913 17:00:52.361199       1 controller.go:624] quota admission added evaluator for: deployments.apps
+I0913 17:19:39.736474       1 controller.go:624] quota admission added evaluator for: namespaces
+I0913 17:19:39.742911       1 controller.go:624] quota admission added evaluator for: serviceaccounts
+I0913 17:19:39.786924       1 controller.go:624] quota admission added evaluator for: daemonsets.apps
+I0913 17:19:39.794926       1 controller.go:624] quota admission added evaluator for: controllerrevisions.apps
+I0913 17:20:01.530079       1 controller.go:624] quota admission added evaluator for: replicasets.apps
+I0913 17:20:01.547824       1 alloc.go:330] "allocated clusterIPs" service="monitoring/prometheus" clusterIPs={"IPv4":"10.101.42.218"}
+I0913 17:20:02.517621       1 alloc.go:330] "allocated clusterIPs" service="monitoring/grafana" clusterIPs={"IPv4":"10.110.101.234"}
+I0913 17:20:33.542886       1 alloc.go:330] "allocated clusterIPs" service="jellyfin/jellyfin-service" clusterIPs={"IPv4":"10.108.154.183"}
+I0913 17:29:02.037505       1 alloc.go:330] "allocated clusterIPs" service="default/test-b-svc" clusterIPs={"IPv4":"10.109.174.85"}
+I0913 17:40:10.972323       1 alloc.go:330] "allocated clusterIPs" service="jellyfin/jellyfin-service" clusterIPs={"IPv4":"10.96.106.235"}
+4:Sep 13 12:40:07 masternode kubelet[1795473]: E0913 12:40:07.284788 1795473 kubelet.go:1929] "Failed creating a mirror pod for" err="pods \"kube-apiserver-masternode\" already exists" pod="kube-system/kube-apiserver-masternode"
+7:Sep 13 12:40:07 masternode kubelet[1795473]: I0913 12:40:07.313668 1795473 pod_startup_latency_tracker.go:102] "Observed pod startup duration" pod="kube-system/kube-apiserver-masternode" podStartSLOduration=3.313635886 podStartE2EDuration="3.313635886s" podCreationTimestamp="2025-09-13 12:40:04 -0400 EDT" firstStartedPulling="0001-01-01 00:00:00 +0000 UTC" lastFinishedPulling="0001-01-01 00:00:00 +0000 UTC" observedRunningTime="2025-09-13 12:40:07.313056167 -0400 EDT m=+1.190596074" watchObservedRunningTime="2025-09-13 12:40:07.313635886 -0400 EDT m=+1.191175788"
 
-Press Enter to continue with fixes, or Ctrl+C to abort...
 
-[INFO] === Starting Cluster Communication Fixes ===
+6.
+root@masternode:/srv/monitoring_data/VMStation# kubectl --kubeconfig=/etc/kubernetes/admin.conf config view -o jsonpath='{.clusters[0].cluster.server}'; host=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf config view -o jsonpath='{.clusters[0].cluster.server}' | sed -E 's#https?://##; s#:[0-9]+##'); ping -c 2 $host || nslookup $host || echo "resolve-failed"
+https://192.168.4.63:6443PING 192.168.4.63 (192.168.4.63) 56(84) bytes of data.
+64 bytes from 192.168.4.63: icmp_seq=1 ttl=64 time=0.051 ms
+64 bytes from 192.168.4.63: icmp_seq=2 ttl=64 time=0.054 ms
 
-[INFO] Step 1: Fixing iptables/nftables compatibility issues
-[INFO] Running: iptables/nftables compatibility fix
-Script: fix_iptables_compatibility.sh
-=== iptables/nftables Compatibility Fix ===
-Timestamp: Fri 12 Sep 2025 06:42:34 PM EDT
-
-[INFO] Checking for existing iptables/nftables compatibility issues
-[INFO] No compatibility issues detected
-[INFO] No iptables compatibility issues detected
-[INFO] Detecting iptables backend configuration
-Current iptables alternative: /usr/sbin/iptables-nft
-[WARN] System is using nftables backend for iptables
-[WARN] System is using nftables backend but no immediate issues detected
-Consider switching to legacy iptables for better Kubernetes compatibility
-[SUCCESS] ✅ iptables/nftables compatibility fix completed successfully
-
-[INFO] Step 2: Fixing CNI bridge conflicts
-[INFO] Running: CNI bridge conflict fix
-Script: fix_cni_bridge_conflict.sh
-[INFO] Backing up CNI configuration and state to /tmp/cni-backup-1757716954
-[INFO] Inspecting current cni0 bridge
-[INFO] cni0 exists with IP: 10.244.0.1/16
-[INFO] cni0 already matches desired bridge IP. No action needed.
-[SUCCESS] ✅ CNI bridge conflict fix completed successfully
-
-[INFO] Step 3: Fixing kube-proxy and pod issues
-[INFO] Running: kube-proxy and pod issues fix
-Script: fix_remaining_pod_issues.sh
-=== VMStation Remaining Pod Issues Fix ===
-Timestamp: Fri 12 Sep 2025 06:42:34 PM EDT
-
-[INFO] Step 1: Fix Jellyfin readiness probe issues
-Current jellyfin status: Ready=false, Restarts=2
-[WARN] Jellyfin pod has readiness issues - applying fixes
-[INFO] Ensuring jellyfin volume directories exist with correct permissions
-[DEBUG] Fixed /srv/media permissions
-[DEBUG] Fixed /var/lib/jellyfin permissions
-[INFO] Cleaning up existing Jellyfin resources to prevent conflicts
-service "jellyfin-service" deleted from jellyfin namespace
-pod "jellyfin" deleted from jellyfin namespace
-[INFO] Updating jellyfin pod configuration with improved health checks
-pod/jellyfin created
-[INFO] Ensuring Jellyfin service exists
-service/jellyfin-service created
-[INFO] Waiting for pod jellyfin/jellyfin to be ready (timeout: 300s)
-  Still waiting... Status: Running, Ready: false (30/300s)
-  Still waiting... Status: Running, Ready: false (60/300s)
-  Still waiting... Status: Running, Ready: false (90/300s)
-  Still waiting... Status: Running, Ready: false (120/300s)
-  Still waiting... Status: Running, Ready: false (150/300s)
-  Still waiting... Status: Running, Ready: false (180/300s)
-  Still waiting... Status: Running, Ready: false (210/300s)
-  Still waiting... Status: Running, Ready: false (240/300s)
-  Still waiting... Status: Running, Ready: false (270/300s)
-  Still waiting... Status: Running, Ready: false (300/300s)
-[WARN] Timeout waiting for pod jellyfin/jellyfin
-[WARN] ⚠️  kube-proxy and pod issues fix completed with warnings or errors
-[WARN] Pod issues fix had issues, but continuing...
-
-[INFO] Step 4: Fixing kubectl configuration on worker nodes
-[INFO] Running: kubectl worker node configuration
-Script: fix_worker_kubectl_config.sh
-=== Worker Node kubectl Configuration Fix ===
-Timestamp: Fri 12 Sep 2025 06:48:47 PM EDT
-Control Plane IP: 192.168.4.63
-
-[INFO] Detected control plane node (found /etc/kubernetes/admin.conf)
-[INFO] Running on control plane node - kubectl should already be configured
-[INFO] Validating kubectl configuration
-[INFO] ✓ kubectl client is working
-[INFO] ✓ kubectl can connect to cluster
-Current cluster nodes:
-NAME               STATUS   ROLES           AGE     VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME
-homelab            Ready    <none>          4h36m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.27
-masternode         Ready    control-plane   7h5m    v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-32-amd64                containerd://1.6.20
-storagenodet3500   Ready    <none>          6h31m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-34-amd64                containerd://1.6.20
-[INFO] ✓ Control plane kubectl configuration is working
-[INFO] Setting up kubectl for all relevant users
-
-[INFO] kubectl configuration setup complete!
-
-To use kubectl, ensure your KUBECONFIG is set:
-  export KUBECONFIG=/root/.kube/config
-  # or for regular users:
-  export KUBECONFIG=$HOME/.kube/config
-[SUCCESS] ✅ kubectl worker node configuration completed successfully
-
-[INFO] Waiting for services to stabilize...
-
-[INFO] === Final Validation ===
-[INFO] Running: cluster communication validation
-Script: validate_cluster_communication.sh
-=== VMStation Cluster Communication Validation ===
-Timestamp: Fri 12 Sep 2025 06:49:17 PM EDT
-
-[INFO] === Step 1: kubectl Connectivity Tests ===
-[INFO] Test 1: kubectl client version check
-[ERROR] ❌ FAIL: kubectl client version check
-[WARN] ⚠️  cluster communication validation completed with warnings or errors
-[WARN] Validation found remaining issues
-
-[INFO] === Fix Summary ===
-[WARN] ⚠️  Some fixes completed with warnings or errors
-
-Common remaining issues and solutions:
-1. If kubectl still fails: manually copy kubeconfig from control plane
-2. If NodePort not accessible: check firewall settings
-3. If pods still crash: check pod logs for specific errors
-4. If networking fails: consider cluster restart
-
-For detailed diagnostics, run:
-  ./scripts/validate_cluster_communication.sh
-  kubectl get pods --all-namespaces
-  kubectl get events --all-namespaces --sort-by='.lastTimestamp'
-
-=== Master Fix Complete ===
-Timestamp: Fri 12 Sep 2025 06:49:17 PM EDT
-root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -o wide --all-namespaces
-NAMESPACE      NAME                                 READY   STATUS             RESTARTS        AGE     IP             NODE               NOMINATED NODE   READINESS GATES
-jellyfin       jellyfin                             0/1     Running            1 (84s ago)     7m27s   10.244.0.15    storagenodet3500   <none>           <none>
-kube-flannel   kube-flannel-ds-n8htq                0/1     CrashLoopBackOff   7 (42s ago)     21m     192.168.4.62   homelab            <none>           <none>
-kube-flannel   kube-flannel-ds-nfrtq                1/1     Running            0               21m     192.168.4.63   masternode         <none>           <none>
-kube-flannel   kube-flannel-ds-xp7fl                1/1     Running            0               22m     192.168.4.61   storagenodet3500   <none>           <none>
-kube-system    coredns-68444cf7cd-85vlv             1/1     Running            0               7h6m    10.244.0.2     masternode         <none>           <none>
-kube-system    etcd-masternode                      1/1     Running            5               7h6m    192.168.4.63   masternode         <none>           <none>
-kube-system    kube-apiserver-masternode            1/1     Running            13 (7h4m ago)   7h6m    192.168.4.63   masternode         <none>           <none>
-kube-system    kube-controller-manager-masternode   1/1     Running            34 (7h4m ago)   7h6m    192.168.4.63   masternode         <none>           <none>
-kube-system    kube-proxy-cgfkw                     1/1     Running            0               22m     192.168.4.61   storagenodet3500   <none>           <none>
-kube-system    kube-proxy-nggrw                     1/1     Running            0               21m     192.168.4.63   masternode         <none>           <none>
-kube-system    kube-proxy-zs88s                     0/1     CrashLoopBackOff   7 (60s ago)     22m     192.168.4.62   homelab            <none>           <none>
-kube-system    kube-scheduler-masternode            1/1     Running            34 (7h4m ago)   7h6m    192.168.4.63   masternode         <none>           <none>
-monitoring     grafana-79747fbd7-pgsck              1/1     Running            0               4h30m   10.244.0.3     masternode         <none>           <none>
-monitoring     prometheus-5bbc459489-x75vg          1/1     Running            0               4h30m   10.244.0.4     masternode         <none>           <none>
-root@masternode:/srv/monitoring_data/VMStation# kubectl logs jellyfin -n jellyfin
-[22:48:47] [INF] [1] Main: Jellyfin version: 10.10.7
-[22:48:47] [INF] [1] Main: Environment Variables: ["[JELLYFIN_SERVICE_SERVICE_PORT_HTTPS, 8920]", "[JELLYFIN_SERVICE_PORT_8096_TCP_ADDR, 10.99.226.212]", "[JELLYFIN_SERVICE_SERVICE_PORT, 8096]", "[JELLYFIN_DATA_DIR, /config]", "[JELLYFIN_SERVICE_PORT, tcp://10.99.226.212:8096]", "[JELLYFIN_FFMPEG, /usr/lib/jellyfin-ffmpeg/ffmpeg]", "[JELLYFIN_SERVICE_PORT_8920_TCP_ADDR, 10.99.226.212]", "[JELLYFIN_SERVICE_SERVICE_HOST, 10.99.226.212]", "[JELLYFIN_SERVICE_PORT_8920_TCP, tcp://10.99.226.212:8920]", "[JELLYFIN_SERVICE_PORT_8096_TCP, tcp://10.99.226.212:8096]", "[JELLYFIN_WEB_DIR, /jellyfin/jellyfin-web]", "[JELLYFIN_CACHE_DIR, /cache]", "[JELLYFIN_SERVICE_PORT_8096_TCP_PROTO, tcp]", "[JELLYFIN_PublishedServerUrl, http://192.168.4.61:30096]", "[JELLYFIN_SERVICE_PORT_8920_TCP_PORT, 8920]", "[JELLYFIN_SERVICE_PORT_8920_TCP_PROTO, tcp]", "[JELLYFIN_SERVICE_PORT_8096_TCP_PORT, 8096]", "[JELLYFIN_LOG_DIR, /config/log]", "[JELLYFIN_SERVICE_SERVICE_PORT_HTTP, 8096]", "[JELLYFIN_CONFIG_DIR, /config/config]"]
-[22:48:47] [INF] [1] Main: Arguments: ["/jellyfin/jellyfin.dll"]
-[22:48:47] [INF] [1] Main: Operating system: Debian GNU/Linux 12 (bookworm)
-[22:48:47] [INF] [1] Main: Architecture: X64
-[22:48:47] [INF] [1] Main: 64-Bit Process: True
-[22:48:47] [INF] [1] Main: User Interactive: True
-[22:48:47] [INF] [1] Main: Processor count: 1
-[22:48:47] [INF] [1] Main: Program data path: /config
-[22:48:47] [INF] [1] Main: Log directory path: /config/log
-[22:48:47] [INF] [1] Main: Config directory path: /config/config
-[22:48:47] [INF] [1] Main: Cache path: /cache
-[22:48:47] [INF] [1] Main: Temp directory path: /tmp/jellyfin
-[22:48:47] [INF] [1] Main: Web resources path: /jellyfin/jellyfin-web
-[22:48:47] [INF] [1] Main: Application directory: /jellyfin/
-[22:48:47] [INF] [1] Emby.Server.Implementations.AppBase.BaseConfigurationManager: Setting cache path: /cache
-[22:48:47] [INF] [1] Emby.Server.Implementations.ApplicationHost: Loading assemblies
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Defined LAN subnets: ["127.0.0.1/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Defined LAN exclusions: []
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Used LAN subnets: ["127.0.0.1/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Filtered interface addresses: ["127.0.0.1", "10.244.0.15"]
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Bind Addresses ["0.0.0.0"]
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Remote IP filter is Allowlist
-[22:48:47] [INF] [1] Jellyfin.Networking.Manager.NetworkManager: Filtered subnets: []
-[22:48:51] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: TMDb 10.10.7.0
-[22:48:51] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: Studio Images 10.10.7.0
-[22:48:51] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: OMDb 10.10.7.0
-[22:48:52] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: MusicBrainz 10.10.7.0
-[22:48:52] [INF] [1] Emby.Server.Implementations.Plugins.PluginManager: Loaded plugin: AudioDB 10.10.7.0
-[22:48:52] [WRN] [1] Microsoft.AspNetCore.DataProtection.Repositories.EphemeralXmlRepository: Using an in-memory repository. Keys will not be persisted to storage.
-[22:48:52] [WRN] [1] Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager: Neither user profile nor HKLM registry available. Using an ephemeral key repository. Protected data will be unavailable when application exits.
-[22:48:52] [INF] [1] Main: Kestrel is listening on 0.0.0.0
-[22:48:52] [WRN] [1] Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager: No XML encryptor configured. Key {54d1ee51-284b-463d-9767-6900db634bb1} may be persisted to storage in unencrypted form.
-[22:48:53] [WRN] [1] Microsoft.AspNetCore.StaticFiles.StaticFileMiddleware: The WebRootPath was not found: /wwwroot. Static files may be unavailable.
-[22:48:53] [INF] [1] Emby.Server.Implementations.ApplicationHost: Running startup tasks
-[22:48:53] [INF] [8] Emby.Server.Implementations.IO.LibraryMonitor: Watching directory /media/Movies
-[22:48:53] [INF] [8] Emby.Server.Implementations.IO.LibraryMonitor: Watching directory /media/TV Shows
-[22:48:53] [INF] [1] Emby.Server.Implementations.ScheduledTasks.TaskManager: Daily trigger for Generate Trickplay Images set to fire at 2025-09-13 03:00:00.000 +00:00, which is 04:11:06.6569623 from now.
-[22:48:53] [INF] [1] Emby.Server.Implementations.ScheduledTasks.TaskManager: Daily trigger for Extract Chapter Images set to fire at 2025-09-13 02:00:00.000 +00:00, which is 03:11:06.6481088 from now.
-[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Found ffmpeg version 7.0.2
-[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available decoders: ["libdav1d", "av1", "av1_cuvid", "av1_qsv", "h264", "h264_qsv", "h264_cuvid", "hevc", "hevc_qsv", "hevc_cuvid", "mpeg2video", "mpeg2_qsv", "mpeg2_cuvid", "mpeg4", "mpeg4_cuvid", "msmpeg4", "vc1_qsv", "vc1_cuvid", "vp8", "libvpx", "vp8_cuvid", "vp8_qsv", "vp9", "libvpx-vp9", "vp9_cuvid", "vp9_qsv", "aac", "ac3", "ac4", "dca", "flac", "mp3", "truehd"]
-[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available encoders: ["libsvtav1", "av1_nvenc", "av1_qsv", "av1_amf", "av1_vaapi", "libx264", "h264_amf", "h264_nvenc", "h264_qsv", "h264_v4l2m2m", "h264_vaapi", "libx265", "hevc_amf", "hevc_nvenc", "hevc_qsv", "hevc_vaapi", "mjpeg_qsv", "mjpeg_vaapi", "aac", "libfdk_aac", "ac3", "alac", "dca", "flac", "libmp3lame", "libopus", "truehd", "libvorbis", "srt"]
-[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available filters: ["bwdif_cuda", "deinterlace_qsv", "deinterlace_vaapi", "flip_vulkan", "hwupload_cuda", "hwupload_vaapi", "libplacebo", "overlay_opencl", "overlay_qsv", "overlay_vaapi", "overlay_vulkan", "overlay_cuda", "procamp_vaapi", "scale_cuda", "scale_opencl", "scale_qsv", "scale_vaapi", "scale_vulkan", "tonemapx", "tonemap_cuda", "tonemap_opencl", "tonemap_vaapi", "transpose_cuda", "transpose_opencl", "transpose_vaapi", "transpose_vulkan", "vpp_qsv", "yadif_cuda", "zscale", "alphasrc"]
-[22:48:53] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: Available hwaccel types: ["cuda", "vaapi", "qsv", "drm", "opencl", "vulkan"]
-[22:48:56] [INF] [8] Emby.Server.Implementations.ScheduledTasks.TaskManager: Clean up collections and playlists Completed after 0 minute(s) and 0 seconds
-[22:48:56] [INF] [8] Emby.Server.Implementations.ScheduledTasks.TaskManager: Clean Transcode Directory Completed after 0 minute(s) and 0 seconds
-[22:49:14] [INF] [1] MediaBrowser.MediaEncoding.Encoder.MediaEncoder: FFmpeg: /usr/lib/jellyfin-ffmpeg/ffmpeg
-[22:49:14] [INF] [1] Emby.Server.Implementations.ApplicationHost: ServerId: 6877a13a13684a05a7c7ca43bf5d02c8
-[22:49:14] [INF] [1] Emby.Server.Implementations.ApplicationHost: Core startup complete
-[22:49:14] [INF] [1] Main: Startup complete 0:00:27.9672657
-[22:49:17] [ERR] [10] Emby.Server.Implementations.Updates.InstallationManager: An error occurred while accessing the plugin manifest: https://repo.jellyfin.org/files/plugin/manifest.json
-System.Net.Http.HttpRequestException: Resource temporarily unavailable (repo.jellyfin.org:443)
- ---> System.Net.Sockets.SocketException (11): Resource temporarily unavailable
-   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
-   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
-   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
-   at Jellyfin.Networking.HappyEyeballs.HttpClientExtension.AttemptConnection(AddressFamily addressFamily, SocketsHttpConnectionContext context, CancellationToken cancellationToken)
-   at Jellyfin.Networking.HappyEyeballs.HttpClientExtension.OnConnect(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
-   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
-   --- End of inner exception stack trace ---
-   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
-   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
-   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
-   at System.Net.Http.HttpConnectionPool.AddHttp11ConnectionAsync(QueueItem queueItem)
-   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
-   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
-   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
-   at System.Net.Http.DecompressionHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
-   at Microsoft.Extensions.Http.Logging.LoggingHttpMessageHandler.<SendCoreAsync>g__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
-   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|5_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
-   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
-   at System.Net.Http.Json.HttpClientJsonExtensions.<FromJsonAsyncCore>g__Core|12_0[TValue,TJsonOptions](HttpClient client, Task`1 responseTask, Boolean usingResponseHeadersRead, CancellationTokenSource linkedCTS, Func`4 deserializeMethod, TJsonOptions jsonOptions, CancellationToken cancellationToken)
-   at Emby.Server.Implementations.Updates.InstallationManager.GetPackages(String manifestName, String manifest, Boolean filterIncompatible, CancellationToken cancellationToken)
-[22:49:17] [INF] [10] Emby.Server.Implementations.ScheduledTasks.TaskManager: Update Plugins Completed after 0 minute(s) and 20 seconds
+--- 192.168.4.63 ping statistics ---
+2 packets transmitted, 2 received, 0% packet loss, time 1001ms
+rtt min/avg/max/mdev = 0.051/0.052/0.054/0.001 ms
