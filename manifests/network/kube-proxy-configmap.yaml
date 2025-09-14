@@ -18,6 +18,7 @@ data:
     portRange: ""
     udpIdleTimeout: 250ms
     nodePortAddresses: null
+    kubeconfig: /var/lib/kube-proxy/kubeconfig.conf
     winkernel:
       enableDSR: false
       networkName: ""

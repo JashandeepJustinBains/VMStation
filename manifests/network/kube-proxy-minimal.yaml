@@ -39,6 +39,7 @@ data:
     portRange: ""
     udpIdleTimeout: 250ms
     nodePortAddresses: []
+    kubeconfig: /var/lib/kube-proxy/kubeconfig.conf
     iptables:
       masqueradeAll: false
       masqueradeBit: 14
