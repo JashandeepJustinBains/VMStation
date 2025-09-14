@@ -2,101 +2,33 @@
 
 This directory contains operational scripts for VMStation infrastructure management.
 
-## CrashLoopBackOff Fix Scripts (NEW!)
-
-### `fix_k8s_dashboard_permissions.sh`
-Fixes Kubernetes Dashboard CrashLoopBackOff issues related to directory permissions and certificate generation.
-
-**Usage:**
-```bash
-# Diagnose dashboard permission issues
-./scripts/fix_k8s_dashboard_permissions.sh
-
-# Apply fixes automatically
-./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
-```
-
-### `validate_drone_config.sh`
-Validates Drone CI configuration and tests GitHub integration setup.
-
-**Usage:**
-```bash
-# Validate drone configuration
-./scripts/validate_drone_config.sh
-```
-
-### `test_crashloop_fixes.sh`
-Integration test script that validates and applies both drone and dashboard fixes.
-
-**Usage:**
-```bash
-# Dry run test (recommended first)
-./scripts/test_crashloop_fixes.sh
-
-# Apply fixes
-./scripts/test_crashloop_fixes.sh --apply
-```
-
-## Quick Start for CrashLoopBackOff Issues
-
-1. **Identify the problem:**
-   ```bash
-   kubectl get pods -A | grep CrashLoopBackOff
-   ```
-
-2. **Run diagnostics:**
-   ```bash
-   ./scripts/diagnose_monitoring_permissions.sh
-   ```
-
-3. **For Drone issues:**
-   ```bash
-   # Check configuration
-   ./scripts/validate_drone_config.sh
-   
-   # Fix by updating secrets and redeploying
-   ansible-vault edit ansible/group_vars/secrets.yml
-   ansible-playbook -i inventory.txt ansible/subsites/05-extra_apps.yaml --ask-vault-pass
-   ```
-
-4. **For Dashboard issues:**
-   ```bash
-   # Fix permissions
-   ./scripts/fix_k8s_dashboard_permissions.sh --auto-approve
-   ```
-
-5. **Integration test:**
-   ```bash
-   # Test all fixes together
-   ./scripts/test_crashloop_fixes.sh --apply
-   ```
-
 ## Infrastructure Scripts
 
-### Kubernetes (Primary)
-- **`validate_k8s_monitoring.sh`** - Validates Kubernetes monitoring stack health
-- **`fix_k8s_monitoring_pods.sh`** - **NEW!** Fixes CrashLoopBackOff pod issues with targeted remediation
-- **`analyze_k8s_monitoring_diagnostics.sh`** - Analyzes diagnostic output and provides CLI remediation commands
-- **`get_copilot_prompt.sh`** - Provides premium GitHub Copilot troubleshooting prompts for monitoring issues
-- **`validate_infrastructure.sh`** - Auto-detects and validates current infrastructure mode
+### Core Infrastructure Scripts
+- **`enhanced_kubeadm_join.sh`** - Enhanced Kubernetes join process with comprehensive validation
+- **`comprehensive_worker_setup.sh`** - Complete worker node setup and configuration
+- **`fix_cluster_communication.sh`** - Fixes cluster communication and networking issues
+- **`fix_remaining_pod_issues.sh`** - Fixes common pod issues including Jellyfin readiness and kube-proxy
+- **`validate_pod_health.sh`** - Validates pod health and cluster status
+- **`vmstation_status.sh`** - Comprehensive cluster status and diagnostic information
 
-### Legacy Podman (Deprecated)
-- **`validate_monitoring.sh`** - Legacy Podman monitoring validation
-- **`fix_podman_metrics.sh`** - Fixes Podman metrics issues
-- **`podman_metrics_diagnostic.sh`** - Diagnoses Podman metrics problems
-- **`cleanup_podman_legacy.sh`** - Removes legacy Podman infrastructure
+### CNI and Network Fixes
+- **`fix_cni_bridge_conflict.sh`** - Fixes CNI bridge IP conflicts causing ContainerCreating errors
+- **`fix_worker_node_cni.sh`** - Fixes worker node CNI communication issues
+- **`fix_flannel_mixed_os.sh`** - Fixes Flannel issues in mixed OS environments
+- **`validate_cluster_communication.sh`** - Validates cluster communication and NodePort services
 
-### Permission Management
-- **`quick_permission_guide.sh`** - Quick reference for monitoring permission fixes
-- **`diagnose_monitoring_permissions.sh`** - Comprehensive permission diagnostic tool
-- **`fix_monitoring_permissions.sh`** - Automated permission fix script
+### Diagnostic and Troubleshooting Scripts  
+- **`diagnose_remaining_pod_issues.sh`** - Analyzes specific pod failures and issues
+- **`gather_worker_diagnostics.sh`** - Comprehensive worker node diagnostic collection
+- **`run_network_diagnosis.sh`** - Network diagnosis and connectivity testing
+- **`check_coredns_status.sh`** - CoreDNS status and configuration validation
 
-### Premium GitHub Copilot Integration
-- **`get_copilot_prompt.sh`** - Provides premium GitHub Copilot troubleshooting prompts for monitoring issues
-  - `--show` - Template prompt (requires separate diagnostic gathering)
-  - `--complete` - Ready-to-use prompt with embedded diagnostic data
-  - `--copy` / `--copy-complete` - Copy prompts to clipboard
-  - `--gather` - Collect basic cluster diagnostics
+### Validation Scripts
+- **`validate_join_prerequisites.sh`** - Comprehensive validation before kubeadm join
+- **`validate_post_wipe_functionality.sh`** - Validates post-wipe worker join functionality
+- **`validate_pod_connectivity.sh`** - Tests pod-to-pod CNI communication
+- **`validate_nodeport_external_access.sh`** - Validates external access to NodePort services
 
 ## Troubleshooting Workflow Options
 
@@ -120,81 +52,76 @@ Integration test script that validates and applies both drone and dashboard fixe
 
 ## Quick Reference
 
-### For Kubernetes Infrastructure
+### Core Deployment and Setup
 ```bash
-# Fix monitoring pod CrashLoopBackOff issues (NEW!)
-./scripts/fix_k8s_monitoring_pods.sh
+# Main cluster deployment
+./deploy-cluster.sh
 
-# Validate monitoring stack
-./scripts/validate_k8s_monitoring.sh
+# Enhanced worker join process
+./scripts/enhanced_kubeadm_join.sh
 
-# Get premium Copilot troubleshooting prompt (template)
-./scripts/get_copilot_prompt.sh --show
+# Comprehensive worker setup
+./scripts/comprehensive_worker_setup.sh
 
-# Get complete prompt with embedded diagnostics
-./scripts/get_copilot_prompt.sh --complete
-
-# Gather diagnostic data for manual troubleshooting
-./scripts/get_copilot_prompt.sh --gather
-
-# Auto-detect and validate
-./scripts/validate_infrastructure.sh
-
-# Deploy infrastructure
-./deploy_kubernetes.sh
+# Get cluster status and diagnostics
+./scripts/vmstation_status.sh
 ```
 
-### For Legacy Podman (Migration Path)
+### Fixing Common Issues
 ```bash
-# Validate current Podman setup
-./scripts/validate_monitoring.sh
+# Fix cluster communication problems
+./scripts/fix_cluster_communication.sh
 
-# Fix Podman metrics issues
-./scripts/fix_podman_metrics.sh
+# Fix remaining pod issues (Jellyfin, kube-proxy, etc.)
+./scripts/fix_remaining_pod_issues.sh
 
-# Diagnose problems
-./scripts/podman_metrics_diagnostic.sh
+# Fix CNI bridge conflicts
+./scripts/fix_cni_bridge_conflict.sh
 
-# Migrate to Kubernetes
-./deploy_kubernetes.sh
+# Fix worker node CNI communication
+./scripts/fix_worker_node_cni.sh
+```
 
-# Clean up after migration
-./scripts/cleanup_podman_legacy.sh
+### Validation and Diagnostics
+```bash
+# Validate pod health
+./scripts/validate_pod_health.sh
+
+# Validate cluster communication
+./scripts/validate_cluster_communication.sh
+
+# Diagnose pod issues
+./scripts/diagnose_remaining_pod_issues.sh
+
+# Gather worker diagnostics
+./scripts/gather_worker_diagnostics.sh
 ```
 
 ## Script Categories
 
-### Validation Scripts
-| Script | Purpose | Infrastructure |
-|--------|---------|----------------|
-| `validate_k8s_monitoring.sh` | Kubernetes monitoring validation | Kubernetes |
-| `validate_infrastructure.sh` | Auto-detecting validation | Both |
-| `validate_monitoring.sh` | Podman monitoring validation | Podman (Legacy) |
+### Core Infrastructure Scripts
+| Script | Purpose | Size (lines) |
+|--------|---------|-------------|
+| `enhanced_kubeadm_join.sh` | Enhanced Kubernetes join process | 1388 |
+| `comprehensive_worker_setup.sh` | Complete worker node setup | 481 |
+| `fix_cluster_communication.sh` | Cluster communication fixes | 705 |
+| `fix_remaining_pod_issues.sh` | Pod issue remediation | 673 |
 
-### Diagnostic Scripts
-| Script | Purpose | Infrastructure |
-|--------|---------|----------------|
-| `analyze_k8s_monitoring_diagnostics.sh` | K8s monitoring issue analysis and CLI remediation | Kubernetes |
-| `diagnose_monitoring_permissions.sh` | Monitoring permission analysis | Both |
-| `podman_metrics_diagnostic.sh` | Podman metrics diagnostics | Podman (Legacy) |
+### Network and CNI Scripts
+| Script | Purpose | Size (lines) |
+|--------|---------|-------------|
+| `fix_cni_bridge_conflict.sh` | CNI bridge IP conflict fixes | 378 |
+| `fix_worker_node_cni.sh` | Worker CNI communication fixes | 423 |
+| `fix_flannel_mixed_os.sh` | Mixed OS Flannel fixes | 403 |
+| `validate_cluster_communication.sh` | Cluster communication validation | 339 |
 
-### Fix Scripts
-| Script | Purpose | Infrastructure |
-|--------|---------|----------------|
-| `fix_k8s_monitoring_pods.sh` | Fix Kubernetes pod CrashLoopBackOff issues | Kubernetes |
-| `fix_monitoring_permissions.sh` | Fix monitoring permission issues | Both |
-| `fix_podman_metrics.sh` | Fix Podman metrics issues | Podman (Legacy) |
-| `fix_container_restarts.sh` | Fix container restart issues | Podman (Legacy) |
-
-### Quick Reference
-| Script | Purpose | Infrastructure |
-|--------|---------|----------------|
-| `quick_permission_guide.sh` | Permission fix guidance | Both |
-
-### Migration Scripts
-| Script | Purpose | Infrastructure |
-|--------|---------|----------------|
-| `cleanup_podman_legacy.sh` | Remove legacy Podman setup | Migration |
+### Diagnostic and Validation Scripts  
+| Script | Purpose | Size (lines) |
+|--------|---------|-------------|
+| `gather_worker_diagnostics.sh` | Worker diagnostic collection | 453 |
+| `validate_join_prerequisites.sh` | Pre-join validation | 398 |
+| `diagnose_remaining_pod_issues.sh` | Pod issue diagnosis | 195 |
+| `validate_pod_health.sh` | Pod health validation | 109 |
 
 ## Migration Workflow
 

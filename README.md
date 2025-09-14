@@ -902,12 +902,12 @@ The previous complex deployment system (with 85% more code) has been moved to th
 - **Overly complex cluster setup**: `legacy/ansible/plays/kubernetes/setup_cluster.yaml` (2900 lines)
 - **Legacy diagnostic scripts**: Various test and troubleshooting scripts for the old system
 
-**For new deployments, always use the simplified system:**
-- `./deploy.sh` - New deployment script (120 lines)
-- `ansible/simple-deploy.yaml` - Consolidated playbook (93 lines)
-- `ansible/plays/setup-cluster.yaml` - Essential cluster setup (200 lines)
+**For new deployments, always use the current system:**
+- `./deploy-cluster.sh` - Main deployment script (967 lines)
+- `scripts/enhanced_kubeadm_join.sh` - Enhanced join process (1388 lines)
+- `ansible/plays/setup-cluster.yaml` - Essential cluster setup
 
-See `legacy/README.md` for complete migration information and benefits of the simplified system.
+See `scripts/README.md` for complete script documentation and usage information.
 
 ---
 

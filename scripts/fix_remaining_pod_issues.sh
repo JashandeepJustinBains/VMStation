@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Fix Remaining VMStation Pod Issues
-# Addresses specific problems after deploy.sh and fix_homelab_node_issues.sh
+# Addresses specific problems after deploy-cluster.sh and fix_homelab_node_issues.sh
 # Focuses on: jellyfin readiness issues and kube-proxy crashloop
 
 set -e
