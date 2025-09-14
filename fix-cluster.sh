@@ -19,8 +19,7 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-ANSIBLE_DIR="$PROJECT_ROOT/ansible"
+ANSIBLE_DIR="ansible"
 INVENTORY_FILE="$ANSIBLE_DIR/inventory/hosts.yml"
 PLAYBOOK="$ANSIBLE_DIR/playbooks/minimal-network-fix.yml"
 
