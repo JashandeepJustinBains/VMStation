@@ -167,7 +167,7 @@ spec:
   tolerations:
   - key: "node.kubernetes.io/network-unavailable"
     operator: "Exists"
-    effect: "NoSchedule"
+    effect: "NoExecute"
     tolerationSeconds: 300
   - key: "node.kubernetes.io/not-ready"
     operator: "Exists"
