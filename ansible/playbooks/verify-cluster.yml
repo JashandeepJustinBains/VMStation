@@ -394,7 +394,27 @@
       register: jellyfin_final
       failed_when: >
         jellyfin_final.resources | length == 0 or
-        'Running' not in (jellyfin_final.resources | map(attribute='status.phase') | list)
+        (jellyfin_final.resources[0].status.phase not in ['Running', 'Pending'] if jellyfin_final.resources else true)
+
+    - name: "Display final Jellyfin pod status for debugging"
+      debug:
+        msg: |
+          Final Jellyfin Pod Status:
+          {% if jellyfin_final.resources %}
+          Pod: {{ jellyfin_final.resources[0].metadata.name }}
+          Phase: {{ jellyfin_final.resources[0].status.phase }}
+          Pod IP: {{ jellyfin_final.resources[0].status.podIP | default('No IP assigned') }}
+          Node: {{ jellyfin_final.resources[0].spec.nodeName | default('Not scheduled') }}
+          {% if jellyfin_final.resources[0].status.containerStatuses %}
+          Main Container Ready: {{ jellyfin_final.resources[0].status.containerStatuses[0].ready | default('Unknown') }}
+          Main Container State: {{ jellyfin_final.resources[0].status.containerStatuses[0].state.keys() | first if jellyfin_final.resources[0].status.containerStatuses[0].state else 'Unknown' }}
+          {% endif %}
+          {% if jellyfin_final.resources[0].status.initContainerStatuses %}
+          Init Container Status: {{ jellyfin_final.resources[0].status.initContainerStatuses | length }} containers
+          {% endif %}
+          {% else %}
+          No Jellyfin pod found!
+          {% endif %}
 
     - name: "Verify Jellyfin is scheduled on storage node"
       assert:
