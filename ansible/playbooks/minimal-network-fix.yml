@@ -1,0 +1,346 @@
+---
+# VMStation Minimal Network Fix Playbook
+# Applies minimal CNI bridge fixes and deploys working network components
+
+- name: "VMStation CNI Bridge Fix and Network Deployment"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  vars:
+    # Use minimal manifests that fix CNI bridge issues
+    flannel_manifest: "{{ playbook_dir }}/../manifests/cni/flannel-minimal.yaml"
+    coredns_manifest: "{{ playbook_dir }}/../manifests/network/coredns-minimal.yaml"
+    kube_proxy_manifest: "{{ playbook_dir }}/../manifests/network/kube-proxy-minimal.yaml"
+    jellyfin_manifest: "{{ playbook_dir }}/../manifests/jellyfin/jellyfin-minimal.yaml"
+    
+  tasks:
+    - name: "Check if we're on the control plane"
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubeconfig_check
+      
+    - name: "Fail if not on control plane"
+      fail:
+        msg: "This playbook must run on the Kubernetes control plane node"
+      when: not kubeconfig_check.stat.exists
+      
+    - name: "Set KUBECONFIG environment"
+      set_fact:
+        ansible_env: "{{ ansible_env | combine({'KUBECONFIG': '/etc/kubernetes/admin.conf'}) }}"
+    
+    - name: "Display current cluster status"
+      block:
+        - name: "Get current nodes"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Node
+          register: current_nodes
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Show current cluster state"
+          debug:
+            msg: |
+              === Current Cluster State ===
+              Nodes: {{ current_nodes.resources | length }}
+              {% for node in current_nodes.resources %}
+              - {{ node.metadata.name }}: {{ node.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first | default('Unknown') }}
+              {% endfor %}
+
+    - name: "Reset CNI bridge on all nodes"
+      block:
+        - name: "Check for CNI bridge conflicts"
+          shell: |
+            # Check for CNI bridge IP conflicts
+            cni_conflicts=$(kubectl get events --all-namespaces --field-selector reason=FailedCreatePodSandBox 2>/dev/null | grep "failed to set bridge addr.*already has an IP address different" | wc -l || echo "0")
+            echo "CNI_CONFLICTS=$cni_conflicts"
+            
+            # Check CNI bridge IP if it exists
+            if ip addr show cni0 >/dev/null 2>&1; then
+              cni_ip=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+              echo "CNI_BRIDGE_IP=$cni_ip"
+              if [ -n "$cni_ip" ] && ! echo "$cni_ip" | grep -q "10.244."; then
+                echo "CNI_BRIDGE_WRONG=true"
+              else
+                echo "CNI_BRIDGE_WRONG=false"
+              fi
+            else
+              echo "CNI_BRIDGE_EXISTS=false"
+            fi
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: cni_status_check
+          
+        - name: "Parse CNI status"
+          set_fact:
+            cni_conflicts: "{{ cni_status_check.stdout | regex_search('CNI_CONFLICTS=([0-9]+)', '\\1') | first | int }}"
+            cni_bridge_wrong: "{{ 'CNI_BRIDGE_WRONG=true' in cni_status_check.stdout }}"
+            
+        - name: "Reset CNI bridge if needed"
+          block:
+            - name: "Stop kubelet temporarily"
+              systemd:
+                name: kubelet
+                state: stopped
+                
+            - name: "Kill container processes"
+              shell: |
+                pkill -f containerd-shim || true
+                pkill -f runc || true
+              ignore_errors: true
+              
+            - name: "Wait for processes to stop"
+              pause:
+                seconds: 10
+                
+            - name: "Delete CNI bridge if it has wrong IP"
+              shell: |
+                if ip link show cni0 >/dev/null 2>&1; then
+                  current_ip=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+                  if [ -n "$current_ip" ] && ! echo "$current_ip" | grep -q "10.244."; then
+                    echo "Deleting CNI bridge with wrong IP: $current_ip"
+                    ip link delete cni0 || true
+                  fi
+                fi
+              when: cni_bridge_wrong
+              
+            - name: "Clean up conflicting CNI configs"
+              file:
+                path: "{{ item }}"
+                state: absent
+              loop:
+                - /etc/cni/net.d/100-crio-bridge.conf
+                - /etc/cni/net.d/200-loopback.conf
+                - /etc/cni/net.d/87-podman-bridge.conflist
+              ignore_errors: true
+              
+            - name: "Clear iptables NAT rules"
+              shell: |
+                iptables -t nat -F POSTROUTING || true
+                iptables -t nat -F PREROUTING || true  
+                iptables -t filter -F FORWARD || true
+              ignore_errors: true
+              
+            - name: "Restart containerd"
+              systemd:
+                name: containerd
+                state: restarted
+                
+            - name: "Wait for containerd"
+              pause:
+                seconds: 10
+                
+            - name: "Start kubelet"
+              systemd:
+                name: kubelet
+                state: started
+                
+            - name: "Wait for kubelet to stabilize"
+              pause:
+                seconds: 15
+                
+          when: cni_conflicts > 0 or cni_bridge_wrong
+          
+        - name: "CNI bridge reset not needed"
+          debug:
+            msg: "CNI bridge appears to be correctly configured, skipping reset"
+          when: cni_conflicts == 0 and not cni_bridge_wrong
+
+    - name: "Deploy minimal network components"
+      block:
+        - name: "Remove existing network components"
+          kubernetes.core.k8s:
+            state: absent
+            definition:
+              apiVersion: "{{ item.api }}"
+              kind: "{{ item.kind }}"
+              metadata:
+                name: "{{ item.name }}"
+                namespace: "{{ item.namespace | default('kube-system') }}"
+          loop:
+            - { api: "apps/v1", kind: "DaemonSet", name: "kube-flannel-ds", namespace: "kube-flannel" }
+            - { api: "v1", kind: "Namespace", name: "kube-flannel" }
+            - { api: "apps/v1", kind: "Deployment", name: "coredns" }
+            - { api: "apps/v1", kind: "DaemonSet", name: "kube-proxy" }
+          ignore_errors: true
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Wait for cleanup"
+          pause:
+            seconds: 30
+            
+        - name: "Apply minimal flannel manifest"
+          kubernetes.core.k8s:
+            state: present
+            src: "{{ flannel_manifest }}"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Wait for flannel namespace"
+          pause:
+            seconds: 10
+            
+        - name: "Apply minimal kube-proxy manifest"
+          kubernetes.core.k8s:
+            state: present
+            src: "{{ kube_proxy_manifest }}"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Apply minimal CoreDNS manifest"
+          kubernetes.core.k8s:
+            state: present
+            src: "{{ coredns_manifest }}"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Wait for network components to stabilize"
+          pause:
+            seconds: 60
+
+    - name: "Wait for network components to be ready"
+      block:
+        - name: "Wait for flannel DaemonSet"
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: DaemonSet
+            name: kube-flannel-ds
+            namespace: kube-flannel
+            wait: true
+            wait_condition:
+              type: Ready
+            wait_timeout: 300
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
+          register: flannel_wait
+          
+        - name: "Wait for CoreDNS Deployment"
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: Deployment
+            name: coredns
+            namespace: kube-system
+            wait: true
+            wait_condition:
+              type: Available
+            wait_timeout: 300
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
+          register: coredns_wait
+          
+        - name: "Wait for kube-proxy DaemonSet"
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: DaemonSet
+            name: kube-proxy
+            namespace: kube-system
+            wait: true
+            wait_condition:
+              type: Ready
+            wait_timeout: 300
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
+          register: proxy_wait
+
+    - name: "Deploy Jellyfin with minimal manifest"
+      block:
+        - name: "Remove existing Jellyfin resources"
+          kubernetes.core.k8s:
+            state: absent
+            definition:
+              apiVersion: "{{ item.api }}"
+              kind: "{{ item.kind }}"
+              metadata:
+                name: "{{ item.name }}"
+                namespace: "{{ item.namespace }}"
+          loop:
+            - { api: "v1", kind: "Pod", name: "jellyfin", namespace: "jellyfin" }
+            - { api: "v1", kind: "Service", name: "jellyfin-service", namespace: "jellyfin" }
+          ignore_errors: true
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Wait for Jellyfin cleanup"
+          pause:
+            seconds: 15
+            
+        - name: "Apply minimal Jellyfin manifest"
+          kubernetes.core.k8s:
+            state: present
+            src: "{{ jellyfin_manifest }}"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+            
+        - name: "Wait for Jellyfin pod"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            name: jellyfin
+            namespace: jellyfin
+            wait: true
+            wait_condition:
+              type: Ready
+            wait_timeout: 300
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
+          register: jellyfin_wait
+
+    - name: "Verify deployment"
+      block:
+        - name: "Check final pod status"
+          shell: kubectl get pods --all-namespaces
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: final_pods
+          
+        - name: "Check for stuck pods"
+          shell: kubectl get pods --all-namespaces | grep -E "(ContainerCreating|Pending|CrashLoopBackOff)" | wc -l
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: stuck_pods
+          
+        - name: "Check CNI bridge final status"
+          shell: |
+            if ip addr show cni0 >/dev/null 2>&1; then
+              cni_ip=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+              echo "CNI Bridge IP: $cni_ip"
+              if echo "$cni_ip" | grep -q "10.244."; then
+                echo "CNI_BRIDGE_STATUS=CORRECT"
+              else
+                echo "CNI_BRIDGE_STATUS=WRONG"
+              fi
+            else
+              echo "CNI_BRIDGE_STATUS=MISSING"
+            fi
+          register: final_cni_status
+          
+        - name: "Display deployment results"
+          debug:
+            msg: |
+              === VMStation Deployment Results ===
+              
+              Network Components:
+              - Flannel DaemonSet: {{ 'Ready' if not flannel_wait.failed else 'Failed' }}
+              - CoreDNS Deployment: {{ 'Ready' if not coredns_wait.failed else 'Failed' }}
+              - kube-proxy DaemonSet: {{ 'Ready' if not proxy_wait.failed else 'Failed' }}
+              
+              Applications:
+              - Jellyfin Pod: {{ 'Ready' if not jellyfin_wait.failed else 'Failed' }}
+              
+              Cluster Health:
+              - Stuck pods: {{ stuck_pods.stdout | default('Unknown') }}
+              - CNI Bridge: {{ 'CORRECT' if 'CNI_BRIDGE_STATUS=CORRECT' in final_cni_status.stdout else 'ISSUES' }}
+              
+              Access URLs:
+              - Jellyfin: http://192.168.4.61:30096
+              
+              {{ '✅ Deployment completed successfully!' if stuck_pods.stdout | int == 0 else '⚠️ Some pods may still be starting' }}
+              
+        - name: "Show detailed pod status"
+          debug:
+            var: final_pods.stdout_lines

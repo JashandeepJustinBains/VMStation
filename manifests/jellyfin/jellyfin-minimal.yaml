@@ -1,0 +1,106 @@
+---
+# Minimal Jellyfin deployment for VMStation
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jellyfin
+  labels:
+    name: jellyfin
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jellyfin
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+spec:
+  # Schedule on storage node explicitly
+  nodeSelector:
+    kubernetes.io/hostname: storagenodet3500
+  containers:
+  - name: jellyfin
+    image: jellyfin/jellyfin:latest
+    imagePullPolicy: IfNotPresent
+    ports:
+    - containerPort: 8096
+      name: http
+    env:
+    - name: JELLYFIN_PublishedServerUrl
+      value: "http://192.168.4.61:30096"
+    - name: JELLYFIN_HTTP_BIND_ADDRESS
+      value: "0.0.0.0"
+    - name: JELLYFIN_HTTP_PORT
+      value: "8096"
+    volumeMounts:
+    - name: jellyfin-config
+      mountPath: /config
+    - name: jellyfin-cache
+      mountPath: /cache
+    - name: jellyfin-media
+      mountPath: /media
+      readOnly: true
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+    # Simple health checks
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8096
+      initialDelaySeconds: 300
+      periodSeconds: 60
+      timeoutSeconds: 30
+      failureThreshold: 5
+    readinessProbe:
+      httpGet:
+        path: /health
+        port: 8096
+      initialDelaySeconds: 240
+      periodSeconds: 30
+      timeoutSeconds: 15
+      failureThreshold: 10
+    startupProbe:
+      httpGet:
+        path: /health
+        port: 8096
+      initialDelaySeconds: 180
+      periodSeconds: 15
+      timeoutSeconds: 10
+      failureThreshold: 40
+  # Use hostPath volumes directly
+  volumes:
+  - name: jellyfin-config
+    hostPath:
+      path: /var/lib/jellyfin
+      type: DirectoryOrCreate
+  - name: jellyfin-cache
+    emptyDir:
+      sizeLimit: 10Gi
+  - name: jellyfin-media
+    hostPath:
+      path: /srv/media
+      type: DirectoryOrCreate
+  restartPolicy: Always
+---
+# Jellyfin Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-service
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+spec:
+  type: NodePort
+  ports:
+  - port: 8096
+    targetPort: 8096
+    nodePort: 30096
+    name: http
+  selector:
+    app: jellyfin
