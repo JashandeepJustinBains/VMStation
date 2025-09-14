@@ -7,6 +7,29 @@ metadata:
     k8s-app: kube-dns
 data:
   Corefile: |
+    # VMStation homelab.com domain configuration
+    homelab.com:53 {
+        errors
+        health {
+            lameduck 5s
+        }
+        ready
+        # Static host mappings for homelab.com subdomains
+        hosts {
+            192.168.4.61 jellyfin.homelab.com storage.homelab.com
+            192.168.4.62 compute.homelab.com
+            192.168.4.63 grafana.homelab.com control.homelab.com
+            # Fallback for any other homelab.com subdomain
+            fallthrough
+        }
+        prometheus :9153
+        cache 30
+        loop
+        reload
+        loadbalance
+    }
+    
+    # Default Kubernetes cluster configuration
     .:53 {
         errors
         health {
