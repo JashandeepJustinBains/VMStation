@@ -1,0 +1,123 @@
+# Enhanced Flannel CNI Configuration for VMStation
+# Addresses CNI bridge IP conflicts and ensures proper network setup
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flannel-cni-config
+  namespace: kube-flannel
+  labels:
+    app: flannel
+    tier: node
+data:
+  # CNI configuration that prevents bridge IP conflicts
+  cni-conf.json: |
+    {
+      "name": "cbr0",
+      "cniVersion": "0.3.1",
+      "plugins": [
+        {
+          "type": "flannel",
+          "delegate": {
+            "hairpinMode": true,
+            "isDefaultGateway": true
+          }
+        },
+        {
+          "type": "portmap",
+          "capabilities": {
+            "portMappings": true
+          }
+        }
+      ]
+    }
+  
+  # Bridge cleanup script for DaemonSet init container
+  bridge-cleanup.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "=== Flannel CNI Bridge Cleanup ==="
+    echo "Node: $(hostname)"
+    echo "Timestamp: $(date)"
+    
+    # Function to safely cleanup conflicting bridges
+    cleanup_conflicting_bridges() {
+        # Check for existing cni0 bridge that might conflict
+        if ip link show cni0 >/dev/null 2>&1; then
+            current_ip=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+            echo "Found existing cni0 bridge with IP: ${current_ip:-none}"
+            
+            # Get the expected subnet for this node from annotations
+            expected_subnet=""
+            for i in {1..30}; do
+                expected_subnet=$(kubectl get node $(hostname) -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' 2>/dev/null || echo "")
+                if [ -n "$expected_subnet" ]; then
+                    break
+                fi
+                echo "Waiting for node subnet annotation... (attempt $i/30)"
+                sleep 2
+            done
+            
+            if [ -n "$expected_subnet" ]; then
+                expected_bridge_ip=$(echo "$expected_subnet" | sed 's/\.0\/24/.1\/24/')
+                echo "Expected bridge IP for this node: $expected_bridge_ip"
+                
+                # Check if current bridge IP matches expected
+                if [ -n "$current_ip" ] && [ "$current_ip" != "$expected_bridge_ip" ]; then
+                    echo "Bridge IP conflict detected: current=$current_ip, expected=$expected_bridge_ip"
+                    echo "Removing conflicting bridge..."
+                    ip link set cni0 down 2>/dev/null || true
+                    ip link delete cni0 2>/dev/null || true
+                    echo "Conflicting bridge removed"
+                else
+                    echo "Bridge IP is correct or will be configured by Flannel"
+                fi
+            else
+                echo "WARNING: No subnet annotation found for node - removing bridge to allow Flannel to configure"
+                ip link set cni0 down 2>/dev/null || true
+                ip link delete cni0 2>/dev/null || true
+            fi
+        else
+            echo "No existing cni0 bridge found - clean state"
+        fi
+        
+        # Cleanup any stale CNI network state
+        if [ -d "/var/lib/cni/networks" ]; then
+            echo "Cleaning stale CNI network state..."
+            find /var/lib/cni/networks -name "cni0" -type f -delete 2>/dev/null || true
+        fi
+        
+        echo "Bridge cleanup completed"
+    }
+    
+    # Only run cleanup if we're not already running Flannel
+    if ! pgrep -f "flannel" >/dev/null 2>&1; then
+        cleanup_conflicting_bridges
+    else
+        echo "Flannel already running - skipping cleanup"
+    fi
+    
+    echo "=== CNI Bridge Cleanup Complete ==="
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flannel-network-config
+  namespace: kube-flannel
+  labels:
+    app: flannel
+    tier: node
+data:
+  # Enhanced network configuration with proper subnet management
+  net-conf.json: |
+    {
+      "Network": "10.244.0.0/16",
+      "Backend": {
+        "Type": "vxlan",
+        "Port": 8472
+      },
+      "EnableIPv4": true,
+      "EnableIPv6": false
+    }

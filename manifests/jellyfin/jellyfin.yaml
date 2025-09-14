@@ -8,9 +8,9 @@ metadata:
     name: jellyfin
     vmstation.io/component: media
 ---
-# Jellyfin Pod (using hostPath volumes instead of PVCs)
-apiVersion: v1
-kind: Pod
+# Jellyfin Deployment with Enhanced Networking and Health Checks
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: jellyfin
   namespace: jellyfin
@@ -18,102 +18,192 @@ metadata:
     app: jellyfin
     component: media-server
 spec:
-  # Schedule on storage node explicitly
-  nodeSelector:
-    kubernetes.io/hostname: storagenodet3500
-  # Security context: Run as non-root user for better security
-  securityContext:
-    runAsUser: 1000
-    runAsGroup: 1000
-    fsGroup: 1000
-    # Removed seccompProfile: RuntimeDefault to allow network access for probes
-  containers:
-  - name: jellyfin
-    image: jellyfin/jellyfin:latest
-    imagePullPolicy: IfNotPresent
-    ports:
-    - containerPort: 8096
-      name: http
-    - containerPort: 8920
-      name: https
-    - containerPort: 1900
-      name: dlna
-      protocol: UDP
-    - containerPort: 7359
-      name: discovery
-      protocol: UDP
-    env:
-    - name: JELLYFIN_PublishedServerUrl
-      value: "http://192.168.4.61:30096"
-    - name: JELLYFIN_HTTP_BIND_ADDRESS
-      value: "0.0.0.0"
-    - name: JELLYFIN_HTTP_PORT
-      value: "8096"
-    volumeMounts:
-    - name: jellyfin-config
-      mountPath: /config
-    - name: jellyfin-cache
-      mountPath: /cache
-    - name: jellyfin-media
-      mountPath: /media
-      readOnly: true
-    resources:
-      requests:
-        cpu: 500m
-        memory: 512Mi
-      limits:
-        cpu: "2"
-        memory: 2Gi
-    # Health checks using root endpoint for better compatibility
-    # Extended timeouts to handle potential network routing delays in mixed OS clusters
-    livenessProbe:
-      httpGet:
-        path: /
-        port: 8096
-        scheme: HTTP
-      initialDelaySeconds: 240
-      periodSeconds: 60
-      timeoutSeconds: 30
-      failureThreshold: 5
-    readinessProbe:
-      httpGet:
-        path: /
-        port: 8096
-        scheme: HTTP
-      initialDelaySeconds: 180
-      periodSeconds: 30
-      timeoutSeconds: 15
-      failureThreshold: 10
-    startupProbe:
-      httpGet:
-        path: /
-        port: 8096
-        scheme: HTTP
-      initialDelaySeconds: 120
-      periodSeconds: 15
-      timeoutSeconds: 10
-      # Increased failure threshold to handle CNI networking delays in mixed OS
-      failureThreshold: 30
-    securityContext:
-      allowPrivilegeEscalation: false
-      readOnlyRootFilesystem: false
-      capabilities:
-        drop:
-        - ALL
-  # Use hostPath volumes directly (no PVCs needed)
-  volumes:
-  - name: jellyfin-config
-    hostPath:
-      path: /var/lib/jellyfin
-      type: DirectoryOrCreate
-  - name: jellyfin-cache
-    emptyDir:
-      sizeLimit: 10Gi
-  - name: jellyfin-media
-    hostPath:
-      path: /srv/media
-      type: DirectoryOrCreate
-  restartPolicy: Always
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensure only one instance due to hostPath volumes
+  selector:
+    matchLabels:
+      app: jellyfin
+      component: media-server
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+        component: media-server
+      annotations:
+        # Annotations to help with networking troubleshooting
+        vmstation.io/node-selector: "storagenodet3500"
+        vmstation.io/requires-host-storage: "true"
+    spec:
+      # Enhanced scheduling constraints
+      nodeSelector:
+        kubernetes.io/hostname: storagenodet3500
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values: ["storagenodet3500"]
+      # Init container to ensure proper directory setup and permissions
+      initContainers:
+      - name: setup-directories
+        image: busybox:1.35
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Setting up Jellyfin directories..."
+          
+          # Create directories if they don't exist
+          mkdir -p /media /config /cache
+          
+          # Ensure correct ownership (will be 1000:1000 in the main container)
+          # Note: This init container runs as root to set up permissions
+          chown -R 1000:1000 /config /cache 2>/dev/null || true
+          chmod -R 755 /config /cache /media 2>/dev/null || true
+          
+          # Test directory access
+          ls -la /media /config /cache
+          
+          echo "Directory setup completed"
+        securityContext:
+          runAsUser: 0  # Run as root to set up permissions
+        volumeMounts:
+        - name: jellyfin-config
+          mountPath: /config
+        - name: jellyfin-cache
+          mountPath: /cache
+        - name: jellyfin-media
+          mountPath: /media
+      # Security context: Run as non-root user for better security
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: jellyfin
+        image: jellyfin/jellyfin:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8096
+          name: http
+        - containerPort: 8920
+          name: https
+        - containerPort: 1900
+          name: dlna
+          protocol: UDP
+        - containerPort: 7359
+          name: discovery
+          protocol: UDP
+        env:
+        - name: JELLYFIN_PublishedServerUrl
+          value: "http://192.168.4.61:30096"
+        - name: JELLYFIN_HTTP_BIND_ADDRESS
+          value: "0.0.0.0"
+        - name: JELLYFIN_HTTP_PORT
+          value: "8096"
+        # Add network debugging environment variables
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: jellyfin-config
+          mountPath: /config
+        - name: jellyfin-cache
+          mountPath: /cache
+        - name: jellyfin-media
+          mountPath: /media
+          readOnly: true
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        # Enhanced health checks with network validation
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8096
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-Liveness-Probe"
+          initialDelaySeconds: 300  # Increased for network setup time
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 5
+          successThreshold: 1
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8096
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-Readiness-Probe"
+          initialDelaySeconds: 180
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 10
+          successThreshold: 1
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8096
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-Startup-Probe"
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          timeoutSeconds: 10
+          # Increased failure threshold to handle CNI networking delays
+          failureThreshold: 40  # 40 * 15s = 10 minutes max startup time
+          successThreshold: 1
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+      # Use hostPath volumes directly (no PVCs needed)
+      volumes:
+      - name: jellyfin-config
+        hostPath:
+          path: /var/lib/jellyfin
+          type: DirectoryOrCreate
+      - name: jellyfin-cache
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: jellyfin-media
+        hostPath:
+          path: /srv/media
+          type: DirectoryOrCreate
+      restartPolicy: Always
+      # DNS configuration to ensure proper name resolution
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+        - name: edns0
 ---
 # Jellyfin Service
 apiVersion: v1
