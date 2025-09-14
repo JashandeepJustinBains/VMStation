@@ -423,6 +423,25 @@
         fail_msg: "Jellyfin pod is not scheduled on the storage node"
         success_msg: "✅ Jellyfin correctly scheduled on storage node"
 
+    - name: "Wait for Jellyfin container to be ready (not just running)"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: jellyfin
+        label_selectors:
+          - app=jellyfin
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: jellyfin_ready_check
+      until: >
+        jellyfin_ready_check.resources | length > 0 and
+        jellyfin_ready_check.resources[0].status.phase == 'Running' and
+        jellyfin_ready_check.resources[0].status.containerStatuses is defined and
+        jellyfin_ready_check.resources[0].status.containerStatuses | length > 0 and
+        jellyfin_ready_check.resources[0].status.containerStatuses[0].ready == true
+      retries: 20
+      delay: 15
+      failed_when: false
+
     - name: "Test Jellyfin web interface"
       uri:
         url: "http://192.168.4.61:30096/"
