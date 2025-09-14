@@ -32,25 +32,8 @@ spec:
     runAsGroup: 1000
     fsGroup: 1000
     # Removed seccompProfile: RuntimeDefault to allow network access for probes
-  # Add init container for network validation
-  initContainers:
-  - name: network-init
-    image: busybox:1.35
-    command: ['sh', '-c']
-    args:
-    - |
-      echo "=== VMStation Jellyfin Network Initialization ==="
-      echo "Pod IP: $(hostname -i)"
-      echo "Hostname: $(hostname)"
-      echo "DNS resolution test:"
-      nslookup kubernetes.default.svc.cluster.local || echo "DNS resolution failed"
-      echo "Network interface check:"
-      ip addr show || ifconfig -a
-      echo "Route table:"
-      ip route || route -n
-      echo "Network initialization complete"
-    securityContext:
-      runAsUser: 0  # Need root for network debugging
+  # Removed init container to prevent chicken-and-egg networking issue
+  # The init container was preventing pod startup when CNI networking had issues
   containers:
   - name: jellyfin
     image: jellyfin/jellyfin:latest
