@@ -71,7 +71,7 @@ if [ "$ISSUES_FOUND" = "true" ]; then
     echo "  ./scripts/fix_coredns_unknown_status.sh"
     echo
     echo "Or integrate into deployment:"
-    echo "  ./deploy.sh full && ./scripts/fix_coredns_unknown_status.sh"
+    echo "  ./deploy-cluster.sh full && ./scripts/fix_coredns_unknown_status.sh"
     exit 1
 else
     info "CoreDNS appears to be working correctly"

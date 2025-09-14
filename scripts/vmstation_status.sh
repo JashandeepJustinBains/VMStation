@@ -141,7 +141,7 @@ if [ "$HAS_PROBLEMS" = "true" ] || [ "$HAS_STUCK_PODS" = "true" ]; then
     echo "   ./scripts/fix_coredns_unknown_status.sh"
     echo
     echo "4. For fresh deployment after fixes:"
-    echo "   ./deploy.sh apps"
+    echo "   ./deploy-cluster.sh apps"
     echo
     echo "5. Monitor progress:"
     echo "   watch kubectl get pods --all-namespaces"
@@ -156,7 +156,7 @@ else
     echo
     echo "Optional actions:"
     echo "1. Deploy applications if not already deployed:"
-    echo "   ./deploy.sh apps"
+    echo "   ./deploy-cluster.sh apps"
     echo
     echo "2. Check specific application status:"
     echo "   kubectl get pods -n monitoring"

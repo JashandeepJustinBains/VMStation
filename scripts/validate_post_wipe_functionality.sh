@@ -121,13 +121,13 @@ else
     exit 1
 fi
 
-# Test 6: Validate deploy.sh integration
-info "Test 6: Validating deploy.sh integration..."
+# Test 6: Validate deploy-cluster.sh integration
+info "Test 6: Validating deploy-cluster.sh integration..."
 
-if grep -q "cluster" deploy.sh && grep -q "setup-cluster.yaml" deploy.sh; then
-    info "✓ deploy.sh integrates with enhanced cluster setup"
+if grep -q "cluster" deploy-cluster.sh && grep -q "setup-cluster.yaml" deploy-cluster.sh; then
+    info "✓ deploy-cluster.sh integrates with enhanced cluster setup"
 else
-    error "✗ deploy.sh missing cluster setup integration"
+    error "✗ deploy-cluster.sh missing cluster setup integration"
     exit 1
 fi
 
@@ -188,12 +188,12 @@ info "✓ Control-plane readiness validation"
 info "✓ Enhanced pre-join and post-join validation"
 info "✓ Standalone mode prevention and verification"
 info "✓ Comprehensive documentation and usage instructions"
-info "✓ Full integration with deploy.sh cluster deployment"
+info "✓ Full integration with deploy-cluster.sh cluster deployment"
 echo ""
 info "🎉 The enhanced post-wipe worker join functionality is ready!"
 echo ""
 info "Usage after aggressive worker wipe:"
 info "  1. Run aggressive_worker_wipe_preserve_storage.sh on each worker"
-info "  2. From master node: ./deploy.sh cluster"
+info "  2. From master node: ./deploy-cluster.sh cluster"
 info "  3. Workers will automatically be detected as post-wipe and joined cleanly"
 echo ""
