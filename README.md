@@ -448,6 +448,7 @@ kubectl apply --dry-run=client -f k8s/
 - **Pod diagnostics**: `./scripts/diagnose_remaining_pod_issues.sh` - **NEW!** Detailed analysis of pod failures
 - **Service enablement**: `./scripts/fix_kubernetes_service_enablement.sh` - **NEW!** Enables disabled kubelet/containerd services
 - **CNI bridge conflicts**: `./scripts/fix_cni_bridge_conflict.sh` - **NEW!** Fixes CNI bridge IP conflicts causing ContainerCreating errors
+- **CNI bridge reset**: `sudo ./scripts/reset_cni_bridge.sh` - **NEW!** Quick reset for "cni0 already has IP address different from 10.244.x.x" errors
 - **RHEL 10 compatibility**: `./scripts/check_rhel10_compatibility.sh`
 - **RHEL 10 fixes validation**: `./scripts/validate_rhel10_fixes.sh`
 - **Cluster validation**: `./scripts/validate_k8s_monitoring.sh`
@@ -590,20 +591,25 @@ If CoreDNS pods show "Unknown" status with no IP after running `deploy.sh full`:
 #### CNI Bridge IP Conflicts ⚡ **NEW!**
 If pods are stuck in ContainerCreating due to CNI bridge IP conflicts:
 ```bash
-# Check for CNI bridge conflicts
-./scripts/check_cni_bridge_conflict.sh
+# Quick validation to detect CNI bridge conflicts
+./scripts/validate_network_prerequisites.sh
 
-# Fix CNI bridge IP conflicts 
+# Quick reset for CNI bridge IP conflicts (recommended)
+sudo ./scripts/reset_cni_bridge.sh
+
+# Alternative comprehensive fix 
 ./scripts/fix_cni_bridge_conflict.sh
 
 # This fixes:
 # - Pods stuck in "ContainerCreating" state
+# - "cni0 already has an IP address different from 10.244.x.x" errors
 # - CNI bridge (cni0) IP address conflicts with Flannel subnet
 # - "failed to set bridge addr" errors in pod events
 # - Automatic integration with existing fix scripts
 ```
 
 📖 **Documentation**: 
+- **Quick CNI reset**: [docs/CNI_BRIDGE_RESET.md](./docs/CNI_BRIDGE_RESET.md) - Fast targeted fix
 - CoreDNS scheduling fixes: [docs/COREDNS_MASTERNODE_ENFORCEMENT.md](./docs/COREDNS_MASTERNODE_ENFORCEMENT.md)
 - CoreDNS unknown status: [docs/COREDNS_UNKNOWN_STATUS_FIX.md](./docs/COREDNS_UNKNOWN_STATUS_FIX.md)
 

@@ -34,6 +34,22 @@ fi
 check_cni_bridge() {
     info "Step 1: Checking CNI bridge configuration"
     
+    # Check for specific CNI bridge conflict errors in recent events
+    CNI_BRIDGE_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' 2>/dev/null | \
+        grep -i "failed to set bridge addr.*cni0.*already has an IP address different from" | wc -l)
+    
+    if [ "$CNI_BRIDGE_ERRORS" -gt 0 ]; then
+        error "✗ Detected CNI bridge IP conflicts in recent events"
+        warn "Error pattern: 'cni0 already has an IP address different from 10.244.x.x/xx'"
+        warn "This is exactly the issue preventing pod creation"
+        echo "Recent CNI bridge errors:"
+        kubectl get events --all-namespaces --sort-by='.lastTimestamp' 2>/dev/null | \
+            grep -i "failed to set bridge addr.*cni0" | tail -3
+        echo
+        warn "SOLUTION: Run 'sudo ./scripts/reset_cni_bridge.sh' to fix this issue"
+        return 1
+    fi
+    
     if ip addr show cni0 >/dev/null 2>&1; then
         CNI_IP=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
         info "Current cni0 bridge IP: $CNI_IP"
@@ -44,6 +60,7 @@ check_cni_bridge() {
         else
             warn "✗ cni0 bridge IP ($CNI_IP) is not in Flannel subnet (10.244.0.0/16)"
             warn "This will cause pod IP assignment failures"
+            warn "SOLUTION: Run 'sudo ./scripts/reset_cni_bridge.sh' to fix this issue"
             return 1
         fi
     else
@@ -214,10 +231,26 @@ check_stuck_pods() {
         warn "Found $STUCK_PODS pods in problematic states:"
         kubectl get pods --all-namespaces | grep -E "ContainerCreating|Pending|ImagePullBackOff" | head -5
         
-        # Check for specific networking errors
-        NETWORK_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to create pod sandbox\|network plugin is not ready\|cni\|failed to set bridge addr" | wc -l)
-        if [ "$NETWORK_ERRORS" -gt 0 ]; then
-            warn "Found $NETWORK_ERRORS networking-related events"
+        # Check for specific CNI bridge IP conflict errors (the exact issue from problem statement)
+        CNI_BRIDGE_CONFLICTS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' 2>/dev/null | \
+            grep -i "failed to set bridge addr.*cni0.*already has an IP address different from" | wc -l)
+        
+        if [ "$CNI_BRIDGE_CONFLICTS" -gt 0 ]; then
+            error "✗ DETECTED CNI BRIDGE IP CONFLICTS - this is the exact issue from your error!"
+            warn "Error: cni0 already has an IP address different from 10.244.x.x/xx"
+            echo "Recent CNI bridge conflict events:"
+            kubectl get events --all-namespaces --sort-by='.lastTimestamp' 2>/dev/null | \
+                grep -i "failed to set bridge addr.*cni0" | tail -2
+            echo
+            warn "🔧 IMMEDIATE FIX: Run 'sudo ./scripts/reset_cni_bridge.sh'"
+            warn "This will reset the CNI bridge to align with kube-flannel configuration"
+        fi
+        
+        # Check for other networking errors  
+        OTHER_NETWORK_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' | \
+            grep -i "failed to create pod sandbox\|network plugin is not ready" | grep -v "failed to set bridge addr" | wc -l)
+        if [ "$OTHER_NETWORK_ERRORS" -gt 0 ]; then
+            warn "Found $OTHER_NETWORK_ERRORS other networking-related events"
         fi
         
         return 1
@@ -309,10 +342,11 @@ main() {
         done
         echo
         echo "Recommended actions:"
-        echo "  1. Run ./scripts/fix_cni_bridge_conflict.sh if CNI bridge issues found"
-        echo "  2. Run ./scripts/fix_homelab_node_issues.sh for node-specific problems"
-        echo "  3. Check flannel and kube-proxy logs: kubectl logs -n kube-flannel <pod-name>"
-        echo "  4. Ensure all nodes have proper network connectivity"
+        echo "  1. Run sudo ./scripts/reset_cni_bridge.sh if CNI bridge conflicts detected"
+        echo "  2. Run ./scripts/fix_cni_bridge_conflict.sh for comprehensive CNI fixes"
+        echo "  3. Run ./scripts/fix_homelab_node_issues.sh for node-specific problems"
+        echo "  4. Check flannel and kube-proxy logs: kubectl logs -n kube-flannel <pod-name>"
+        echo "  5. Ensure all nodes have proper network connectivity"
         echo
         echo "After addressing issues, re-run this validation script"
     fi
