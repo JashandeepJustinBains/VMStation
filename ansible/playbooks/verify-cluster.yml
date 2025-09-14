@@ -286,7 +286,7 @@
       until: >
         jellyfin_pods.resources | length > 0 and
         jellyfin_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
-      retries: 45  # Increased from 30 to allow for network fixes
+      retries: 15  # Increased from 30 to allow for network fixes
       delay: 15    # Increased delay for network stabilization
       failed_when: false  # Don't fail immediately, allow for diagnosis
 
