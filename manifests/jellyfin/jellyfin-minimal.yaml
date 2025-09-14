@@ -50,7 +50,7 @@ spec:
     # Simple health checks
     livenessProbe:
       httpGet:
-        path: /health
+        path: /
         port: 8096
       initialDelaySeconds: 300
       periodSeconds: 60
@@ -58,7 +58,7 @@ spec:
       failureThreshold: 5
     readinessProbe:
       httpGet:
-        path: /health
+        path: /
         port: 8096
       initialDelaySeconds: 240
       periodSeconds: 30
@@ -66,7 +66,7 @@ spec:
       failureThreshold: 10
     startupProbe:
       httpGet:
-        path: /health
+        path: /
         port: 8096
       initialDelaySeconds: 180
       periodSeconds: 15
