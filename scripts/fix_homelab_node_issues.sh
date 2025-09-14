@@ -74,10 +74,17 @@ fi
 # Step 2: Check and fix flannel pod on homelab
 info "Step 2: Fixing flannel pod issues on homelab"
 
-FLANNEL_POD=$(kubectl get pods -n kube-flannel -o wide | grep "homelab" | grep "CrashLoopBackOff" | awk '{print $1}' | head -1)
+# Check for both CrashLoopBackOff and Completed status (flannel should never complete)
+FLANNEL_POD=$(kubectl get pods -n kube-flannel -o wide | grep "homelab" | grep -E "(CrashLoopBackOff|Completed)" | awk '{print $1}' | head -1)
+FLANNEL_STATUS=$(kubectl get pods -n kube-flannel -o wide | grep "homelab" | awk '{print $3}' | head -1)
 
 if [ -n "$FLANNEL_POD" ]; then
-    warn "Deleting crashlooping flannel pod: $FLANNEL_POD"
+    warn "Found problematic flannel pod: $FLANNEL_POD (Status: $FLANNEL_STATUS)"
+    if [ "$FLANNEL_STATUS" = "Completed" ]; then
+        warn "Flannel pod completed instead of running continuously - this indicates a configuration issue"
+    fi
+    
+    warn "Deleting problematic flannel pod: $FLANNEL_POD"
     kubectl delete pod -n kube-flannel "$FLANNEL_POD" --force --grace-period=0
     
     echo "Waiting for flannel to recreate..."
@@ -91,11 +98,21 @@ if [ -n "$FLANNEL_POD" ]; then
             break
         else
             echo "  Waiting for flannel pod... ($i/6) Status: $NEW_FLANNEL_STATUS"
+            if [ "$NEW_FLANNEL_STATUS" = "Completed" ]; then
+                warn "Flannel completed again - may need CNI configuration fix"
+            fi
             sleep 10
         fi
     done
 else
-    info "No crashlooping flannel pods found on homelab"
+    # Still check if flannel is actually running properly
+    if [ "$FLANNEL_STATUS" = "Running" ]; then
+        info "✓ Flannel pod on homelab is running"
+    elif [ -z "$FLANNEL_STATUS" ]; then
+        warn "No flannel pod found on homelab node"
+    else
+        info "Flannel pod status on homelab: $FLANNEL_STATUS"
+    fi
 fi
 
 # Step 3: Check and fix kube-proxy on homelab
@@ -104,25 +121,59 @@ info "Step 3: Fixing kube-proxy issues on homelab"
 PROXY_POD=$(kubectl get pods -n kube-system -o wide | grep "kube-proxy" | grep "homelab" | grep "CrashLoopBackOff" | awk '{print $1}' | head -1)
 
 if [ -n "$PROXY_POD" ]; then
+    warn "Found crashlooping kube-proxy pod: $PROXY_POD"
+    
+    # Get logs to understand the crash reason
+    echo "Analyzing kube-proxy crash logs..."
+    CRASH_LOGS=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=20 2>/dev/null || echo "No previous logs available")
+    echo "Recent crash logs:"
+    echo "$CRASH_LOGS"
+    
+    # Check for specific error patterns
+    if echo "$CRASH_LOGS" | grep -qi "iptables.*failed\|nftables.*incompatible"; then
+        warn "Detected iptables/nftables compatibility issues"
+        # May need to apply compatibility fixes first
+    fi
+    
     warn "Deleting crashlooping kube-proxy pod: $PROXY_POD"
     kubectl delete pod -n kube-system "$PROXY_POD" --force --grace-period=0
     
     echo "Waiting for kube-proxy to recreate..."
     sleep 15
     
-    # Check if new pod is running
-    for i in {1..6}; do
+    # Check if new pod is running with more patience for networking issues
+    for i in {1..10}; do
         NEW_PROXY_STATUS=$(kubectl get pods -n kube-system -o wide | grep "kube-proxy" | grep "homelab" | awk '{print $3}' | head -1)
         if [ "$NEW_PROXY_STATUS" = "Running" ]; then
             info "✓ kube-proxy pod on homelab is now running"
             break
+        elif [ "$NEW_PROXY_STATUS" = "CrashLoopBackOff" ]; then
+            if [ "$i" -ge 5 ]; then
+                warn "kube-proxy still crashing after $i attempts - may need additional intervention"
+                # Get the new pod name and check logs again
+                NEW_PROXY_POD=$(kubectl get pods -n kube-system -o wide | grep "kube-proxy" | grep "homelab" | awk '{print $1}' | head -1)
+                if [ -n "$NEW_PROXY_POD" ]; then
+                    echo "New crash logs:"
+                    kubectl logs -n kube-system "$NEW_PROXY_POD" --previous --tail=10 2>/dev/null || echo "No new logs available"
+                fi
+            fi
+            echo "  kube-proxy still crashing... ($i/10) Status: $NEW_PROXY_STATUS"
+            sleep 15
         else
-            echo "  Waiting for kube-proxy pod... ($i/6) Status: $NEW_PROXY_STATUS"
+            echo "  Waiting for kube-proxy pod... ($i/10) Status: $NEW_PROXY_STATUS"
             sleep 10
         fi
     done
 else
-    info "No crashlooping kube-proxy pods found on homelab"
+    # Check if kube-proxy exists and is running
+    PROXY_STATUS=$(kubectl get pods -n kube-system -o wide | grep "kube-proxy" | grep "homelab" | awk '{print $3}' | head -1)
+    if [ "$PROXY_STATUS" = "Running" ]; then
+        info "✓ kube-proxy pod on homelab is running"
+    elif [ -z "$PROXY_STATUS" ]; then
+        warn "No kube-proxy pod found on homelab node"
+    else
+        info "kube-proxy pod status on homelab: $PROXY_STATUS"
+    fi
 fi
 
 # Step 4: Fix CoreDNS scheduling to prefer masternode
@@ -232,10 +283,15 @@ info "=== Homelab Node Issue Remediation Complete ==="
 
 # Final status check
 REMAINING_ISSUES=$(kubectl get pods --all-namespaces | grep -E "(CrashLoopBackOff|Error|Unknown)" | grep -v "Completed" | wc -l)
+COMPLETED_FLANNEL=$(kubectl get pods -n kube-flannel | grep "Completed" | wc -l)
 
-if [ "$REMAINING_ISSUES" -eq 0 ]; then
-    info "✅ No remaining crashlooping pods detected"
+if [ "$REMAINING_ISSUES" -eq 0 ] && [ "$COMPLETED_FLANNEL" -eq 0 ]; then
+    info "✅ No remaining crashlooping or problematic pods detected"
     echo "Cluster networking should now be stable for application deployment."
+elif [ "$COMPLETED_FLANNEL" -gt 0 ]; then
+    warn "⚠️  Found $COMPLETED_FLANNEL flannel pods in Completed state - this indicates CNI configuration issues"
+    kubectl get pods -n kube-flannel | grep "Completed"
+    echo "Flannel pods should be Running continuously. Consider running the CNI bridge fix script."
 else
     warn "⚠️  $REMAINING_ISSUES pods still have issues - running additional fixes"
     
