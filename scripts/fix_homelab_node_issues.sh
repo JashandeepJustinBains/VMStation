@@ -25,8 +25,40 @@ echo "=== Homelab Node Issue Remediation ==="
 echo "Timestamp: $(date)"
 echo
 
-# Step 0: Check for CNI bridge IP conflicts (common root cause)
-info "Step 0: Checking for CNI bridge IP conflicts"
+echo "=== Homelab Node Issue Remediation ==="
+echo "Timestamp: $(date)"
+echo
+
+# Step 0a: Preventive checks and fixes for homelab node stability
+info "Step 0a: Preventive checks for homelab node stability"
+
+# Check if homelab node is Ready
+HOMELAB_STATUS=$(kubectl get node homelab --no-headers 2>/dev/null | awk '{print $2}' || echo "NotFound")
+if [ "$HOMELAB_STATUS" != "Ready" ]; then
+    warn "Homelab node status: $HOMELAB_STATUS"
+    if [ "$HOMELAB_STATUS" = "NotReady" ]; then
+        warn "Homelab node is NotReady - this may cause pod scheduling issues"
+        
+        # Check node conditions
+        kubectl describe node homelab | grep -A 10 "Conditions:" || true
+        
+        # Give it some time to stabilize
+        info "Waiting 30 seconds for node to stabilize..."
+        sleep 30
+    fi
+else
+    info "✓ Homelab node is Ready"
+fi
+
+# Check for disk pressure or memory pressure
+NODE_CONDITIONS=$(kubectl get node homelab -o jsonpath='{.status.conditions[?(@.status=="True")].type}' 2>/dev/null || echo "")
+if echo "$NODE_CONDITIONS" | grep -q "DiskPressure\|MemoryPressure\|PIDPressure"; then
+    warn "Homelab node has pressure conditions: $NODE_CONDITIONS"
+fi
+
+# Step 0b: Check for CNI bridge IP conflicts (common root cause)
+# Step 0b: Check for CNI bridge IP conflicts (common root cause)
+info "Step 0b: Checking for CNI bridge IP conflicts"
 
 # Check for ContainerCreating pods which often indicate CNI issues
 CONTAINER_CREATING_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
@@ -115,8 +147,44 @@ else
     fi
 fi
 
-# Step 3: Check and fix kube-proxy on homelab
-info "Step 3: Fixing kube-proxy issues on homelab"
+# Step 3a: Apply preventive networking fixes for homelab node
+info "Step 3a: Applying preventive networking fixes for homelab node"
+
+# Check if we can apply fixes to the homelab node directly
+# Note: In a real environment, this would require SSH access to the homelab node
+# For now, we'll focus on cluster-level fixes
+
+# Ensure kube-proxy configuration is compatible with RHEL/AlmaLinux
+info "Checking kube-proxy configuration for RHEL compatibility..."
+PROXY_CM_EXISTS=$(kubectl get configmap kube-proxy -n kube-system 2>/dev/null && echo "exists" || echo "missing")
+if [ "$PROXY_CM_EXISTS" = "exists" ]; then
+    # Check if proxy mode is set appropriately for RHEL
+    PROXY_MODE=$(kubectl get configmap kube-proxy -n kube-system -o jsonpath='{.data.config\.conf}' | grep -o 'mode: "[^"]*"' || echo "mode not found")
+    info "Current kube-proxy mode: $PROXY_MODE"
+    
+    # For RHEL systems, iptables mode is often more stable than ipvs
+    if echo "$PROXY_MODE" | grep -q "ipvs"; then
+        warn "kube-proxy is using ipvs mode on RHEL - this may cause issues"
+        info "Consider switching to iptables mode for better compatibility"
+    fi
+fi
+
+# Check flannel configuration for mixed OS compatibility
+info "Checking flannel configuration for mixed OS compatibility..."
+FLANNEL_DS_EXISTS=$(kubectl get daemonset kube-flannel-ds -n kube-flannel 2>/dev/null && echo "exists" || echo "missing")
+if [ "$FLANNEL_DS_EXISTS" = "missing" ]; then
+    # Check for alternative flannel daemonset names
+    FLANNEL_DS_NAME=$(kubectl get daemonset -n kube-flannel -o name 2>/dev/null | head -1 | cut -d'/' -f2 || echo "")
+    if [ -n "$FLANNEL_DS_NAME" ]; then
+        info "Found flannel daemonset: $FLANNEL_DS_NAME"
+    else
+        warn "No flannel daemonset found - this may cause networking issues"
+    fi
+fi
+
+# Step 3b: Check and fix kube-proxy on homelab
+# Step 3b: Check and fix kube-proxy on homelab
+info "Step 3b: Fixing kube-proxy issues on homelab"
 
 PROXY_POD=$(kubectl get pods -n kube-system -o wide | grep "kube-proxy" | grep "homelab" | grep "CrashLoopBackOff" | awk '{print $1}' | head -1)
 

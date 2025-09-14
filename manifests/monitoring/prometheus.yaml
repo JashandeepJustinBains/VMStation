@@ -124,7 +124,7 @@ spec:
     spec:
       serviceAccountName: prometheus
       nodeSelector:
-        vmstation.io/role: monitoring
+        node-role.kubernetes.io/control-plane: ""
       containers:
       - name: prometheus
         image: prom/prometheus:v2.45.0
