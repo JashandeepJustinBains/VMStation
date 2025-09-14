@@ -79,5 +79,7 @@ else
     echo "3. Check kubelet status: systemctl status kubelet"
     echo "4. Check for CNI bridge issues: ip addr show cni0"
     echo "5. Check recent events: kubectl get events --all-namespaces"
+    echo "6. If namespace termination issues persist, check: kubectl get namespace kube-flannel"
+    echo "7. Manual namespace cleanup: kubectl patch namespace kube-flannel -p '{\"metadata\":{\"finalizers\":[]}}' --type=merge"
     exit 1
 fi

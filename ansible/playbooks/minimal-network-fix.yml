@@ -152,7 +152,7 @@
 
     - name: "Deploy minimal network components"
       block:
-        - name: "Remove existing network components"
+        - name: "Remove existing network components (excluding namespace)"
           kubernetes.core.k8s:
             state: absent
             definition:
@@ -163,23 +163,114 @@
                 namespace: "{{ item.namespace | default('kube-system') }}"
           loop:
             - { api: "apps/v1", kind: "DaemonSet", name: "kube-flannel-ds", namespace: "kube-flannel" }
-            - { api: "v1", kind: "Namespace", name: "kube-flannel" }
             - { api: "apps/v1", kind: "Deployment", name: "coredns" }
             - { api: "apps/v1", kind: "DaemonSet", name: "kube-proxy" }
           ignore_errors: true
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
             
-        - name: "Wait for cleanup"
-          pause:
-            seconds: 30
+        - name: "Remove kube-flannel namespace separately"
+          kubernetes.core.k8s:
+            state: absent
+            definition:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: kube-flannel
+          ignore_errors: true
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
             
-        - name: "Apply minimal flannel manifest"
+        - name: "Wait for namespace termination"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Namespace
+            name: kube-flannel
+            wait: true
+            wait_condition:
+              type: Terminating
+              status: "False"
+            wait_timeout: 120
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          ignore_errors: true
+          register: namespace_wait_result
+          
+        - name: "Log namespace wait result"
+          debug:
+            msg: |
+              Namespace wait result: {{ 'SUCCESS' if not namespace_wait_result.failed else 'FAILED/TIMEOUT' }}
+              {% if namespace_wait_result.failed %}
+              Will attempt force cleanup...
+              {% endif %}
+          
+        - name: "Force cleanup stuck namespace if needed"
+          block:
+            - name: "Check if namespace is stuck in terminating state"
+              shell: |
+                kubectl get namespace kube-flannel -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound"
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: namespace_status
+              
+            - name: "Force cleanup stuck namespace"
+              shell: |
+                # Remove finalizers from namespace if stuck
+                kubectl patch namespace kube-flannel -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+                # Wait a bit for cleanup
+                sleep 10
+                # Verify namespace is gone
+                kubectl get namespace kube-flannel >/dev/null 2>&1 && echo "Still exists" || echo "Cleaned up"
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              when: namespace_status.stdout == "Terminating"
+              ignore_errors: true
+              
+          when: namespace_wait_result.failed | default(false)
+            
+        - name: "Final wait for cleanup completion"
+          pause:
+            seconds: 15
+            
+        - name: "Verify namespace is completely removed"
+          shell: |
+            if kubectl get namespace kube-flannel >/dev/null 2>&1; then
+              echo "NAMESPACE_EXISTS"
+            else
+              echo "NAMESPACE_REMOVED"
+            fi
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+          register: final_namespace_check
+          
+        - name: "Report namespace cleanup status"
+          debug:
+            msg: |
+              Namespace cleanup status: {{ final_namespace_check.stdout }}
+              {% if final_namespace_check.stdout == 'NAMESPACE_EXISTS' %}
+              WARNING: Namespace still exists, proceeding anyway but may encounter issues
+              {% else %}
+              SUCCESS: Namespace fully removed, safe to proceed
+              {% endif %}
+            
+        - name: "Apply minimal flannel manifest with retries"
           kubernetes.core.k8s:
             state: present
             src: "{{ flannel_manifest }}"
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
+          register: flannel_apply_result
+          until: flannel_apply_result is succeeded
+          retries: 5
+          delay: 15
+          
+        - name: "Report flannel application status"
+          debug:
+            msg: |
+              Flannel manifest application: {{ 'SUCCESS' if not flannel_apply_result.failed else 'FAILED' }}
+              {% if flannel_apply_result.failed %}
+              Error: {{ flannel_apply_result.msg | default('Unknown error') }}
+              {% endif %}
             
         - name: "Wait for flannel namespace"
           pause:
