@@ -409,7 +409,7 @@
           Main Container Ready: {{ jellyfin_final.resources[0].status.containerStatuses[0].ready | default('Unknown') }}
           Main Container State: {{ jellyfin_final.resources[0].status.containerStatuses[0].state.keys() | first if jellyfin_final.resources[0].status.containerStatuses[0].state else 'Unknown' }}
           {% endif %}
-          {% if jellyfin_final.resources[0].status.initContainerStatuses %}
+          {% if jellyfin_final.resources[0].status.initContainerStatuses is defined and jellyfin_final.resources[0].status.initContainerStatuses %}
           Init Container Status: {{ jellyfin_final.resources[0].status.initContainerStatuses | length }} containers
           {% endif %}
           {% else %}
