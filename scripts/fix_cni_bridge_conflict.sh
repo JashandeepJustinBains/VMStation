@@ -389,11 +389,91 @@ sudo systemctl restart containerd
 # Wait for containerd to stabilize
 sleep 10
 
-# Step 5: Restart Flannel pods to recreate bridge with correct configuration
-info "Step 5: Restarting Flannel pods to recreate CNI bridge"
+# Step 5: Carefully restart Flannel pods to recreate CNI bridge only if needed
+info "Step 5: Checking if Flannel pods need restart for CNI bridge recreation"
 
-# Delete flannel pods to force recreation with clean network state
-timeout 60 kubectl delete pods -n kube-flannel --all --force --grace-period=0
+# Check if flannel pods are actually having issues before forcefully deleting them
+FLANNEL_PODS_STATUS=$(kubectl get pods -n kube-flannel --no-headers 2>/dev/null || echo "")
+FLANNEL_ISSUES=""
+
+if [ -n "$FLANNEL_PODS_STATUS" ]; then
+    # Check for crashlooping or failed flannel pods
+    CRASHLOOP_PODS=$(echo "$FLANNEL_PODS_STATUS" | grep -E "CrashLoopBackOff|Error|Failed" || echo "")
+    PENDING_PODS=$(echo "$FLANNEL_PODS_STATUS" | grep "Pending" || echo "")
+    
+    if [ -n "$CRASHLOOP_PODS" ]; then
+        warn "Found crashlooping Flannel pods - these need restart:"
+        echo "$CRASHLOOP_PODS"
+        FLANNEL_ISSUES="crashloop"
+    elif [ -n "$PENDING_PODS" ]; then
+        warn "Found pending Flannel pods - these may need restart:"
+        echo "$PENDING_PODS"
+        FLANNEL_ISSUES="pending"
+    else
+        # Check if all flannel pods are actually running and ready
+        RUNNING_PODS=$(echo "$FLANNEL_PODS_STATUS" | grep "Running" | wc -l)
+        TOTAL_PODS=$(echo "$FLANNEL_PODS_STATUS" | wc -l)
+        
+        if [ "$RUNNING_PODS" -eq "$TOTAL_PODS" ] && [ "$TOTAL_PODS" -gt 0 ]; then
+            info "✓ All Flannel pods are Running ($RUNNING_PODS/$TOTAL_PODS) - checking readiness"
+            
+            # Check readiness
+            NOT_READY=$(echo "$FLANNEL_PODS_STATUS" | grep "0/" || echo "")
+            if [ -n "$NOT_READY" ]; then
+                warn "Some Flannel pods are not ready:"
+                echo "$NOT_READY"
+                FLANNEL_ISSUES="not_ready"
+            else
+                info "✓ All Flannel pods are Running and Ready - minimal restart approach"
+                FLANNEL_ISSUES="minimal"
+            fi
+        else
+            warn "Not all Flannel pods are running ($RUNNING_PODS/$TOTAL_PODS)"
+            FLANNEL_ISSUES="not_running"
+        fi
+    fi
+else
+    warn "No Flannel pods found - they may need to be recreated"
+    FLANNEL_ISSUES="missing"
+fi
+
+# Apply appropriate restart strategy based on the issues found
+case "$FLANNEL_ISSUES" in
+    "crashloop"|"not_running"|"missing")
+        warn "Flannel pods have serious issues - performing full restart"
+        timeout 60 kubectl delete pods -n kube-flannel --all --force --grace-period=0 || true
+        ;;
+    "pending"|"not_ready")
+        warn "Flannel pods have readiness issues - performing selective restart"
+        # Only delete the problematic pods, not all of them
+        if [ -n "$PENDING_PODS" ]; then
+            echo "$PENDING_PODS" | while read line; do
+                pod_name=$(echo "$line" | awk '{print $1}')
+                if [ -n "$pod_name" ]; then
+                    info "Restarting pending Flannel pod: $pod_name"
+                    kubectl delete pod -n kube-flannel "$pod_name" --force --grace-period=0 || true
+                fi
+            done
+        fi
+        if [ -n "$NOT_READY" ]; then
+            echo "$NOT_READY" | while read line; do
+                pod_name=$(echo "$line" | awk '{print $1}')
+                if [ -n "$pod_name" ]; then
+                    info "Restarting not-ready Flannel pod: $pod_name"
+                    kubectl delete pod -n kube-flannel "$pod_name" --force --grace-period=0 || true
+                fi
+            done
+        fi
+        ;;
+    "minimal")
+        info "Flannel pods are healthy - using gentle restart via DaemonSet rollout"
+        kubectl rollout restart daemonset/kube-flannel-ds -n kube-flannel || true
+        ;;
+    *)
+        warn "Unknown Flannel status - using cautious restart approach"
+        kubectl rollout restart daemonset/kube-flannel-ds -n kube-flannel || true
+        ;;
+esac
 
 echo "Waiting for Flannel pods to recreate..."
 sleep 20
