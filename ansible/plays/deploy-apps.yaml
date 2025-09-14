@@ -1,6 +1,6 @@
 ---
-# VMStation Simplified Application Deployment with Enhanced Networking
-# Deploys essential monitoring and applications with network validation
+# VMStation Simplified Application Deployment
+# Deploys essential monitoring and applications
 
 - name: "Deploy VMStation Applications"
   hosts: monitoring_nodes
@@ -12,56 +12,6 @@
     loki_nodeport: 31100
     alertmanager_nodeport: 30903
   tasks:
-    - name: "Pre-deployment network validation"
-      block:
-        - name: "Validate cluster networking is stable before deployment"
-          shell: |
-            echo "=== Pre-deployment Network Validation ==="
-            
-            # Check that all nodes are Ready
-            not_ready_nodes=$(kubectl get nodes --no-headers | grep -v " Ready " | wc -l)
-            if [ "$not_ready_nodes" -gt 0 ]; then
-              echo "ERROR: $not_ready_nodes nodes are not Ready"
-              kubectl get nodes
-              exit 1
-            fi
-            
-            # Check CoreDNS is running
-            coredns_running=$(kubectl get pods -n kube-system -l k8s-app=kube-dns --field-selector=status.phase=Running | grep -c "Running" || echo "0")
-            if [ "$coredns_running" -eq 0 ]; then
-              echo "ERROR: CoreDNS is not running"
-              kubectl get pods -n kube-system -l k8s-app=kube-dns
-              exit 1
-            fi
-            
-            # Check Flannel is running on all nodes
-            flannel_desired=$(kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null || echo "0")
-            flannel_ready=$(kubectl get daemonset -n kube-flannel kube-flannel-ds -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0")
-            
-            if [ "$flannel_ready" != "$flannel_desired" ] || [ "$flannel_ready" = "0" ]; then
-              echo "ERROR: Flannel is not ready on all nodes ($flannel_ready/$flannel_desired)"
-              kubectl get pods -n kube-flannel
-              exit 1
-            fi
-            
-            echo "✅ Cluster networking is stable and ready for application deployment"
-          environment:
-            KUBECONFIG: /etc/kubernetes/admin.conf
-          register: pre_deployment_validation
-          
-      rescue:
-        - name: "Handle pre-deployment validation failure"
-          fail:
-            msg: |
-              Pre-deployment network validation failed. 
-              Cluster networking is not stable enough for application deployment.
-              
-              Please run the following to fix network issues:
-              1. ./scripts/fix_homelab_node_issues.sh
-              2. ./scripts/fix_remaining_pod_issues.sh
-              3. Wait for all components to stabilize
-              4. Retry application deployment
-
     - name: "Create monitoring namespace"
       kubernetes.core.k8s:
         name: "{{ monitoring_namespace }}"

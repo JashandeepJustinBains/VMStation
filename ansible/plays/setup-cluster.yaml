@@ -897,18 +897,6 @@
       run_once: true
       failed_when: false
 
-    - name: "Apply network manifests for enhanced configuration"
-      kubernetes.core.k8s:
-        state: present
-        src: "{{ item }}"
-      loop:
-        - "../../manifests/network/kube-proxy-configmap.yaml"
-        - "../../manifests/network/coredns-deployment.yaml"
-        - "../../manifests/network/flannel-cni-config.yaml"
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      ignore_errors: yes
-
     - name: "Install Flannel CNI"
       shell: |
         timeout 60 kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
@@ -1232,33 +1220,6 @@
               The deployment will automatically run fix_cni_bridge_conflict.sh after cluster setup.
               This will resolve CoreDNS pod creation issues caused by CNI bridge IP conflicts.
               {% endif %}
-
-    - name: "Post-deployment network validation and remediation"
-      block:
-        - name: "Wait for initial network components to stabilize"
-          pause:
-            seconds: 60
-
-        - name: "Include network validation tasks"
-          include_tasks: templates/network-validation-tasks.yaml
-          vars:
-            cluster_ready_check: true
-            
-      rescue:
-        - name: "Handle network validation failures"
-          debug:
-            msg: |
-              Network validation encountered issues, but this is not uncommon immediately after cluster setup.
-              The deployment will continue, and you can run additional fixes if needed:
-              - ./scripts/fix_homelab_node_issues.sh
-              - ./scripts/fix_remaining_pod_issues.sh
-              
-              Common issues and solutions:
-              1. CNI bridge conflicts: Usually resolve automatically with time
-              2. CoreDNS scheduling: Will be enforced by proper manifests
-              3. kube-proxy crashes: Enhanced configuration should prevent these
-              
-              Monitor cluster status with: kubectl get pods --all-namespaces
 
     - name: "Wait for API server to be ready"
       wait_for:
