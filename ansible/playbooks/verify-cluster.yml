@@ -444,7 +444,7 @@
 
     - name: "Test Jellyfin web interface"
       uri:
-        url: "http://192.168.4.61:30096/"
+        url: "http://192.168.4.61:30096/web/#/home.html"
         method: GET
         return_content: yes
         status_code: [200, 302]  # 302 is acceptable for redirect to setup

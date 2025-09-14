@@ -900,6 +900,11 @@ reset_cluster() {
         "rm -rf /etc/kubernetes/"
         "rm -rf /var/lib/kubelet/"
         "rm -rf /etc/cni/net.d/"
+        "rm -rf /var/lib/cni/"
+        # Remove CNI bridge interfaces that may have wrong IP ranges
+        "ip link show cni0 >/dev/null 2>&1 && ip link delete cni0 || true"
+        "ip link show flannel.1 >/dev/null 2>&1 && ip link delete flannel.1 || true"
+        "ip link show docker0 >/dev/null 2>&1 && ip link delete docker0 || true"
         # Modified iptables reset to preserve SSH rules
         "iptables-save | grep -E 'ssh|:22 ' > /tmp/ssh_rules.txt && iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X && if [ -s /tmp/ssh_rules.txt ]; then iptables-restore < /tmp/ssh_rules.txt; fi"
         "systemctl start containerd"
