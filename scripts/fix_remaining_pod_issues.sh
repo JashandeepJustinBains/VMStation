@@ -423,6 +423,7 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     # Check for specific error patterns
     nftables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "nf_tables.*incompatible" || echo "")
     iptables_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "iptables.*failed" || echo "")
+    permission_error=$(kubectl logs -n kube-system "$PROXY_POD" --previous --tail=50 2>/dev/null | grep -i "permission denied\|operation not permitted" || echo "")
     
     if [ -n "$nftables_error" ]; then
         error "Detected nftables compatibility issue: $nftables_error"
@@ -430,6 +431,30 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     elif [ -n "$iptables_error" ]; then
         error "Detected iptables issue: $iptables_error"
         fix_iptables_compatibility
+    elif [ -n "$permission_error" ]; then
+        error "Detected permission/privilege issue: $permission_error"
+        warn "This may indicate host-level networking configuration problems"
+        # May need additional privileged container fixes
+    fi
+    
+    # Special handling for homelab node which has persistent issues
+    if echo "$CRASHLOOP_PROXY" | grep -q "homelab"; then
+        warn "Detected persistent kube-proxy issues on homelab node - applying enhanced fixes"
+        
+        # Get homelab-specific logs
+        HOMELAB_PROXY_POD=$(echo "$CRASHLOOP_PROXY" | grep "homelab" | awk '{print $1}' | head -1)
+        if [ -n "$HOMELAB_PROXY_POD" ]; then
+            echo "Homelab-specific kube-proxy logs:"
+            kubectl logs -n kube-system "$HOMELAB_PROXY_POD" --previous --tail=30 2>/dev/null || echo "No homelab logs available"
+            
+            # Force restart with longer wait for homelab
+            warn "Applying extended restart procedure for homelab kube-proxy"
+            kubectl delete pod -n kube-system "$HOMELAB_PROXY_POD" --force --grace-period=0
+            
+            # Wait longer for homelab to stabilize
+            echo "Giving homelab extra time to stabilize..."
+            sleep 30
+        fi
     fi
     
     # Common fixes for kube-proxy issues
@@ -437,30 +462,52 @@ if [ -n "$CRASHLOOP_PROXY" ]; then
     
     # Delete all crashlooping pods to force recreation
     echo "$CRASHLOOP_PROXY" | while read -r line; do
-        pod_name=$(echo "$line" | awk '{print $1}')
-        info "Deleting crashlooping pod: $pod_name"
-        kubectl delete pod -n kube-system "$pod_name" --force --grace-period=0 2>/dev/null || true
+        if [ -n "$line" ]; then
+            pod_name=$(echo "$line" | awk '{print $1}')
+            node_name=$(echo "$line" | awk '{print $7}')
+            info "Deleting crashlooping pod: $pod_name on node $node_name"
+            kubectl delete pod -n kube-system "$pod_name" --force --grace-period=0 2>/dev/null || true
+        fi
     done
     
     echo "Waiting for new kube-proxy pods to start..."
-    sleep 15
+    sleep 20
     
     # Restart kube-proxy daemonset to ensure clean state with new configuration
     info "Restarting kube-proxy daemonset with updated configuration"
     kubectl rollout restart daemonset/kube-proxy -n kube-system
     
-    # Wait for rollout to complete
-    if timeout 180 kubectl rollout status daemonset/kube-proxy -n kube-system; then
+    # Wait for rollout to complete with extended timeout for mixed environments
+    if timeout 300 kubectl rollout status daemonset/kube-proxy -n kube-system; then
         info "✓ kube-proxy daemonset rollout completed"
     else
-        warn "kube-proxy rollout timed out"
+        warn "kube-proxy rollout timed out - checking partial status"
     fi
     
-    # Check the new pod status
-    sleep 10
+    # Extended verification for problematic nodes like homelab
+    echo "Giving additional time for problematic nodes to stabilize..."
+    sleep 30
+    
+    # Check the new pod status with detailed reporting
     NEW_PROXY_STATUS=$(kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide)
     echo "Updated kube-proxy pod status:"
     echo "$NEW_PROXY_STATUS"
+    
+    # Check specifically for homelab node
+    HOMELAB_PROXY_STATUS=$(echo "$NEW_PROXY_STATUS" | grep "homelab" | awk '{print $3}' | head -1)
+    if [ -n "$HOMELAB_PROXY_STATUS" ]; then
+        if [ "$HOMELAB_PROXY_STATUS" = "Running" ]; then
+            info "✓ Homelab kube-proxy is now running"
+        else
+            warn "⚠️  Homelab kube-proxy status: $HOMELAB_PROXY_STATUS"
+            # Get the pod name and check logs if still failing
+            HOMELAB_POD_NAME=$(echo "$NEW_PROXY_STATUS" | grep "homelab" | awk '{print $1}' | head -1)
+            if [ -n "$HOMELAB_POD_NAME" ] && [ "$HOMELAB_PROXY_STATUS" != "Running" ]; then
+                echo "Current homelab kube-proxy logs:"
+                kubectl logs -n kube-system "$HOMELAB_POD_NAME" --tail=15 2>/dev/null || echo "No logs available"
+            fi
+        fi
+    fi
     
     # Count running vs total - improved counting
     RUNNING_PROXY=$(echo "$NEW_PROXY_STATUS" | grep "Running" | wc -l)
