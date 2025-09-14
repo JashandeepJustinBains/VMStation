@@ -1,0 +1,219 @@
+# Enhanced Flannel DaemonSet with CNI Bridge Conflict Prevention
+# Addresses issues from fix_jellyfin_cni_bridge_conflict.sh and fix_homelab_node_issues.sh
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-flannel-ds
+  namespace: kube-flannel
+  labels:
+    tier: node
+    app: flannel
+    k8s-app: flannel
+spec:
+  selector:
+    matchLabels:
+      app: flannel
+  template:
+    metadata:
+      labels:
+        tier: node
+        app: flannel
+        k8s-app: flannel
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      serviceAccountName: flannel
+      # Init container to handle CNI bridge conflicts
+      initContainers:
+      - name: cni-bridge-cleanup
+        image: alpine/k8s:1.29.0
+        command:
+        - /bin/sh
+        - /etc/kube-flannel/bridge-cleanup.sh
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["NET_ADMIN", "NET_RAW"]
+        volumeMounts:
+        - name: cni
+          mountPath: /etc/cni/net.d
+        - name: flannel-cfg
+          mountPath: /etc/kube-flannel/
+        - name: run
+          mountPath: /run/flannel
+        # Add kubectl for node annotation checks
+        - name: kubectl-binary
+          mountPath: /usr/local/bin/kubectl
+          subPath: kubectl
+        - name: kubeconfig
+          mountPath: /etc/kubernetes
+          readOnly: true
+      containers:
+      - name: kube-flannel
+        image: docker.io/flannel/flannel:v0.25.2
+        command:
+        - /opt/bin/flanneld
+        args:
+        - --ip-masq
+        - --kube-subnet-mgr
+        - --iface-regex=^(eth0|ens|enp).*
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "300m"
+            memory: "200Mi"
+        securityContext:
+          privileged: false
+          capabilities:
+            add: ["NET_ADMIN", "NET_RAW"]
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: EVENT_QUEUE_DEPTH
+          value: "5000"
+        volumeMounts:
+        - name: run
+          mountPath: /run/flannel
+        - name: flannel-cfg
+          mountPath: /etc/kube-flannel/
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+        # Liveness probe to detect Flannel crashes early
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if Flannel is managing the network properly
+              if [ -f /run/flannel/subnet.env ]; then
+                source /run/flannel/subnet.env
+                if [ -n "$FLANNEL_SUBNET" ]; then
+                  exit 0
+                fi
+              fi
+              exit 1
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        # Readiness probe to ensure Flannel is fully configured
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Verify Flannel network configuration is active
+              if [ -f /run/flannel/subnet.env ]; then
+                source /run/flannel/subnet.env
+                if [ -n "$FLANNEL_SUBNET" ] && [ -n "$FLANNEL_NETWORK" ]; then
+                  # Check if the node's pod CIDR is properly set
+                  kubectl get node "$NODE_NAME" -o jsonpath='{.metadata.annotations.flannel\.alpha\.coreos\.com/pod-cidr}' | grep -q "10.244" 
+                  exit $?
+                fi
+              fi
+              exit 1
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 5
+      volumes:
+      - name: run
+        hostPath:
+          path: /run/flannel
+      - name: cni
+        hostPath:
+          path: /etc/cni/net.d
+      - name: flannel-cfg
+        configMap:
+          name: flannel-cni-config
+      - name: xtables-lock
+        hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+      # Volume for kubectl binary (needed for init container)
+      - name: kubectl-binary
+        hostPath:
+          path: /usr/local/bin/kubectl
+          type: File
+      - name: kubeconfig
+        hostPath:
+          path: /etc/kubernetes
+          type: Directory
+---
+# Service Account for Flannel with enhanced permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flannel
+  namespace: kube-flannel
+---
+# ClusterRole for Flannel with node annotation access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flannel
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - watch
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - patch
+---
+# ClusterRoleBinding for Flannel
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flannel
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flannel
+subjects:
+- kind: ServiceAccount
+  name: flannel
+  namespace: kube-flannel
