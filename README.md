@@ -553,6 +553,24 @@ kubectl cluster-info
 kubectl get nodes
 ```
 
+#### CoreDNS Scheduling to Worker Nodes ⚡ **NEW!**
+If CoreDNS pods are being scheduled to worker nodes like "homelab" instead of staying on the masternode:
+```bash
+# Check current CoreDNS pod placement
+kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
+
+# Test CoreDNS scheduling configuration
+./scripts/test_coredns_masternode_scheduling.sh
+
+# Fix CoreDNS to require masternode scheduling  
+./scripts/fix_homelab_node_issues.sh
+
+# This ensures:
+# - CoreDNS will ONLY run on control-plane nodes (masternode)
+# - CoreDNS will NEVER be scheduled to worker nodes (homelab, storage)
+# - Uses required node affinity instead of preferred
+```
+
 #### CoreDNS "Unknown" Status After Flannel Regeneration ⚡ **NEW!**
 If CoreDNS pods show "Unknown" status with no IP after running `deploy.sh full`:
 ```bash
@@ -585,7 +603,9 @@ If pods are stuck in ContainerCreating due to CNI bridge IP conflicts:
 # - Automatic integration with existing fix scripts
 ```
 
-📖 **Documentation**: See [docs/COREDNS_UNKNOWN_STATUS_FIX.md](./docs/COREDNS_UNKNOWN_STATUS_FIX.md) for detailed information.
+📖 **Documentation**: 
+- CoreDNS scheduling fixes: [docs/COREDNS_MASTERNODE_ENFORCEMENT.md](./docs/COREDNS_MASTERNODE_ENFORCEMENT.md)
+- CoreDNS unknown status: [docs/COREDNS_UNKNOWN_STATUS_FIX.md](./docs/COREDNS_UNKNOWN_STATUS_FIX.md)
 
 **Key Features of this fix**:
 - ✅ Automatically integrated into `deploy.sh full` workflow
