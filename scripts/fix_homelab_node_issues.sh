@@ -183,24 +183,23 @@ info "Step 4: Fixing CoreDNS scheduling preferences"
 COREDNS_ON_HOMELAB=$(kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide | grep "homelab" || true)
 
 if [ -n "$COREDNS_ON_HOMELAB" ]; then
-    warn "CoreDNS is running on homelab - will patch deployment to prefer masternode"
+    warn "CoreDNS is running on homelab - will patch deployment to require masternode"
     
-    # Patch CoreDNS deployment to prefer control-plane nodes
+    # Patch CoreDNS deployment to require control-plane nodes
     kubectl patch deployment coredns -n kube-system -p '{
         "spec": {
             "template": {
                 "spec": {
                     "affinity": {
                         "nodeAffinity": {
-                            "preferredDuringSchedulingIgnoredDuringExecution": [{
-                                "weight": 100,
-                                "preference": {
+                            "requiredDuringSchedulingIgnoredDuringExecution": {
+                                "nodeSelectorTerms": [{
                                     "matchExpressions": [{
                                         "key": "node-role.kubernetes.io/control-plane",
                                         "operator": "Exists"
                                     }]
-                                }
-                            }]
+                                }]
+                            }
                         }
                     },
                     "tolerations": [{

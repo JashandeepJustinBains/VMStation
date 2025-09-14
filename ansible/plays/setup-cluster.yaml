@@ -941,23 +941,22 @@
           echo "CoreDNS already has correct replica count: $current_replicas"
         fi
         
-        # Configure CoreDNS to prefer control-plane nodes
-        echo "Patching CoreDNS deployment to prefer control-plane nodes..."
+        # Configure CoreDNS to require control-plane nodes
+        echo "Patching CoreDNS deployment to require control-plane nodes..."
         timeout 60 kubectl patch deployment coredns -n kube-system -p '{
           "spec": {
             "template": {
               "spec": {
                 "affinity": {
                   "nodeAffinity": {
-                    "preferredDuringSchedulingIgnoredDuringExecution": [{
-                      "weight": 100,
-                      "preference": {
+                    "requiredDuringSchedulingIgnoredDuringExecution": {
+                      "nodeSelectorTerms": [{
                         "matchExpressions": [{
                           "key": "node-role.kubernetes.io/control-plane",
                           "operator": "Exists"
                         }]
-                      }
-                    }]
+                      }]
+                    }
                   }
                 },
                 "tolerations": [{
