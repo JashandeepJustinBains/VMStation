@@ -73,8 +73,12 @@
           
         - name: "Parse CNI status"
           set_fact:
-            cni_conflicts: "{{ cni_status_check.stdout | regex_search('CNI_CONFLICTS=([0-9]+)', '\\1') | first | int }}"
+            cni_conflicts_match: "{{ cni_status_check.stdout | regex_search('CNI_CONFLICTS=([0-9]+)', '\\1') }}"
             cni_bridge_wrong: "{{ 'CNI_BRIDGE_WRONG=true' in cni_status_check.stdout }}"
+            
+        - name: "Set CNI conflicts value"
+          set_fact:
+            cni_conflicts: "{{ cni_conflicts_match[0] if cni_conflicts_match else '0' }}"
             
         - name: "Reset CNI bridge if needed"
           block:
@@ -139,12 +143,12 @@
               pause:
                 seconds: 15
                 
-          when: cni_conflicts > 0 or cni_bridge_wrong
+          when: cni_conflicts | int > 0 or cni_bridge_wrong
           
         - name: "CNI bridge reset not needed"
           debug:
             msg: "CNI bridge appears to be correctly configured, skipping reset"
-          when: cni_conflicts == 0 and not cni_bridge_wrong
+          when: cni_conflicts | int == 0 and not cni_bridge_wrong
 
     - name: "Deploy minimal network components"
       block:
