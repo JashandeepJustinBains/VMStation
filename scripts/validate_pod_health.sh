@@ -50,6 +50,22 @@ if kubectl get namespace jellyfin >/dev/null 2>&1; then
     
     if [ "$JELLYFIN_READY" = "true" ]; then
         info "✅ Jellyfin pod is ready"
+        
+        # Additional health check using /health endpoint
+        JELLYFIN_IP=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.podIP}' 2>/dev/null)
+        if [ -n "$JELLYFIN_IP" ]; then
+            echo "Testing Jellyfin health endpoint..."
+            HEALTH_RESPONSE=$(kubectl run health-test-$$RANDOM --image=busybox:1.35 --rm -i --restart=Never --timeout=30s -- \
+                sh -c "wget -qO- http://$JELLYFIN_IP:8096/health" 2>/dev/null || echo "")
+            
+            if echo "$HEALTH_RESPONSE" | grep -q "Healthy"; then
+                info "✅ Jellyfin health check passed (health endpoint responds 'Healthy')"
+            elif [ -n "$HEALTH_RESPONSE" ]; then
+                warn "⚠️  Jellyfin health endpoint responded but didn't contain 'Healthy': $HEALTH_RESPONSE"
+            else
+                warn "⚠️  Jellyfin health endpoint test failed or timed out"
+            fi
+        fi
     else
         warn "❌ Jellyfin pod is not ready (restarts: $JELLYFIN_RESTARTS)"
     fi
@@ -82,17 +98,41 @@ JELLYFIN_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.cont
 
 if [ "$JELLYFIN_READY" = "true" ]; then
     echo "Jellyfin readiness: ✅ Ready"
+    
+    # Check health endpoint as well
+    JELLYFIN_IP=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.podIP}' 2>/dev/null)
+    if [ -n "$JELLYFIN_IP" ]; then
+        HEALTH_RESPONSE=$(kubectl run health-check-$$RANDOM --image=busybox:1.35 --rm -i --restart=Never --timeout=20s -- \
+            sh -c "wget -qO- http://$JELLYFIN_IP:8096/health" 2>/dev/null || echo "")
+        
+        if echo "$HEALTH_RESPONSE" | grep -q "Healthy"; then
+            echo "Jellyfin health endpoint: ✅ Healthy"
+            JELLYFIN_HEALTH_OK="true"
+        else
+            echo "Jellyfin health endpoint: ❌ Not Healthy"
+            JELLYFIN_HEALTH_OK="false"
+        fi
+    else
+        echo "Jellyfin health endpoint: ❌ Cannot determine (no pod IP)"
+        JELLYFIN_HEALTH_OK="false"
+    fi
 else
     echo "Jellyfin readiness: ❌ Not Ready"
+    JELLYFIN_HEALTH_OK="false"
 fi
 
 # Overall health assessment
 TOTAL_ISSUES=$((CRASHLOOP_COUNT + PENDING_COUNT + ERROR_COUNT))
 
-if [ "$TOTAL_ISSUES" -eq 0 ] && [ "$JELLYFIN_READY" = "true" ]; then
+if [ "$TOTAL_ISSUES" -eq 0 ] && [ "$JELLYFIN_READY" = "true" ] && [ "$JELLYFIN_HEALTH_OK" = "true" ]; then
     info "🎉 All pods appear healthy!"
     echo
     echo "Access Jellyfin at: http://192.168.4.61:30096"
+elif [ "$TOTAL_ISSUES" -eq 0 ] && [ "$JELLYFIN_READY" = "true" ]; then
+    warn "⚠️  System pods are healthy, Jellyfin pod is ready, but health check failed"
+    echo
+    echo "Jellyfin may be starting up or health endpoint may need attention"
+    echo "Run: ./scripts/fix_remaining_pod_issues.sh"
 elif [ "$TOTAL_ISSUES" -eq 0 ]; then
     warn "⚠️  System pods are healthy, but Jellyfin needs attention"
     echo

@@ -178,8 +178,10 @@ if kubectl get service -n jellyfin jellyfin-service >/dev/null 2>&1; then
                 printf "  Testing Jellyfin %s:%s ... " "$node_ip" "$JELLYFIN_NODEPORT"
                 
                 # Try different endpoints that Jellyfin might respond to
-                if timeout 10 curl -s --connect-timeout 5 "http://$node_ip:$JELLYFIN_NODEPORT/" >/dev/null 2>&1; then
-                    echo -e "${GREEN}✅ Jellyfin accessible${NC}"
+                if timeout 10 curl -s --connect-timeout 5 "http://$node_ip:$JELLYFIN_NODEPORT/health" 2>/dev/null | grep -q "Healthy"; then
+                    echo -e "${GREEN}✅ Jellyfin health endpoint accessible and healthy${NC}"
+                elif timeout 10 curl -s --connect-timeout 5 "http://$node_ip:$JELLYFIN_NODEPORT/" >/dev/null 2>&1; then
+                    echo -e "${GREEN}✅ Jellyfin web interface accessible${NC}"
                 elif timeout 10 curl -s --connect-timeout 5 "http://$node_ip:$JELLYFIN_NODEPORT/web/index.html" >/dev/null 2>&1; then
                     echo -e "${GREEN}✅ Jellyfin web accessible${NC}"
                 elif timeout 5 nc -z "$node_ip" "$JELLYFIN_NODEPORT" 2>/dev/null; then
