@@ -8,10 +8,10 @@
   become: true
   vars:
     # Use minimal manifests that fix CNI bridge issues
-    flannel_manifest: "{{ playbook_dir }}/../manifests/cni/flannel-minimal.yaml"
-    coredns_manifest: "{{ playbook_dir }}/../manifests/network/coredns-minimal.yaml"
-    kube_proxy_manifest: "{{ playbook_dir }}/../manifests/network/kube-proxy-minimal.yaml"
-    jellyfin_manifest: "{{ playbook_dir }}/../manifests/jellyfin/jellyfin-minimal.yaml"
+    flannel_manifest: "{{ playbook_dir }}/../../manifests/cni/flannel-minimal.yaml"
+    coredns_manifest: "{{ playbook_dir }}/../../manifests/network/coredns-minimal.yaml"
+    kube_proxy_manifest: "{{ playbook_dir }}/../../manifests/network/kube-proxy-minimal.yaml"
+    jellyfin_manifest: "{{ playbook_dir }}/../../manifests/jellyfin/jellyfin-minimal.yaml"
     
   tasks:
     - name: "Check if we're on the control plane"
