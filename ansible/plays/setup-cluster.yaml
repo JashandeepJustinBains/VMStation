@@ -2534,6 +2534,17 @@
               pause:
                 seconds: 5
 
+        - name: "Remove existing node from cluster before retry (if it exists)"
+          delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+          shell: kubectl delete node {{ inventory_hostname }} --ignore-not-found
+          failed_when: false
+          when: inventory_hostname in groups['storage_nodes'] or inventory_hostname in groups['compute_nodes']
+
+        - name: "Wait for node deletion to propagate in cluster"
+          pause:
+            seconds: 5
+          when: inventory_hostname in groups['storage_nodes'] or inventory_hostname in groups['compute_nodes']
+
         - name: "Retry join after thorough cleanup"
           shell: timeout 120 /tmp/kubeadm-join.sh --ignore-preflight-errors=Port-10250,FileAvailable--etc-kubernetes-pki-ca.crt --v=5
           register: join_retry_result
