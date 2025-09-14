@@ -176,7 +176,7 @@ else
     fi
 fi
 
-# Step 4: Fix CoreDNS scheduling to prefer masternode
+# Step 4: Fix CoreDNS scheduling to require masternode
 info "Step 4: Fixing CoreDNS scheduling preferences"
 
 # Check current CoreDNS deployment

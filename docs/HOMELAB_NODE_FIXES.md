@@ -18,7 +18,7 @@ The homelab node (192.168.4.62) appears to have CNI networking configuration iss
 - System pods like kube-proxy to fail
 - Network instability affecting the entire cluster
 
-Additionally, CoreDNS was being scheduled to the homelab node instead of preferring the control-plane node (masternode), which compounded the networking issues.
+Additionally, CoreDNS was being scheduled to the homelab node instead of being required to run on the control-plane node (masternode), which compounded the networking issues.
 
 ## Solutions Implemented
 
@@ -27,7 +27,7 @@ Additionally, CoreDNS was being scheduled to the homelab node instead of preferr
 This script provides comprehensive remediation:
 - **Restarts crashlooping Flannel pods** on homelab node
 - **Restarts crashlooping kube-proxy pods** on homelab node  
-- **Patches CoreDNS deployment** to prefer control-plane nodes with proper tolerations
+- **Patches CoreDNS deployment** to require control-plane nodes with proper tolerations
 - **Forces restart of stuck ContainerCreating pods**
 - **Tests DNS resolution** to verify fixes
 - **Provides detailed status reporting**
@@ -35,7 +35,7 @@ This script provides comprehensive remediation:
 ### 2. CoreDNS Scheduling Improvements
 
 Updated `ansible/plays/setup-cluster.yaml` to:
-- **Configure CoreDNS node affinity** to prefer control-plane nodes
+- **Configure CoreDNS node affinity** to require control-plane nodes
 - **Add proper tolerations** for control-plane node taints
 - **Apply scheduling configuration** during cluster setup
 
