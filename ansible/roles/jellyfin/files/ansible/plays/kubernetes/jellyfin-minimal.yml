@@ -42,8 +42,9 @@ metadata:
     app: jellyfin
     component: media-server
 spec:
-  # Force scheduling on specific node using nodeName (not nodeSelector)
-  nodeName: storagenodet3500
+  # Use nodeSelector instead of nodeName for more flexibility
+  nodeSelector:
+    kubernetes.io/hostname: storagenodet3500
   
   # OPTIONAL: Add tolerations if the target node has taints
   # tolerations:
