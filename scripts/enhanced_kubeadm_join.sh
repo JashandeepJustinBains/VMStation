@@ -953,7 +953,7 @@ EOF
         fi
         
         # Check if this is a "node already exists" issue and attempt node deletion
-        if check_node_already_exists "$join_output" && [ $attempt -le $TOKEN_REFRESH_RETRIES ]; then
+        if check_node_already_exists "$join_output" && [ $attempt -le $MAX_RETRIES ]; then
             warn "Detected 'node already exists in cluster' issue"
             local node_name
             node_name=$(extract_node_name_from_error "$join_output")
