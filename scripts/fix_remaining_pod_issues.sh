@@ -101,13 +101,25 @@ if kubectl get pod -n jellyfin jellyfin >/dev/null 2>&1; then
             debug "Fixed /var/lib/jellyfin permissions"
         fi
         
-        # Clean up any existing Jellyfin resources that might conflict
-        info "Cleaning up existing Jellyfin resources to prevent conflicts"
-        kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true
-        kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true
-        kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true
-        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true
-        sleep 5  # Give time for resources to be cleaned up
+        # Only clean up Jellyfin resources if they are actually problematic
+        info "Checking Jellyfin pod status before potential cleanup"
+        
+        JELLYFIN_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+        JELLYFIN_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
+        
+        if [ "$JELLYFIN_STATUS" = "Running" ] && [ "$JELLYFIN_READY" = "True" ]; then
+            info "✓ Jellyfin pod is healthy (Running and Ready) - skipping cleanup"
+            return 0  # Don't recreate a healthy pod
+        elif [ "$JELLYFIN_STATUS" = "Running" ] && [ "$JELLYFIN_READY" = "False" ]; then
+            info "Jellyfin pod is Running but not Ready - will update health check configuration"
+            # Continue to apply improved health checks without deleting the running pod
+        elif [ "$JELLYFIN_STATUS" = "Pending" ] || [ "$JELLYFIN_STATUS" = "Failed" ] || [ "$JELLYFIN_STATUS" = "Unknown" ]; then
+            warn "Jellyfin pod is in problematic state ($JELLYFIN_STATUS) - cleaning up for recreation"
+            kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true
+            sleep 5  # Give time for pod to be cleaned up
+        else
+            info "No existing Jellyfin pod found - will create new one"
+        fi
         
         # Update jellyfin pod with improved health checks
         info "Updating jellyfin pod configuration with improved health checks"
@@ -567,19 +579,29 @@ if [ -n "$STUCK_PODS" ]; then
         info "Running CNI bridge conflict fix..."
         ./scripts/fix_cni_bridge_conflict.sh
     else
-        warn "CNI bridge fix script not found - applying manual CNI reset"
+        warn "CNI bridge fix script not found - applying cautious manual CNI reset"
         
-        # Manual CNI reset
-        sudo systemctl restart containerd
-        kubectl delete pods -n kube-flannel --all --force --grace-period=0
+        # Manual CNI reset - check if really needed first
+        FLANNEL_WORKING=$(kubectl get pods -n kube-flannel --no-headers 2>/dev/null | grep "Running" | wc -l)
+        FLANNEL_TOTAL=$(kubectl get pods -n kube-flannel --no-headers 2>/dev/null | wc -l)
         
-        echo "Waiting for flannel to recreate..."
-        sleep 30
-        
-        if timeout 120 kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel; then
-            info "✓ Flannel DaemonSet is ready"
+        if [ "$FLANNEL_WORKING" -eq "$FLANNEL_TOTAL" ] && [ "$FLANNEL_TOTAL" -gt 0 ]; then
+            info "✓ Flannel pods are already working ($FLANNEL_WORKING/$FLANNEL_TOTAL) - skipping aggressive reset"
         else
-            warn "Flannel rollout timed out"
+            warn "Flannel pods need reset ($FLANNEL_WORKING/$FLANNEL_TOTAL working) - applying manual reset"
+            
+            # Manual CNI reset
+            sudo systemctl restart containerd
+            kubectl delete pods -n kube-flannel --all --force --grace-period=0
+            
+            echo "Waiting for flannel to recreate..."
+            sleep 30
+            
+            if timeout 120 kubectl rollout status daemonset/kube-flannel-ds -n kube-flannel; then
+                info "✓ Flannel DaemonSet is ready"
+            else
+                warn "Flannel rollout timed out"
+            fi
         fi
     fi
     

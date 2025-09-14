@@ -313,15 +313,36 @@ run_post_deployment_fixes() {
     if is_running_on_control_plane; then
         info "Running post-deployment fixes locally (already on control plane)..."
         
-        # Clean up any existing Jellyfin resources that might conflict
-        info "Cleaning up any conflicting Jellyfin resources..."
-        kubectl delete pvc -n jellyfin --all --ignore-not-found=true --timeout=30s || true
-        kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true --timeout=30s || true
-        # Clean up existing services and deployments to prevent port conflicts
-        kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true --timeout=30s || true
-        kubectl delete service -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
-        kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
-        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
+        # Only clean up conflicting Jellyfin resources if they are actually problematic
+        info "Checking for problematic Jellyfin resources..."
+        
+        # Check if jellyfin pod exists and its status
+        JELLYFIN_POD_STATUS=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+        JELLYFIN_POD_READY=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "False")
+        
+        if [ "$JELLYFIN_POD_STATUS" = "Running" ] && [ "$JELLYFIN_POD_READY" = "True" ]; then
+            info "✓ Jellyfin pod is healthy (Running and Ready) - preserving existing pod"
+        elif [ "$JELLYFIN_POD_STATUS" = "Running" ] && [ "$JELLYFIN_POD_READY" = "False" ]; then
+            info "Jellyfin pod is Running but not Ready - will preserve pod and let fix scripts handle health issues"
+        elif [ "$JELLYFIN_POD_STATUS" = "Pending" ] || [ "$JELLYFIN_POD_STATUS" = "Failed" ] || [ "$JELLYFIN_POD_STATUS" = "Unknown" ]; then
+            warn "Jellyfin pod is in problematic state ($JELLYFIN_POD_STATUS) - cleaning up for recreation"
+            kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
+        else
+            info "No existing Jellyfin pod found - will be created by manifests"
+        fi
+        
+        # Only clean up PVCs and PVs if there are actual conflicts (not during normal operations)
+        # These should generally be preserved to maintain data persistence
+        if kubectl get pv jellyfin-config-pv jellyfin-media-pv >/dev/null 2>&1; then
+            PV_STATUS=$(kubectl get pv jellyfin-config-pv jellyfin-media-pv -o jsonpath='{.items[*].status.phase}' 2>/dev/null || echo "")
+            if echo "$PV_STATUS" | grep -q "Failed"; then
+                warn "Found failed PVs - cleaning up for recreation"
+                kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true --timeout=30s || true
+                kubectl delete pvc -n jellyfin --all --ignore-not-found=true --timeout=30s || true
+            else
+                info "✓ PVs appear healthy - preserving storage"
+            fi
+        fi
         
         # Wait for cleanup to complete
         sleep 10
@@ -376,15 +397,33 @@ run_post_deployment_fixes() {
         # Copy scripts to control plane
         local temp_dir="/tmp/vmstation-fixes"
         
-        # First clean up any conflicting Jellyfin resources
-        info "Cleaning up any conflicting Jellyfin resources on remote control plane..."
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true --timeout=30s || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true --timeout=30s || true" || true
-        # Clean up existing services and deployments to prevent port conflicts
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true --timeout=30s || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
+        # Only clean up conflicting Jellyfin resources if they are actually problematic on remote control plane
+        info "Checking for problematic Jellyfin resources on remote control plane..."
+        
+        # Check remote jellyfin pod status
+        REMOTE_JELLYFIN_STATUS=$(ssh ${control_plane_user}@$control_plane_ip "kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo 'NotFound'")
+        REMOTE_JELLYFIN_READY=$(ssh ${control_plane_user}@$control_plane_ip "kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}' 2>/dev/null || echo 'False'")
+        
+        if [ "$REMOTE_JELLYFIN_STATUS" = "Running" ] && [ "$REMOTE_JELLYFIN_READY" = "True" ]; then
+            info "✓ Remote Jellyfin pod is healthy (Running and Ready) - preserving existing pod"
+        elif [ "$REMOTE_JELLYFIN_STATUS" = "Running" ] && [ "$REMOTE_JELLYFIN_READY" = "False" ]; then
+            info "Remote Jellyfin pod is Running but not Ready - will preserve pod and let fix scripts handle health issues"
+        elif [ "$REMOTE_JELLYFIN_STATUS" = "Pending" ] || [ "$REMOTE_JELLYFIN_STATUS" = "Failed" ] || [ "$REMOTE_JELLYFIN_STATUS" = "Unknown" ]; then
+            warn "Remote Jellyfin pod is in problematic state ($REMOTE_JELLYFIN_STATUS) - cleaning up for recreation"
+            ssh ${control_plane_user}@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
+        else
+            info "No existing remote Jellyfin pod found - will be created by manifests"
+        fi
+        
+        # Only clean up PVCs and PVs if there are actual conflicts on remote
+        REMOTE_PV_STATUS=$(ssh ${control_plane_user}@$control_plane_ip "kubectl get pv jellyfin-config-pv jellyfin-media-pv -o jsonpath='{.items[*].status.phase}' 2>/dev/null || echo ''")
+        if [ -n "$REMOTE_PV_STATUS" ] && echo "$REMOTE_PV_STATUS" | grep -q "Failed"; then
+            warn "Found failed PVs on remote - cleaning up for recreation"
+            ssh ${control_plane_user}@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true --timeout=30s || true" || true
+            ssh ${control_plane_user}@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true --timeout=30s || true" || true
+        else
+            info "✓ Remote PVs appear healthy - preserving storage"
+        fi
         
         for script in "${fix_scripts[@]}"; do
             if [ -f "$script" ]; then
