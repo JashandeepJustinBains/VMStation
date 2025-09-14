@@ -286,11 +286,115 @@
       until: >
         jellyfin_pods.resources | length > 0 and
         jellyfin_pods.resources | map(attribute='status.phase') | list | unique == ['Running']
-      retries: 30
-      delay: 10
-      failed_when: >
+      retries: 45  # Increased from 30 to allow for network fixes
+      delay: 15    # Increased delay for network stabilization
+      failed_when: false  # Don't fail immediately, allow for diagnosis
+
+    - name: "Diagnose Jellyfin networking issues if pod is not ready"
+      block:
+        - name: "Check Jellyfin pod detailed status"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: jellyfin
+            label_selectors:
+              - app=jellyfin
+            kubeconfig: "{{ kubeconfig_path }}"
+          register: jellyfin_status
+
+        - name: "Display Jellyfin pod networking diagnostics"
+          debug:
+            msg: |
+              Jellyfin Pod Networking Diagnostics:
+              Pod Phase: {{ jellyfin_status.resources[0].status.phase if jellyfin_status.resources else 'Not Found' }}
+              Pod IP: {{ jellyfin_status.resources[0].status.podIP | default('No IP assigned') if jellyfin_status.resources else 'N/A' }}
+              Host IP: {{ jellyfin_status.resources[0].status.hostIP | default('Unknown') if jellyfin_status.resources else 'N/A' }}
+              Node: {{ jellyfin_status.resources[0].spec.nodeName | default('Not scheduled') if jellyfin_status.resources else 'N/A' }}
+              {% if jellyfin_status.resources and jellyfin_status.resources[0].status.containerStatuses %}
+              Container Ready: {{ jellyfin_status.resources[0].status.containerStatuses[0].ready | default('Unknown') }}
+              Container State: {{ jellyfin_status.resources[0].status.containerStatuses[0].state.keys() | first if jellyfin_status.resources[0].status.containerStatuses[0].state else 'Unknown' }}
+              {% endif %}
+
+        - name: "Check for CNI bridge networking events"
+          shell: kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to create pod sandbox\|network plugin is not ready\|cni0\|failed to set bridge addr" | tail -5
+          register: cni_events
+          failed_when: false
+
+        - name: "Display CNI networking events"
+          debug:
+            msg: |
+              Recent CNI/Networking Events:
+              {{ cni_events.stdout if cni_events.stdout else 'No recent CNI errors found' }}
+
+        - name: "Check flannel pod status for networking issues"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: kube-flannel
+            label_selectors:
+              - app=flannel
+            kubeconfig: "{{ kubeconfig_path }}"
+          register: flannel_status
+
+        - name: "Display flannel pod status"
+          debug:
+            msg: |
+              Flannel Pod Status:
+              {% for pod in flannel_status.resources %}
+              {{ pod.metadata.name }} on {{ pod.spec.nodeName }}: {{ pod.status.phase }}
+              {% endfor %}
+
+        - name: "Apply automatic CNI bridge fix if needed"
+          shell: |
+            if [ -f "/home/runner/work/VMStation/VMStation/scripts/fix_cni_bridge_conflict.sh" ]; then
+              echo "Running CNI bridge conflict fix..."
+              chmod +x /home/runner/work/VMStation/VMStation/scripts/fix_cni_bridge_conflict.sh
+              /home/runner/work/VMStation/VMStation/scripts/fix_cni_bridge_conflict.sh
+            else
+              echo "CNI bridge fix script not found"
+            fi
+          register: cni_fix_result
+          failed_when: false
+          when: jellyfin_status.resources and jellyfin_status.resources[0].status.phase == 'Pending'
+
+        - name: "Display CNI fix results"
+          debug:
+            msg: "{{ cni_fix_result.stdout }}"
+          when: cni_fix_result is defined and cni_fix_result.stdout
+
+        - name: "Wait additional time for Jellyfin after CNI fix"
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: jellyfin
+            label_selectors:
+              - app=jellyfin
+            kubeconfig: "{{ kubeconfig_path }}"
+          register: jellyfin_retry
+          until: >
+            jellyfin_retry.resources | length > 0 and
+            jellyfin_retry.resources | map(attribute='status.phase') | list | unique == ['Running']
+          retries: 20
+          delay: 15
+          failed_when: false
+          when: cni_fix_result is defined
+
+      when: >
         jellyfin_pods.resources | length == 0 or
         'Running' not in (jellyfin_pods.resources | map(attribute='status.phase') | list)
+
+    - name: "Final Jellyfin status check"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: jellyfin
+        label_selectors:
+          - app=jellyfin
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: jellyfin_final
+      failed_when: >
+        jellyfin_final.resources | length == 0 or
+        'Running' not in (jellyfin_final.resources | map(attribute='status.phase') | list)
 
     - name: "Verify Jellyfin is scheduled on storage node"
       assert:

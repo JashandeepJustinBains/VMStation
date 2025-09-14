@@ -221,6 +221,16 @@ deploy_cluster() {
         success "✅ Cluster deployment completed successfully!"
         
         if [ "$SKIP_VERIFICATION" = false ] && [ "$DRY_RUN" = false ]; then
+            info "Running network prerequisites validation..."
+            if [ -f "scripts/validate_network_prerequisites.sh" ]; then
+                chmod +x scripts/validate_network_prerequisites.sh
+                if scripts/validate_network_prerequisites.sh; then
+                    info "✓ Network prerequisites validation passed"
+                else
+                    warn "Network prerequisites validation found issues - running fixes..."
+                fi
+            fi
+            
             info "Running post-deployment verification..."
             verify_cluster
             
@@ -270,16 +280,34 @@ run_post_deployment_fixes() {
         return 0
     fi
     
-    # Check if fix scripts exist - reordered to fix critical node issues first
+    # Check if fix scripts exist - reordered to fix critical network issues first
     local fix_scripts=(
-        "scripts/fix_homelab_node_issues.sh"
-        "scripts/fix_cluster_dns_configuration.sh"
-        "scripts/setup_static_ips_and_dns.sh"
-        "scripts/fix_remaining_pod_issues.sh"
+        "scripts/fix_cni_bridge_conflict.sh"          # Fix CNI bridge conflicts first
+        "scripts/fix_homelab_node_issues.sh"          # Fix homelab node networking
+        "scripts/fix_cluster_dns_configuration.sh"    # Fix cluster DNS
+        "scripts/setup_static_ips_and_dns.sh"         # Setup static IPs
+        "scripts/fix_remaining_pod_issues.sh"         # Fix remaining issues
     )
     
     local control_plane_ip="192.168.4.63"
     local control_plane_user=$(get_ssh_user_for_ip "$control_plane_ip")
+    
+    # Pre-deployment network diagnostics
+    info "Running pre-fix network diagnostics..."
+    if is_running_on_control_plane; then
+        # Check for immediate CNI bridge conflicts
+        if ip addr show cni0 >/dev/null 2>&1; then
+            CNI_IP=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+            if [ -n "$CNI_IP" ] && ! echo "$CNI_IP" | grep -q "10.244."; then
+                warn "Detected CNI bridge IP conflict: $CNI_IP (expected 10.244.x.x)"
+                info "This may cause Jellyfin and other pods to fail IP assignment"
+            fi
+        fi
+        
+        # Check for stuck pods before fixes
+        STUCK_PODS_BEFORE=$(kubectl get pods --all-namespaces | grep "ContainerCreating\|Pending" | wc -l)
+        info "Pods stuck before fixes: $STUCK_PODS_BEFORE"
+    fi
     
     # Check if we're already running on the control plane
     if is_running_on_control_plane; then
@@ -287,26 +315,61 @@ run_post_deployment_fixes() {
         
         # Clean up any existing Jellyfin resources that might conflict
         info "Cleaning up any conflicting Jellyfin resources..."
-        kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true
-        kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true
+        kubectl delete pvc -n jellyfin --all --ignore-not-found=true --timeout=30s || true
+        kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true --timeout=30s || true
         # Clean up existing services and deployments to prevent port conflicts
-        kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true
-        kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true
-        kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true
-        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true
+        kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true --timeout=30s || true
+        kubectl delete service -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
+        kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
+        kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true
+        
+        # Wait for cleanup to complete
+        sleep 10
         
         for script in "${fix_scripts[@]}"; do
             if [ -f "$script" ]; then
                 info "Running fix script: $script"
-                if chmod +x "$script" && "$script"; then
-                    success "✅ Fix script $script completed successfully"
+                if chmod +x "$script" && timeout 300 "$script"; then
+                    success="✅ Fix script $script completed successfully"
+                    
+                    # Special handling for CNI bridge fix
+                    if [[ "$script" == *"cni_bridge_conflict"* ]]; then
+                        info "Waiting for CNI bridge fix to stabilize..."
+                        sleep 30
+                        
+                        # Check if CNI bridge now has correct IP
+                        if ip addr show cni0 >/dev/null 2>&1; then
+                            NEW_CNI_IP=$(ip addr show cni0 | grep "inet " | awk '{print $2}' | head -1)
+                            if echo "$NEW_CNI_IP" | grep -q "10.244."; then
+                                info "✓ CNI bridge now has correct IP: $NEW_CNI_IP"
+                            fi
+                        fi
+                    fi
+                    
+                    echo "$success"
                 else
                     warn "⚠️ Fix script $script encountered issues (non-critical)"
+                    # For critical networking scripts, show more details
+                    if [[ "$script" == *"cni_bridge"* ]] || [[ "$script" == *"homelab_node"* ]]; then
+                        warn "This script addresses critical networking issues - review logs"
+                    fi
                 fi
             else
                 warn "Fix script not found: $script"
             fi
         done
+        
+        # Post-fix validation
+        info "Running post-fix validation..."
+        sleep 15
+        
+        STUCK_PODS_AFTER=$(kubectl get pods --all-namespaces | grep "ContainerCreating\|Pending" | wc -l)
+        info "Pods stuck after fixes: $STUCK_PODS_AFTER"
+        
+        if [ "$STUCK_PODS_AFTER" -lt "$STUCK_PODS_BEFORE" ]; then
+            info "✓ Network fixes improved pod creation (reduced from $STUCK_PODS_BEFORE to $STUCK_PODS_AFTER stuck pods)"
+        fi
+        
     else
         info "Copying fix scripts to control plane and running them..."
         
@@ -315,20 +378,20 @@ run_post_deployment_fixes() {
         
         # First clean up any conflicting Jellyfin resources
         info "Cleaning up any conflicting Jellyfin resources on remote control plane..."
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pvc -n jellyfin --all --ignore-not-found=true --timeout=30s || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pv jellyfin-config-pv jellyfin-media-pv --ignore-not-found=true --timeout=30s || true" || true
         # Clean up existing services and deployments to prevent port conflicts
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin --ignore-not-found=true || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true || true" || true
-        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin-service --ignore-not-found=true --timeout=30s || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete service -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete deployment -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
+        ssh ${control_plane_user}@$control_plane_ip "kubectl delete pod -n jellyfin jellyfin --ignore-not-found=true --timeout=30s || true" || true
         
         for script in "${fix_scripts[@]}"; do
             if [ -f "$script" ]; then
                 info "Copying and running: $script"
                 if scp "$script" ${control_plane_user}@$control_plane_ip:/tmp/; then
                     local script_name=$(basename "$script")
-                    if ssh ${control_plane_user}@$control_plane_ip "chmod +x /tmp/$script_name && /tmp/$script_name"; then
+                    if ssh ${control_plane_user}@$control_plane_ip "chmod +x /tmp/$script_name && timeout 300 /tmp/$script_name"; then
                         success "✅ Remote fix script $script_name completed successfully"
                     else
                         warn "⚠️ Remote fix script $script_name encountered issues (non-critical)"

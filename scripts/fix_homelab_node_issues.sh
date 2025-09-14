@@ -58,37 +58,83 @@ fi
 
 # Step 0b: Check for CNI bridge IP conflicts (common root cause)
 # Step 0b: Check for CNI bridge IP conflicts (common root cause)
-info "Step 0b: Checking for CNI bridge IP conflicts"
+info "Step 0b: Checking for CNI bridge IP conflicts and network readiness"
 
-# Check for ContainerCreating pods which often indicate CNI issues
+# Enhanced check for ContainerCreating pods which often indicate CNI issues
 CONTAINER_CREATING_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
+STUCK_JELLYFIN=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
 
-if [ "$CONTAINER_CREATING_PODS" -gt 0 ]; then
-    warn "Found $CONTAINER_CREATING_PODS pods stuck in ContainerCreating - checking for CNI bridge conflicts"
+if [ "$CONTAINER_CREATING_PODS" -gt 0 ] || [ "$STUCK_JELLYFIN" = "Pending" ]; then
+    warn "Found $CONTAINER_CREATING_PODS pods stuck in ContainerCreating"
+    if [ "$STUCK_JELLYFIN" = "Pending" ]; then
+        warn "Jellyfin pod is stuck in Pending state"
+    fi
     
     # Check for the specific CNI bridge error in events
-    CNI_BRIDGE_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to set bridge addr.*cni0.*already has an IP address" | tail -1)
+    CNI_BRIDGE_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to set bridge addr.*cni0.*already has an IP address\|Failed to create pod sandbox\|network plugin is not ready" | tail -3)
     
     if [ -n "$CNI_BRIDGE_ERRORS" ]; then
-        error "CNI bridge IP conflict detected!"
-        echo "Error: $CNI_BRIDGE_ERRORS"
+        error "CNI networking errors detected!"
+        echo "Recent errors:"
+        echo "$CNI_BRIDGE_ERRORS"
         echo
         warn "Applying CNI bridge fix before proceeding with other fixes..."
         
         if [ -f "./scripts/fix_cni_bridge_conflict.sh" ]; then
+            info "Running enhanced CNI bridge conflict fix..."
             ./scripts/fix_cni_bridge_conflict.sh
             echo
-            info "CNI bridge fix applied - continuing with remaining fixes..."
+            info "CNI bridge fix applied - waiting for network stabilization..."
+            sleep 30
+            
+            # Re-check pod status after CNI fix
+            NEW_CONTAINER_CREATING=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
+            if [ "$NEW_CONTAINER_CREATING" -lt "$CONTAINER_CREATING_PODS" ]; then
+                info "✓ CNI fix reduced stuck pods from $CONTAINER_CREATING_PODS to $NEW_CONTAINER_CREATING"
+            fi
         else
             error "CNI bridge fix script not found - manual intervention required"
             echo "Please run: sudo ip link delete cni0 && sudo systemctl restart containerd"
             echo "Then restart flannel pods: kubectl delete pods -n kube-flannel --all"
         fi
     else
-        info "No CNI bridge conflicts detected in recent events"
+        info "No obvious CNI bridge conflicts detected, checking other network issues..."
+        
+        # Check for general network plugin readiness
+        NETWORK_READY=$(kubectl get nodes -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o True | wc -l)
+        TOTAL_NODES=$(kubectl get nodes --no-headers | wc -l)
+        
+        if [ "$NETWORK_READY" -ne "$TOTAL_NODES" ]; then
+            warn "Network readiness issue: $NETWORK_READY/$TOTAL_NODES nodes ready"
+            
+            # Check for network plugin issues
+            kubectl get nodes -o wide
+            echo
+            kubectl get pods -n kube-flannel -o wide
+        fi
     fi
 else
-    info "No pods stuck in ContainerCreating"
+    info "No pods stuck in ContainerCreating - network appears functional"
+fi
+
+# Additional check for mixed OS environment compatibility
+info "Checking mixed OS environment compatibility..."
+RHEL_NODES=$(kubectl get nodes -o jsonpath='{.items[?(@.status.nodeInfo.osImage=~".*Red Hat.*|.*AlmaLinux.*|.*CentOS.*")].metadata.name}' 2>/dev/null || echo "")
+if [ -n "$RHEL_NODES" ]; then
+    warn "RHEL/AlmaLinux nodes detected: $RHEL_NODES"
+    info "Applying mixed OS networking compatibility fixes..."
+    
+    # Ensure iptables backend is consistent
+    IPTABLES_MODE=$(iptables --version 2>/dev/null | head -1 || echo "unknown")
+    info "iptables mode: $IPTABLES_MODE"
+    
+    # Check for nftables compatibility issues
+    if command -v nft >/dev/null 2>&1; then
+        NFT_TABLES=$(nft list tables 2>/dev/null | wc -l)
+        if [ "$NFT_TABLES" -gt 0 ]; then
+            warn "nftables detected with $NFT_TABLES tables - may conflict with iptables-based CNI"
+        fi
+    fi
 fi
 
 # Step 1: Identify problematic pods on homelab node

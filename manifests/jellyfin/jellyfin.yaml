@@ -7,8 +7,10 @@ metadata:
   labels:
     name: jellyfin
     vmstation.io/component: media
+    pod-security.kubernetes.io/enforce: privileged
 ---
 # Jellyfin Pod (using hostPath volumes instead of PVCs)
+# Enhanced with networking diagnostics and improved probe settings
 apiVersion: v1
 kind: Pod
 metadata:
@@ -17,6 +19,9 @@ metadata:
   labels:
     app: jellyfin
     component: media-server
+  annotations:
+    vmstation.io/network-mode: "host-bridge"
+    vmstation.io/cni-debug: "enabled"
 spec:
   # Schedule on storage node explicitly
   nodeSelector:
@@ -27,6 +32,25 @@ spec:
     runAsGroup: 1000
     fsGroup: 1000
     # Removed seccompProfile: RuntimeDefault to allow network access for probes
+  # Add init container for network validation
+  initContainers:
+  - name: network-init
+    image: busybox:1.35
+    command: ['sh', '-c']
+    args:
+    - |
+      echo "=== VMStation Jellyfin Network Initialization ==="
+      echo "Pod IP: $(hostname -i)"
+      echo "Hostname: $(hostname)"
+      echo "DNS resolution test:"
+      nslookup kubernetes.default.svc.cluster.local || echo "DNS resolution failed"
+      echo "Network interface check:"
+      ip addr show || ifconfig -a
+      echo "Route table:"
+      ip route || route -n
+      echo "Network initialization complete"
+    securityContext:
+      runAsUser: 0  # Need root for network debugging
   containers:
   - name: jellyfin
     image: jellyfin/jellyfin:latest
@@ -49,6 +73,21 @@ spec:
       value: "0.0.0.0"
     - name: JELLYFIN_HTTP_PORT
       value: "8096"
+    # Add network debugging environment variables
+    - name: JELLYFIN_LOG_LEVEL
+      value: "Debug"
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
     volumeMounts:
     - name: jellyfin-config
       mountPath: /config
@@ -65,41 +104,51 @@ spec:
         cpu: "2"
         memory: 2Gi
     # Health checks using root endpoint for better compatibility
-    # Extended timeouts to handle potential network routing delays in mixed OS clusters
+    # Enhanced timeouts and failure thresholds for networking issues
     livenessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 240
+      initialDelaySeconds: 300  # Increased from 240 for network stabilization
       periodSeconds: 60
       timeoutSeconds: 30
       failureThreshold: 5
+      successThreshold: 1
     readinessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 180
+      initialDelaySeconds: 240  # Increased from 180 for network stabilization
       periodSeconds: 30
       timeoutSeconds: 15
       failureThreshold: 10
+      successThreshold: 1
     startupProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
-      initialDelaySeconds: 120
+      initialDelaySeconds: 180  # Increased from 120 for network stabilization
       periodSeconds: 15
       timeoutSeconds: 10
       # Increased failure threshold to handle CNI networking delays in mixed OS
-      failureThreshold: 30
+      failureThreshold: 40  # Increased from 30 for better network tolerance
+      successThreshold: 1
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: false
       capabilities:
         drop:
         - ALL
+  # DNS configuration for better name resolution
+  dnsPolicy: ClusterFirst
+  dnsConfig:
+    options:
+    - name: ndots
+      value: "2"
+    - name: edns0
   # Use hostPath volumes directly (no PVCs needed)
   volumes:
   - name: jellyfin-config
@@ -114,6 +163,16 @@ spec:
       path: /srv/media
       type: DirectoryOrCreate
   restartPolicy: Always
+  # Add tolerations for network-related node issues
+  tolerations:
+  - key: "node.kubernetes.io/network-unavailable"
+    operator: "Exists"
+    effect: "NoSchedule"
+    tolerationSeconds: 300
+  - key: "node.kubernetes.io/not-ready"
+    operator: "Exists"
+    effect: "NoExecute"
+    tolerationSeconds: 300
 ---
 # Jellyfin Service
 apiVersion: v1

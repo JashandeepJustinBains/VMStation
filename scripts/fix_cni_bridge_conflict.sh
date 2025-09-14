@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # fix_cni_bridge_conflict.sh
-# Idempotent helper to resolve CNI bridge IP conflicts (cni0 mismatch)
+# Enhanced CNI bridge conflict resolution for VMStation cluster
+# Addresses specific issues with Jellyfin pod IP assignment failures
 # Run this on the control-plane node as root.
 # It will:
 #  - back up current /etc/cni/net.d and /var/lib/cni state
@@ -10,9 +11,11 @@ set -euo pipefail
 #  - remove the cni0 bridge and flush CNI state
 #  - restart containerd and kubelet so the CNI plugin (flannel) recreates the correct bridge
 #  - wait for flannel DaemonSet and CoreDNS to reach Running
+#  - validate pod IP assignment is working
 
 DESIRED_BRIDGE_CIDR="10.244.0.1/16"
 BACKUP_DIR="/tmp/cni-backup-$(date +%s)"
+FLANNEL_SUBNET="10.244.0.0/16"
 
 info() { echo -e "[INFO] $*"; }
 warn() { echo -e "[WARN] $*"; }
@@ -20,6 +23,36 @@ err() { echo -e "[ERROR] $*"; exit 1; }
 
 if [ "$EUID" -ne 0 ]; then
   err "This script must be run as root on the control-plane node"
+fi
+
+# Pre-flight checks for VMStation specific networking
+info "VMStation CNI bridge conflict resolution starting..."
+info "Target Flannel subnet: $FLANNEL_SUBNET"
+info "Expected bridge CIDR: $DESIRED_BRIDGE_CIDR"
+
+# Check if kubectl is available and cluster is accessible
+if ! command -v kubectl >/dev/null 2>&1; then
+  err "kubectl not found. This script must run on the control plane node."
+fi
+
+if ! timeout 30 kubectl get nodes >/dev/null 2>&1; then
+  err "Cannot access Kubernetes cluster. Ensure this runs on the control plane."
+fi
+
+# Check for stuck pods in ContainerCreating state (key symptom)
+STUCK_PODS=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | wc -l)
+if [ "$STUCK_PODS" -gt 0 ]; then
+  warn "Found $STUCK_PODS pods stuck in ContainerCreating state"
+  info "This typically indicates CNI bridge IP conflicts"
+fi
+
+# Check for specific CNI bridge errors in events
+info "Checking for CNI bridge conflict errors..."
+BRIDGE_ERRORS=$(kubectl get events --all-namespaces --sort-by='.lastTimestamp' | grep -i "failed to set bridge addr.*cni0.*already has an IP address" | wc -l)
+if [ "$BRIDGE_ERRORS" -gt 0 ]; then
+  warn "Found $BRIDGE_ERRORS CNI bridge conflict events"
+else
+  info "No recent CNI bridge conflict events found"
 fi
 
 info "Backing up CNI configuration and state to $BACKUP_DIR"
@@ -52,22 +85,54 @@ systemctl stop kubelet || warn "Failed to stop kubelet; continuing"
 info "Stopping containerd"
 systemctl stop containerd || warn "Failed to stop containerd; continuing"
 
+# Wait for containerd to fully stop
+sleep 5
+
 info "Removing cni0 bridge and flushing CNI state"
 # bring down and delete bridge if present
 ip link set dev cni0 down 2>/dev/null || true
 ip addr flush dev cni0 2>/dev/null || true
 ip link delete cni0 2>/dev/null || true
 
+# Check if bridge was successfully removed
+if ip link show cni0 >/dev/null 2>&1; then
+  warn "cni0 bridge still exists after deletion attempt"
+else
+  info "Successfully removed cni0 bridge"
+fi
+
 # Remove per-pod CNI network state so plugins can reinitialize cleanly
 if [ -d /var/lib/cni ]; then
   info "Backing up and clearing /var/lib/cni"
-  mv /var/lib/cni "$BACKUP_DIR/" || true
+  mv /var/lib/cni "$BACKUP_DIR/var-lib-cni" || true
+  mkdir -p /var/lib/cni
 fi
 
 if [ -d /var/lib/cni/networks ]; then
-  info "Backing up and clearing /var/lib/cni/networks"
-  mv /var/lib/cni/networks "$BACKUP_DIR/" || true
+  info "Backing up and clearing /var/lib/cni/networks" 
+  mv /var/lib/cni/networks "$BACKUP_DIR/cni-networks" || true
 fi
+
+# Clear any remaining CNI network namespace state
+if [ -d /var/run/netns ]; then
+  info "Cleaning up network namespaces"
+  for ns in $(ip netns list 2>/dev/null | awk '{print $1}' | grep -E '^cni-|^[0-9a-f-]+$' || true); do
+    if [ -n "$ns" ]; then
+      ip netns delete "$ns" 2>/dev/null || true
+    fi
+  done
+fi
+
+# Clean up any iptables rules related to old CNI setup
+info "Cleaning up stale iptables rules"
+# Remove any rules related to old CNI bridges
+iptables -t nat -S | grep -E "cni0|cbr0" | sed 's/^-A/-D/' | while read rule; do
+  iptables -t nat $rule 2>/dev/null || true
+done
+
+iptables -S | grep -E "cni0|cbr0" | sed 's/^-A/-D/' | while read rule; do
+  iptables $rule 2>/dev/null || true
+done
 
 info "Starting containerd"
 systemctl start containerd || err "Failed to start containerd"
@@ -77,6 +142,31 @@ sleep 5
 
 info "Starting kubelet"
 systemctl start kubelet || err "Failed to start kubelet"
+
+# Wait for kubelet to stabilize
+info "Waiting for kubelet to stabilize..."
+sleep 10
+
+# Restart any stuck pods that were in ContainerCreating state
+info "Checking for pods that need restart after CNI reset..."
+JELLYFIN_STUCK=$(kubectl get pod -n jellyfin jellyfin -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+if [ "$JELLYFIN_STUCK" = "Pending" ]; then
+  warn "Jellyfin pod is still pending, restarting it..."
+  kubectl delete pod -n jellyfin jellyfin --force --grace-period=0 2>/dev/null || true
+  sleep 5
+fi
+
+# Delete any other stuck pods
+STUCK_PODS_LIST=$(kubectl get pods --all-namespaces | grep "ContainerCreating" | awk '{print $2 " " $1}' || true)
+if [ -n "$STUCK_PODS_LIST" ]; then
+  warn "Restarting stuck pods..."
+  echo "$STUCK_PODS_LIST" | while read pod namespace; do
+    if [ -n "$pod" ] && [ -n "$namespace" ]; then
+      info "Restarting stuck pod: $namespace/$pod"
+      kubectl delete pod -n "$namespace" "$pod" --force --grace-period=0 || true
+    fi
+  done
+fi
 
 info "Waiting for flannel DaemonSet pods to become Ready (up to 2 minutes)"
 timeout=120
@@ -117,6 +207,58 @@ if [ $elapsed -ge $timeout ]; then
 fi
 
 info "CNI reset script completed. Backups saved under $BACKUP_DIR"
+
+# Additional validation for VMStation specific issues
+info "Performing VMStation-specific networking validation..."
+
+# Wait a bit more for the new cni0 bridge to be created
+sleep 20
+
+# Check if new bridge has correct IP
+if ip link show cni0 >/dev/null 2>&1; then
+  new_ip=$(ip -4 addr show dev cni0 | awk '/inet /{print $2; exit}') || true
+  info "New cni0 bridge IP: ${new_ip:-<none>}"
+  
+  if echo "${new_ip:-}" | grep -q "10.244."; then
+    info "✓ cni0 bridge now has correct Flannel subnet IP"
+  else
+    warn "cni0 bridge IP may still be incorrect: ${new_ip:-none}"
+  fi
+else
+  warn "cni0 bridge not recreated yet - this may be normal during startup"
+fi
+
+# Test pod creation to validate CNI is working
+info "Testing pod creation to validate CNI functionality..."
+cat <<EOF | kubectl apply -f - || warn "Test pod creation failed"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cni-validation-test
+  namespace: kube-system
+spec:
+  containers:
+  - name: test
+    image: busybox:1.35
+    command: ['sleep', '30']
+  restartPolicy: Never
+EOF
+
+# Wait and check test pod
+sleep 15
+TEST_STATUS=$(kubectl get pod cni-validation-test -n kube-system -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+TEST_IP=$(kubectl get pod cni-validation-test -n kube-system -o jsonpath='{.status.podIP}' 2>/dev/null || echo "")
+
+if [ "$TEST_STATUS" = "Running" ] && [ -n "$TEST_IP" ]; then
+  info "✓ CNI validation test successful - Pod IP: $TEST_IP"
+else
+  warn "CNI validation test failed - Status: $TEST_STATUS, IP: ${TEST_IP:-none}"
+fi
+
+# Clean up test pod
+kubectl delete pod cni-validation-test -n kube-system --ignore-not-found >/dev/null 2>&1 || true
+
+info "CNI bridge conflict resolution completed!"
 info "If pods still fail, run: kubectl -n kube-system describe pod <pod> and check kubelet logs: journalctl -u kubelet -n 200"
 
 exit 0
