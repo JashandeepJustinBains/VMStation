@@ -143,7 +143,7 @@ if [ -n "$TARGET_IP" ]; then
     # Test 2: HTTP connectivity (if target supports it)
     if [ -n "$JELLYFIN_IP" ]; then
         echo "--- HTTP Test to Jellyfin ---"
-        if kubectl -n kube-system exec debug-net -- timeout 10 curl -sv --max-time 5 "http://$TARGET_IP:8096/" 2>&1; then
+        if kubectl -n kube-system exec debug-net -- timeout 10 curl -sv -f --max-time 5 "http://$TARGET_IP:8096/" 2>&1; then
             success "✓ HTTP test PASSED"
             HTTP_SUCCESS=true
         else
@@ -152,7 +152,7 @@ if [ -n "$TARGET_IP" ]; then
         fi
     elif echo "$TARGET_DESC" | grep -q "nginx"; then
         echo "--- HTTP Test to Nginx ---"
-        if kubectl -n kube-system exec debug-net -- timeout 10 curl -s --max-time 5 "http://$TARGET_IP/" >/dev/null 2>&1; then
+        if kubectl -n kube-system exec debug-net -- timeout 10 curl -s -f --max-time 5 "http://$TARGET_IP/" >/dev/null 2>&1; then
             success "✓ HTTP test PASSED"
             HTTP_SUCCESS=true
         else

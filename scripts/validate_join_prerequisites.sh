@@ -89,7 +89,7 @@ check_master_connectivity() {
     fi
     
     # Test API server health endpoint
-    if curl -k -s --connect-timeout 5 "https://$MASTER_IP:6443/healthz" | grep -q "ok"; then
+    if curl -k -s -f --connect-timeout 5 "https://$MASTER_IP:6443/healthz" | grep -q "ok"; then
         info "✓ API server health endpoint responds"
     else
         warn "API server health endpoint not responding (may be normal)"

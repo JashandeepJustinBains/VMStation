@@ -219,7 +219,7 @@ test_dns_subdomains() {
     
     # Test Jellyfin access
     echo "  Testing Jellyfin access via subdomain..."
-    if timeout 10 curl -s --connect-timeout 3 "http://jellyfin.homelab.com:30096/" >/dev/null 2>&1; then
+    if timeout 10 curl -s -f --connect-timeout 3 "http://jellyfin.homelab.com:30096/" >/dev/null 2>&1; then
         info "    ✅ jellyfin.homelab.com:30096 is accessible"
     else
         warn "    ⚠️ jellyfin.homelab.com:30096 is not accessible"
