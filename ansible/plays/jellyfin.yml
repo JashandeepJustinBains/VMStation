@@ -158,6 +158,9 @@
               env:
               - name: JELLYFIN_PublishedServerUrl
                 value: "http://{{ groups['storage_nodes'][0] | default('192.168.4.61') }}:30096"
+              # Health check configuration
+              - name: HEALTHCHECK_URL
+                value: "http://localhost:8096/health"
               resources:
                 requests:
                   memory: "512Mi"
@@ -174,7 +177,7 @@
                 readOnly: false
               livenessProbe:
                 httpGet:
-                  path: /
+                  path: /health
                   port: 8096
                   scheme: HTTP
                 initialDelaySeconds: 180
@@ -183,7 +186,7 @@
                 failureThreshold: 5
               readinessProbe:
                 httpGet:
-                  path: /
+                  path: /health
                   port: 8096
                   scheme: HTTP
                 initialDelaySeconds: 120
@@ -192,7 +195,7 @@
                 failureThreshold: 5
               startupProbe:
                 httpGet:
-                  path: /
+                  path: /health
                   port: 8096
                   scheme: HTTP
                 initialDelaySeconds: 60

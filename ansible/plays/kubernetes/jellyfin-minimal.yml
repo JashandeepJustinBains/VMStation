@@ -79,6 +79,9 @@ spec:
     env:
     - name: JELLYFIN_PublishedServerUrl
       value: "http://192.168.4.61:30096"
+    # Health check configuration
+    - name: HEALTHCHECK_URL
+      value: "http://localhost:8096/health"
     
     # Resource limits for basic operation
     resources:
@@ -98,10 +101,10 @@ spec:
       mountPath: /config
       readOnly: false
     
-    # Health checks using root endpoint for better compatibility
+    # Health checks using /health endpoint for better accuracy
     livenessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 180
@@ -111,7 +114,7 @@ spec:
     
     readinessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 120
@@ -122,7 +125,7 @@ spec:
     # Startup probe to handle slow initialization
     startupProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 60

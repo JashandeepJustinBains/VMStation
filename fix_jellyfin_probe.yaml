@@ -40,6 +40,9 @@ spec:
       value: "0.0.0.0"
     - name: JELLYFIN_HTTP_PORT
       value: "8096"
+    # Health check configuration
+    - name: HEALTHCHECK_URL
+      value: "http://localhost:8096/health"
     resources:
       requests:
         memory: "512Mi"

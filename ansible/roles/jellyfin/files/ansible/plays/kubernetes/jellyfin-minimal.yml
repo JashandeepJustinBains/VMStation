@@ -79,6 +79,9 @@ spec:
     env:
     - name: JELLYFIN_PublishedServerUrl
       value: "http://192.168.4.61:30096"
+    # Health check configuration
+    - name: HEALTHCHECK_URL
+      value: "http://localhost:8096/health"
     
     # Resource limits for basic operation
     resources:
