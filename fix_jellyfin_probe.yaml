@@ -55,10 +55,10 @@ spec:
     - name: jellyfin-media
       mountPath: /media
       readOnly: true
-    # Fixed probe configuration - more time for initial Jellyfin setup
+    # Fixed probe configuration - using proper /health endpoint
     livenessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 180
@@ -67,7 +67,7 @@ spec:
       failureThreshold: 5
     readinessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 120
@@ -76,7 +76,7 @@ spec:
       failureThreshold: 5
     startupProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 60

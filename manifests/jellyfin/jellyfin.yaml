@@ -86,11 +86,11 @@ spec:
       limits:
         cpu: "2"
         memory: 2Gi
-    # Health checks using root endpoint for better compatibility during startup
+    # Health checks using /health endpoint to properly validate Jellyfin service status
     # Enhanced timeouts and failure thresholds for networking issues
     livenessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 300  # Increased from 240 for network stabilization
@@ -100,7 +100,7 @@ spec:
       successThreshold: 1
     readinessProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 240  # Increased from 180 for network stabilization
@@ -110,7 +110,7 @@ spec:
       successThreshold: 1
     startupProbe:
       httpGet:
-        path: /
+        path: /health
         port: 8096
         scheme: HTTP
       initialDelaySeconds: 180  # Increased from 120 for network stabilization

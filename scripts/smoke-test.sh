@@ -131,7 +131,9 @@ if [ "$JELLYFIN_NAMESPACE" -eq 1 ]; then
         fi
         
         # Test Jellyfin endpoint
-        if curl -s -f http://192.168.4.61:30096/ >/dev/null 2>&1; then
+        if curl -s -f http://192.168.4.61:30096/health 2>/dev/null | grep -q "Healthy"; then
+            success "✅ Jellyfin health endpoint is accessible and healthy"
+        elif curl -s -f http://192.168.4.61:30096/ >/dev/null 2>&1; then
             success "✅ Jellyfin web interface is accessible"
         else
             warn "⚠️  Jellyfin web interface may not be ready yet"
