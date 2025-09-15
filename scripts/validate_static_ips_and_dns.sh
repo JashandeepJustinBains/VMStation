@@ -145,7 +145,7 @@ test_service_accessibility() {
     # Test 16: Test HTTP connectivity to Jellyfin (if running)
     echo "Test $((TESTS_TOTAL + 1)): HTTP connectivity to jellyfin.homelab.com:30096"
     TESTS_TOTAL=$((TESTS_TOTAL + 1))
-    if timeout 10 curl -s --connect-timeout 3 "http://jellyfin.homelab.com:30096/" >/dev/null 2>&1; then
+    if timeout 10 curl -s -f --connect-timeout 3 "http://jellyfin.homelab.com:30096/" >/dev/null 2>&1; then
         success "  ✅ PASSED - Jellyfin is accessible via subdomain"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else

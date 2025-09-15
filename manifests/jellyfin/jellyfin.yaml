@@ -59,6 +59,9 @@ spec:
     # Add network debugging environment variables
     - name: JELLYFIN_LOG_LEVEL
       value: "Debug"
+    # Health check configuration
+    - name: HEALTHCHECK_URL
+      value: "http://localhost:8096/health"
     - name: POD_IP
       valueFrom:
         fieldRef:

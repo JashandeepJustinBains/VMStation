@@ -100,7 +100,7 @@ if [ "$MONITORING_NAMESPACE" -eq 1 ]; then
         fi
         
         # Test Grafana endpoint  
-        if curl -s http://192.168.4.63:30300/api/health >/dev/null; then
+        if curl -s -f http://192.168.4.63:30300/api/health >/dev/null; then
             success "✅ Grafana API is accessible"
         else
             warn "⚠️  Grafana API may not be ready yet"

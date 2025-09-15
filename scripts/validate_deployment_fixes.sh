@@ -68,15 +68,15 @@ echo "=== Testing Service Accessibility ==="
 
 # Test Jellyfin access
 echo "Testing Jellyfin access..."
-if timeout 10 curl -s --connect-timeout 3 "http://192.168.4.61:30096/health" 2>/dev/null | grep -q "Healthy"; then
+if timeout 10 curl -s -f --connect-timeout 3 "http://192.168.4.61:30096/health" 2>/dev/null | grep -q "Healthy"; then
     echo "✅ Jellyfin health endpoint accessible and healthy at 192.168.4.61:30096"
-elif timeout 10 curl -s --connect-timeout 3 "http://192.168.4.61:30096/" >/dev/null 2>&1; then
+elif timeout 10 curl -s -f --connect-timeout 3 "http://192.168.4.61:30096/" >/dev/null 2>&1; then
     echo "✅ Jellyfin web interface accessible at 192.168.4.61:30096"
 else
     echo "❌ Jellyfin not accessible at 192.168.4.61:30096"
 fi
 
-if timeout 10 curl -s --connect-timeout 3 "http://jellyfin.homelab.com:30096/" >/dev/null 2>&1; then
+if timeout 10 curl -s -f --connect-timeout 3 "http://jellyfin.homelab.com:30096/" >/dev/null 2>&1; then
     echo "✅ Jellyfin accessible via subdomain: jellyfin.homelab.com:30096"
 else
     echo "❌ Jellyfin not accessible via subdomain"

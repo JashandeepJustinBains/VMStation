@@ -295,7 +295,7 @@ if kubectl get namespace jellyfin >/dev/null 2>&1; then
             node_ips=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
             
             for node_ip in $node_ips; do
-                if timeout 5 curl -s --connect-timeout 3 "http://$node_ip:$jellyfin_nodeport/" >/dev/null 2>&1; then
+                if timeout 5 curl -s -f --connect-timeout 3 "http://$node_ip:$jellyfin_nodeport/" >/dev/null 2>&1; then
                     success "✅ Jellyfin NodePort accessible on $node_ip:$jellyfin_nodeport"
                 else
                     warn "⚠️  Jellyfin NodePort not accessible on $node_ip:$jellyfin_nodeport"

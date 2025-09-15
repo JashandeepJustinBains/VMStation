@@ -583,7 +583,7 @@ EOF
                 
                 for node_ip in $node_ips; do
                     info "Testing NodePort access on $node_ip:$jellyfin_nodeport"
-                    if timeout 5 curl -s --connect-timeout 3 "http://$node_ip:$jellyfin_nodeport/" >/dev/null 2>&1; then
+                    if timeout 5 curl -s -f --connect-timeout 3 "http://$node_ip:$jellyfin_nodeport/" >/dev/null 2>&1; then
                         success "✓ Jellyfin NodePort accessible on $node_ip:$jellyfin_nodeport"
                         nodeport_accessible=true
                     else

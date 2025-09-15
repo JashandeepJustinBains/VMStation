@@ -45,7 +45,7 @@ spec:
   # Use nodeSelector instead of nodeName for more flexibility
   nodeSelector:
     kubernetes.io/hostname: storagenodet3500
-  
+
   # OPTIONAL: Add tolerations if the target node has taints
   # tolerations:
   # - key: "node-role.kubernetes.io/storage"
@@ -56,18 +56,18 @@ spec:
   #   operator: "Equal"
   #   value: "storage"
   #   effect: "NoSchedule"
-  
+
   # Security context: run as non-root user
   securityContext:
     runAsUser: 1000
     runAsGroup: 1000
     fsGroup: 1000
-  
+
   containers:
   - name: jellyfin
     image: jellyfin/jellyfin:latest
     imagePullPolicy: IfNotPresent
-    
+
     ports:
     - name: http
       containerPort: 8096
@@ -75,11 +75,14 @@ spec:
     - name: https
       containerPort: 8920
       protocol: TCP
-    
+
     env:
     - name: JELLYFIN_PublishedServerUrl
       value: "http://192.168.4.61:30096"
-    
+    # Health check configuration
+    - name: HEALTHCHECK_URL
+      value: "http://localhost:8096/health"
+
     # Resource limits for basic operation
     resources:
       requests:
@@ -88,7 +91,7 @@ spec:
       limits:
         memory: "2Gi"
         cpu: "1000m"
-    
+
     # Volume mounts: media (read-only), config (read-write)
     volumeMounts:
     - name: media
@@ -97,7 +100,7 @@ spec:
     - name: config
       mountPath: /config
       readOnly: false
-    
+
     # Health checks
     livenessProbe:
       httpGet:
@@ -107,7 +110,7 @@ spec:
       periodSeconds: 30
       timeoutSeconds: 10
       failureThreshold: 3
-    
+
     readinessProbe:
       httpGet:
         path: /health
@@ -116,7 +119,7 @@ spec:
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
-    
+
     # Security context for container
     securityContext:
       allowPrivilegeEscalation: false
@@ -124,7 +127,7 @@ spec:
       capabilities:
         drop:
         - ALL
-  
+
   # Volumes: using hostPath by default (see PVC templates below for alternatives)
   volumes:
   - name: media
@@ -135,7 +138,7 @@ spec:
     hostPath:
       path: /var/lib/jellyfin
       type: DirectoryOrCreate
-  
+
   restartPolicy: Always
 
 ---
