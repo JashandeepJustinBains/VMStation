@@ -178,3 +178,10 @@ demo_*.sh
 
 # Test files for homelab node fixes
 test_homelab_fixes.sh
+
+# Frontend build artifacts (src directory)
+src/.next/
+src/out/
+src/dist/
+src/build/
+src/coverage/
