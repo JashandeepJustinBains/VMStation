@@ -133,6 +133,13 @@ coverage/
 docs/_build/
 site/
 
+# Repository Explorer build artifacts
+src/.next/
+src/out/
+src/dist/
+src/build/
+src/node_modules/
+
 # Test scripts (keep local)
 test_deployment_order_fix.sh
 
