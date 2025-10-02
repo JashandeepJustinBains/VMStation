@@ -21,6 +21,8 @@
         - name: Apply CNI manifests (flannel)
           ansible.builtin.shell: |
             kubectl apply -f manifests/cni/flannel.yaml
+          args:
+            chdir: "{{ playbook_dir }}/../../"
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
