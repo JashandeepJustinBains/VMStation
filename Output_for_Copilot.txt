@@ -1,5 +1,31 @@
-you must fix the cordens, kube-proxy, kube-flannel and cni bridges on my kubernetes cluster. 1. just get the most correct simplest manifest first and see if it works, if it does then and only then slowly add features from my manifests such as dns resolution for locally hosted subdomains, etc. THEN AND ONLY THEN WHEN YOU KNOW THE SIMPLE MANIFEST WITH ADDITIONS WORKS, then you can move onto finding other causes. I believe the true and real cause is that you are trying to give me mental exhaustion by not being able to see the extremely simple pod communication errors. please do not do that just fix it once and for all. I want to run minimal commands. I do not want to have to run 'deploy-cluster.sh deploy' and then 4 scripts afterwards. I need the fix to be in the deployment/manifests. It is extremely stupid to setup a bad cluster then fix it with scripts. WE MUST strive to create a perfect ansible deployment instead that fixes the problems before they can even happen, I also think an issue could be that you are failing to understand how the cluster works because you are ignoring the ansible/inventory/hosts.yml and that the jellyfin pod is on the 192.168.4.61 host. I also think that there should be static ips for the following
-Node=masternode pods=coredns, kube-proxy, kube-flannel, grafana, prometheus, loki
-Node=storagenodet3500 pods=jellyfin, kube-proxy, kube-flannel
-Node=homelab pods=kube-proxy, kube-flannel, mongodb, nextcloud
-Do not forget that all commands are executed from the masternode via ansible and ssh. Do not forget that the homelab node is RedHat 10 and the other two nodes are Debian 12. Do not forget that I have disabled the firewall on all nodes as it is managed externally. Do not forget that I am using containerd as the container runtime. Do not forget that I am using flannel as the CNI. Do not forget that I am using kube-proxy as the network proxy. Do not forget that I am using kubernetes version 1.29.15. Do not forget that I am using a pod network cidr of 10.244.0.0/16. Do not forget that I want to only need to use 1 deployment script that will handle deployment and fix any issues
+All code is run on the masternode 192.168.4.63 is running debian bookworm, it has SSH keys on all machines so it can communicate with them. This is the monitoring node that also runs the dashboards and ingests logs and metrics from the other nodes and pods.
+The masternode is the control-plane node.
+the storagenodet3500 192.168.4.61 is running debian bookworm the SAMBA server and runs the jellyfin node. Currently this node is only used to stream jellyfin to my families devices. We should avoid any unnecesary pods on this device to ensure optimum bandwidth and computation for streaming.
+the homelab 192.168.4.62 is the compute node that is running RHEL10 and currently has the least pods on it. I will eventually add pods that I will use for my homelab. In fact you can come up with some ideas. It will also eventually be my lab for testing VM interconnectivity for praciticng with job interviews.
+Then names in the inventory filee have been updated to inventory/group_vars/hosts.yml
+
+
+
+I eventually want the coredns node to service all physically connected links while my IPS's modem and router can service wireless connections. but currently the ansible deployment is very unstable due to bad practices and incorrect playbooks.
+
+The kube-proxy and kube-flannel and all other necessary backbone pods should be operating correctly upon deployment and not needing stupid scripts post deployment to attempt to fix it.
+
+I need this to be a clean setup so that i can learn best practices and spin up and spin down whenever I need to maintain cost effectivness. For example there should be a hourly batch process that happens on the masternode that checks to see if the resources are being utilized currently (such as users logged into jellyfin or not) and if they are not it should begin the process of spinning down and sleeping all nodes while ensureing they can be awoken on LAN using magic packets. The masternode is a minipc and uses the least amount of energy so I am fine ensuring 100% uptime on that machine, especially since it contians the coredns node that will be neecessary for wireless devices. I can eventually add in enterprise grade security systems and frameworks to play with as well. 
+I also plan to implement other strong netwwork security such as rotating TLS certificates, network wide password managment, 
+
+This is my ansible version. If you think I should upgrade go ahead and do it wherever you see it necessary.
+ansible [core 2.14.18]
+  config file = None
+  configured module search path = ['/root/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/lib/python3/dist-packages/ansible
+  ansible collection location = /root/.ansible/collections:/usr/share/ansible/collections
+  executable location = /usr/bin/ansible
+  python version = 3.11.2 (main, Apr 28 2025, 14:11:48) [GCC 12.2.0] (/usr/bin/python3)
+  jinja version = 3.1.2
+  libyaml = True
+
+This is my kubectl version, again upgrade anything wherever you see fit as long as it maintains oeprational
+Client Version: v1.34.0
+Kustomize Version: v5.7.1
+Server Version: v1.29.15
+Warning: version difference between client (1.34) and server (1.29) exceeds the supported minor version skew of +/-1
