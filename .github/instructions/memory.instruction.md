@@ -16,6 +16,9 @@ applyTo: '**'
 - Architecture patterns: control-plane and worker nodes managed by Ansible playbooks
 - All playbooks and scripts must reside in the actual repo root (F:\VMStation), never in F:\f\ or other paths.
 
+## Context7 Research History
+- 2025-10-02: Searched Context7 for flannel CrashLoopBackOff guidance (project /flannel-io/flannel). API returned metadata but full docs require additional access; no actionable content retrieved yet.
+
 ## Conversation History
 - Created an Ansible role `network-fix` and playbook `ansible/playbooks/network-fix.yaml` to apply kernel/module/sysctl changes and restart CNI components.
 - Replaced multi-document spin-down-cluster.yaml with a single-play, valid Ansible playbook that wraps the cluster-spindown role and accepts spin_targets from extra-vars.
