@@ -1,17 +1,53 @@
 ---
 # Ensure kernel modules, sysctl and basic forwarding rules required for Kubernetes CNI
-- name: Ensure br_netfilter module is loaded now
+
+- name: Install required network packages (RHEL/CentOS)
+  become: true
+  ansible.builtin.package:
+    name:
+      - iptables
+      - iptables-services
+      - conntrack-tools
+      - socat
+      - iproute-tc
+    state: present
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
+- name: Install required network packages (Debian/Ubuntu)
+  become: true
+  ansible.builtin.package:
+    name:
+      - iptables
+      - conntrack
+      - socat
+      - iproute2
+    state: present
+  when: ansible_os_family == 'Debian'
+  ignore_errors: true
+
+- name: Load all required kernel modules
   become: true
   ansible.builtin.command:
-    cmd: modprobe br_netfilter
+    cmd: "modprobe {{ item }}"
+  loop:
+    - br_netfilter
+    - overlay
+    - nf_conntrack
+    - vxlan
   changed_when: false
+  ignore_errors: true
 
-- name: Persist br_netfilter module load on boot
+- name: Persist all required kernel modules on boot
   become: true
   ansible.builtin.copy:
-    dest: /etc/modules-load.d/br_netfilter.conf
+    dest: /etc/modules-load.d/kubernetes.conf
     content: |
+      # Kubernetes required modules
       br_netfilter
+      overlay
+      nf_conntrack
+      vxlan
     owner: root
     group: root
     mode: '0644'
@@ -62,6 +98,29 @@
     state: stopped
     enabled: false
   when: ufw_path.stat.exists
+  ignore_errors: true
+
+- name: Stop and disable firewalld on RHEL systems (Flannel VXLAN requires open communication)
+  become: true
+  ansible.builtin.service:
+    name: firewalld
+    state: stopped
+    enabled: false
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
+- name: Configure NetworkManager to ignore CNI interfaces (RHEL/Debian)
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/conf.d/99-kubernetes.conf
+    content: |
+      [keyfile]
+      unmanaged-devices=interface-name:cni*;interface-name:flannel*;interface-name:veth*
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart NetworkManager
+  when: ansible_service_mgr == 'systemd'
   ignore_errors: true
 
 # kubelet will be restarted via handler 'restart kubelet' only when changes occur
