@@ -385,7 +385,7 @@
 
     - name: "Wait for applications to be ready (with improved error handling)"
       block:
-        - name: "Check if cluster networking is stable before waiting"
+        - name: "Check CoreDNS status (informational only - kubeadm manages CoreDNS)"
           kubernetes.core.k8s_info:
             api_version: v1
             kind: Pod
@@ -393,45 +393,11 @@
             label_selectors:
               - k8s-app=kube-dns
           register: coredns_check
-          
-
-        - name: "Deploy CoreDNS if not present"
-          kubernetes.core.k8s:
-            state: present
-            src: https://raw.githubusercontent.com/coredns/deployment/master/kubernetes/coredns.yaml.sed
           ignore_errors: true
-          when: coredns_check.resources | length == 0
-
-        - name: "Wait for CoreDNS to be ready if just deployed"
-          when: coredns_check.resources | length == 0
-          block:
-            - name: "Wait for CoreDNS to be ready"
-              kubernetes.core.k8s_info:
-                api_version: v1
-                kind: Pod
-                namespace: kube-system
-                label_selectors:
-                  - k8s-app=kube-dns
-              register: coredns_pods
-              until: >
-                coredns_pods.resources | length > 0 and
-                (coredns_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) >= 1
-              retries: 12
-              delay: 5
-              ignore_errors: true
-
-        - name: "If CoreDNS exists but not running, print debug and suggest manual intervention"
-          when: coredns_check.resources | length > 0 and (coredns_check.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) == 0
+          
+        - name: "Display CoreDNS status"
           debug:
-            msg: |
-              "CoreDNS deployment exists but no pods are running.\n"
-              "This may be due to a previous deployment with an immutable selector.\n"
-              "Manual intervention is required. Try: kubectl rollout restart deployment/coredns -n kube-system\n"
-              "Or check pod logs: kubectl logs -n kube-system -l k8s-app=kube-dns --all-containers --tail=100\n"
-
-        - name: "Verify CoreDNS is running (soft check)"
-          debug:
-            msg: "CoreDNS status: {{ (coredns_check.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) }} pods running"
+            msg: "CoreDNS pods: {{ coredns_check.resources | length }} (managed by kubeadm, not modified by this playbook)"
         
         - name: "Wait for applications to be ready with reduced timeout"
           kubernetes.core.k8s_info:

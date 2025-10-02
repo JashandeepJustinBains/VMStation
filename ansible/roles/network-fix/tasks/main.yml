@@ -109,6 +109,17 @@
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
+- name: Ensure NetworkManager conf.d directory exists
+  become: true
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_service_mgr == 'systemd'
+  ignore_errors: true
+
 - name: Configure NetworkManager to ignore CNI interfaces (RHEL/Debian)
   become: true
   ansible.builtin.copy:
@@ -122,5 +133,16 @@
   notify: restart NetworkManager
   when: ansible_service_mgr == 'systemd'
   ignore_errors: true
+
+- name: Configure iptables-legacy as default on RHEL systems (kube-proxy compatibility)
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - alternatives --set iptables /usr/sbin/iptables-legacy
+    - alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+  changed_when: false
 
 # kubelet will be restarted via handler 'restart kubelet' only when changes occur
