@@ -32,12 +32,15 @@
             fi
           args:
             chdir: "{{ playbook_dir }}/../../"
+            executable: /bin/bash
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
         - name: Wait for flannel daemonset to be ready
           ansible.builtin.shell: |
-            kubectl -n kube-system rollout status daemonset/kube-flannel-ds --timeout=180s
+            kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=180s
+          args:
+            executable: /bin/bash
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
@@ -55,3 +58,7 @@
     - name: Install idle-sleep timer and script on masternode
       import_role:
         name: idle-sleep
+
+# Import application deployments (Jellyfin etc.) so the top-level deploy covers apps as well
+- import_playbook: ../plays/jellyfin.yml
+  when: jellyfin_enabled | default(true)
