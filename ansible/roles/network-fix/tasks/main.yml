@@ -15,6 +15,7 @@
     owner: root
     group: root
     mode: '0644'
+  notify: restart kubelet
 
 - name: Ensure sysctl settings for Kubernetes CNIs
   become: true
@@ -27,6 +28,7 @@
     owner: root
     group: root
     mode: '0644'
+  notify: restart kubelet
 
 - name: Apply sysctl settings
   become: true
@@ -62,11 +64,4 @@
   when: ufw_path.stat.exists
   ignore_errors: true
 
-- name: Restart kubelet to pick up sysctl/module changes
-  become: true
-  ansible.builtin.service:
-    name: kubelet
-    state: restarted
-    enabled: true
-  register: kubelet_restart
-  ignore_errors: true
+# kubelet will be restarted via handler 'restart kubelet' only when changes occur
