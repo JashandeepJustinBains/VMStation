@@ -30,24 +30,40 @@
               - app=flannel
           register: flannel_status
 
-        - name: "Restart crashlooping flannel pods"
+        - name: "Identify crashlooping flannel pods (>5 restarts)"
+          set_fact:
+            crashloop_pods: "{{ flannel_status.resources | selectattr('status.containerStatuses', 'defined') | selectattr('status.containerStatuses.0.restartCount', 'greaterthan', 5) | list }}"
+
+        - name: "Fix crashlooping flannel pods by restarting kubelet on affected nodes"
+          ansible.builtin.shell: |
+            set -eux
+            node_name="{{ item.spec.nodeName }}"
+            echo "Restarting kubelet on $node_name to fix flannel crashloop"
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "{{ hostvars[item.spec.nodeName].ansible_host }}" 'systemctl restart kubelet' || true
+          loop: "{{ crashloop_pods }}"
+          when: crashloop_pods | length > 0
+          delegate_to: localhost
+
+        - name: "Wait for kubelet restart and flannel pod recreation"
+          pause:
+            seconds: 30
+          when: crashloop_pods | length > 0
+
+        - name: "Delete any remaining crashlooping flannel pods to force recreation"
           kubernetes.core.k8s:
             state: absent
             api_version: v1
             kind: Pod
             name: "{{ item.metadata.name }}"
             namespace: "{{ item.metadata.namespace }}"
-          loop: "{{ flannel_status.resources }}"
-          when: 
-            - item.status.phase == 'Running'
-            - item.status.containerStatuses is defined
-            - item.status.containerStatuses | selectattr('restartCount', 'greaterthan', 5) | list | length > 0
+          loop: "{{ crashloop_pods }}"
+          when: crashloop_pods | length > 0
           ignore_errors: yes
 
-        - name: "Wait for flannel to stabilize"
+        - name: "Wait for flannel to stabilize after remediation"
           pause:
-            seconds: 30
-          when: flannel_status.resources | selectattr('status.phase', 'equalto', 'Running') | selectattr('status.containerStatuses.0.restartCount', 'greaterthan', 5) | list | length > 0
+            seconds: 45
+          when: crashloop_pods | length > 0
       ignore_errors: yes
 
     - name: "Deploy Prometheus"
@@ -71,8 +87,6 @@
                 labels:
                   app.kubernetes.io/name: prometheus
               spec:
-                nodeSelector:
-                  node-role.kubernetes.io/control-plane: ""
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -193,8 +207,6 @@
                 labels:
                   app.kubernetes.io/name: grafana
               spec:
-                nodeSelector:
-                  node-role.kubernetes.io/control-plane: ""
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -276,8 +288,6 @@
                 labels:
                   app.kubernetes.io/name: loki
               spec:
-                nodeSelector:
-                  node-role.kubernetes.io/control-plane: ""
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists

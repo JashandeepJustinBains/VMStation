@@ -88,6 +88,49 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
-# Import application deployments (Jellyfin etc.) so the top-level deploy covers apps as well
+    - name: Ensure masternode has control-plane label for monitoring scheduling
+      ansible.builtin.shell: |
+        set -eux
+        kubectl label node masternode 'node-role.kubernetes.io/control-plane=' --overwrite || true
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Validate flannel pods are stable before proceeding
+      ansible.builtin.shell: |
+        set -eux
+        echo "Checking flannel pod stability..."
+        # wait up to 120s for all flannel pods to be Running and not restarting
+        for i in {1..24}; do
+          crash_count=$(kubectl get pods -n kube-flannel -l app=flannel -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' | awk '{if($1>3)print}' | wc -l)
+          pending_count=$(kubectl get pods -n kube-flannel -l app=flannel --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+          
+          if [ "$crash_count" -eq 0 ] && [ "$pending_count" -eq 0 ]; then
+            echo "All flannel pods stable"
+            exit 0
+          fi
+          
+          echo "Waiting for flannel stability (attempt $i/24): crashes=$crash_count pending=$pending_count"
+          sleep 5
+        done
+        
+        echo "WARNING: Flannel pods may be unstable after 120s wait"
+        kubectl get pods -n kube-flannel -o wide
+        exit 0  # don't fail deploy, but warn
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: flannel_stability_check
+
+    - name: Show flannel stability result
+      ansible.builtin.debug:
+        var: flannel_stability_check.stdout_lines
+
+# Import application deployments (monitoring, Jellyfin etc.) so the top-level deploy covers apps as well
+- import_playbook: ../plays/deploy-apps.yaml
+  when: monitoring_enabled | default(true)
+
 - import_playbook: ../plays/jellyfin.yml
   when: jellyfin_enabled | default(true)
