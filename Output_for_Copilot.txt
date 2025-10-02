@@ -29,31 +29,3 @@ Client Version: v1.34.0
 Kustomize Version: v5.7.1
 Server Version: v1.29.15
 Warning: version difference between client (1.34) and server (1.29) exceeds the supported minor version skew of +/-1
-
-
-F:\VMStation\validate-cluster.sh
-F:\VMStation\validate_cni_fix.sh
-F:\VMStation\validate_network_reset.sh
-F:\VMStation\USAGE_INSTRUCTIONS.md
-F:\VMStation\test_cni_bridge_fix.sh
-F:\VMStation\SOLUTION-SUMMARY.md
-F:\VMStation\SIMPLIFIED-DEPLOYMENT.md
-F:\VMStation\SCRIPT_CONSOLIDATION_GUIDE.md
-F:\VMStation\README-CNI-FIX.md
-F:\VMStation\README-cluster.md
-F:\VMStation\QUICK_FIX_GUIDE.md
-F:\VMStation\quick_fix_cni_communication.sh
-F:\VMStation\Output_for_VSCode.md
-F:\VMStation\Output_for_Copilot.txt
-F:\VMStation\NETWORK-DIAGNOSIS-QUICKSTART.md
-F:\VMStation\NETWORK_RESET_RUNBOOK.md
-F:\VMStation\generate_join_command.sh
-F:\VMStation\fix-cluster.sh
-F:\VMStation\fix_jellyfin_readiness.sh
-F:\VMStation\fix_jellyfin_network_issue.sh
-F:\VMStation\fix_jellyfin_immediate.sh
-F:\VMStation\fix_jellyfin_cni_bridge_conflict.sh
-F:\VMStation\diagnose_jellyfin_network.sh
-F:\VMStation\deploy-single.sh
-F:\VMStation\deploy-cluster.sh
-F:\VMStation\CNI-BRIDGE-FIX-README.md
