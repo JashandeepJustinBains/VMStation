@@ -18,9 +18,18 @@
             path: "{{ playbook_dir }}/../ansible/artifacts"
             state: directory
 
-        - name: Apply CNI manifests (flannel)
+        - name: Apply CNI manifests (flannel) with immutable-selector recovery
           ansible.builtin.shell: |
-            kubectl apply -f manifests/cni/flannel.yaml
+            set -o errexit -o nounset -o pipefail
+            echo "Applying flannel manifests"
+            if kubectl apply -f manifests/cni/flannel.yaml; then
+              echo "flannel applied"
+            else
+              echo "Initial apply failed, attempting safe recovery: delete existing DaemonSet and re-apply"
+              # delete the DaemonSet if present (handles immutable selector changes)
+              kubectl -n kube-flannel delete daemonset kube-flannel-ds --ignore-not-found
+              kubectl apply -f manifests/cni/flannel.yaml
+            fi
           args:
             chdir: "{{ playbook_dir }}/../../"
           environment:
