@@ -1,0 +1,6 @@
+---
+- name: Cluster cleanup (safe teardown)
+  hosts: all
+  become: true
+  roles:
+    - cluster-spindown
