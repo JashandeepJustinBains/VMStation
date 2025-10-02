@@ -52,8 +52,6 @@
         wol {{ hostvars[item].wol_mac }} || true
       args:
         warn: false
-      with_items: "{{ spin_targets }}"
----
 # Idempotent cluster spin-down helper (intended to be run from the masternode)
 # Behavior summary:
 # - Save replica counts for configured deployments to artifact file
