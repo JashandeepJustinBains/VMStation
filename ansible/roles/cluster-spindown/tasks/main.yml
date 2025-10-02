@@ -42,8 +42,12 @@
 
 - name: Drain target nodes safely (ignore daemonsets, delete local data if requested)
   shell: |
-    kubectl drain {{ item }} --ignore-daemonsets --delete-local-data --force || true
+    kubectl drain {{ item }} --ignore-daemonsets --delete-emptydir-data --force --timeout=120s || true
   with_items: "{{ spin_targets }}"
+
+- name: Wait for pods to terminate gracefully
+  pause:
+    seconds: 10
 
 - name: Optionally power off targets via IPMI or WOL (guarded)
   when: allow_power_down | default(false)

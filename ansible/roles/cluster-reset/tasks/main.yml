@@ -1,0 +1,138 @@
+---
+# Safe and comprehensive Kubernetes cluster reset
+# Removes all K8s-specific config/network resources while preserving SSH and physical interfaces
+
+- name: Stop kubelet service before reset
+  ansible.builtin.systemd:
+    name: kubelet
+    state: stopped
+  ignore_errors: true
+
+- name: Run kubeadm reset with force flag
+  ansible.builtin.command:
+    cmd: kubeadm reset --force
+  register: kubeadm_reset_result
+  ignore_errors: true
+
+- name: Display kubeadm reset output
+  ansible.builtin.debug:
+    var: kubeadm_reset_result.stdout_lines
+  when: kubeadm_reset_result.stdout_lines is defined
+
+- name: Remove Kubernetes config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/kubernetes
+    - /var/lib/kubelet
+    - /var/lib/etcd
+    - /etc/cni/net.d
+    - /var/lib/cni
+    - /run/flannel
+    - /var/lib/flannel
+    - /var/run/flannel
+    - /opt/cni/bin
+  ignore_errors: true
+
+- name: Identify Kubernetes-related network interfaces
+  ansible.builtin.shell: |
+    ip -o link show | awk -F': ' '{print $2}' | egrep 'flannel|^cni|^cali|^weave|^vxlan\.calico|^tunl0|docker0|kube-' || true
+  register: k8s_interfaces
+  changed_when: false
+
+- name: Display identified Kubernetes interfaces
+  ansible.builtin.debug:
+    msg: "Kubernetes interfaces to remove: {{ k8s_interfaces.stdout_lines }}"
+  when: k8s_interfaces.stdout_lines | length > 0
+
+- name: Bring down Kubernetes network interfaces
+  ansible.builtin.command:
+    cmd: "ip link set {{ item }} down"
+  loop: "{{ k8s_interfaces.stdout_lines }}"
+  when: k8s_interfaces.stdout_lines | length > 0
+  ignore_errors: true
+
+- name: Delete Kubernetes network interfaces
+  ansible.builtin.command:
+    cmd: "ip link delete {{ item }}"
+  loop: "{{ k8s_interfaces.stdout_lines }}"
+  when: k8s_interfaces.stdout_lines | length > 0
+  ignore_errors: true
+
+- name: Remove iptables rules created by Kubernetes (flush all chains)
+  ansible.builtin.shell: |
+    iptables -F
+    iptables -t nat -F
+    iptables -t mangle -F
+    iptables -X
+    iptables -t nat -X
+    iptables -t mangle -X
+  ignore_errors: true
+
+- name: Remove ipvs rules if present
+  ansible.builtin.shell: |
+    if command -v ipvsadm >/dev/null 2>&1; then
+      ipvsadm --clear
+    fi
+  ignore_errors: true
+
+- name: Clean container runtime state (containerd)
+  ansible.builtin.shell: |
+    if command -v ctr >/dev/null 2>&1; then
+      ctr -n k8s.io containers rm $(ctr -n k8s.io containers list -q) 2>/dev/null || true
+      ctr -n k8s.io tasks rm $(ctr -n k8s.io tasks list -q) 2>/dev/null || true
+    fi
+  ignore_errors: true
+  when: container_runtime | default('containerd') == 'containerd'
+
+- name: Restart containerd after cleanup
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+  ignore_errors: true
+  when: container_runtime | default('containerd') == 'containerd'
+
+- name: Remove any remaining Kubernetes processes
+  ansible.builtin.shell: |
+    pkill -9 kube-apiserver || true
+    pkill -9 kube-controller || true
+    pkill -9 kube-scheduler || true
+    pkill -9 kube-proxy || true
+    pkill -9 kubelet || true
+  ignore_errors: true
+
+- name: Verify SSH keys are preserved
+  ansible.builtin.stat:
+    path: "{{ ansible_env.HOME }}/.ssh/authorized_keys"
+  register: ssh_keys_check
+
+- name: Assert SSH keys still exist
+  ansible.builtin.assert:
+    that:
+      - ssh_keys_check.stat.exists
+    fail_msg: "CRITICAL: SSH keys were removed during reset!"
+    success_msg: "SSH keys preserved successfully"
+
+- name: Verify physical ethernet interfaces are preserved
+  ansible.builtin.shell: |
+    ip -o link show | egrep 'eth|ens|eno|enp' | wc -l
+  register: ethernet_check
+  changed_when: false
+
+- name: Assert physical interfaces still exist
+  ansible.builtin.assert:
+    that:
+      - ethernet_check.stdout | int > 0
+    fail_msg: "CRITICAL: Physical ethernet interfaces may have been affected!"
+    success_msg: "Physical ethernet interfaces preserved successfully"
+
+- name: Display reset completion summary
+  ansible.builtin.debug:
+    msg: |
+      Kubernetes cluster reset completed successfully:
+      - kubeadm reset: {{ 'OK' if kubeadm_reset_result.rc == 0 else 'FAILED (check if kubeadm was installed)' }}
+      - Kubernetes interfaces removed: {{ k8s_interfaces.stdout_lines | length }}
+      - SSH keys: preserved
+      - Physical interfaces: preserved
+      - Node is ready for fresh cluster deployment

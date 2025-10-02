@@ -5,6 +5,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts"
 SPIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/spin-down-cluster.yaml"
 DEPLOY_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-cluster.yaml"
+RESET_PLAYBOOK="$REPO_ROOT/ansible/playbooks/reset-cluster.yaml"
 
 info(){ echo "[INFO] $*" >&2; }
 warn(){ echo "[WARN] $*" >&2; }
@@ -17,11 +18,13 @@ Usage: $(basename "$0") [command]
 Commands:
   (no args)    Run main deploy playbook
   spindown     Cordon/drain and scale to zero on all nodes, then cleanup CNI/flannel artifacts (does NOT power off)
+  reset        Comprehensive cluster reset - removes all K8s config/network (preserves SSH and ethernet)
   help         Show this message
 
 Examples:
   ./deploy.sh
   ./deploy.sh spindown
+  ./deploy.sh reset
 
 EOF
 }
@@ -104,7 +107,15 @@ run_cleanup_on_hosts(){
 cmd_deploy(){
   info "Running deploy playbook: ${DEPLOY_PLAYBOOK}"
   require_bin ansible-playbook
-  ansible-playbook "$DEPLOY_PLAYBOOK"
+  ansible-playbook -i "$INVENTORY_FILE" "$DEPLOY_PLAYBOOK"
+}
+
+cmd_reset(){
+  require_bin ansible-playbook
+  info "Running comprehensive cluster reset playbook: ${RESET_PLAYBOOK}"
+  info "This will remove all Kubernetes config and network interfaces"
+  info "SSH keys and physical ethernet interfaces will be preserved"
+  ansible-playbook -i "$INVENTORY_FILE" "$RESET_PLAYBOOK"
 }
 
 cmd_spindown(){
@@ -129,6 +140,7 @@ main(){
   case "$1" in
     help|-h|--help) usage; exit 0 ;;
     spindown) cmd_spindown ;;
+    reset) cmd_reset ;;
     *) usage; err "unknown command: $1" ;;
   esac
 }
