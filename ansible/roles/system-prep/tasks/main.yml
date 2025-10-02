@@ -1,7 +1,6 @@
 - name: Debug become password variable
   debug:
-    msg: "ansible_become_pass is {{ ansible_become_pass | default('NOT SET') }}"
-  when: inventory_hostname == 'homelab'
+    msg: "{{ inventory_hostname }}: ansible_become_pass is {{ ansible_become_pass | default('NOT SET') }}"
 - name: Check kubectl version
   ansible.builtin.command:
     cmd: kubectl version --client
