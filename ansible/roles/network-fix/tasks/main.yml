@@ -145,4 +145,22 @@
   ignore_errors: true
   changed_when: false
 
+- name: Set SELinux to permissive mode on RHEL (temporary for CNI compatibility)
+  become: true
+  ansible.posix.selinux:
+    policy: targeted
+    state: permissive
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
+- name: Ensure SELinux permissive persists on reboot (RHEL)
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/selinux/config
+    regexp: '^SELINUX='
+    line: 'SELINUX=permissive'
+    state: present
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
 # kubelet will be restarted via handler 'restart kubelet' only when changes occur
