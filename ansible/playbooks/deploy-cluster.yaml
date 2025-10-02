@@ -10,30 +10,29 @@
 - hosts: masternode
   become: true
   tasks:
-    - name: Apply CNI manifests (flannel)
-      ansible.builtin.shell: |
-        kubectl apply -f manifests/cni/flannel.yaml || true
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+    - block:
+        - name: Ensure artifacts dir exists on controller
+          delegate_to: localhost
+          run_once: true
+          ansible.builtin.file:
+            path: "{{ playbook_dir }}/../ansible/artifacts"
+            state: directory
 
-    - name: Wait for flannel daemonset to be ready
-      ansible.builtin.shell: |
-        kubectl -n kube-system rollout status daemonset/kube-flannel-ds --timeout=180s || true
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-
-    - name: Ensure kube-proxy-ready
-      ansible.builtin.shell: |
-        kubectl -n kube-system get pods -l 'k8s-app=kube-proxy' -o jsonpath='{.items[*].status.phase}' || true
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-
-    - name: Validate core pods and collect diagnostics on failure
-      block:
-        - name: Check flannel pod status
+        - name: Apply CNI manifests (flannel)
           ansible.builtin.shell: |
-            kubectl -n kube-system get pods -l app=kube-flannel -o wide || true
-          register: flannel_status
+            kubectl apply -f manifests/cni/flannel.yaml
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Wait for flannel daemonset to be ready
+          ansible.builtin.shell: |
+            kubectl -n kube-system rollout status daemonset/kube-flannel-ds --timeout=180s
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Ensure kube-proxy-ready
+          ansible.builtin.shell: |
+            kubectl -n kube-system get pods -l 'k8s-app=kube-proxy' -o jsonpath='{.items[*].status.phase}'
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
