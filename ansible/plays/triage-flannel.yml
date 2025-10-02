@@ -64,7 +64,7 @@
         var: klet.stdout_lines
 
     - name: List CNI conf dir
-      ansible.builtin.command: ls -l /etc/cni/net.d || true
+      ansible.builtin.shell: ls -l /etc/cni/net.d || true
       register: cni_conf
 
     - name: Show CNI conf
