@@ -1,0 +1,141 @@
+---
+# Wake targets (WOL or IPMI), uncordon nodes and restore replicas from snapshot
+- name: Read deployments snapshot
+  slurp:
+    src: /tmp/ansible-spin-artifacts/deploy_snapshot.yml
+  register: snapshot_raw
+
+- name: Decode snapshot
+  set_fact:
+    deploy_snapshot: "{{ snapshot_raw.content | b64decode | from_yaml }}"
+
+- name: Wake targets via ipmi if configured
+  shell: |
+    ipmitool -I lanplus -H {{ hostvars[item].ipmi_host | default('') }} -U {{ hostvars[item].ipmi_user | default('') }} -P {{ hostvars[item].ipmi_pass | default('') }} chassis power on || true
+  args:
+    warn: false
+  with_items: "{{ spin_targets }}"
+
+- name: Send WOL packets for targets with wol_mac
+  shell: |
+    wol {{ hostvars[item].wol_mac }} || true
+  args:
+    warn: false
+  with_items: "{{ spin_targets }}"
+
+- name: Wait for nodes to become Ready
+  shell: |
+    until kubectl get node {{ item }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' | grep True; do sleep 5; done
+  args:
+    warn: false
+  with_items: "{{ spin_targets }}"
+
+- name: Uncordon nodes
+  shell: |
+    kubectl uncordon {{ item }} || true
+  args:
+    warn: false
+  with_items: "{{ spin_targets }}"
+
+- name: Restore deployments replicas from snapshot
+  when: deploy_snapshot is defined
+  block:
+    - name: Iterate snapshot and restore each deployment
+      loop: "{{ deploy_snapshot }}"
+      loop_control:
+        loop_var: ds
+      shell: |
+        kubectl -n {{ ds.item.item }} scale deploy {{ ds.item.metadata.name }} --replicas={{ ds.item.spec.replicas }} || true
+      args:
+        warn: false
+---
+# Idempotent cluster spin-up helper
+
+- name: Ensure artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ playbook_dir | dirname | dirname }}/artifacts/cluster_spin"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
+- name: Wake workers via WOL (if MACs provided)
+  ansible.builtin.shell: |
+    {% for mac in vmstation_wol_macs | default([]) %}
+    if command -v etherwake >/dev/null 2>&1; then
+      etherwake {{ mac }} || true
+    elif command -v wakeonlan >/dev/null 2>&1; then
+      wakeonlan {{ mac }} || true
+    fi
+    {% endfor %}
+  delegate_to: localhost
+  when: vmstation_wol_macs is defined and vmstation_wol_macs | length > 0
+
+- name: Uncordon worker nodes
+  ansible.builtin.shell: kubectl uncordon {{ item }}
+  loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+  delegate_to: localhost
+
+- name: Restore replicas from artifact files
+  ansible.builtin.shell: |
+    set -eux
+    ART={{ playbook_dir | dirname | dirname }}/artifacts/cluster_spin/replicas_{{ inventory_hostname }}.yaml
+    if [ -f "$ART" ]; then
+      while IFS= read -r line; do
+        ns_name=$(echo "$line" | cut -d'/' -f1)
+        dep_name=$(echo "$line" | cut -d'/' -f2 | cut -d: -f1)
+        replicas=$(echo "$line" | awk -F': ' '{print $2}')
+        if kubectl -n "$ns_name" get deploy "$dep_name" >/dev/null 2>&1; then
+          kubectl -n "$ns_name" scale deploy/"$dep_name" --replicas="$replicas" || true
+        fi
+      done < "$ART"
+    fi
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+---
+# Idempotent cluster spin-up helper
+# Behavior:
+# - Power on worker hosts via WOL if configured
+# - Uncordon nodes
+# - Restore saved replicas from artifacts
+
+- name: Ensure artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../artifacts/cluster_spin"
+    state: directory
+    mode: '0755'
+
+- name: Wake workers via WOL (if MACs provided)
+  ansible.builtin.shell: |
+    {% for mac in vmstation_wol_macs | default([]) %}
+    if command -v etherwake >/dev/null 2>&1; then
+      etherwake {{ mac }} || true
+    elif command -v wakeonlan >/dev/null 2>&1; then
+      wakeonlan {{ mac }} || true
+    fi
+    {% endfor %}
+  delegate_to: localhost
+  when: vmstation_wol_macs is defined and vmstation_wol_macs | length > 0
+
+- name: Uncordon worker nodes
+  ansible.builtin.shell: kubectl uncordon {{ item }}
+  loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+  delegate_to: localhost
+
+- name: Restore replicas from artifact files
+  ansible.builtin.shell: |
+    set -eux
+    ART={{ playbook_dir }}/../artifacts/cluster_spin/replicas_{{ inventory_hostname }}.yaml
+    if [ -f "$ART" ]; then
+      while IFS= read -r line; do
+        ns_name=$(echo "$line" | cut -d'/' -f1)
+        dep_name=$(echo "$line" | cut -d'/' -f2 | cut -d: -f1)
+        replicas=$(echo "$line" | awk -F': ' '{print $2}')
+        if kubectl -n "$ns_name" get deploy "$dep_name" >/dev/null 2>&1; then
+          kubectl -n "$ns_name" scale deploy/"$dep_name" --replicas="$replicas" || true
+        fi
+      done < "$ART"
+    fi
+  args:
+    executable: /bin/bash
+  delegate_to: localhost

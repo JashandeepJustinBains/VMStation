@@ -1,0 +1,196 @@
+---
+# Save current replica counts, scale deployments/statefulsets to 0, cordon and drain worker nodes.
+- name: Ensure temporary artifacts dir exists
+  file:
+    path: /tmp/ansible-spin-artifacts
+    state: directory
+    mode: '0755'
+
+- name: Gather list of deployments in kube-system and jellyfin namespace
+  shell: |
+    kubectl -n {{ item }} get deploy --no-headers -o custom-columns=":metadata.name,:spec.replicas" || true
+  args:
+    warn: false
+  with_items:
+    - kube-system
+    - jellyfin
+  register: deploy_list
+
+- name: Write deployments snapshot to artifacts
+  copy:
+    content: "{{ deploy_list.results | to_nice_yaml }}\n"
+    dest: /tmp/ansible-spin-artifacts/deploy_snapshot.yml
+
+- name: Scale deployments to zero (kube-system and jellyfin)
+  shell: |
+    kubectl -n {{ item }} scale deploy --all --replicas=0 || true
+  args:
+    warn: false
+  with_items:
+    - kube-system
+    - jellyfin
+
+- name: Cordon target nodes
+  shell: |
+    kubectl cordon {{ item }} || true
+  args:
+    warn: false
+  with_items: "{{ spin_targets }}"
+
+- name: Drain target nodes safely (ignore daemonsets, delete local data if requested)
+  shell: |
+    kubectl drain {{ item }} --ignore-daemonsets --delete-local-data --force || true
+  args:
+    warn: false
+  with_items: "{{ spin_targets }}"
+
+- name: Optionally power off targets via IPMI or WOL (guarded)
+  when: allow_power_down | default(false)
+  block:
+    - name: Power off via ipmitool if host has ipmi inventory var
+      shell: |
+        ipmitool -I lanplus -H {{ hostvars[item].ipmi_host | default('') }} -U {{ hostvars[item].ipmi_user | default('') }} -P {{ hostvars[item].ipmi_pass | default('') }} chassis power off || true
+      args:
+        warn: false
+      with_items: "{{ spin_targets }}"
+
+    - name: Send WOL packets as fallback when mac present
+      shell: |
+        wol {{ hostvars[item].wol_mac }} || true
+      args:
+        warn: false
+      with_items: "{{ spin_targets }}"
+---
+# Idempotent cluster spin-down helper (intended to be run from the masternode)
+# Behavior summary:
+# - Save replica counts for configured deployments to artifact file
+# - Scale deployments down to 0 replicas (only for configured apps)
+# - Cordon and drain worker nodes (using kubectl from masternode)
+# - Offer powered-off via IPMI/WOL only when explicitly allowed
+
+- name: Preflight - ensure spin_confirm provided or dry-run
+  ansible.builtin.fail:
+    msg: "spin_confirm is not true; set -e spin_confirm=true to perform spin-down"
+  when: not (spin_confirm | default(false))
+
+- name: Ensure artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ playbook_dir | dirname | dirname }}/artifacts/cluster_spin"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
+- name: Save current replicas for configured apps
+  ansible.builtin.shell: |
+    set -eux
+    OUT={{ playbook_dir | dirname | dirname }}/artifacts/cluster_spin/replicas_{{ inventory_hostname }}.yaml
+    echo "# saved replicas for {{ inventory_hostname }}" > "$OUT"
+    {% for app in apps_to_manage | default([{'name':'jellyfin','namespace':'jellyfin'}]) %}
+    if kubectl -n {{ app.namespace }} get deploy {{ app.name }} >/dev/null 2>&1; then
+      replicas=$(kubectl -n {{ app.namespace }} get deploy {{ app.name }} -o jsonpath='{.spec.replicas}')
+      echo "{{ app.namespace }}/{{ app.name }}: $replicas" >> "$OUT"
+    fi
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+
+- name: Scale configured apps to 0 (safe)
+  ansible.builtin.shell: |
+    set -eux
+    {% for app in apps_to_manage | default([{'name':'jellyfin','namespace':'jellyfin'}]) %}
+    if kubectl -n {{ app.namespace }} get deploy {{ app.name }} >/dev/null 2>&1; then
+      kubectl -n {{ app.namespace }} scale deploy/{{ app.name }} --replicas=0
+    fi
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+
+- name: Cordon target worker nodes
+  ansible.builtin.shell: kubectl cordon {{ item }}
+  loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+  delegate_to: localhost
+
+- name: Drain target worker nodes (ignore daemonsets)
+  ansible.builtin.shell: |
+    kubectl drain {{ item }} --ignore-daemonsets --delete-local-data={{ delete_local_data | default('false') }} --force --grace-period={{ drain_grace_period | default('60') }} || true
+  loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+  delegate_to: localhost
+
+- name: Optionally power off worker hosts (only when allow_power_down true)
+  block:
+    - name: Power off via ipmi if ipmi available
+      ansible.builtin.shell: ipmitool -I open chassis power off || true
+      when: hostvars[item].has_ipmi | default(false)
+      loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+      delegate_to: localhost
+
+    - name: Power off via SSH (safe shutdown) when no IPMI but allow_power_down true
+      ansible.builtin.shell: ssh -o BatchMode=yes -o ConnectTimeout=10 {{ ansible_user | default('root') }}@{{ item }} 'sudo shutdown -h now' || true
+      when: not (hostvars[item].has_ipmi | default(false))
+      loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+      delegate_to: localhost
+  when: allow_power_down | default(false)
+---
+# Idempotent cluster spin-down helper (intended to be run from the masternode)
+# Behavior summary:
+# - Save replica counts for configured deployments to artifact file
+# - Scale deployments down to 0 replicas (only for configured apps)
+# - Cordon and drain worker nodes (using kubectl from masternode)
+# - Power off worker hosts (Ansible-managed machines) if confirm flag set
+
+- name: Assert spin_confirm variable is provided
+  ansible.builtin.assert:
+    that: spin_confirm is defined and spin_confirm | bool
+    fail_msg: "spin_confirm not set to true. To perform spin-down set -e spin_confirm=true"
+
+- name: Ensure artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../artifacts/cluster_spin"
+    state: directory
+    mode: '0755'
+
+- name: Save current replicas for configured apps
+  ansible.builtin.shell: |
+    set -eux
+    OUT={{ playbook_dir }}/../artifacts/cluster_spin/replicas_{{ inventory_hostname }}.yaml
+    echo "# saved replicas" > "$OUT"
+    {% for app in apps_to_manage | default(['jellyfin']) %}
+    if kubectl -n {{ app.namespace | default('jellyfin') }} get deploy {{ app.name | default('jellyfin') }} >/dev/null 2>&1; then
+      replicas=$(kubectl -n {{ app.namespace | default('jellyfin') }} get deploy {{ app.name | default('jellyfin') }} -o jsonpath='{.spec.replicas}')
+      echo "{{ app.namespace | default('jellyfin') }}/{{ app.name | default('jellyfin') }}: $replicas" >> "$OUT"
+    fi
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+
+- name: Scale configured apps to 0 (safe)
+  ansible.builtin.shell: |
+    set -eux
+    {% for app in apps_to_manage | default([{'name':'jellyfin','namespace':'jellyfin'}]) %}
+    if kubectl -n {{ app.namespace }} get deploy {{ app.name }} >/dev/null 2>&1; then
+      kubectl -n {{ app.namespace }} scale deploy/{{ app.name }} --replicas=0
+    fi
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  delegate_to: localhost
+
+- name: Cordon target worker nodes (using kubectl)
+  ansible.builtin.shell: kubectl cordon {{ item }}
+  loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+  delegate_to: localhost
+
+- name: Drain target worker nodes (ignore daemonsets, do not delete local data by default)
+  ansible.builtin.shell: |
+    kubectl drain {{ item }} --ignore-daemonsets --delete-local-data={{ delete_local_data | default('false') }} --force --grace-period={{ drain_grace_period | default('60') }} || true
+  loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
+  delegate_to: localhost
+
+- name: Power off worker hosts (Ansible-managed) - safe shutdown
+  ansible.builtin.systemd:
+    name: poweroff.target
+    state: started
+  when: inventory_hostname in (spin_targets | default(groups['workers'] | default([])))
