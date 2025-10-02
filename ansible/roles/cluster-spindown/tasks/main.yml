@@ -48,3 +48,4 @@
     - name: Send WOL packets as fallback when mac present
       shell: |
         wol {{ hostvars[item].wol_mac }} || true
+      with_items: "{{ spin_targets }}"
