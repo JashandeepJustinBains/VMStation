@@ -1,0 +1,42 @@
+---
+# Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
+- hosts: all
+  gather_facts: false
+  roles:
+    - preflight
+    - network-fix
+
+- hosts: masternode
+  become: true
+  tasks:
+    - name: Apply CNI manifests (flannel)
+      ansible.builtin.shell: |
+        kubectl apply -f manifests/cni/flannel.yaml || true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for flannel daemonset to be ready
+      ansible.builtin.shell: |
+        kubectl -n kube-system rollout status daemonset/kube-flannel-ds --timeout=180s || true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Ensure kube-proxy-ready
+      ansible.builtin.shell: |
+        kubectl -n kube-system get pods -l 'k8s-app=kube-proxy' -o jsonpath='{.items[*].status.phase}' || true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Validate core pods and collect diagnostics on failure
+      block:
+        - name: Check flannel pod status
+          ansible.builtin.shell: |
+            kubectl -n kube-system get pods -l app=kube-flannel -o wide || true
+          register: flannel_status
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+      rescue:
+        - name: Run diagnostics role on failure
+          import_role:
+            name: diagnostics
