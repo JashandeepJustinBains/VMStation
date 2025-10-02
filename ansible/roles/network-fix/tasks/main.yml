@@ -164,3 +164,27 @@
   ignore_errors: true
 
 # kubelet will be restarted via handler 'restart kubelet' only when changes occur
+
+# Ensure /etc/cni/net.d exists and is writable by root (required for Flannel CNI bootstrap)
+# Ensure /etc/cni/net.d exists and is writable by root (required for Flannel CNI bootstrap)
+- name: Ensure /etc/cni/net.d exists with correct permissions (CNI bootstrap)
+  become: true
+  ansible.builtin.file:
+    path: /etc/cni/net.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  ignore_errors: true
+
+# Validate that Flannel CNI config is present after deploy (fail early if missing)
+- name: Check for Flannel CNI config after deploy
+  become: true
+  ansible.builtin.stat:
+    path: /etc/cni/net.d/10-flannel.conflist
+  register: flannel_cni_conf
+
+- name: Fail if Flannel CNI config is missing (critical for pod networking)
+  ansible.builtin.fail:
+    msg: "Flannel CNI config /etc/cni/net.d/10-flannel.conflist is missing after deploy. Pod networking will not function. Check Flannel DaemonSet logs."
+  when: not flannel_cni_conf.stat.exists
