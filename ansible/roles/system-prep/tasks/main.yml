@@ -6,7 +6,6 @@
     cmd: kubectl version --client
   register: kubectl_version
   ignore_errors: true
-INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts"
 - name: Check kubelet version
   become: true
   ansible.builtin.command:
