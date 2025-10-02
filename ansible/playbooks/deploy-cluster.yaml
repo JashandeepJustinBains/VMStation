@@ -59,6 +59,35 @@
       import_role:
         name: idle-sleep
 
+    - name: Uncordon any nodes that are still cordoned (idempotent)
+      ansible.builtin.shell: |
+        set -eux
+        # list nodes that have spec.unschedulable=true
+        nodes=$(kubectl get nodes -o jsonpath='{range .items[?(@.spec.unschedulable==true)]}{.metadata.name} "\n"{end}')
+        if [ -n "$nodes" ]; then
+          for n in $nodes; do
+            echo "Uncordoning $n"
+            kubectl uncordon "$n" || true
+          done
+        else
+          echo "No cordoned nodes found"
+        fi
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Remove common control-plane NoSchedule taints if present (idempotent)
+      ansible.builtin.shell: |
+        set -eux
+        # remove control-plane/master taints that can block application scheduling in small clusters
+        kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- || true
+        kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule- || true
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
 # Import application deployments (Jellyfin etc.) so the top-level deploy covers apps as well
 - import_playbook: ../plays/jellyfin.yml
   when: jellyfin_enabled | default(true)
