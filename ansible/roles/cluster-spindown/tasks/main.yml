@@ -114,8 +114,6 @@
       when: not (hostvars[item].has_ipmi | default(false))
       loop: "{{ spin_targets | default(groups['workers'] | default([])) }}"
       delegate_to: localhost
-  when: allow_power_down | default(false)
----
 # Idempotent cluster spin-down helper (intended to be run from the masternode)
 # Behavior summary:
 # - Save replica counts for configured deployments to artifact file
