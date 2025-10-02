@@ -61,6 +61,7 @@
       args:
         warn: false
       with_items: "{{ spin_targets }}"
+# End of valid Ansible task list
 # Save current replica counts, scale deployments/statefulsets to 0, cordon and drain worker nodes.
   file:
     path: /tmp/ansible-spin-artifacts
