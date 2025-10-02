@@ -1,7 +1,7 @@
 ---
 # Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
 - hosts: all
-  gather_facts: false
+  gather_facts: true
   roles:
     - system-prep
     - preflight
