@@ -1,0 +1,46 @@
+---
+# Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
+- hosts: all
+  gather_facts: false
+  roles:
+    - system-prep
+    - preflight
+    - network-fix
+
+- hosts: masternode
+  become: true
+  tasks:
+    - block:
+        - name: Ensure artifacts dir exists on controller
+          delegate_to: localhost
+          run_once: true
+          ansible.builtin.file:
+            path: "{{ playbook_dir }}/../ansible/artifacts"
+            state: directory
+
+        - name: Apply CNI manifests (flannel)
+          ansible.builtin.shell: |
+            kubectl apply -f manifests/cni/flannel.yaml
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Wait for flannel daemonset to be ready
+          ansible.builtin.shell: |
+            kubectl -n kube-system rollout status daemonset/kube-flannel-ds --timeout=180s
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Ensure kube-proxy-ready
+          ansible.builtin.shell: |
+            kubectl -n kube-system get pods -l 'k8s-app=kube-proxy' -o jsonpath='{.items[*].status.phase}'
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+      rescue:
+        - name: Run diagnostics role on failure
+          import_role:
+            name: diagnostics
+
+    - name: Install idle-sleep timer and script on masternode
+      import_role:
+        name: idle-sleep

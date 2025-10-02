@@ -1,0 +1,83 @@
+---
+- name: Install idle-sleep script on masternode
+  when: inventory_hostname == 'masternode'
+  become: true
+  ansible.builtin.copy:
+    dest: /usr/local/bin/vmstation_idle_check.sh
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      # Minimal idle check: if no active connections to Jellyfin port (8096) then mark idle
+      ACTIVE=$(ss -tn state established '( sport = :8096 or dport = :8096 )' | wc -l)
+      if [ "$ACTIVE" -le 0 ]; then
+        echo "vmstation_idle 1" > /var/lib/node_exporter/textfile_collector/vmstation_idle.prom
+        # send WOL to example workers (adjust MAC addresses in vars)
+  for mac in {{ vmstation_wol_macs | default([]) | join(' ') }}; do
+          # try wakeonlan then etherwake
+          if command -v wakeonlan >/dev/null 2>&1; then
+            wakeonlan $mac || true
+          elif command -v etherwake >/dev/null 2>&1; then
+            etherwake -i {{ vmstation_wol_interface }} $mac || true
+          fi
+        done
+      else
+        echo "vmstation_idle 0" > /var/lib/node_exporter/textfile_collector/vmstation_idle.prom
+      fi
+
+- name: Ensure node_exporter textfile collector directory exists
+  become: true
+  file:
+    path: /var/lib/node_exporter/textfile_collector
+    state: directory
+    mode: '0755'
+  when: inventory_hostname == 'masternode'
+
+- name: Install WOL utility (wakeonlan or etherwake)
+  become: true
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - wakeonlan
+    - etherwake
+  when: inventory_hostname == 'masternode'
+  ignore_errors: true
+
+- name: Install systemd service for idle check
+  become: true
+  copy:
+    dest: /etc/systemd/system/vmstation-idle-check.service
+    content: |
+      [Unit]
+      Description=VMStation idle check
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/vmstation_idle_check.sh
+
+  when: inventory_hostname == 'masternode'
+
+- name: Install systemd timer for hourly idle check
+  become: true
+  copy:
+    dest: /etc/systemd/system/vmstation-idle-check.timer
+    content: |
+      [Unit]
+      Description=Run VMStation idle check hourly
+
+      [Timer]
+      OnCalendar=hourly
+      Persistent=true
+
+      [Install]
+      WantedBy=timers.target
+
+  when: inventory_hostname == 'masternode'
+
+- name: Enable and start timer
+  become: true
+  systemd:
+    name: vmstation-idle-check.timer
+    state: started
+    enabled: true
+  when: inventory_hostname == 'masternode'

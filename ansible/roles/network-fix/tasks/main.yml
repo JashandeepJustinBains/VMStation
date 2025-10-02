@@ -1,0 +1,67 @@
+---
+# Ensure kernel modules, sysctl and basic forwarding rules required for Kubernetes CNI
+- name: Ensure br_netfilter module is loaded now
+  become: true
+  ansible.builtin.command:
+    cmd: modprobe br_netfilter
+  changed_when: false
+
+- name: Persist br_netfilter module load on boot
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/br_netfilter.conf
+    content: |
+      br_netfilter
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart kubelet
+
+- name: Ensure sysctl settings for Kubernetes CNIs
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-k8s.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart kubelet
+
+- name: Apply sysctl settings
+  become: true
+  ansible.builtin.command:
+    cmd: sysctl --system
+  changed_when: false
+
+- name: Ensure ip_forward is enabled at runtime
+  become: true
+  ansible.builtin.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+
+- name: Try to set iptables FORWARD policy to ACCEPT (best-effort)
+  become: true
+  ansible.builtin.command:
+    cmd: iptables -P FORWARD ACCEPT
+  ignore_errors: true
+
+- name: If ufw exists, disable it to avoid blocking pod traffic (best-effort)
+  become: true
+  ansible.builtin.stat:
+    path: /usr/sbin/ufw
+  register: ufw_path
+
+- name: Stop and disable ufw when present
+  become: true
+  ansible.builtin.service:
+    name: ufw
+    state: stopped
+    enabled: false
+  when: ufw_path.stat.exists
+  ignore_errors: true
+
+# kubelet will be restarted via handler 'restart kubelet' only when changes occur

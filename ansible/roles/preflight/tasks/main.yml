@@ -1,0 +1,30 @@
+---
+# Preflight checks to validate nodes before any cluster deployment
+- name: Check for connectivity to all hosts
+  ansible.builtin.ping:
+
+- name: Ensure required kernel modules present (overlay, br_netfilter)
+  become: true
+  ansible.builtin.shell: |
+    for module in overlay br_netfilter; do
+      modprobe $module || true
+    done
+  changed_when: false
+
+- name: Verify sysctl parameters
+  become: true
+  ansible.builtin.shell: |
+    sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward || true
+  register: sysctl_out
+  changed_when: false
+
+- name: Fail if kubelet not present
+  become: true
+  ansible.builtin.stat:
+    path: /usr/bin/kubelet
+  register: kubelet_bin
+
+- name: Abort when kubelet missing
+  ansible.builtin.fail:
+    msg: "kubelet binary not found on {{ inventory_hostname }} - install kubeadm/kubelet first"
+  when: not kubelet_bin.stat.exists

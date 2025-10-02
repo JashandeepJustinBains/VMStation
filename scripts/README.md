@@ -1,6 +1,15 @@
 # VMStation Scripts Documentation
 
-This directory contains operational scripts for VMStation infrastructure management.
+This directory historically contained many operational scripts for VMStation.
+
+NOTE: As part of a cleanup to reduce technical debt, large legacy scripts have been archived under `ansible/archive/playbooks` and `ansible/archive/plays`.
+The active deployment flow is now focused under `ansible/playbooks/deploy-cluster.yaml` and `ansible/roles/`.
+
+Use the Ansible minimal deploy instead of the legacy scripts:
+
+```powershell
+ansible-playbook -i ansible/inventory.txt ansible/playbooks/deploy-cluster.yaml
+```
 
 ## Infrastructure Scripts
 
