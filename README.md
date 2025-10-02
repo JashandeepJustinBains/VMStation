@@ -3,6 +3,33 @@
 
 Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalable, reliable self-hosted services.
 
+## 🎉 Latest Updates (October 2025)
+
+**Deployment Hardening Complete!** VMStation now deploys reliably on first run without manual intervention.
+
+### What's New:
+- ✅ **RHEL 10 Support**: Full compatibility with mixed Debian/RHEL cluster
+- ✅ **iptables-legacy Configuration**: Automatic setup for kube-proxy compatibility  
+- ✅ **Flannel v0.27.4**: Latest CNI with nftables awareness
+- ✅ **NetworkManager Integration**: CNI interfaces properly excluded
+- ✅ **Comprehensive Diagnostics**: New troubleshooting scripts and guides
+
+### Quick Start (October 2025):
+
+```bash
+# On masternode (192.168.4.63):
+cd /srv/monitoring_data/VMStation
+git fetch && git pull
+./deploy.sh
+
+# Validation (expected: all pods Running in ~3-4 minutes):
+kubectl get pods -A -o wide
+```
+
+See [`QUICK_FIX_HOMELAB.md`](QUICK_FIX_HOMELAB.md) for immediate fixes or [`SESSION_COMPLETE_SUMMARY.md`](SESSION_COMPLETE_SUMMARY.md) for full details.
+
+---
+
 ## Simplified Deployment System
 
 VMStation uses a **simplified deployment system** that reduces complexity by 85% while maintaining all functionality. The new system replaces the previous complex modular approach with clean, reliable deployment options.
@@ -39,6 +66,7 @@ The new simplified deployment system provides clear, easy-to-use options:
 - **Easier maintenance**: Simple, readable code structure
 - **Faster deployment**: Direct deployment without complex validation overhead
 - **Better testing**: Simple components that are easy to validate (20/20 tests passing)
+- **RHEL 10 Compatible**: Full support for mixed Debian/RHEL clusters (NEW)
 
 ### Enhanced Worker Node Join Process
 
