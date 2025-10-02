@@ -40,3 +40,7 @@
         - name: Run diagnostics role on failure
           import_role:
             name: diagnostics
+
+    - name: Install idle-sleep timer and script on masternode
+      import_role:
+        name: idle-sleep
