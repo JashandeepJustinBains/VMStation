@@ -3,6 +3,7 @@
 - hosts: all
   gather_facts: false
   roles:
+    - system-prep
     - preflight
     - network-fix
 
