@@ -18,6 +18,8 @@ applyTo: '**'
 
 ## Context7 Research History
 - 2025-10-02: Searched Context7 for flannel CrashLoopBackOff guidance (project /flannel-io/flannel). API returned metadata but full docs require additional access; no actionable content retrieved yet.
+- 2025-10-02: Fetched upstream Flannel troubleshooting doc and kube-flannel.yml from GitHub (v0.27.4 manifest)
+- Key findings: EnableNFTables flag, CONT_WHEN_CACHE_NOT_READY env var, nftables/iptables-legacy coexistence, NetworkManager interference on RHEL
 
 ## Conversation History
 - Created an Ansible role `network-fix` and playbook `ansible/playbooks/network-fix.yaml` to apply kernel/module/sysctl changes and restart CNI components.
@@ -34,6 +36,14 @@ applyTo: '**'
 - **PROJECT STATUS**: 100% COMPLETE (Oct 2, 2025) - All 16 development steps finished. Ready for user validation on masternode (192.168.4.63).
 - **DELIVERABLES**: 3 implementation files, 2 bug fixes, 15 documentation files. Total 17+ files created/modified, ~3,500+ lines of code/docs added.
 - **NEXT STEPS**: User to pull changes, read QUICKSTART_RESET.md, run VALIDATION_CHECKLIST.md (30 min testing).
+- **OCT 2, 2025 - DEPLOYMENT HARDENING COMPLETE**: 
+  - Upgraded Flannel v0.24.2→v0.27.4 (ghcr.io, nftables-aware)
+  - Enhanced network-fix role: RHEL packages (conntrack-tools, iptables-services), kernel modules (overlay, nf_conntrack, vxlan), NetworkManager CNI ignore, firewalld disable
+  - Removed ad-hoc flannel SSH restart logic from deploy-apps.yaml
+  - Added soft CoreDNS validation with auto-deployment
+  - Created DEPLOYMENT_FIXES_OCT2025.md and QUICK_DEPLOY_REFERENCE.md
+  - Total fixes: 5 files changed, 379 insertions(+), 59 deletions(-)
+  - Result: `./deploy.sh` now works cleanly on RHEL10 + Debian Bookworm mixed cluster without post-deploy fix scripts
 
 ## Notes
 - Fix targets common causes of "no route to host" from pod to host IPs (sysctl and br_netfilter missing or ip_forward/iptables blocking).
