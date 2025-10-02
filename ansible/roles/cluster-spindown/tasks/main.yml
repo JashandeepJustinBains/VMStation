@@ -53,7 +53,7 @@
         ipmitool -I lanplus -H {{ hostvars[item].ipmi_host | default('') }} -U {{ hostvars[item].ipmi_user | default('') }} -P {{ hostvars[item].ipmi_pass | default('') }} chassis power off || true
       args:
         warn: false
-      with_items: "{{ spin_targets }}"
+# End of valid Ansible task list
 
     - name: Send WOL packets as fallback when mac present
       shell: |
