@@ -1,0 +1,30 @@
+---
+- name: Spin up cluster (restore state)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    spin_targets: ['storagenodet3500','homelab']
+    vmstation_wol_macs: []
+  roles:
+    - role: cluster-spinup
+---
+- name: Spin up cluster (restore state)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    spin_targets: ['storagenodet3500','homelab']
+    vmstation_wol_macs: []
+  roles:
+    - role: cluster-spinup
+---
+- name: Spin up cluster (restore state)
+  hosts: masternode
+  connection: local
+  gather_facts: false
+  vars:
+    spin_targets: ['storagenodet3500','homelab']
+    vmstation_wol_macs: []
+  roles:
+    - role: cluster-spinup

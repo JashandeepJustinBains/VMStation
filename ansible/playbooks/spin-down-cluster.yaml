@@ -1,0 +1,60 @@
+---
+- name: Spin down cluster (cordon, drain, scale-to-zero)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    spin_targets: ['storagenodet3500','homelab']
+    allow_power_down: false
+  roles:
+    - role: cluster-spindown
+---
+- name: Spin down cluster (safe, idempotent)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # require explicit confirmation
+    spin_confirm: false
+    apps_to_manage:
+      - name: jellyfin
+        namespace: jellyfin
+    spin_targets: ['storagenodet3500','homelab']
+    delete_local_data: false
+    drain_grace_period: 60
+    allow_power_down: false
+  roles:
+    - role: cluster-spindown
+---
+- name: Spin down cluster (safe, idempotent)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # require explicit confirmation
+    spin_confirm: false
+    apps_to_manage:
+      - name: jellyfin
+        namespace: jellyfin
+    spin_targets: ['storagenodet3500','homelab']
+    delete_local_data: false
+    drain_grace_period: 60
+    allow_power_down: false
+  roles:
+    - role: cluster-spindown
+---
+- name: Spin down cluster (safe, idempotent)
+  hosts: masternode
+  connection: local
+  gather_facts: false
+  vars:
+    # require explicit confirmation
+    spin_confirm: false
+    apps_to_manage:
+      - name: jellyfin
+        namespace: jellyfin
+    spin_targets: ['storagenodet3500','homelab']
+    delete_local_data: false
+    drain_grace_period: 60
+  roles:
+    - role: cluster-spindown
