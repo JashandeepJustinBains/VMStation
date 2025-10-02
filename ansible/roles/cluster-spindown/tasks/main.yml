@@ -1,3 +1,10 @@
+# Debug: Show spin_targets and hostvars structure for troubleshooting
+- name: Debug spin_targets and hostvars
+  debug:
+    msg:
+      spin_targets: "{{ spin_targets }}"
+      hostvars: "{{ hostvars }}"
+
 
 # Idempotent cluster spin-down helper (intended to be run from the masternode)
 # Each task must start with - name: and be a dictionary.
@@ -47,5 +54,5 @@
       with_items: "{{ spin_targets }}"
     - name: Send WOL packets as fallback when mac present
       shell: |
-        wol {{ hostvars[item].wol_mac }} || true
+        wol {{ item.wol_mac | default('') }} || true
       with_items: "{{ spin_targets }}"
