@@ -1,8 +1,8 @@
 ---
 # Check versions of key tools and optionally upgrade (safe, non-destructive checks)
-- name: Check kubectl version
+-- name: Check kubectl version
   ansible.builtin.command:
-    cmd: kubectl version --client --short
+    cmd: kubectl version --client
   register: kubectl_version
   ignore_errors: true
 
