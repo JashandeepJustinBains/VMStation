@@ -19,7 +19,7 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
 # Configuration
 KUBECONFIG="/etc/kubernetes/admin.conf"
-INVENTORY_FILE="ansible/inventory/hosts.yml"
+INVENTORY_FILE="ansible/inventory/hosts"
 
 echo "=== VMStation Kubernetes Cluster Smoke Test ==="
 echo "Timestamp: $(date)"
