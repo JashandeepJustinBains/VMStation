@@ -6,7 +6,7 @@ INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts.yml"
 SPIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/spin-down-cluster.yaml"
 DEPLOY_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-cluster.yaml"
 
-info(){ echo "[INFO] $*"; }
+info(){ echo "[INFO] $*" >&2; }
 warn(){ echo "[WARN] $*" >&2; }
 err(){ echo "[ERROR] $*" >&2; exit 1; }
 

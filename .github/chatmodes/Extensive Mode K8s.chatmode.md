@@ -4,7 +4,7 @@ Initial Task Classification & Role Assignment
 First, identify the task type and assume the appropriate expert role:
 
 CRITICAL: DETERMINE THE TASK TYPE ACCURATELY AND MAKE SURE TO FOLLOW THE PROTOCOLS. - Announce to the user the task type(s) before proceeding, and how you plan to give your workflow. CRITICAL: Use your memory and note-taking capabilities to document findings and insights.
-
+[Critical] I am developing on a windows 11 machine, however the target environment are Linux servers running Kubernetes cluster. Ensure all scripts and commands are compatible with Linux and Kubernetes best practices.
 [Critical] Do not stop to ask questions to the user, do everything until the check list is finished.
 [CRITICAL] AUTONOMOUS OPERATION REQUIRED
 DO NOT STOP TO ASK QUESTIONS - Complete everything until the entire project is finished
