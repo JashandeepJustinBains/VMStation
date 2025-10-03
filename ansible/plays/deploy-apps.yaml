@@ -20,6 +20,8 @@
         api_version: v1
         kind: Namespace
         state: present
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Wait for Flannel CNI to be ready across all nodes"
       kubernetes.core.k8s_info:
@@ -30,6 +32,8 @@
         namespace: kube-flannel
         label_selectors:
           - app=flannel
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_pods
       until: >
         flannel_pods is defined and 
@@ -110,6 +114,8 @@
                     name: prometheus-config
                 - name: storage-volume
                   emptyDir: {}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Create Prometheus ConfigMap"
       kubernetes.core.k8s:
@@ -145,6 +151,8 @@
                 - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
                   action: keep
                   regex: true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Prometheus Service"
       kubernetes.core.k8s:
@@ -165,6 +173,8 @@
             - port: 9090
               targetPort: 9090
               nodePort: "{{ prometheus_nodeport }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Grafana"
       kubernetes.core.k8s:
@@ -230,6 +240,8 @@
                 volumes:
                 - name: storage
                   emptyDir: {}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Grafana Service"
       kubernetes.core.k8s:
@@ -250,6 +262,8 @@
             - port: 3000
               targetPort: 3000
               nodePort: "{{ grafana_nodeport }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Loki"
       kubernetes.core.k8s:
@@ -312,6 +326,8 @@
                 volumes:
                 - name: storage
                   emptyDir: {}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Loki Service"
       kubernetes.core.k8s:
@@ -332,6 +348,8 @@
             - port: 3100
               targetPort: 3100
               nodePort: "{{ loki_nodeport }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Kubernetes Dashboard"
       kubernetes.core.k8s:
@@ -339,6 +357,8 @@
         validate_certs: false
         state: present
         src: https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       
     - name: "Patch Kubernetes Dashboard to run on monitoring node"
       kubernetes.core.k8s:
@@ -360,6 +380,8 @@
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
                   effect: NoSchedule
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
                   
     - name: "Patch Dashboard Metrics Scraper to run on monitoring node"
       kubernetes.core.k8s:
@@ -381,6 +403,8 @@
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
                   effect: NoSchedule
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Create Dashboard Admin User"
       kubernetes.core.k8s:
@@ -393,6 +417,8 @@
           metadata:
             name: admin-user
             namespace: kubernetes-dashboard
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Create Dashboard Admin ClusterRoleBinding"
       kubernetes.core.k8s:
@@ -412,6 +438,8 @@
           - kind: ServiceAccount
             name: admin-user
             namespace: kubernetes-dashboard
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Wait for applications to be ready (with improved error handling)"
       block:
@@ -424,6 +452,8 @@
             namespace: kube-system
             label_selectors:
               - k8s-app=kube-dns
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
           register: coredns_check
           failed_when: false
 
@@ -450,6 +480,8 @@
               type: Ready
               status: "True"
             wait_timeout: 300  # Reduced from 600 to 300 seconds
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
           loop:
             - prometheus
             - grafana
@@ -464,6 +496,8 @@
         namespace: "{{ monitoring_namespace }}"
         label_selectors:
           - app.kubernetes.io/name={{ item.item }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       loop: "{{ app_readiness_results.results }}"
       when: item.failed | default(false)
       register: failed_pod_status

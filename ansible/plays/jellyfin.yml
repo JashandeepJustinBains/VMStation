@@ -53,6 +53,8 @@
         api_version: v1
         kind: Node
         name: "{{ jellyfin_node_name | default('storagenodet3500') }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: target_node_check
       failed_when: false
 
@@ -60,6 +62,8 @@
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Node
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: cluster_info
       when: target_node_check.resources is not defined or not target_node_check.resources
 
@@ -92,6 +96,8 @@
       kubernetes.core.k8s_info:
         api_version: v1
         kind: Node
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: cluster_info
       when: not target_node_check.resources
 
@@ -104,6 +110,8 @@
         kind: "{{ item.kind }}"
         name: "{{ item.name }}"
         namespace: "{{ item.namespace | default(omit) }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       loop:
         - { api_version: "v1", kind: "Service", name: "jellyfin-service", namespace: "jellyfin" }
         - { api_version: "v1", kind: "Service", name: "jellyfin", namespace: "jellyfin" }
@@ -128,6 +136,8 @@
             labels:
               name: jellyfin
               app: jellyfin
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: Deploy Jellyfin pod
       kubernetes.core.k8s:
@@ -224,6 +234,8 @@
                 path: "{{ jellyfin_config_path | default('/var/lib/jellyfin') }}"
                 type: DirectoryOrCreate
             restartPolicy: Always
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: Deploy Jellyfin service
       kubernetes.core.k8s:
@@ -255,6 +267,8 @@
               targetPort: 8920
               nodePort: 30920
               protocol: TCP
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: Get Jellyfin pod status
       kubernetes.core.k8s_info:
@@ -262,6 +276,8 @@
         kind: Pod
         name: jellyfin
         namespace: jellyfin
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: jellyfin_pod_info
       failed_when: false
 
@@ -271,6 +287,8 @@
         kind: Service
         name: jellyfin-service
         namespace: jellyfin
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: jellyfin_service_info
       failed_when: false
 
@@ -281,6 +299,8 @@
             api_version: v1
             kind: Node
             name: "{{ actual_jellyfin_node | default(jellyfin_node_name | default('storagenodet3500')) }}"
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
           register: storage_node_ready
           
         - name: "Verify storage node is in Ready state"
@@ -301,6 +321,8 @@
               type: Ready
               status: "True"
             wait_timeout: "{{ jellyfin_readiness_timeout | default(300) }}"  # Reduced default timeout
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
           register: jellyfin_ready_check
           ignore_errors: yes
 
@@ -310,6 +332,8 @@
         kind: Pod
         name: jellyfin
         namespace: jellyfin
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
       register: jellyfin_final_status
       when: jellyfin_ready_check.failed | default(false)
 
