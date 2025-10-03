@@ -176,6 +176,37 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
+    - name: "Create Grafana Datasource Provisioning ConfigMap"
+      kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: grafana-datasources
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              app.kubernetes.io/name: grafana
+          data:
+            prometheus-loki-datasources.yaml: |
+              apiVersion: 1
+              datasources:
+                - name: Prometheus
+                  type: prometheus
+                  access: proxy
+                  url: http://prometheus.{{ monitoring_namespace }}.svc.cluster.local:9090
+                  isDefault: true
+                  editable: true
+                - name: Loki
+                  type: loki
+                  access: proxy
+                  url: http://loki.{{ monitoring_namespace }}.svc.cluster.local:3100
+                  editable: true
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
     - name: "Deploy Grafana"
       kubernetes.core.k8s:
         kubeconfig: /etc/kubernetes/admin.conf
@@ -237,9 +268,15 @@
                   volumeMounts:
                   - name: storage
                     mountPath: /var/lib/grafana
+                  - name: grafana-datasources
+                    mountPath: /etc/grafana/provisioning/datasources/
+                    readOnly: true
                 volumes:
                 - name: storage
                   emptyDir: {}
+                - name: grafana-datasources
+                  configMap:
+                    name: grafana-datasources
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
