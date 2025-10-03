@@ -479,7 +479,7 @@
             wait_condition:
               type: Ready
               status: "True"
-             wait_timeout: 180  # Lowered from 300 to 180 seconds (3 minutes)
+            wait_timeout: 180  # Lowered from 300 to 180 seconds (3 minutes)
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
           loop:
