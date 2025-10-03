@@ -194,6 +194,7 @@
     enabled: true
   when: ansible_distribution_major_version is version('10', '==') and ansible_os_family == 'RedHat'
 
+
 - name: Configure iptables to use nftables backend (RHEL 10)
   become: true
   ansible.builtin.command:
@@ -203,22 +204,18 @@
     - ansible_distribution_major_version is version('10', '>=')
   ignore_errors: true
 
-  - name: Configure ip6tables to use nftables backend (RHEL 10)
-    become: true
-    ansible.builtin.command:
-      cmd: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
-    when:
-      - ansible_os_family == 'RedHat'
-      - ansible_distribution_major_version is version('10', '>=')
-      - ansible.builtin.stat:
-          path: /usr/sbin/ip6tables-nft
-        register: ip6tables_nft_bin
-      - ansible.builtin.stat:
-          path: /var/lib/alternatives/ip6tables
-        register: ip6tables_alt
-      - ip6tables_nft_bin.stat.exists | default(false)
-      - ip6tables_alt.stat.exists | default(false)
-    ignore_errors: true
+- name: Configure ip6tables to use nftables backend (RHEL 10)
+  become: true
+  ansible.builtin.command:
+    cmd: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version']|int >= 10
+    - lookup('ansible.builtin.file', '/usr/sbin/ip6tables-nft', errors='ignore') is not none
+    - lookup('ansible.builtin.file', '/var/lib/alternatives/ip6tables', errors='ignore') is not none
+  ignore_errors: true
 
 - name: Ensure iptables lock file directory exists (RHEL 10)
   become: true
