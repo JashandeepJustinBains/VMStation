@@ -40,6 +40,51 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
+    - name: Pre-flight | Print system date/time
+      ansible.builtin.shell: date
+      args:
+        executable: /bin/bash
+      register: system_date
+      changed_when: false
+
+    - name: Pre-flight | Show system date/time
+      ansible.builtin.debug:
+        var: system_date.stdout
+
+    - name: Pre-flight | Check /etc/kubernetes/admin.conf exists and print summary
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/admin.conf ]; then
+          echo "admin.conf present."
+          grep 'certificate-authority-data' /etc/kubernetes/admin.conf || true
+        else
+          echo "admin.conf MISSING!"
+        fi
+      args:
+        executable: /bin/bash
+      register: admin_conf_check
+      changed_when: false
+
+    - name: Pre-flight | Show admin.conf check
+      ansible.builtin.debug:
+        var: admin_conf_check.stdout_lines
+
+    - name: Pre-flight | Check /etc/kubernetes/pki/ca.crt exists and print cert details
+      ansible.builtin.shell: |
+        if [ -f /etc/kubernetes/pki/ca.crt ]; then
+          echo "ca.crt present."
+          openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -text | grep -E 'Issuer:|Subject:|Not Before:|Not After :'
+        else
+          echo "ca.crt MISSING!"
+        fi
+      args:
+        executable: /bin/bash
+      register: ca_crt_check
+      changed_when: false
+
+    - name: Pre-flight | Show ca.crt check
+      ansible.builtin.debug:
+        var: ca_crt_check.stdout_lines
+
 - hosts: masternode
   become: true
   tasks:
@@ -231,53 +276,8 @@
         KUBECONFIG: /etc/kubernetes/admin.conf
 
 # --- Post-deploy: Summarize non-Ready pods and provide actionable diagnostics ---
-- name: Post-deploy | Summarize non-Ready pods in all namespaces
   become: true
   tasks:
-      - name: Pre-flight | Print system date/time
-        ansible.builtin.shell: date
-        args:
-          executable: /bin/bash
-        register: system_date
-        changed_when: false
-
-      - name: Pre-flight | Show system date/time
-        ansible.builtin.debug:
-          var: system_date.stdout
-
-      - name: Pre-flight | Check /etc/kubernetes/admin.conf exists and print summary
-        ansible.builtin.shell: |
-          if [ -f /etc/kubernetes/admin.conf ]; then
-            echo "admin.conf present."
-            grep 'certificate-authority-data' /etc/kubernetes/admin.conf || true
-          else
-            echo "admin.conf MISSING!"
-          fi
-        args:
-          executable: /bin/bash
-        register: admin_conf_check
-        changed_when: false
-
-      - name: Pre-flight | Show admin.conf check
-        ansible.builtin.debug:
-          var: admin_conf_check.stdout_lines
-
-      - name: Pre-flight | Check /etc/kubernetes/pki/ca.crt exists and print cert details
-        ansible.builtin.shell: |
-          if [ -f /etc/kubernetes/pki/ca.crt ]; then
-            echo "ca.crt present."
-            openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -text | grep -E 'Issuer:|Subject:|Not Before:|Not After :'
-          else
-            echo "ca.crt MISSING!"
-          fi
-        args:
-          executable: /bin/bash
-        register: ca_crt_check
-        changed_when: false
-
-      - name: Pre-flight | Show ca.crt check
-        ansible.builtin.debug:
-          var: ca_crt_check.stdout_lines
     - name: Get all non-Ready pods
       ansible.builtin.shell: |
         kubectl get pods --all-namespaces --field-selector=status.phase!=Running -o wide
