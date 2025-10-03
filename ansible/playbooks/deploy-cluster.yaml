@@ -80,32 +80,22 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
-        - name: Set flannel_cni_nodes_ip variable (all nodes except masternode, using ansible_host if defined)
-          set_fact:
-            flannel_cni_nodes_ip: >-
-              {{ groups['all'] | difference(['masternode']) | map('extract', hostvars, 'ansible_host') | list if 'ansible_host' in hostvars[groups['all'][0]] else groups['all'] | difference(['masternode']) }}
-
-        - name: Verify Flannel CNI config created on all nodes (by IP)
-          vars:
-            flannel_ssh_user: "{{ hostvars[inventory_hostname].ansible_user | default('root') }}"
+        - name: Verify Flannel pods are running on all nodes (Kubernetes-native check)
           ansible.builtin.shell: |
-            # Wait up to 60s for CNI config to appear on all nodes
-            nodes=({{ flannel_cni_nodes_ip | join(' ') }})
+            # Wait up to 60s for Flannel pods to be running on all nodes
             for i in {1..12}; do
-              missing=0
-              for node in "${nodes[@]}"; do
-                if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${flannel_ssh_user}@${node}" "test -f /etc/cni/net.d/10-flannel.conflist"; then
-                  missing=$((missing + 1))
-                fi
-              done
-              if [ "$missing" -eq 0 ]; then
-                echo "Flannel CNI config verified on all nodes"
+              total_nodes=$(kubectl get nodes --no-headers | wc -l)
+              running_flannel=$(kubectl -n kube-flannel get pods -l app=flannel -o json | jq '[.items[] | select(.status.phase=="Running")] | length')
+              
+              if [ "$running_flannel" -eq "$total_nodes" ]; then
+                echo "Flannel pods verified: $running_flannel/$total_nodes nodes"
                 exit 0
               fi
-              echo "Waiting for CNI config on $missing nodes ($i/12)..."
+              echo "Waiting for Flannel pods: $running_flannel/$total_nodes nodes ready ($i/12)..."
               sleep 5
             done
-            echo "ERROR: Flannel CNI config missing on some nodes after 60s"
+            echo "ERROR: Not all Flannel pods are running after 60s"
+            kubectl -n kube-flannel get pods -o wide
             exit 1
           args:
             executable: /bin/bash

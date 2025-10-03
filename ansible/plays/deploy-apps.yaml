@@ -23,6 +23,8 @@
 
     - name: "Wait for Flannel CNI to be ready across all nodes"
       kubernetes.core.k8s_info:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         api_version: v1
         kind: Pod
         namespace: kube-flannel
@@ -30,11 +32,13 @@
           - app=flannel
       register: flannel_pods
       until: >
+        flannel_pods is defined and 
+        flannel_pods.resources is defined and
         flannel_pods.resources | length > 0 and
         (flannel_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) == (flannel_pods.resources | length)
       retries: 24
       delay: 5
-      ignore_errors: true
+      failed_when: false
 
     - name: "Deploy Prometheus"
       kubernetes.core.k8s:
@@ -413,13 +417,15 @@
       block:
         - name: "Check CoreDNS status (informational only - kubeadm manages CoreDNS)"
           kubernetes.core.k8s_info:
+            kubeconfig: /etc/kubernetes/admin.conf
+            validate_certs: false
             api_version: v1
             kind: Pod
             namespace: kube-system
             label_selectors:
               - k8s-app=kube-dns
           register: coredns_check
-          ignore_errors: true
+          failed_when: false
 
         - name: "Display CoreDNS status"
           debug:
