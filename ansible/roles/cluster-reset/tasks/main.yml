@@ -1,3 +1,12 @@
+# Ensure /etc/kubernetes/manifests exists after reset (prevents kubelet error)
+- name: Recreate /etc/kubernetes/manifests directory (empty)
+  ansible.builtin.file:
+    path: /etc/kubernetes/manifests
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  ignore_errors: true
 ---
 # Safe and comprehensive Kubernetes cluster reset
 # Removes all K8s-specific config/network resources while preserving SSH and physical interfaces
