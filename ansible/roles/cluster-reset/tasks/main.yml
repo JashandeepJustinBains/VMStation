@@ -6,8 +6,7 @@
     owner: root
     group: root
     mode: '0755'
-  ignore_errors: true
----
+# The document separator (---) is not valid in Ansible task files and must be removed
 # Safe and comprehensive Kubernetes cluster reset
 # Removes all K8s-specific config/network resources while preserving SSH and physical interfaces
 
