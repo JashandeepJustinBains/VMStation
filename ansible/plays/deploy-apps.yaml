@@ -530,7 +530,7 @@
             - name: "Show monitoring events output"
               ansible.builtin.debug:
                 var: monitoring_events.stdout_lines
-          when: app_wait_results is failed or (app_wait_results.results is defined and (app_wait_results.results | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0))
+      when: app_readiness_results is defined and (app_readiness_results.results | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0)
     - name: "Check pod status for troubleshooting"
       kubernetes.core.k8s_info:
         api_version: v1
