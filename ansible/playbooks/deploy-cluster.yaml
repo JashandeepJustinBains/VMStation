@@ -198,7 +198,6 @@
           echo "Waiting for API server... ($i/24)"
           sleep 5
         done
-        echo "ERROR: API server did not become available in time" >&2
         exit 1
       args:
         executable: /bin/bash
@@ -275,7 +274,6 @@
       import_role:
         name: idle-sleep
 
-    - name: Uncordon any nodes that are still cordoned (idempotent)
       ansible.builtin.shell: |
         set -eux
         # list nodes that have spec.unschedulable=true

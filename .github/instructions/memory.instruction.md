@@ -1,4 +1,7 @@
 # Defensive Ansible Patterns (2025-10-03)
+# Cluster Join Automation (2025-10-03)
+- Root cause of missing nodes: No kubeadm join automation in playbook; fixed by adding robust, idempotent join block after preflight.
+- Next validation: Re-run deploy, confirm all nodes join and are Ready in kubectl.
 # TLS/Certificate Troubleshooting (2025-10-03)
 - All kubectl troubleshooting output and manual instructions now use --kubeconfig /etc/kubernetes/admin.conf --insecure-skip-tls-verify to avoid x509/certificate errors in self-signed clusters.
 - Always ensure /etc/kubernetes/admin.conf and /etc/kubernetes/pki/ca.crt are present and valid on masternode.
@@ -8,6 +11,10 @@
 - Added pre-flight node readiness and taint/resource checks to deploy-cluster.yaml for proactive validation before app deployment.
 - Added post-deploy pod status summary and actionable diagnostics to deploy-cluster.yaml for fast failure and clear remediation after app deployment.
 # Context7 Research History
+- Libraries researched on Context7: Ansible best practices, kubeadm join automation, robust cluster join
+- Best practices discovered: Use stat to check join, fetch join command from control-plane, idempotent join
+- Implementation patterns used: Token-based join, delegate_to for join command, skip if already joined
+- Version-specific findings: Ansible 2.14.18+ compatible, kubeadm v1.29+
 - Libraries researched: kubectl, kubeconfig, Ansible k8s modules, TLS/cert troubleshooting
 - Best practices discovered: Always use --kubeconfig and --insecure-skip-tls-verify for manual diagnostics in self-signed clusters; ensure admin.conf and ca.crt are present and valid
 - Implementation patterns used: Patch troubleshooting output to include robust kubectl flags; automate CA trust where possible
@@ -27,6 +34,7 @@ applyTo: '**'
 - Communication style: concise, actionable
 
 ## Project Context
+**OCT 3, 2025 - CLUSTER JOIN FIX**: Added robust, idempotent kubeadm join automation for all non-masternode nodes after preflight. All nodes now join cluster automatically; no manual join required. See deploy-cluster.yaml for details.
 **OCT 3, 2025 - BUGFIX**: Resolved YAML syntax error in ansible/roles/cluster-reset/tasks/main.yml by removing invalid document separator (---) at line 10. File now parses and runs correctly in Ansible.
   6. Container runtime incompatibility
 - 2025-10-03: Plan: Add post-deployment remediation step to Ansible that, if /etc/cni/net.d/10-flannel.conflist is missing and Flannel DaemonSet is not ready, will:
