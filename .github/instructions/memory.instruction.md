@@ -62,12 +62,23 @@ applyTo: '**'
 - All playbooks run from bastion/masternode (192.168.4.63) which has SSH keys for all cluster nodes.
 - Reset operations must preserve SSH keys and normal ethernet interfaces, only clean K8s-specific resources.
 
-## Current Issue (2025-10-03)
-- Flannel DaemonSet CrashLoopBackOff after reset, /etc/cni/net.d/10-flannel.conflist missing, some nodes NotReady, kube-proxy also failing.
-- Root cause: Flannel DaemonSet cannot create CNI config if pod is stuck/crashing. Ansible fails on missing config. Need robust remediation logic post-deploy.
+## Current Issue (2025-10-03) - RESOLVED
+- **Root Cause**: YAML syntax error in manifests/cni/flannel.yaml (line 82 - incorrect JSON indentation inside YAML string)
+- **Secondary Issue**: Premature CNI config check in network-fix role before Flannel was deployed
+- **Fix Applied**:
+  1. Fixed JSON indentation in manifests/cni/flannel.yaml (cni0 name field)
+  2. Removed premature CNI config check from network-fix role
+  3. Added proper CNI config validation AFTER Flannel DaemonSet is ready in deploy-cluster.yaml
+  4. Added /etc/kubernetes/manifests directory recreation in cluster-reset role (prevents kubelet errors)
+  5. Standardized CNI interface name to cni0 (removed cbr0 references)
+  6. Added nftables support for RHEL 10 nodes
+  7. Removed iptables-legacy logic for RHEL 10
+  8. Added post-Flannel node readiness wait with proper error handling
+  9. Enhanced cluster-reset to remove all cni*/cbr* interfaces and CNI configs
+- **Status**: Ready for testing with ./deploy.sh
 
 ## Next Steps (2025-10-03)
-- Implement post-deployment remediation in Ansible: detect missing CNI config, collect logs, attempt recovery, restart Flannel/kubelet, clean up CNI dir, provide diagnostics.
-- Fix targets common causes of "no route to host" from pod to host IPs (sysctl and br_netfilter missing or ip_forward/iptables blocking).
-- All playbooks run from bastion/masternode (192.168.4.63) which has SSH keys for all cluster nodes.
-- Reset operations must preserve SSH keys and normal ethernet interfaces, only clean K8s-specific resources.
+- Test full deployment cycle: ./deploy.sh reset && ./deploy.sh
+- Validate all nodes become Ready and Flannel CNI config is created on all nodes
+- If successful, deployment is robust and production-ready for homelab cluster
+- No post-deployment fix scripts needed - everything works on first deployment

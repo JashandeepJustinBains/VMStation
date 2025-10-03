@@ -243,14 +243,5 @@
   loop: "{{ cni_conflicting_files.files }}"
   when: cni_conflicting_files.matched > 0
 
-# Validate that Flannel CNI config is present after deploy (fail early if missing)
-- name: Check for Flannel CNI config after deploy
-  become: true
-  ansible.builtin.stat:
-    path: /etc/cni/net.d/10-flannel.conflist
-  register: flannel_cni_conf
-
-- name: Fail if Flannel CNI config is missing (critical for pod networking)
-  ansible.builtin.fail:
-    msg: "Flannel CNI config /etc/cni/net.d/10-flannel.conflist is missing after deploy. Pod networking will not function. Check Flannel DaemonSet logs."
-  when: not flannel_cni_conf.stat.exists
+# CNI config validation is handled after Flannel DaemonSet deployment in deploy-cluster.yaml
+# No premature checks here - this role only prepares the environment

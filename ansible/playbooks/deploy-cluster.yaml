@@ -44,6 +44,30 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
+        - name: Verify Flannel CNI config created on all nodes
+          ansible.builtin.shell: |
+            # Wait up to 60s for CNI config to appear on all nodes
+            for i in {1..12}; do
+              missing=0
+              for node in homelab storagenodet3500; do
+                if ! ssh $node "test -f /etc/cni/net.d/10-flannel.conflist"; then
+                  missing=$((missing + 1))
+                fi
+              done
+              if [ "$missing" -eq 0 ]; then
+                echo "Flannel CNI config verified on all nodes"
+                exit 0
+              fi
+              echo "Waiting for CNI config on $missing nodes ($i/12)..."
+              sleep 5
+            done
+            echo "ERROR: Flannel CNI config missing on some nodes after 60s"
+            exit 1
+          args:
+            executable: /bin/bash
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
         - name: Ensure kube-proxy-ready
           ansible.builtin.shell: |
             kubectl -n kube-system get pods -l 'k8s-app=kube-proxy' -o jsonpath='{.items[*].status.phase}'
