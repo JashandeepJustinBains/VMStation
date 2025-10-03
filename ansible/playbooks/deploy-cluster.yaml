@@ -161,9 +161,57 @@
       register: ca_crt_check
       changed_when: false
 
+
     - name: Pre-flight | Show ca.crt check
       ansible.builtin.debug:
         var: ca_crt_check.stdout_lines
+
+# --- Cluster join: Ensure storagenodet3500 and homelab join the cluster ---
+- hosts: storagenodet3500,homelab
+  become: true
+  tasks:
+    - name: Check if node is already joined (kubelet kubeconfig exists)
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Fetch kubeadm join command from masternode
+      ansible.builtin.shell: |
+        kubeadm token create --print-join-command
+      args:
+        executable: /bin/bash
+      delegate_to: masternode
+      register: join_cmd
+      when: not kubelet_conf.stat.exists
+
+    - name: Join cluster if not already joined
+      ansible.builtin.shell: |
+        set -eux
+        {{ join_cmd.stdout }} --ignore-preflight-errors=all
+      args:
+        executable: /bin/bash
+      when: not kubelet_conf.stat.exists
+
+    - name: Wait for node to appear in kubectl get nodes
+      ansible.builtin.shell: |
+        for i in {1..24}; do
+          if kubectl get nodes | grep -q "$(hostname)"; then
+            echo "Node joined successfully"
+            exit 0
+          fi
+          echo "Waiting for node to join cluster ($i/24)..."
+          sleep 5
+        done
+        echo "ERROR: Node did not join cluster in time" >&2
+        exit 1
+      args:
+        executable: /bin/bash
+      delegate_to: masternode
+      when: not kubelet_conf.stat.exists
+
+    - name: Debug join status
+      ansible.builtin.debug:
+        msg: "Node join attempted if not already joined. kubelet.conf exists: {{ kubelet_conf.stat.exists }}"
 
 - hosts: masternode
   become: true
@@ -273,7 +321,9 @@
       import_role:
         name: idle-sleep
 
+    - name: Uncordon any nodes that are still cordoned (idempotent)
       ansible.builtin.shell: |
+        set -eux
         # list nodes that have spec.unschedulable=true
         nodes=$(kubectl get nodes -o jsonpath='{range .items[?(@.spec.unschedulable==true)]}{.metadata.name} "\n"{end}')
         if [ -n "$nodes" ]; then
