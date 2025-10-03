@@ -10,6 +10,26 @@
 - hosts: masternode
   become: true
   tasks:
+    - name: Initialize Kubernetes control plane if not already initialized (idempotent)
+      ansible.builtin.shell: |
+        if [ ! -f /etc/kubernetes/admin.conf ]; then
+          echo "Running kubeadm init to bootstrap control plane..."
+          kubeadm init --pod-network-cidr=10.244.0.0/16 --upload-certs
+        else
+          echo "Control plane already initialized. Skipping kubeadm init."
+        fi
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: kubeadm_init_result
+      ignore_errors: true
+
+    - name: Show kubeadm init output (if any)
+      ansible.builtin.debug:
+        var: kubeadm_init_result.stdout_lines
+      when: kubeadm_init_result is defined and kubeadm_init_result.stdout_lines is defined
+
     - name: Wait for Kubernetes API server to be available
       ansible.builtin.shell: |
         for i in {1..24}; do

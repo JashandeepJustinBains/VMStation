@@ -52,6 +52,13 @@ applyTo: '**'
   9. Enhanced cluster-reset to remove all cni*/cbr* interfaces and CNI configs
 - **Status**: Ready for testing with ./deploy.sh
 
+
+## Architectural Improvement (2025-10-03)
+- Added idempotent kubeadm init logic to deploy-cluster.yaml (masternode block)
+- Now, deploy playbook will automatically initialize control plane if not already set up (checks /etc/kubernetes/admin.conf)
+- Enables true one-command cluster bootstrap and automation, no manual kubeadm init required
+- Next: Validate on clean system, tune for custom kubeadm configs if needed
+
 ## Next Steps (2025-10-03)
 - Test full deployment cycle: ./deploy.sh reset && ./deploy.sh
 - Validate all nodes become Ready and Flannel CNI config is created on all nodes
