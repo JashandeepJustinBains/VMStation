@@ -45,6 +45,18 @@
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
+- name: Install iptables-nft for RHEL 10 (kube-proxy compatibility)
+  become: true
+  ansible.builtin.package:
+    name:
+      - iptables-nft
+      - iptables-nft-services
+    state: present
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
 - name: Install required network packages (Debian/Ubuntu)
   become: true
   ansible.builtin.package:
@@ -182,6 +194,37 @@
     enabled: true
   when: ansible_distribution_major_version is version('10', '==') and ansible_os_family == 'RedHat'
 
+- name: Configure iptables to use nftables backend (RHEL 10)
+  become: true
+  ansible.builtin.command:
+    cmd: update-alternatives --set iptables /usr/sbin/iptables-nft
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
+- name: Configure ip6tables to use nftables backend (RHEL 10)
+  become: true
+  ansible.builtin.command:
+    cmd: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
+- name: Ensure iptables lock file directory exists (RHEL 10)
+  become: true
+  ansible.builtin.file:
+    path: /run/xtables.lock
+    state: touch
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
 - name: Set SELinux to permissive mode on RHEL (temporary for CNI compatibility)
   become: true
   ansible.posix.selinux:
@@ -254,6 +297,38 @@
     - ansible_distribution_major_version is version('10', '>=')
   notify: restart kubelet
   ignore_errors: true
+
+- name: Create iptables chains for kube-proxy (RHEL 10 compatibility)
+  become: true
+  ansible.builtin.shell: |
+    # Ensure basic iptables chains exist for kube-proxy
+    iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
+    iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
+    iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
+    iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
+    iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
+    iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
+    # Ensure NAT table has proper base chains
+    iptables -t nat -C PREROUTING -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A PREROUTING -j KUBE-SERVICES
+    iptables -t nat -C OUTPUT -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A OUTPUT -j KUBE-SERVICES
+    iptables -t nat -C POSTROUTING -j KUBE-POSTROUTING 2>/dev/null || iptables -t nat -A POSTROUTING -j KUBE-POSTROUTING
+    iptables -t filter -C FORWARD -j KUBE-FORWARD 2>/dev/null || iptables -t filter -A FORWARD -j KUBE-FORWARD
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+  changed_when: false
+
+- name: Restart kube-proxy after iptables setup (RHEL 10)
+  become: true
+  ansible.builtin.shell: |
+    # Delete kube-proxy pod to force restart with proper iptables setup
+    kubectl delete pod -n kube-system -l k8s-app=kube-proxy --kubeconfig /etc/kubernetes/kubelet.conf --ignore-not-found=true 2>/dev/null || true
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+  changed_when: false
 
 # kubelet will be restarted via handler 'restart kubelet' only when changes occur
 

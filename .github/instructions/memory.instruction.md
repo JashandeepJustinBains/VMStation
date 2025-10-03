@@ -61,7 +61,18 @@ applyTo: '**'
 - All playbooks run from bastion/masternode (192.168.4.63) which has SSH keys for all cluster nodes.
 - Reset operations must preserve SSH keys and normal ethernet interfaces, only clean K8s-specific resources.
 
-## Current Issue (2025-10-03) - RESOLVED
+## Current Issue (2025-10-03) - RHEL 10 kube-proxy CrashLoopBackOff
+- **Root Cause**: kube-proxy on RHEL 10 crashing with exit code 2 due to iptables/nftables compatibility issues
+- **Analysis**: RHEL 10 uses nftables by default; kube-proxy uses iptables mode but iptables commands fail when backend not properly configured
+- **Fix Applied**: 
+  1. Install iptables-nft and iptables-nft-services packages
+  2. Configure iptables to use nftables backend via update-alternatives
+  3. Pre-create required iptables chains for kube-proxy (KUBE-SERVICES, KUBE-POSTROUTING, etc.)
+  4. Ensure xtables.lock file exists
+  5. Force kube-proxy pod restart after iptables configuration
+- **Status**: Ready for testing
+
+## Previous Issue (2025-10-03) - RESOLVED
 - **Root Cause**: YAML syntax error in manifests/cni/flannel.yaml (line 82 - incorrect JSON indentation inside YAML string)
 - **Secondary Issue**: Premature CNI config check in network-fix role before Flannel was deployed
 - **Fix Applied**:
