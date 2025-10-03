@@ -1,39 +1,25 @@
-# Ensure /etc/kubernetes/manifests exists after reset (prevents kubelet error)
-- name: Recreate /etc/kubernetes/manifests directory (empty)
-  ansible.builtin.file:
-    path: /etc/kubernetes/manifests
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-# The document separator (---) is not valid in Ansible task files and must be removed
 # Safe and comprehensive Kubernetes cluster reset
 # Removes all K8s-specific config/network resources while preserving SSH and physical interfaces
 
-- name: Stop kubelet service before reset
   ansible.builtin.systemd:
     name: kubelet
     state: stopped
   ignore_errors: true
 
-- name: Run kubeadm reset with force flag
   ansible.builtin.command:
     cmd: kubeadm reset --force
   register: kubeadm_reset_result
   ignore_errors: true
 
-- name: Display kubeadm reset output
   ansible.builtin.debug:
     var: kubeadm_reset_result.stdout_lines
   when: kubeadm_reset_result.stdout_lines is defined
 
 
-- name: Remove all CNI config files (cni/cbr cleanup)
   ansible.builtin.shell: |
     rm -f /etc/cni/net.d/* || true
   ignore_errors: true
 
-- name: Remove Kubernetes config directories (except /etc/cni/net.d)
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -48,16 +34,23 @@
     - /opt/cni/bin
   ignore_errors: true
 
-- name: Identify Kubernetes-related network interfaces
   ansible.builtin.shell: |
     ip -o link show | awk -F': ' '{print $2}' | egrep 'flannel|^cni|^cali|^weave|^vxlan\.calico|^tunl0|docker0|kube-' || true
   register: k8s_interfaces
   changed_when: false
 
-- name: Display identified Kubernetes interfaces
   ansible.builtin.debug:
     msg: "Kubernetes interfaces to remove: {{ k8s_interfaces.stdout_lines }}"
   when: k8s_interfaces.stdout_lines | length > 0
+
+# Ensure /etc/kubernetes/manifests exists after reset (prevents kubelet error)
+- name: Recreate /etc/kubernetes/manifests directory (empty)
+  ansible.builtin.file:
+    path: /etc/kubernetes/manifests
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
 
 - name: Bring down Kubernetes network interfaces
   ansible.builtin.command:
