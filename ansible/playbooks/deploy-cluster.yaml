@@ -16,12 +16,23 @@
 
     - name: Download and install CNI plugins if missing
       block:
-        - name: Download CNI plugins tarball
+        - name: Download CNI plugins tarball (Debian/Ubuntu)
           ansible.builtin.get_url:
             url: https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
             dest: /tmp/cni-plugins.tgz
             mode: '0644'
-          when: not loopback_cni.stat.exists
+          when:
+            - not loopback_cni.stat.exists
+            - ansible_facts['os_family'] == 'Debian'
+
+        - name: Download CNI plugins tarball (RHEL/Fallback)
+          ansible.builtin.shell: |
+            curl -L --retry 5 --retry-delay 2 -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+          args:
+            creates: /tmp/cni-plugins.tgz
+          when:
+            - not loopback_cni.stat.exists
+            - ansible_facts['os_family'] == 'RedHat'
 
         - name: Extract CNI plugins to /opt/cni/bin
           ansible.builtin.unarchive:
@@ -36,6 +47,30 @@
             recurse: yes
             mode: '0755'
           when: not loopback_cni.stat.exists
+
+    - name: Trust Kubernetes CA system-wide (Debian/Ubuntu)
+      ansible.builtin.copy:
+        src: /etc/kubernetes/pki/ca.crt
+        dest: /usr/local/share/ca-certificates/kubernetes-ca.crt
+        remote_src: yes
+        mode: '0644'
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Update CA certificates (Debian/Ubuntu)
+      ansible.builtin.shell: update-ca-certificates
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Trust Kubernetes CA system-wide (RHEL)
+      ansible.builtin.copy:
+        src: /etc/kubernetes/pki/ca.crt
+        dest: /etc/pki/ca-trust/source/anchors/kubernetes-ca.crt
+        remote_src: yes
+        mode: '0644'
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: Update CA certificates (RHEL)
+      ansible.builtin.shell: update-ca-trust extract
+      when: ansible_facts['os_family'] == 'RedHat'
 # Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
 
 - hosts: all
