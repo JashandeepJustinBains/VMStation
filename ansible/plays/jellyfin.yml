@@ -67,30 +67,18 @@
       register: cluster_info
       when: target_node_check.resources is not defined or not target_node_check.resources
 
-    - name: Set jellyfin deployment node
-      set_fact:
-        actual_jellyfin_node: "{{ jellyfin_node_name | default('storagenodet3500') }}"
-      when: target_node_check.resources is defined and target_node_check.resources
 
-    - name: Fallback to available storage nodes if target not found
-      set_fact:
-        actual_jellyfin_node: "{{ cluster_info.resources | selectattr('metadata.labels.storage_nodes', 'defined') | map(attribute='metadata.name') | first | default(cluster_info.resources[0].metadata.name) }}"
-      when: (target_node_check.resources is not defined or not target_node_check.resources) and (cluster_info.resources is defined and cluster_info.resources)
-
-    - name: Display node availability status
-      debug:
+    - name: Fail if storagenodet3500 is not present and Ready
+      ansible.builtin.fail:
         msg: |
-          Target node status for Jellyfin deployment:
-          Requested node: {{ jellyfin_node_name | default('storagenodet3500') }}
-          Actual deployment node: {{ actual_jellyfin_node | default('ERROR: No nodes available') }}
-          Node exists: {{ 'Yes' if target_node_check.resources else 'No - using fallback' }}
-          {% if not target_node_check.resources and cluster_info.resources %}
-          
-          Available nodes:
-          {% for node in cluster_info.resources %}
-          - {{ node.metadata.name }} ({{ node.status.addresses[0].address | default('No IP') }})
-          {% endfor %}
-          {% endif %}
+          Jellyfin can only be deployed on storagenodet3500. Node not found or not Ready in cluster.
+          Please ensure storagenodet3500 is joined and Ready before deploying Jellyfin.
+      when: target_node_check.resources is not defined or not target_node_check.resources
+
+    - name: Set jellyfin deployment node (strict)
+      set_fact:
+        actual_jellyfin_node: "storagenodet3500"
+      when: target_node_check.resources is defined and target_node_check.resources
 
     - name: Get cluster nodes for reference
       kubernetes.core.k8s_info:
