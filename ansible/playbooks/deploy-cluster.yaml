@@ -1,5 +1,4 @@
 ---
----
 # --- Preflight: Ensure CNI plugins are present on all nodes ---
 - hosts: all
   become: true
