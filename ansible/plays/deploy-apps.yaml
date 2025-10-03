@@ -479,7 +479,7 @@
             wait_condition:
               type: Ready
               status: "True"
-            wait_timeout: 300  # Reduced from 600 to 300 seconds
+             wait_timeout: 180  # Lowered from 300 to 180 seconds (3 minutes)
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
           loop:
@@ -489,6 +489,48 @@
           register: app_readiness_results
           ignore_errors: yes
 
+        - name: "Troubleshoot stuck pods in monitoring namespace (describe and events)"
+          block:
+            - name: "Get all pods in monitoring namespace"
+              ansible.builtin.shell: |
+                kubectl get pods -n {{ monitoring_namespace }} -o jsonpath='{range .items[*]}{.metadata.name}\n{end}'
+              args:
+                executable: /bin/bash
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: monitoring_pods
+
+            - name: "Describe all pods in monitoring namespace"
+              ansible.builtin.shell: |
+                for pod in $(echo "{{ monitoring_pods.stdout }}"); do
+                  echo "\n===== DESCRIBE $pod ====="
+                  kubectl describe pod -n {{ monitoring_namespace }} $pod
+                done
+              args:
+                executable: /bin/bash
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: monitoring_pod_describes
+              failed_when: false
+
+            - name: "Show pod describe output"
+              ansible.builtin.debug:
+                var: monitoring_pod_describes.stdout_lines
+
+            - name: "Show recent events in monitoring namespace"
+              ansible.builtin.shell: |
+                kubectl get events -n {{ monitoring_namespace }} --sort-by=.metadata.creationTimestamp | tail -30
+              args:
+                executable: /bin/bash
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: monitoring_events
+              failed_when: false
+
+            - name: "Show monitoring events output"
+              ansible.builtin.debug:
+                var: monitoring_events.stdout_lines
+          when: app_wait_results is failed or (app_wait_results.results is defined and (app_wait_results.results | selectattr('failed', 'defined') | selectattr('failed') | list | length > 0))
     - name: "Check pod status for troubleshooting"
       kubernetes.core.k8s_info:
         api_version: v1

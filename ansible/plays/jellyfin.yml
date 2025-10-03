@@ -320,7 +320,7 @@
             wait_condition:
               type: Ready
               status: "True"
-            wait_timeout: "{{ jellyfin_readiness_timeout | default(300) }}"  # Reduced default timeout
+            wait_timeout: "{{ jellyfin_readiness_timeout | default(180) }}"  # Lowered default timeout to 180s (3 minutes)
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
           register: jellyfin_ready_check
