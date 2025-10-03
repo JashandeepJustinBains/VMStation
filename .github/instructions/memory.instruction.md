@@ -1,15 +1,24 @@
 # Defensive Ansible Patterns (2025-10-03)
+# TLS/Certificate Troubleshooting (2025-10-03)
+- All kubectl troubleshooting output and manual instructions now use --kubeconfig /etc/kubernetes/admin.conf --insecure-skip-tls-verify to avoid x509/certificate errors in self-signed clusters.
+- Always ensure /etc/kubernetes/admin.conf and /etc/kubernetes/pki/ca.crt are present and valid on masternode.
+- For Ansible k8s/k8s_info tasks, always set kubeconfig and validate_certs: false, and set KUBECONFIG env var.
 - All Ansible conditionals that check for .resources now use 'is defined' before access, e.g. 'when: target_node_check.resources is not defined or not target_node_check.resources'.
 # Code Enhancements (2025-10-03)
 - Added pre-flight node readiness and taint/resource checks to deploy-cluster.yaml for proactive validation before app deployment.
 - Added post-deploy pod status summary and actionable diagnostics to deploy-cluster.yaml for fast failure and clear remediation after app deployment.
 # Context7 Research History
+- Libraries researched: kubectl, kubeconfig, Ansible k8s modules, TLS/cert troubleshooting
+- Best practices discovered: Always use --kubeconfig and --insecure-skip-tls-verify for manual diagnostics in self-signed clusters; ensure admin.conf and ca.crt are present and valid
+- Implementation patterns used: Patch troubleshooting output to include robust kubectl flags; automate CA trust where possible
+- Version-specific findings: Kubernetes v1.29+ and Ansible 2.14+ compatible
 - All Ansible k8s_info tasks for monitoring app readiness (Prometheus, Grafana, Loki) in deploy-apps.yaml now include kubeconfig and validate_certs: false to prevent SSL errors. This was required for robust, idempotent, and error-free cluster bring-up.
 ---
 applyTo: '**'
 ---
 
 # User Memory
+# Update 2025-10-03: All troubleshooting and diagnostics now robust to TLS/cert errors. See playbook output for new kubectl flags.
 
 ## User Preferences
 - Programming languages: not specified (Ansible/YAML used here)

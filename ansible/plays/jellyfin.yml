@@ -362,8 +362,8 @@
           {% endif %}
           
           Troubleshooting commands:
-          - kubectl describe pod -n jellyfin jellyfin
-          - kubectl logs -n jellyfin jellyfin
+          - kubectl describe pod -n jellyfin jellyfin --kubeconfig /etc/kubernetes/admin.conf --insecure-skip-tls-verify
+          - kubectl logs -n jellyfin jellyfin --kubeconfig /etc/kubernetes/admin.conf --insecure-skip-tls-verify
           {% else %}
           ⏳ Jellyfin is still starting up. Check status with:
           kubectl get pods -n jellyfin
