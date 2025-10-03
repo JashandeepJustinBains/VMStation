@@ -10,6 +10,22 @@
 - hosts: masternode
   become: true
   tasks:
+    - name: Wait for Kubernetes API server to be available
+      ansible.builtin.shell: |
+        for i in {1..60}; do
+          if kubectl version --request-timeout=5s >/dev/null 2>&1; then
+            echo "API server is up"
+            exit 0
+          fi
+          echo "Waiting for API server... ($i/60)"
+          sleep 5
+        done
+        echo "ERROR: API server did not become available in time" >&2
+        exit 1
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
     - block:
         - name: Ensure artifacts dir exists on controller
           delegate_to: localhost
