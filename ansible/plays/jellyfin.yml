@@ -61,17 +61,17 @@
         api_version: v1
         kind: Node
       register: cluster_info
-      when: not target_node_check.resources
+      when: target_node_check.resources is not defined or not target_node_check.resources
 
     - name: Set jellyfin deployment node
       set_fact:
         actual_jellyfin_node: "{{ jellyfin_node_name | default('storagenodet3500') }}"
-      when: target_node_check.resources
+      when: target_node_check.resources is defined and target_node_check.resources
 
     - name: Fallback to available storage nodes if target not found
       set_fact:
         actual_jellyfin_node: "{{ cluster_info.resources | selectattr('metadata.labels.storage_nodes', 'defined') | map(attribute='metadata.name') | first | default(cluster_info.resources[0].metadata.name) }}"
-      when: not target_node_check.resources and cluster_info.resources
+      when: (target_node_check.resources is not defined or not target_node_check.resources) and (cluster_info.resources is defined and cluster_info.resources)
 
     - name: Display node availability status
       debug:

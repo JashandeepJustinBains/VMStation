@@ -1,3 +1,5 @@
+# Defensive Ansible Patterns (2025-10-03)
+- All Ansible conditionals that check for .resources now use 'is defined' before access, e.g. 'when: target_node_check.resources is not defined or not target_node_check.resources'.
 # Code Enhancements (2025-10-03)
 - Added pre-flight node readiness and taint/resource checks to deploy-cluster.yaml for proactive validation before app deployment.
 - Added post-deploy pod status summary and actionable diagnostics to deploy-cluster.yaml for fast failure and clear remediation after app deployment.
