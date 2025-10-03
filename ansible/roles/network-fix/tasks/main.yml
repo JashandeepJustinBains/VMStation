@@ -36,8 +36,7 @@
   become: true
   ansible.builtin.shell: |
     find /etc/cni/net.d -type f -exec sed -i 's/\"cbr\"/\"cni\"/g' {} +
-  ignore_errors: true
----
+#  ignore_errors: true
 # Ensure kernel modules, sysctl and basic forwarding rules required for Kubernetes CNI
 
 - name: Install required network packages (RHEL/CentOS)
