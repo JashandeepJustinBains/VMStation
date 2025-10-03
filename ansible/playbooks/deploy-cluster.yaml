@@ -80,14 +80,15 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
-        - name: Set flannel_cni_nodes variable (all nodes except masternode)
+        - name: Set flannel_cni_nodes_ip variable (all nodes except masternode, using ansible_host if defined)
           set_fact:
-            flannel_cni_nodes: "{{ groups['all'] | difference(['masternode']) }}"
+            flannel_cni_nodes_ip: >-
+              {{ groups['all'] | difference(['masternode']) | map('extract', hostvars, 'ansible_host') | list if 'ansible_host' in hostvars[groups['all'][0]] else groups['all'] | difference(['masternode']) }}
 
-        - name: Verify Flannel CNI config created on all nodes
+        - name: Verify Flannel CNI config created on all nodes (by IP)
           ansible.builtin.shell: |
             # Wait up to 60s for CNI config to appear on all nodes
-            nodes=({{ flannel_cni_nodes | join(' ') }})
+            nodes=({{ flannel_cni_nodes_ip | join(' ') }})
             for i in {1..12}; do
               missing=0
               for node in "${nodes[@]}"; do
