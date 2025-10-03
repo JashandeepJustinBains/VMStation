@@ -1,11 +1,44 @@
 ---
 # Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
+
 - hosts: all
   gather_facts: true
   roles:
     - system-prep
     - preflight
     - network-fix
+
+# --- Pre-flight cluster health checks ---
+- hosts: masternode
+  become: true
+  tasks:
+    - name: Pre-flight | Ensure all nodes are Ready
+      ansible.builtin.shell: |
+        notready=$(kubectl get nodes --no-headers | awk '{print $2}' | grep -v '^Ready$' | wc -l)
+        if [ "$notready" -ne 0 ]; then
+          echo "ERROR: Some nodes are not Ready before deployment."
+          kubectl get nodes -o wide
+          exit 1
+        fi
+        echo "All nodes are Ready."
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Pre-flight | Ensure all nodes are schedulable (no taints block scheduling)
+      ansible.builtin.shell: |
+        tainted=$(kubectl get nodes -o json | jq '[.items[] | select(.spec.taints and ([.spec.taints[] | select(.effect=="NoSchedule")] | length) > 0)] | length')
+        if [ "$tainted" -ne 0 ]; then
+          echo "ERROR: Some nodes have NoSchedule taints before deployment."
+          kubectl get nodes -o json | jq '.items[] | {name: .metadata.name, taints: .spec.taints}'
+          exit 1
+        fi
+        echo "No NoSchedule taints found."
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
 
 - hosts: masternode
   become: true
@@ -196,6 +229,27 @@
         executable: /bin/bash
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
+
+# --- Post-deploy: Summarize non-Ready pods and provide actionable diagnostics ---
+- name: Post-deploy | Summarize non-Ready pods in all namespaces
+  hosts: masternode
+  become: true
+  tasks:
+    - name: Get all non-Ready pods
+      ansible.builtin.shell: |
+        kubectl get pods --all-namespaces --field-selector=status.phase!=Running -o wide
+        echo "\nFor details on a pod, run: kubectl describe pod <pod> -n <namespace>"
+        echo "For logs: kubectl logs <pod> -n <namespace>"
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: nonready_pods
+      failed_when: false
+
+    - name: Show non-Ready pod summary
+      ansible.builtin.debug:
+        var: nonready_pods.stdout_lines
 
 # Import application deployments (monitoring, Jellyfin etc.) so the top-level deploy covers apps as well
 - import_playbook: ../plays/deploy-apps.yaml

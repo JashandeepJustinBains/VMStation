@@ -1,3 +1,6 @@
+# Code Enhancements (2025-10-03)
+- Added pre-flight node readiness and taint/resource checks to deploy-cluster.yaml for proactive validation before app deployment.
+- Added post-deploy pod status summary and actionable diagnostics to deploy-cluster.yaml for fast failure and clear remediation after app deployment.
 # Context7 Research History
 - All Ansible k8s_info tasks for monitoring app readiness (Prometheus, Grafana, Loki) in deploy-apps.yaml now include kubeconfig and validate_certs: false to prevent SSL errors. This was required for robust, idempotent, and error-free cluster bring-up.
 ---
