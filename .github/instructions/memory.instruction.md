@@ -1,4 +1,5 @@
 # Defensive Ansible Patterns (2025-10-03)
+# 2025-10-03: Updated network-fix role so containerd and kubelet config patching is conditional on file existence. This prevents errors/race conditions if kubeadm init/join hasn't created the config yet, and ensures CNI/Flannel/kube-proxy can start cleanly. Diagnostics for CNI, Flannel, kubelet, and node readiness are already present and robust in deploy-cluster.yaml.
 # Cluster Join Automation (2025-10-03)
 - Root cause of missing nodes: No kubeadm join automation in playbook; fixed by adding robust, idempotent join block after preflight.
 - Next validation: Re-run deploy, confirm all nodes join and are Ready in kubectl.
