@@ -1,3 +1,5 @@
+# Context7 Research History
+- All Ansible k8s_info tasks for monitoring app readiness (Prometheus, Grafana, Loki) in deploy-apps.yaml now include kubeconfig and validate_certs: false to prevent SSL errors. This was required for robust, idempotent, and error-free cluster bring-up.
 ---
 applyTo: '**'
 ---
