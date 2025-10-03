@@ -48,29 +48,37 @@
             mode: '0755'
           when: not loopback_cni.stat.exists
 
-    - name: Trust Kubernetes CA system-wide (Debian/Ubuntu)
+    - name: Trust Kubernetes CA system-wide (Debian/Ubuntu, masternode only)
       ansible.builtin.copy:
         src: /etc/kubernetes/pki/ca.crt
         dest: /usr/local/share/ca-certificates/kubernetes-ca.crt
         remote_src: yes
         mode: '0644'
-      when: ansible_facts['os_family'] == 'Debian'
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+        - inventory_hostname == 'masternode'
 
-    - name: Update CA certificates (Debian/Ubuntu)
+    - name: Update CA certificates (Debian/Ubuntu, masternode only)
       ansible.builtin.shell: update-ca-certificates
-      when: ansible_facts['os_family'] == 'Debian'
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+        - inventory_hostname == 'masternode'
 
-    - name: Trust Kubernetes CA system-wide (RHEL)
+    - name: Trust Kubernetes CA system-wide (RHEL, masternode only)
       ansible.builtin.copy:
         src: /etc/kubernetes/pki/ca.crt
         dest: /etc/pki/ca-trust/source/anchors/kubernetes-ca.crt
         remote_src: yes
         mode: '0644'
-      when: ansible_facts['os_family'] == 'RedHat'
+      when:
+        - ansible_facts['os_family'] == 'RedHat'
+        - inventory_hostname == 'masternode'
 
-    - name: Update CA certificates (RHEL)
+    - name: Update CA certificates (RHEL, masternode only)
       ansible.builtin.shell: update-ca-trust extract
-      when: ansible_facts['os_family'] == 'RedHat'
+      when:
+        - ansible_facts['os_family'] == 'RedHat'
+        - inventory_hostname == 'masternode'
 # Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
 
 - hosts: all
