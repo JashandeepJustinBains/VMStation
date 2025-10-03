@@ -198,7 +198,6 @@
           echo "Waiting for API server... ($i/24)"
           sleep 5
         done
-        exit 1
       args:
         executable: /bin/bash
       environment:
@@ -275,7 +274,6 @@
         name: idle-sleep
 
       ansible.builtin.shell: |
-        set -eux
         # list nodes that have spec.unschedulable=true
         nodes=$(kubectl get nodes -o jsonpath='{range .items[?(@.spec.unschedulable==true)]}{.metadata.name} "\n"{end}')
         if [ -n "$nodes" ]; then
