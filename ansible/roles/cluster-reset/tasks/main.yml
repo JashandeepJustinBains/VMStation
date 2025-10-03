@@ -19,7 +19,13 @@
     var: kubeadm_reset_result.stdout_lines
   when: kubeadm_reset_result.stdout_lines is defined
 
-- name: Remove Kubernetes config directories
+
+- name: Remove all CNI config files (cni/cbr cleanup)
+  ansible.builtin.shell: |
+    rm -f /etc/cni/net.d/* || true
+  ignore_errors: true
+
+- name: Remove Kubernetes config directories (except /etc/cni/net.d)
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -27,7 +33,6 @@
     - /etc/kubernetes
     - /var/lib/kubelet
     - /var/lib/etcd
-    - /etc/cni/net.d
     - /var/lib/cni
     - /run/flannel
     - /var/lib/flannel
