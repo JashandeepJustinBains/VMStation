@@ -48,37 +48,7 @@
             mode: '0755'
           when: not loopback_cni.stat.exists
 
-    - name: Trust Kubernetes CA system-wide (Debian/Ubuntu, masternode only)
-      ansible.builtin.copy:
-        src: /etc/kubernetes/pki/ca.crt
-        dest: /usr/local/share/ca-certificates/kubernetes-ca.crt
-        remote_src: yes
-        mode: '0644'
-      when:
-        - ansible_facts['os_family'] == 'Debian'
-        - inventory_hostname == 'masternode'
-
-    - name: Update CA certificates (Debian/Ubuntu, masternode only)
-      ansible.builtin.shell: update-ca-certificates
-      when:
-        - ansible_facts['os_family'] == 'Debian'
-        - inventory_hostname == 'masternode'
-
-    - name: Trust Kubernetes CA system-wide (RHEL, masternode only)
-      ansible.builtin.copy:
-        src: /etc/kubernetes/pki/ca.crt
-        dest: /etc/pki/ca-trust/source/anchors/kubernetes-ca.crt
-        remote_src: yes
-        mode: '0644'
-      when:
-        - ansible_facts['os_family'] == 'RedHat'
-        - inventory_hostname == 'masternode'
-
-    - name: Update CA certificates (RHEL, masternode only)
-      ansible.builtin.shell: update-ca-trust extract
-      when:
-        - ansible_facts['os_family'] == 'RedHat'
-        - inventory_hostname == 'masternode'
+    # CA trust tasks moved after kubeadm init
 # Consolidated cluster deploy playbook: preflight -> apply network fixes -> deploy manifests -> validate
 
 - hosts: all
@@ -166,7 +136,92 @@
       ansible.builtin.debug:
         var: ca_crt_check.stdout_lines
 
-# --- Cluster join: Ensure storagenodet3500 and homelab join the cluster ---
+# --- Control plane initialization and CA trust ---
+- hosts: masternode
+  become: true
+  tasks:
+    - name: Initialize Kubernetes control plane if not already initialized (idempotent)
+      ansible.builtin.shell: |
+        if [ ! -f /etc/kubernetes/admin.conf ]; then
+          echo "Running kubeadm init to bootstrap control plane..."
+          kubeadm init --pod-network-cidr=10.244.0.0/16 --upload-certs
+        else
+          echo "Control plane already initialized. Skipping kubeadm init."
+        fi
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: kubeadm_init_result
+      ignore_errors: true
+
+    - name: Show kubeadm init output (if any)
+      ansible.builtin.debug:
+        var: kubeadm_init_result.stdout_lines
+      when: kubeadm_init_result is defined and kubeadm_init_result.stdout_lines is defined
+
+    - name: Wait for Kubernetes API server to be available
+      ansible.builtin.shell: |
+        for i in {1..24}; do
+          if kubectl version --request-timeout=5s >/dev/null 2>&1; then
+            echo "API server is up"
+            exit 0
+          fi
+          echo "Waiting for API server... ($i/24)"
+          sleep 5
+        done
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Trust Kubernetes CA system-wide (Debian/Ubuntu, masternode only)
+      ansible.builtin.copy:
+        src: /etc/kubernetes/pki/ca.crt
+        dest: /usr/local/share/ca-certificates/kubernetes-ca.crt
+        remote_src: yes
+        mode: '0644'
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+        - inventory_hostname == 'masternode'
+        - ansible.builtin.stat:
+            path: /etc/kubernetes/pki/ca.crt
+          register: ca_crt_stat
+        - ca_crt_stat.stat.exists | default(false)
+
+    - name: Update CA certificates (Debian/Ubuntu, masternode only)
+      ansible.builtin.shell: update-ca-certificates
+      when:
+        - ansible_facts['os_family'] == 'Debian'
+        - inventory_hostname == 'masternode'
+        - ansible.builtin.stat:
+            path: /usr/local/share/ca-certificates/kubernetes-ca.crt
+          register: ca_cert_stat
+        - ca_cert_stat.stat.exists | default(false)
+
+    - name: Trust Kubernetes CA system-wide (RHEL, masternode only)
+      ansible.builtin.copy:
+        src: /etc/kubernetes/pki/ca.crt
+        dest: /etc/pki/ca-trust/source/anchors/kubernetes-ca.crt
+        remote_src: yes
+        mode: '0644'
+      when:
+        - ansible_facts['os_family'] == 'RedHat'
+        - inventory_hostname == 'masternode'
+        - ansible.builtin.stat:
+            path: /etc/kubernetes/pki/ca.crt
+          register: ca_crt_stat_rh
+        - ca_crt_stat_rh.stat.exists | default(false)
+
+    - name: Update CA certificates (RHEL, masternode only)
+      ansible.builtin.shell: update-ca-trust extract
+      when:
+        - ansible_facts['os_family'] == 'RedHat'
+        - inventory_hostname == 'masternode'
+        - ansible.builtin.stat:
+            path: /etc/pki/ca-trust/source/anchors/kubernetes-ca.crt
+          register: ca_cert_stat_rh
+        - ca_cert_stat_rh.stat.exists | default(false)
 - hosts: storagenodet3500,homelab
   become: true
   tasks:
