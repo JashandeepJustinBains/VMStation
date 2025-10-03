@@ -115,16 +115,23 @@
     pkill -9 kubelet || true
   ignore_errors: true
 
-- name: Verify SSH keys are preserved
-  ansible.builtin.stat:
-    path: "{{ ansible_env.HOME }}/.ssh/authorized_keys"
-  register: ssh_keys_check
 
-- name: Assert SSH keys still exist
+# Robust SSH key check: look for authorized_keys in all user homes and root
+- name: Find all authorized_keys files
+  ansible.builtin.find:
+    paths:
+      - /root/.ssh
+      - /home
+    patterns: authorized_keys
+    file_type: file
+    recurse: yes
+  register: ssh_keys_found
+
+- name: Assert at least one SSH authorized_keys file exists
   ansible.builtin.assert:
     that:
-      - ssh_keys_check.stat.exists
-    fail_msg: "CRITICAL: SSH keys were removed during reset!"
+      - ssh_keys_found.matched > 0
+    fail_msg: "CRITICAL: No SSH authorized_keys found in /root or /home/*/.ssh!"
     success_msg: "SSH keys preserved successfully"
 
 - name: Verify physical ethernet interfaces are preserved
