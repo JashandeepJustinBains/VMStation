@@ -420,10 +420,15 @@
               - k8s-app=kube-dns
           register: coredns_check
           ignore_errors: true
-          
+
         - name: "Display CoreDNS status"
           debug:
-            msg: "CoreDNS pods: {{ coredns_check.resources | length }} (managed by kubeadm, not modified by this playbook)"
+            msg: >-
+              {% if coredns_check is defined and coredns_check.resources is defined %}
+              CoreDNS pods: {{ coredns_check.resources | length }} (managed by kubeadm, not modified by this playbook)
+              {% else %}
+              CoreDNS pod information unavailable (API call failed or returned no pods)
+              {% endif %}
         
         - name: "Wait for applications to be ready with reduced timeout"
           kubernetes.core.k8s_info:

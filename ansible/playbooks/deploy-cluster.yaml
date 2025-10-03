@@ -86,13 +86,15 @@
               {{ groups['all'] | difference(['masternode']) | map('extract', hostvars, 'ansible_host') | list if 'ansible_host' in hostvars[groups['all'][0]] else groups['all'] | difference(['masternode']) }}
 
         - name: Verify Flannel CNI config created on all nodes (by IP)
+          vars:
+            flannel_ssh_user: "{{ hostvars[inventory_hostname].ansible_user | default('root') }}"
           ansible.builtin.shell: |
             # Wait up to 60s for CNI config to appear on all nodes
             nodes=({{ flannel_cni_nodes_ip | join(' ') }})
             for i in {1..12}; do
               missing=0
               for node in "${nodes[@]}"; do
-                if ! ssh "$node" "test -f /etc/cni/net.d/10-flannel.conflist"; then
+                if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${flannel_ssh_user}@${node}" "test -f /etc/cni/net.d/10-flannel.conflist"; then
                   missing=$((missing + 1))
                 fi
               done
