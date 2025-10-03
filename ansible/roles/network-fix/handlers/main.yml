@@ -6,6 +6,13 @@
     state: restarted
     enabled: true
 
+- name: restart containerd
+  become: true
+  ansible.builtin.service:
+    name: containerd
+    state: restarted
+    enabled: true
+
 - name: restart NetworkManager
   become: true
   ansible.builtin.service:

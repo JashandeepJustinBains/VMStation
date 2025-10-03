@@ -200,6 +200,61 @@
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
+# RHEL 10 specific fixes for Flannel CrashLoopBackOff
+- name: Disable systemd-oomd interference with containers (RHEL 10)
+  become: true
+  ansible.builtin.systemd:
+    name: systemd-oomd
+    state: stopped
+    enabled: false
+    masked: true
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
+- name: Ensure containerd cgroup driver is systemd (RHEL 10)
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/containerd/config.toml
+    regexp: '^\s*SystemdCgroup\s*='
+    line: '          SystemdCgroup = true'
+    insertafter: '\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
+    state: present
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  notify: restart containerd
+  ignore_errors: true
+
+- name: Ensure containerd uses correct cgroup path (RHEL 10)
+  become: true
+  ansible.builtin.shell: |
+    if [ -f /etc/containerd/config.toml ]; then
+      if ! grep -q "SystemdCgroup = true" /etc/containerd/config.toml; then
+        mkdir -p /etc/containerd
+        containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
+      fi
+    fi
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  notify: restart containerd
+  ignore_errors: true
+
+- name: Ensure kubelet uses systemd cgroup driver (RHEL 10)
+  become: true
+  ansible.builtin.lineinfile:
+    path: /var/lib/kubelet/config.yaml
+    regexp: '^cgroupDriver:'
+    line: 'cgroupDriver: systemd'
+    state: present
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  notify: restart kubelet
+  ignore_errors: true
+
 # kubelet will be restarted via handler 'restart kubelet' only when changes occur
 
 # Ensure /etc/cni/net.d exists and is writable by root (required for Flannel CNI bootstrap)
