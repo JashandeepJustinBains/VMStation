@@ -16,10 +16,23 @@ applyTo: '**'
 - Architecture patterns: control-plane and worker nodes managed by Ansible playbooks
 - All playbooks and scripts must reside in the actual repo root (F:\VMStation), never in F:\f\ or other paths.
 
-## Context7 Research History
-- 2025-10-02: Searched Context7 for flannel CrashLoopBackOff guidance (project /flannel-io/flannel). API returned metadata but full docs require additional access; no actionable content retrieved yet.
-- 2025-10-02: Fetched upstream Flannel troubleshooting doc and kube-flannel.yml from GitHub (v0.27.4 manifest)
-- Key findings: EnableNFTables flag, CONT_WHEN_CACHE_NOT_READY env var, nftables/iptables-legacy coexistence, NetworkManager interference on RHEL
+
+## Context7 & Web Research History
+- 2025-10-03: Context7 search for Flannel CNI troubleshooting in Kubernetes v1.29+ returned no actionable content.
+- 2025-10-03: Codebase analysis shows Flannel DaemonSet is responsible for creating /etc/cni/net.d/10-flannel.conflist via init container. If DaemonSet is stuck (CrashLoopBackOff), config is not created, causing Ansible to fail.
+- 2025-10-03: Common root causes (industry knowledge):
+  1. /etc/cni/net.d missing or wrong permissions
+  2. Flannel DaemonSet init container failure (copy config)
+  3. Node NotReady (kubelet/volume issues)
+  4. Conflicting CNI plugins/configs
+  5. SELinux/AppArmor/firewall blocking
+  6. Container runtime incompatibility
+- 2025-10-03: Plan: Add post-deployment remediation step to Ansible that, if /etc/cni/net.d/10-flannel.conflist is missing and Flannel DaemonSet is not ready, will:
+  - Collect Flannel pod/init logs
+  - Attempt to manually re-run init logic (copy config)
+  - Clean up conflicting CNI configs
+  - Restart Flannel DaemonSet and kubelet if needed
+  - Provide diagnostics if still failing
 
 ## Conversation History
 - Created an Ansible role `network-fix` and playbook `ansible/playbooks/network-fix.yaml` to apply kernel/module/sysctl changes and restart CNI components.
@@ -45,7 +58,16 @@ applyTo: '**'
   - Total fixes: 5 files changed, 379 insertions(+), 59 deletions(-)
   - Result: `./deploy.sh` now works cleanly on RHEL10 + Debian Bookworm mixed cluster without post-deploy fix scripts
 
-## Notes
+- Fix targets common causes of "no route to host" from pod to host IPs (sysctl and br_netfilter missing or ip_forward/iptables blocking).
+- All playbooks run from bastion/masternode (192.168.4.63) which has SSH keys for all cluster nodes.
+- Reset operations must preserve SSH keys and normal ethernet interfaces, only clean K8s-specific resources.
+
+## Current Issue (2025-10-03)
+- Flannel DaemonSet CrashLoopBackOff after reset, /etc/cni/net.d/10-flannel.conflist missing, some nodes NotReady, kube-proxy also failing.
+- Root cause: Flannel DaemonSet cannot create CNI config if pod is stuck/crashing. Ansible fails on missing config. Need robust remediation logic post-deploy.
+
+## Next Steps (2025-10-03)
+- Implement post-deployment remediation in Ansible: detect missing CNI config, collect logs, attempt recovery, restart Flannel/kubelet, clean up CNI dir, provide diagnostics.
 - Fix targets common causes of "no route to host" from pod to host IPs (sysctl and br_netfilter missing or ip_forward/iptables blocking).
 - All playbooks run from bastion/masternode (192.168.4.63) which has SSH keys for all cluster nodes.
 - Reset operations must preserve SSH keys and normal ethernet interfaces, only clean K8s-specific resources.

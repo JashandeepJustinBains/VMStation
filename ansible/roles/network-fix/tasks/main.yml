@@ -1,3 +1,42 @@
+# --- Robust Pre-checks for CNI/Flannel Deployment ---
+- name: Pre-check required kernel modules
+  become: true
+  ansible.builtin.shell: |
+    missing=0
+    for mod in br_netfilter overlay nf_conntrack vxlan; do
+      lsmod | grep -q $mod || missing=1
+    done
+    exit $missing
+  register: kernel_mod_check
+  failed_when: kernel_mod_check.rc != 0
+  changed_when: false
+
+- name: Pre-check sysctl settings for Kubernetes CNI
+  become: true
+  ansible.builtin.shell: |
+    sysctl -n net.bridge.bridge-nf-call-iptables | grep -q '^1$' && \
+    sysctl -n net.bridge.bridge-nf-call-ip6tables | grep -q '^1$' && \
+    sysctl -n net.ipv4.ip_forward | grep -q '^1$'
+  register: sysctl_check
+  failed_when: sysctl_check.rc != 0
+  changed_when: false
+
+- name: Pre-check node readiness (all nodes must be Ready)
+  become: true
+  ansible.builtin.shell: |
+    kubectl get nodes --no-headers | awk '{print $2}' | grep -v '^Ready$' && exit 1 || exit 0
+  register: node_ready_check
+  failed_when: node_ready_check.rc != 0
+  changed_when: false
+
+# --- Standardize CNI interface name to 'cni' ---
+# (This should be reflected in Flannel manifest and CNI config templates)
+# If any CNI config or manifest uses 'cbr', replace with 'cni' (idempotent)
+- name: Standardize CNI interface name to 'cni' in CNI configs
+  become: true
+  ansible.builtin.shell: |
+    find /etc/cni/net.d -type f -exec sed -i 's/\"cbr\"/\"cni\"/g' {} +
+  ignore_errors: true
 ---
 # Ensure kernel modules, sysctl and basic forwarding rules required for Kubernetes CNI
 
@@ -176,6 +215,35 @@
     group: root
     mode: '0755'
   ignore_errors: true
+
+# Ensure /etc/cni/net.d exists and is writable by root (required for Flannel CNI bootstrap)
+- name: Ensure /etc/cni/net.d exists with correct permissions (CNI bootstrap)
+  become: true
+  ansible.builtin.file:
+    path: /etc/cni/net.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  ignore_errors: false
+
+# Remove any conflicting CNI configs before Flannel deploy (idempotent)
+- name: Remove conflicting CNI configs before Flannel deploy
+  become: true
+  ansible.builtin.find:
+    paths: /etc/cni/net.d
+    patterns: '*'
+    excludes: '10-flannel.conflist'
+    file_type: file
+  register: cni_conflicting_files
+
+- name: Delete conflicting CNI configs
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ cni_conflicting_files.files }}"
+  when: cni_conflicting_files.matched > 0
 
 # Validate that Flannel CNI config is present after deploy (fail early if missing)
 - name: Check for Flannel CNI config after deploy
