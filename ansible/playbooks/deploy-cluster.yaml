@@ -80,13 +80,18 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
+        - name: Set flannel_cni_nodes variable (all nodes except masternode)
+          set_fact:
+            flannel_cni_nodes: "{{ groups['all'] | difference(['masternode']) }}"
+
         - name: Verify Flannel CNI config created on all nodes
           ansible.builtin.shell: |
             # Wait up to 60s for CNI config to appear on all nodes
+            nodes=({{ flannel_cni_nodes | join(' ') }})
             for i in {1..12}; do
               missing=0
-              for node in {{ groups['all'] | difference(['masternode']) | join(' ') }}; do
-                if ! ssh $node "test -f /etc/cni/net.d/10-flannel.conflist"; then
+              for node in "${nodes[@]}"; do
+                if ! ssh "$node" "test -f /etc/cni/net.d/10-flannel.conflist"; then
                   missing=$((missing + 1))
                 fi
               done

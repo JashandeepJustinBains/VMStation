@@ -97,6 +97,8 @@
 
     - name: Clean up any existing Jellyfin resources to prevent conflicts
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: absent
         api_version: "{{ item.api_version }}"
         kind: "{{ item.kind }}"
@@ -115,6 +117,8 @@
 
     - name: Deploy Jellyfin namespace
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -127,6 +131,8 @@
 
     - name: Deploy Jellyfin pod
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -221,6 +227,8 @@
 
     - name: Deploy Jellyfin service
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1

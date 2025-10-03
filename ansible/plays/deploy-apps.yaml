@@ -14,6 +14,8 @@
   tasks:
     - name: "Create monitoring namespace"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         name: "{{ monitoring_namespace }}"
         api_version: v1
         kind: Namespace
@@ -36,6 +38,8 @@
 
     - name: "Deploy Prometheus"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: apps/v1
@@ -105,6 +109,8 @@
 
     - name: "Create Prometheus ConfigMap"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -138,6 +144,8 @@
 
     - name: "Deploy Prometheus Service"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -156,6 +164,8 @@
 
     - name: "Deploy Grafana"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: apps/v1
@@ -219,6 +229,8 @@
 
     - name: "Deploy Grafana Service"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -237,6 +249,8 @@
 
     - name: "Deploy Loki"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: apps/v1
@@ -297,6 +311,8 @@
 
     - name: "Deploy Loki Service"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -315,11 +331,15 @@
 
     - name: "Deploy Kubernetes Dashboard"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         src: https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
       
     - name: "Patch Kubernetes Dashboard to run on monitoring node"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: apps/v1
@@ -339,6 +359,8 @@
                   
     - name: "Patch Dashboard Metrics Scraper to run on monitoring node"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: apps/v1
@@ -358,6 +380,8 @@
 
     - name: "Create Dashboard Admin User"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: v1
@@ -368,6 +392,8 @@
 
     - name: "Create Dashboard Admin ClusterRoleBinding"
       kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        validate_certs: false
         state: present
         definition:
           apiVersion: rbac.authorization.k8s.io/v1
