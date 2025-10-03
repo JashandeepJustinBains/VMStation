@@ -77,6 +77,16 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
+
+    - name: Uncordon all nodes after reset/deploy (make schedulable)
+      ansible.builtin.shell: |
+        set -eux
+        kubectl get nodes --no-headers | awk '{print $1}' | xargs -r -n1 kubectl uncordon || true
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
     - name: Remove common control-plane NoSchedule taints if present (idempotent)
       ansible.builtin.shell: |
         set -eux
