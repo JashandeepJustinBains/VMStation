@@ -120,6 +120,25 @@
       ansible.builtin.debug:
         var: flannel_stability_check.stdout_lines
 
+    - name: Wait for all nodes to become Ready after Flannel deploy
+      ansible.builtin.shell: |
+        for i in {1..24}; do
+          notready=$(kubectl get nodes --no-headers | awk '{print $2}' | grep -v '^Ready$' | wc -l)
+          if [ "$notready" -eq 0 ]; then
+            echo "All nodes are Ready."
+            exit 0
+          fi
+          echo "Waiting for nodes to become Ready ($i/24)..."
+          sleep 5
+        done
+        echo "ERROR: Some nodes are still NotReady after waiting."
+        kubectl get nodes -o wide
+        exit 1
+      args:
+        executable: /bin/bash
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
 # Import application deployments (monitoring, Jellyfin etc.) so the top-level deploy covers apps as well
 - import_playbook: ../plays/deploy-apps.yaml
   when: monitoring_enabled | default(true)

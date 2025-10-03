@@ -21,13 +21,6 @@
   failed_when: sysctl_check.rc != 0
   changed_when: false
 
-- name: Pre-check node readiness (all nodes must be Ready)
-  become: true
-  ansible.builtin.shell: |
-    kubectl get nodes --no-headers | awk '{print $2}' | grep -v '^Ready$' && exit 1 || exit 0
-  register: node_ready_check
-  failed_when: node_ready_check.rc != 0
-  changed_when: false
 
 # --- Standardize CNI interface name to 'cni' ---
 # (This should be reflected in Flannel manifest and CNI config templates)
