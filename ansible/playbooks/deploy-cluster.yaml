@@ -85,7 +85,7 @@
             # Wait up to 60s for CNI config to appear on all nodes
             for i in {1..12}; do
               missing=0
-              for node in homelab storagenodet3500; do
+              for node in {{ groups['all'] | difference(['masternode']) | join(' ') }}; do
                 if ! ssh $node "test -f /etc/cni/net.d/10-flannel.conflist"; then
                   missing=$((missing + 1))
                 fi
