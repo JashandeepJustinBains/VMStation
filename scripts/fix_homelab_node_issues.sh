@@ -53,7 +53,7 @@ get_sudo_pass() {
           # attempt to view decrypted content and parse variable
           dec=$(ansible-vault view "$f" --vault-password-file "$vault_file_var" 2>/dev/null || true)
           if [ -n "$dec" ]; then
-            val=$(echo "$dec" | grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
+            val=$(echo "$dec" | grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"'"']$//' | sed 's/^\s*//g' | head -n1 || true)
             if [ -n "$val" ] && ! echo "$val" | grep -q '{{'; then
               export SUDO_PASS="$val"
               echo "Found sudo password in (vault): $f"
@@ -64,7 +64,7 @@ get_sudo_pass() {
       fi
 
       # Look for common variable names in plaintext; ignore commented lines
-  val=$(grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' "$f" | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
+  val=$(grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' "$f" | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"'"']$//' | sed 's/^\s*//g' | head -n1 || true)
       if [ -n "$val" ]; then
         # skip templated placeholders like {{ ... }}
         if echo "$val" | grep -q '{{'; then
