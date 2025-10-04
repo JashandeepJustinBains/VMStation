@@ -40,25 +40,17 @@ get_sudo_pass() {
     return 0
   fi
 
-  local candidates=(
-    "$REPO_ROOT/ansible/inventory/group_vars/secrets.yml"
-    "$REPO_ROOT/ansible/inventory/group_vars/all.yml"
-    "$REPO_ROOT/ansible/group_vars/all.yml"
-    "$REPO_ROOT/ansible/inventory/group_vars/secrets.yml.example"
-  )
+  candidates="$REPO_ROOT/ansible/inventory/group_vars/secrets.yml $REPO_ROOT/ansible/inventory/group_vars/all.yml $REPO_ROOT/ansible/group_vars/all.yml $REPO_ROOT/ansible/inventory/group_vars/secrets.yml.example"
 
-  for f in "${candidates[@]}"; do
+  for f in $candidates; do
     if [ -f "$f" ]; then
       # If a vault password file is supplied, try to decrypt the file and extract variable
       if [ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}${VAULT_PASSWORD_FILE:-}${VAULT_PASS_FILE:-}" ] && command -v ansible-vault >/dev/null 2>&1; then
-        local vault_file_var
         vault_file_var="${ANSIBLE_VAULT_PASSWORD_FILE:-${VAULT_PASSWORD_FILE:-${VAULT_PASS_FILE:-}}}"
         if [ -f "$vault_file_var" ]; then
           # attempt to view decrypted content and parse variable
-          local dec
           dec=$(ansible-vault view "$f" --vault-password-file "$vault_file_var" 2>/dev/null || true)
           if [ -n "$dec" ]; then
-            local val
             val=$(echo "$dec" | grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
             if [ -n "$val" ] && ! echo "$val" | grep -q '{{'; then
               export SUDO_PASS="$val"
@@ -70,8 +62,7 @@ get_sudo_pass() {
       fi
 
       # Look for common variable names in plaintext; ignore commented lines
-      local val
-      val=$(grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' "$f" | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
+  val=$(grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' "$f" | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
       if [ -n "$val" ]; then
         # skip templated placeholders like {{ ... }}
         if echo "$val" | grep -q '{{'; then
