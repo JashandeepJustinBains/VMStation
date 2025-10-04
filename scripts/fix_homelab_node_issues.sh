@@ -16,14 +16,16 @@ echo ""
 # Function to wait for kubectl to be available
 wait_for_kubectl() {
     echo "Waiting for Kubernetes API to become available..."
-    for i in {1..30}; do
-        if kubectl get nodes >/dev/null 2>&1; then
-            echo "✓ Kubernetes API is available"
-            return 0
-        fi
-        echo "  Waiting for API... ($i/30)"
-        sleep 2
-    done
+  i=1
+  while [ "$i" -le 30 ]; do
+    if kubectl get nodes >/dev/null 2>&1; then
+      echo "✓ Kubernetes API is available"
+      return 0
+    fi
+    echo "  Waiting for API... ($i/30)"
+    sleep 2
+    i=$((i+1))
+  done
     echo "✗ ERROR: Kubernetes API is still unavailable after 60 seconds"
     return 1
 }
