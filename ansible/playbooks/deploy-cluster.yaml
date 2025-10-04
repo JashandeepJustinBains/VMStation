@@ -331,6 +331,7 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
+
         - name: Wait for flannel daemonset to be ready
           ansible.builtin.shell: |
             kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=180s
@@ -341,19 +342,17 @@
 
         - name: Verify Flannel pods are running on all nodes (Kubernetes-native check)
           ansible.builtin.shell: |
-            # Wait up to 60s for Flannel pods to be running on all nodes
-            for i in {1..12}; do
+            for i in {1..18}; do
               total_nodes=$(kubectl get nodes --no-headers | wc -l)
               running_flannel=$(kubectl -n kube-flannel get pods -l app=flannel -o json | jq '[.items[] | select(.status.phase=="Running")] | length')
-              
               if [ "$running_flannel" -eq "$total_nodes" ]; then
                 echo "Flannel pods verified: $running_flannel/$total_nodes nodes"
                 exit 0
               fi
-              echo "Waiting for Flannel pods: $running_flannel/$total_nodes nodes ready ($i/12)..."
+              echo "Waiting for Flannel pods: $running_flannel/$total_nodes nodes ready ($i/18)..."
               sleep 5
             done
-            echo "ERROR: Not all Flannel pods are running after 60s"
+            echo "ERROR: Not all Flannel pods are running after 90s"
             kubectl -n kube-flannel get pods -o wide
             exit 1
           args:
@@ -361,9 +360,74 @@
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
-        - name: Ensure kube-proxy-ready
+        - name: Check CNI config presence on all nodes (robust diagnostic)
           ansible.builtin.shell: |
-            kubectl -n kube-system get pods -l 'k8s-app=kube-proxy' -o jsonpath='{.items[*].status.phase}'
+            for node in $(kubectl get nodes -o name | cut -d/ -f2); do
+              echo "--- $node ---"
+              ssh $node 'ls -l /etc/cni/net.d/ || echo "CNI config dir missing"'
+              ssh $node 'cat /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "10-flannel.conflist missing"'
+            done
+          args:
+            executable: /bin/bash
+          ignore_errors: true
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Check kube-proxy pod status and auto-recover CrashLoopBackOff (RHEL 10)
+          ansible.builtin.shell: |
+            for node in $(kubectl get nodes -o name | cut -d/ -f2); do
+              os=$(kubectl get node $node -o jsonpath='{.status.nodeInfo.osImage}')
+              if echo "$os" | grep -qi 'Red Hat Enterprise Linux 10'; then
+                pod=$(kubectl -n kube-system get pods -o wide | awk '$1 ~ /^kube-proxy/ && $7 == "'$node'" {print $1}')
+                status=$(kubectl -n kube-system get pod $pod -o jsonpath='{.status.phase}')
+                if [ "$status" = "CrashLoopBackOff" ]; then
+                  echo "Restarting kube-proxy pod on $node (RHEL 10) due to CrashLoopBackOff..."
+                  kubectl -n kube-system delete pod $pod
+                fi
+              fi
+            done
+          args:
+            executable: /bin/bash
+          ignore_errors: true
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Wait for kube-proxy pods to be Running on all nodes
+          ansible.builtin.shell: |
+            for i in {1..18}; do
+              total_nodes=$(kubectl get nodes --no-headers | wc -l)
+              running_kp=$(kubectl -n kube-system get pods -l k8s-app=kube-proxy -o json | jq '[.items[] | select(.status.phase=="Running")] | length')
+              if [ "$running_kp" -eq "$total_nodes" ]; then
+                echo "kube-proxy pods verified: $running_kp/$total_nodes nodes"
+                exit 0
+              fi
+              echo "Waiting for kube-proxy pods: $running_kp/$total_nodes nodes ready ($i/18)..."
+              sleep 5
+            done
+            echo "ERROR: Not all kube-proxy pods are running after 90s"
+            kubectl -n kube-system get pods -l k8s-app=kube-proxy -o wide
+            exit 1
+          args:
+            executable: /bin/bash
+          environment:
+            KUBECONFIG: /etc/kubernetes/admin.conf
+
+        - name: Wait for all nodes to become Ready after Flannel and kube-proxy
+          ansible.builtin.shell: |
+            for i in {1..24}; do
+              notready=$(kubectl get nodes --no-headers | awk '{print $2}' | grep -v '^Ready$' | wc -l)
+              if [ "$notready" -eq 0 ]; then
+                echo "All nodes are Ready."
+                exit 0
+              fi
+              echo "Waiting for nodes to become Ready ($i/24)..."
+              sleep 5
+            done
+            echo "ERROR: Some nodes are still NotReady after waiting."
+            kubectl get nodes -o wide
+            exit 1
+          args:
+            executable: /bin/bash
           environment:
             KUBECONFIG: /etc/kubernetes/admin.conf
 
