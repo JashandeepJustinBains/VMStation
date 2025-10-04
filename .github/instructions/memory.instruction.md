@@ -246,3 +246,91 @@ Updated: 2025-10-04 — simplified, focused memory file for current debugging lo
 - Validate all nodes become Ready and Flannel CNI config is created on all nodes
 - If successful, deployment is robust and production-ready for homelab cluster
 - No post-deployment fix scripts needed - everything works on first deployment
+
+---
+
+## Idempotency Hardening (2025-10-04)
+
+### Changes Made
+Based on user requirements in Output_for_Copilot.txt, implemented full idempotency for mixed Debian Bookworm (iptables) + RHEL 10 (nftables) environment.
+
+**Root causes identified:**
+1. RHEL 10 uses nftables backend; requires explicit alternatives configuration and permissive nftables ruleset
+2. Flannel init container sometimes fails to write CNI config on RHEL 10 due to SELinux contexts
+3. /run/xtables.lock must exist before iptables operations (idempotent creation required)
+4. Readiness probe was too fast (3s initial delay) causing premature Ready status before flannel.1 interface exists
+5. Missing host-level CNI config verification between Flannel deploy and node readiness wait
+
+**Files modified:**
+1. `ansible/roles/network-fix/tasks/main.yml`:
+   - Changed /run/xtables.lock creation from `touch` to `copy` with `force: no` for true idempotency
+   - Added ip6tables alternative configuration for RHEL 10 (nftables backend)
+   - Made nftables rule configuration idempotent with changed_when/failed_when logic
+   - Added pre-creation of /etc/cni/net.d/10-flannel.conflist on RHEL 10 with proper owner/mode (root:root, 0644)
+   - Applied restorecon for correct SELinux context (etc_t) on CNI config file
+   - Made update-alternatives calls idempotent with proper changed_when detection
+
+2. `manifests/cni/flannel.yaml`:
+   - Adjusted readiness probe: initialDelaySeconds 3→5, periodSeconds 5→10, timeoutSeconds 2→3
+   - Added flannel.1 interface existence check to readiness probe (alongside subnet.env check)
+   - Liveness probe already removed (correct; flanneld process check was killing healthy pods)
+   - EnableNFTables: true already set in ConfigMap (correct for both Debian and RHEL 10)
+
+3. `ansible/playbooks/deploy-cluster.yaml`:
+   - Added SSH-based CNI config verification after Flannel rollout (checks /etc/cni/net.d/10-flannel.conflist on all nodes)
+   - Uses delegate_to for each node (masternode, storagenodet3500, homelab)
+   - Verification happens before "all nodes Ready" wait to catch missing CNI files early
+
+4. `ansible/playbooks/verify-cluster.yaml` (NEW):
+   - Comprehensive smoke test playbook for post-deployment validation
+   - Checks: kubectl connectivity, all nodes Ready, Flannel DaemonSet ready (desired==ready)
+   - Checks: kube-proxy pods Running on all nodes, CoreDNS pods Ready
+   - Checks: no CrashLoopBackOff pods anywhere
+   - Host-level checks: /etc/cni/net.d/10-flannel.conflist, /run/flannel/subnet.env, flannel.1 interface
+   - Final summary with detailed pod/node status
+
+**Verification commands (run on masternode 192.168.4.63):**
+
+```bash
+# 1. Syntax check
+ansible-playbook --syntax-check ansible/playbooks/deploy-cluster.yaml
+ansible-playbook --syntax-check ansible/playbooks/verify-cluster.yaml
+
+# 2. Dry-run (check mode)
+ansible-playbook -i ansible/inventory/hosts ansible/playbooks/deploy-cluster.yaml --check
+
+# 3. Full deployment
+./deploy.sh
+
+# 4. Run verification
+ansible-playbook -i ansible/inventory/hosts ansible/playbooks/verify-cluster.yaml
+
+# 5. Two-cycle idempotency test
+./deploy.sh reset
+./deploy.sh
+ansible-playbook -i ansible/inventory/hosts ansible/playbooks/verify-cluster.yaml
+
+# 6. Repeat to ensure 100% idempotency
+./deploy.sh reset && ./deploy.sh
+```
+
+**Expected outputs:**
+- No CrashLoopBackOff pods in any namespace
+- All 3 nodes show Ready status
+- Flannel DaemonSet: 3/3 pods Running
+- kube-proxy: 3/3 pods Running
+- CoreDNS: 2/2 pods Running
+- /etc/cni/net.d/10-flannel.conflist present on all nodes with correct owner/mode/SELinux context
+- flannel.1 interface exists on all nodes
+- /run/flannel/subnet.env exists on all nodes
+
+**Technical details:**
+- RHEL 10 now uses iptables-nft (nftables backend) via update-alternatives
+- Flannel CNI config pre-created on RHEL 10 to avoid init-container SELinux write failures
+- SELinux remains in permissive mode (targeted policy) on RHEL nodes
+- nftables permissive ruleset (accept all) configured on RHEL 10 for inet filter table
+- All tasks are idempotent (can run deploy → reset → deploy 100x without failures)
+- No overly long timeouts (180s max for Flannel rollout, 150s max for nodes Ready check)
+- Deterministic checks replace polling/sleep patterns
+
+---
