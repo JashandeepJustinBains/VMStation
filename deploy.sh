@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts"
+INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts.yml"
 SPIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/spin-down-cluster.yaml"
 DEPLOY_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-cluster.yaml"
 RESET_PLAYBOOK="$REPO_ROOT/ansible/playbooks/reset-cluster.yaml"
