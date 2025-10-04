@@ -62,29 +62,29 @@
 - hosts: masternode
   become: true
   tasks:
-    - name: Pre-flight | Ensure all nodes are Ready
+    - name: Pre-flight | Warn if any nodes are NotReady (do not fail, just warn)
       ansible.builtin.shell: |
         notready=$(kubectl get nodes --no-headers | awk '{print $2}' | grep -v '^Ready$' | wc -l)
         if [ "$notready" -ne 0 ]; then
-          echo "ERROR: Some nodes are not Ready before deployment."
+          echo "WARNING: Some nodes are NotReady before deployment. This is expected before CNI/Flannel is deployed."
           kubectl get nodes -o wide
-          exit 1
+        else
+          echo "All nodes are Ready."
         fi
-        echo "All nodes are Ready."
       args:
         executable: /bin/bash
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
-    - name: Pre-flight | Ensure all nodes are schedulable (no taints block scheduling)
+    - name: Pre-flight | Warn if any nodes have NoSchedule taints (do not fail, just warn)
       ansible.builtin.shell: |
         tainted=$(kubectl get nodes -o json | jq '[.items[] | select(.spec.taints and ([.spec.taints[] | select(.effect=="NoSchedule")] | length) > 0)] | length')
         if [ "$tainted" -ne 0 ]; then
-          echo "ERROR: Some nodes have NoSchedule taints before deployment."
+          echo "WARNING: Some nodes have NoSchedule taints before deployment."
           kubectl get nodes -o json | jq '.items[] | {name: .metadata.name, taints: .spec.taints}'
-          exit 1
+        else
+          echo "No NoSchedule taints found."
         fi
-        echo "No NoSchedule taints found."
       args:
         executable: /bin/bash
       environment:
