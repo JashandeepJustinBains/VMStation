@@ -175,6 +175,61 @@
       register: flannel_check
       changed_when: false
 
+    - name: Detect if any node is RHEL 10+ (requires flannel nftables backend)
+      ansible.builtin.set_fact:
+        rhel10_present: "{{ groups['all'] | select('defined', hostvars) | map('extract', hostvars, item, 'ansible_distribution') | list | select('equalto', 'RedHat') | list | length > 0 }}"
+      vars:
+        # fallback: mark false if facts not available
+        _rhel_detect_fallback: false
+      changed_when: false
+
+    - name: Apply Flannel ConfigMap with EnableNFTables=true for RHEL 10+ (idempotent)
+      ansible.builtin.shell: |
+        cat <<'YAML' | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: kube-flannel-cfg
+          namespace: kube-flannel
+          labels:
+            tier: node
+            k8s-app: flannel
+            app: flannel
+        data:
+          cni-conf.json: |
+            {
+              "name": "cni0",
+              "cniVersion": "0.3.1",
+              "plugins": [
+                {
+                  "type": "flannel",
+                  "delegate": {
+                    "hairpinMode": true,
+                    "isDefaultGateway": true
+                  }
+                },
+                {
+                  "type": "portmap",
+                  "capabilities": {
+                    "portMappings": true
+                  }
+                }
+              ]
+            }
+          net-conf.json: |
+            {
+              "Network": "10.244.0.0/16",
+              "EnableNFTables": true,
+              "Backend": {
+                "Type": "vxlan"
+              }
+            }
+        YAML
+      args:
+        executable: /bin/bash
+      when: "rhel10_present"
+      changed_when: true
+
     - name: Apply Flannel CNI manifest
       ansible.builtin.shell: |
         kubectl --kubeconfig=/etc/kubernetes/admin.conf \
