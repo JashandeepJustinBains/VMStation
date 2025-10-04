@@ -70,42 +70,10 @@
         mode: '0755'
 
 # -----------------------------------------------------------------------------
-# PHASE 3: RHEL 10 Specific - iptables Chain Pre-creation
-# Create iptables chains before kubelet starts to prevent kube-proxy crashes
-# -----------------------------------------------------------------------------
-- name: Phase 3 - Pre-create iptables chains for kube-proxy (RHEL 10)
-  hosts: compute_nodes
-  become: true
-  tasks:
-    - name: Pre-create kube-proxy iptables chains (RHEL 10)
-      ansible.builtin.shell: |
-        # Create filter table chains
-        iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
-        iptables -t filter -N KUBE-EXTERNAL-SERVICES 2>/dev/null || true
-        iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
-        iptables -t filter -N KUBE-NODEPORTS 2>/dev/null || true
-        
-        # Create nat table chains
-        iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
-        iptables -t nat -N KUBE-NODEPORTS 2>/dev/null || true
-        iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
-        iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
-        iptables -t nat -N KUBE-MARK-DROP 2>/dev/null || true
-        iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
-        
-        echo "Chains pre-created successfully"
-      args:
-        executable: /bin/bash
-      when:
-        - ansible_os_family == 'RedHat'
-        - ansible_distribution_major_version is version('10', '>=')
-      changed_when: false
-
-# -----------------------------------------------------------------------------
-# PHASE 4: Control Plane Initialization
+# PHASE 3: Control Plane Initialization
 # Initialize Kubernetes control plane on masternode (idempotent)
 # -----------------------------------------------------------------------------
-- name: Phase 4 - Initialize Kubernetes control plane
+- name: Phase 3 - Initialize Kubernetes control plane
   hosts: monitoring_nodes
   become: true
   tasks:
@@ -157,10 +125,10 @@
         ansible_env_kubeconfig: /etc/kubernetes/admin.conf
 
 # -----------------------------------------------------------------------------
-# PHASE 5: Worker Node Join
+# PHASE 4: Worker Node Join
 # Join worker nodes to cluster (idempotent)
 # -----------------------------------------------------------------------------
-- name: Phase 5 - Join worker nodes to cluster
+- name: Phase 4 - Join worker nodes to cluster
   hosts: storage_nodes:compute_nodes
   become: true
   tasks:
@@ -191,10 +159,10 @@
       when: not kubelet_conf.stat.exists
 
 # -----------------------------------------------------------------------------
-# PHASE 6: Flannel CNI Deployment
+# PHASE 5: Flannel CNI Deployment
 # Deploy Flannel CNI and wait for all pods to be Running
 # -----------------------------------------------------------------------------
-- name: Phase 6 - Deploy Flannel CNI
+- name: Phase 5 - Deploy Flannel CNI
   hosts: monitoring_nodes
   become: true
   tasks:
@@ -264,16 +232,16 @@
       ignore_errors: true
 
 # -----------------------------------------------------------------------------
-# PHASE 7: Wait for All Nodes to be Ready
+# PHASE 6: Wait for All Nodes to be Ready
 # Ensure all nodes are Ready before proceeding to application deployment
 # -----------------------------------------------------------------------------
-- name: Phase 7 - Wait for all nodes to be Ready
+- name: Phase 6 - Wait for all nodes to be Ready
   hosts: monitoring_nodes
   become: true
   tasks:
     - name: Wait for all nodes to be Ready
       ansible.builtin.shell: |
-        for i in {1..30}; do
+        for i in {1..18}; do
           total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
           ready_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
             get nodes --no-headers | awk '$2 == "Ready"' | wc -l)
@@ -284,21 +252,21 @@
             exit 0
           fi
           
-          echo "Waiting for nodes to be Ready: $ready_nodes/$total_nodes ($i/30)"
+          echo "Waiting for nodes to be Ready: $ready_nodes/$total_nodes ($i/18)"
           sleep 10
         done
         
-        echo "Not all nodes Ready after 5 minutes"
+        echo "Not all nodes Ready after 3 minutes"
         kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
         exit 1
       args:
         executable: /bin/bash
 
 # -----------------------------------------------------------------------------
-# PHASE 8: Node Configuration
+# PHASE 7: Node Configuration
 # Remove taints and uncordon nodes for workload scheduling
 # -----------------------------------------------------------------------------
-- name: Phase 8 - Configure node scheduling
+- name: Phase 7 - Configure node scheduling
   hosts: monitoring_nodes
   become: true
   tasks:
@@ -320,10 +288,10 @@
       changed_when: false
 
 # -----------------------------------------------------------------------------
-# PHASE 9: Post-Deployment Validation
+# PHASE 8: Post-Deployment Validation
 # Verify cluster health and component status
 # -----------------------------------------------------------------------------
-- name: Phase 9 - Post-deployment validation
+- name: Phase 8 - Post-deployment validation
   hosts: monitoring_nodes
   become: true
   tasks:
