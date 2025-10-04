@@ -336,6 +336,104 @@ sudo systemctl restart kubelet
 kubectl get nodes -o wide
 ```
 
+## Recovery workflow: homelab node fixes and deployment safety
+
+When a RHEL worker (for example the homelab R430) shows Flannel or kube-proxy instability, use the included idempotent host-fix script to apply persistent and transient fixes. This section documents when to run it, how to run it non-interactively, and how to confirm the node is healthy.
+
+When to run
+- Run the script if kube-proxy or flannel pods on a RHEL node are in CrashLoopBackOff, Pending, or show repeated restarts.
+- Run it when kubelet logs show errors about swap being enabled, xtables locks, or iptables failures.
+
+Run the fix script (interactive or non-interactive)
+- Interactive (recommended): the script will prompt for your sudo password if needed.
+
+```powershell
+# run from the repo root; you will be prompted for your sudo password
+./scripts/fix_homelab_node_issues.sh
+```
+
+- Non-interactive (one-off): export SUDO_PASS in your shell session (temporary) so the script can run without prompting.
+
+```powershell
+# set for the session, run, then unset
+$env:SUDO_PASS='your_sudo_password_here'; ./scripts/fix_homelab_node_issues.sh; Remove-Item Env:\SUDO_PASS
+```
+
+Vault-aware execution
+- If you use Ansible Vault to store `ansible_become_pass` or `vault_r430_sudo_password`, the script can attempt to decrypt `ansible/inventory/group_vars/secrets.yml` if `ANSIBLE_VAULT_PASSWORD_FILE` is set in the environment and `ansible-vault` is available.
+
+Integrate into deploy
+- Quick (fast): call the script early in `deploy.sh` before kubeadm/kubelet startup to ensure host preflight state. This is safe because the script is idempotent.
+
+```powershell
+# inside deploy.sh (early step)
+./scripts/fix_homelab_node_issues.sh || exit 1
+```
+
+- Recommended (production quality): convert the script's operations into an Ansible preflight role and run the role from `ansible/playbooks/deploy-cluster.yaml`. This integrates vault, become, and inventory management cleanly.
+
+What the script enforces
+- Disables swap and removes swap from `/etc/fstab` (persistent)
+- Ensures `/run/xtables.lock` exists and required kernel modules are loaded
+- Configures iptables alternatives and enables nftables where appropriate (RHEL)
+- Cleans stale CNI interfaces and restarts kubelet/kube-proxy/flannel as needed
+
+Quick verification commands
+
+```powershell
+# Check node and pod health
+kubectl get nodes -o wide
+kubectl get pods -A -o wide | grep -E "kube-proxy|flannel|coredns|kube-system"
+
+# Check node-level state (run on the RHEL node or use ssh)
+ssh user@r430 'sudo swapon --show || echo no-active-swap; sudo grep -E "^[^#].*swap" /etc/fstab || echo no-swap-in-fstab'
+ssh user@r430 'sudo getenforce || echo selinux-not-available; sudo grep ^SELINUX= /etc/selinux/config'
+ssh user@r430 'test -f /run/xtables.lock && echo xtables-lock-present || echo xtables-lock-missing'
+ssh user@r430 'sudo iptables --version || echo iptables-missing'
+```
+
+## Resetting pod restart counts (view and reset)
+
+Kubernetes tracks restart counts per container inside a Pod. There is no API to zero an existing Pod's restart counter; the counter resets when a new Pod object (new UID) is created. Use one of the following safe options depending on your controller type:
+
+- View restart counts across all namespaces:
+
+```powershell
+kubectl get pods -A --no-headers -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,RESTARTS:.status.containerStatuses[*].restartCount' | column -t
+```
+
+- Reset restart count for a Pod managed by a controller (Deployment/DaemonSet/StatefulSet): delete the Pod and the controller will recreate it with restartCount=0.
+
+```powershell
+kubectl delete pod <pod-name> -n <namespace>
+```
+
+- Restart a controller (preferred for DaemonSet/Deployment):
+
+```powershell
+kubectl rollout restart deployment/<name> -n <namespace>
+kubectl rollout restart daemonset/<name> -n <namespace>
+```
+
+- Restart all pods in a namespace (careful — disruptive):
+
+```powershell
+kubectl delete pod --all -n <namespace>
+```
+
+Notes and tips
+- Always inspect pod events and previous logs before deleting to understand root cause:
+
+```powershell
+kubectl describe pod <pod-name> -n <namespace>
+kubectl logs <pod-name> -n <namespace> --previous
+```
+
+- For kube-system DaemonSets (kube-proxy, flannel) prefer `rollout restart` on the DaemonSet instead of deleting all pods at once.
+
+- Add these steps to your runbook and consider turning the script into an Ansible preflight role to avoid manual execution.
+
+
 ## Infrastructure Overview
 
 ### Kubernetes Cluster
