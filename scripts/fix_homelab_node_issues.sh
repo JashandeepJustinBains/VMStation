@@ -46,35 +46,35 @@ echo "=========================================="
 echo ""
 
 echo "1.1 Disabling swap (required for kubelet)..."
-ssh 192.168.4.62 'sudo swapoff -a 2>/dev/null || echo "Swap already disabled"'
-ssh 192.168.4.62 'sudo sed -i "/\sswap\s/s/^/# /" /etc/fstab 2>/dev/null || echo "fstab already updated"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo swapoff -a 2>/dev/null || echo "Swap already disabled"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo sed -i "/\sswap\s/s/^/# /" /etc/fstab 2>/dev/null || echo "fstab already updated"'
 echo "✓ Swap disabled"
 echo ""
 
 echo "1.2 Setting SELinux to permissive mode..."
-ssh 192.168.4.62 'sudo setenforce 0 2>/dev/null || echo "SELinux already permissive"'
-ssh 192.168.4.62 'sudo sed -i "s/^SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config 2>/dev/null || echo "SELinux config already updated"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo setenforce 0 2>/dev/null || echo "SELinux already permissive"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo sed -i "s/^SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config 2>/dev/null || echo "SELinux config already updated"'
 echo "✓ SELinux set to permissive"
 echo ""
 
 echo "1.3 Loading required kernel modules..."
-ssh 192.168.4.62 'sudo modprobe br_netfilter overlay nf_conntrack vxlan 2>/dev/null || echo "Modules already loaded"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo modprobe br_netfilter overlay nf_conntrack vxlan 2>/dev/null || echo "Modules already loaded"'
 echo "✓ Kernel modules loaded"
 echo ""
 
 echo "1.4 Configuring iptables backend for RHEL 10..."
 # Check if iptables-nft exists (RHEL 10)
-if ssh 192.168.4.62 'test -f /usr/sbin/iptables-nft' 2>/dev/null; then
+if ssh jashandeepjustinbains@192.168.4.62 'test -f /usr/sbin/iptables-nft' 2>/dev/null; then
     echo "  Detected iptables-nft, configuring nftables backend..."
     
     # Install alternatives if they don't exist
-    ssh 192.168.4.62 'sudo update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10 2>/dev/null || true'
-    ssh 192.168.4.62 'sudo update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 2>/dev/null || true'
+    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10 2>/dev/null || true'
+    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 2>/dev/null || true'
     
     # Set the backend
-    ssh 192.168.4.62 'sudo update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || echo "iptables-nft already set"'
-    ssh 192.168.4.62 'sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || echo "ip6tables-nft already set"'
-    
+    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || echo "iptables-nft already set"'
+    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || echo "ip6tables-nft already set"'
+
     echo "  ✓ nftables backend configured"
 else
     echo "  iptables-legacy detected, no backend change needed"
@@ -82,12 +82,12 @@ fi
 echo ""
 
 echo "1.5 Creating iptables lock file..."
-ssh 192.168.4.62 'sudo touch /run/xtables.lock 2>/dev/null || echo "Lock file already exists"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo touch /run/xtables.lock 2>/dev/null || echo "Lock file already exists"'
 echo "✓ iptables lock file created"
 echo ""
 
 echo "1.6 Pre-creating kube-proxy iptables chains..."
-ssh 192.168.4.62 'sudo bash -c "
+ssh jashandeepjustinbains@192.168.4.62 'sudo bash -c "
     # Create NAT table chains
     iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
     iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
@@ -108,19 +108,19 @@ echo "✓ iptables chains pre-created"
 echo ""
 
 echo "1.7 Clearing stale network interfaces..."
-ssh 192.168.4.62 'sudo ip link delete flannel.1 2>/dev/null || echo "No flannel.1 to delete"'
-ssh 192.168.4.62 'sudo ip link delete cni0 2>/dev/null || echo "No cni0 to delete"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo ip link delete flannel.1 2>/dev/null || echo "No flannel.1 to delete"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo ip link delete cni0 2>/dev/null || echo "No cni0 to delete"'
 echo "✓ Stale interfaces cleared"
 echo ""
 
 echo "1.8 Clearing CNI configuration (will be regenerated)..."
-ssh 192.168.4.62 'sudo rm -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "No CNI config to remove"'
-ssh 192.168.4.62 'sudo rm -rf /var/lib/cni/flannel/* 2>/dev/null || echo "No flannel data to remove"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo rm -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "No CNI config to remove"'
+ssh jashandeepjustinbains@192.168.4.62 'sudo rm -rf /var/lib/cni/flannel/* 2>/dev/null || echo "No flannel data to remove"'
 echo "✓ CNI configuration cleared"
 echo ""
 
 echo "1.9 Restarting kubelet..."
-ssh 192.168.4.62 'sudo systemctl restart kubelet'
+ssh jashandeepjustinbains@192.168.4.62 'sudo systemctl restart kubelet'
 sleep 5
 echo "✓ kubelet restarted"
 echo ""
