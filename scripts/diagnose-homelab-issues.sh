@@ -27,11 +27,6 @@ ssh 192.168.4.62 'systemctl status NetworkManager --no-pager -l || echo "Network
 ssh 192.168.4.62 'cat /etc/NetworkManager/conf.d/99-kubernetes.conf 2>/dev/null || echo "NetworkManager config missing"'
 echo ""
 
-echo "5. Checking NetworkManager status and configuration..."
-ssh 192.168.4.62 'systemctl status NetworkManager --no-pager -l || echo "NetworkManager not running"'
-ssh 192.168.4.62 'cat /etc/NetworkManager/conf.d/99-kubernetes.conf 2>/dev/null || echo "NetworkManager config missing"'
-echo ""
-
 echo "6. Checking firewalld status..."
 ssh 192.168.4.62 'systemctl status firewalld --no-pager || echo "firewalld not running (expected)"'
 echo ""
