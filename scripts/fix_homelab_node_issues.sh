@@ -101,7 +101,7 @@ remote_sudo() {
     ) | ssh "$host" "sudo -S -p '' bash -s"
   else
     # No password provided: run command via ssh -> sudo -> bash -s, sending the command on stdin
-    ssh "$host" "sudo bash -s" <<EOF
+    ssh -t "$host" "sudo bash -s" <<'EOF'
 $cmd
 EOF
   fi
@@ -111,7 +111,22 @@ EOF
 if get_sudo_pass; then
   :
 else
-  echo "Note: no sudo password discovered in repository files; the script may prompt for one when required." >&2
+  # If running interactively, prompt the user for the sudo password so they can type it
+  if [ -t 0 ]; then
+    echo "No sudo password discovered in repository files. Please enter the sudo password for remote operations." >&2
+    # read silently
+    read -s -p "Sudo password: " SUDO_PASS_INPUT
+    echo
+    if [ -n "${SUDO_PASS_INPUT:-}" ]; then
+      export SUDO_PASS="$SUDO_PASS_INPUT"
+      unset SUDO_PASS_INPUT
+      echo "Using the provided sudo password for remote operations." >&2
+    else
+      echo "No password entered; continuing without a provided sudo password. Remote sudo may prompt interactively or fail." >&2
+    fi
+  else
+    echo "Note: no sudo password discovered in repository files; the script may prompt for one when required (non-interactive)." >&2
+  fi
 fi
 
 # Function to check if homelab node exists
