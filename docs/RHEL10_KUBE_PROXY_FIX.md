@@ -23,9 +23,32 @@ The issue occurs when:
 2. iptables commands fail because the iptables-nftables backend isn't properly configured
 3. kube-proxy crashes when it cannot set up required NAT/filter chains
 
+Additional contributing factors:
+- **Swap enabled**: kubelet fails to start when swap is enabled, causing pod lifecycle instability
+- **Race conditions**: iptables alternatives missing during early boot can cause transient failures
+- **Missing CNI**: kube-proxy starting before Flannel CNI is ready
+
 ## The Fix
 
 The permanent fix ensures proper iptables/nftables compatibility on RHEL 10 by:
+
+### 0. Disable Swap (CRITICAL - prevents kubelet failures)
+```yaml
+- name: Ensure swap is disabled (immediate, before kubelet)
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+  ignore_errors: true
+
+- name: Disable swap in /etc/fstab (persistent across reboots)
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\s+swap\s+.*)$'
+    replace: '# \1'
+    backup: yes
+  ignore_errors: true
+```
+
+This ensures kubelet can start properly. Kubelet refuses to run with swap enabled.
 
 ### 1. Install iptables-nft Packages
 ```yaml
@@ -38,18 +61,40 @@ The permanent fix ensures proper iptables/nftables compatibility on RHEL 10 by:
 
 This provides the nftables-based iptables implementation that RHEL 10 requires.
 
-### 2. Configure iptables Backend
+### 2. Configure iptables Backend (Idempotent)
 ```yaml
+# First check if binaries exist
+- name: Check if iptables-nft binary exists (RHEL 10+)
+  ansible.builtin.stat:
+    path: /usr/sbin/iptables-nft
+  register: iptables_nft_binary
+
+# Check if alternatives entry already exists
+- name: Check if iptables alternatives entry exists (RHEL 10+)
+  ansible.builtin.stat:
+    path: /var/lib/alternatives/iptables
+  register: iptables_alt_exists
+
+# Create alternatives entry if missing (prevents "cannot access" errors)
+- name: Install iptables alternatives if missing (RHEL 10+)
+  ansible.builtin.command:
+    cmd: update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10
+  when:
+    - iptables_nft_binary.stat.exists | default(false)
+    - not (iptables_alt_exists.stat.exists | default(false))
+
+# Now safe to set the backend
 - name: Configure iptables to use nftables backend (RHEL 10)
   ansible.builtin.command:
     cmd: update-alternatives --set iptables /usr/sbin/iptables-nft
 
+# Same for ip6tables
 - name: Configure ip6tables to use nftables backend (RHEL 10)
   ansible.builtin.command:
     cmd: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
 ```
 
-This ensures all iptables commands use the nftables backend.
+This ensures all iptables commands use the nftables backend. The idempotent approach prevents race conditions where `--set` fails because alternatives don't exist yet.
 
 ### 3. Pre-create Required iptables Chains
 ```yaml
@@ -94,13 +139,16 @@ This forces kube-proxy to restart with the proper iptables configuration.
 ## Files Modified
 
 1. **ansible/roles/network-fix/tasks/main.yml**
+   - Added swap disable tasks (immediate + persistent fstab modification)
+   - Added idempotent iptables/ip6tables alternatives creation (--install before --set)
    - Added iptables-nft package installation
    - Added iptables backend configuration
    - Added iptables chain pre-creation
    - Added kube-proxy restart logic
 
-2. **.github/instructions/memory.instruction.md**
-   - Documented the root cause and fix
+2. **docs/RHEL10_KUBE_PROXY_FIX.md** (this file)
+   - Updated to document swap handling
+   - Updated to document idempotent alternatives handling
 
 ## Testing Instructions
 
