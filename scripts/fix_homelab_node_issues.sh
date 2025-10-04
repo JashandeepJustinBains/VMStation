@@ -252,7 +252,7 @@ if [ -n "$STUCK_PODS" ]; then
     echo "$STUCK_PODS"
     echo ""
     echo "  Deleting stuck pods..."
-    echo "$STUCK_PODS" | while read pod; do
+    echo "$STUCK_PODS" | while read -r pod; do
         if [ -n "$pod" ]; then
             kubectl delete pod "$pod" --wait=false 2>/dev/null || echo "  Failed to delete $pod"
         fi
