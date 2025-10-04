@@ -112,6 +112,9 @@ unmanaged-devices=interface-name:cni*;interface-name:flannel*;interface-name:vet
 - Manual flannel pod deletion
 - Crashloop detection and remediation
 
+**Added**:
+- **nodeSelector** to monitoring pods (Prometheus, Grafana, Loki) to ensure they run only on control-plane node (masternode) and avoid the problematic homelab node
+
 **Replaced With**:
 ```yaml
 - name: "Wait for Flannel CNI to be ready across all nodes"
@@ -130,7 +133,7 @@ unmanaged-devices=interface-name:cni*;interface-name:flannel*;interface-name:vet
   ignore_errors: true
 ```
 
-**Rationale**: If `network-fix` role prepares nodes correctly, flannel starts cleanly without intervention.
+**Rationale**: If `network-fix` role prepares nodes correctly, flannel starts cleanly without intervention. By adding nodeSelector to monitoring pods, we prevent them from being scheduled on the homelab node which has known networking issues.
 
 ### 4. CoreDNS Deployment & Validation
 
