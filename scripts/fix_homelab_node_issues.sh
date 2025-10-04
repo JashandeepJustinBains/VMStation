@@ -28,6 +28,91 @@ wait_for_kubectl() {
     return 1
 }
 
+# Determine script and repo root so we can look for ansible group_vars files
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Try to obtain a sudo password from environment or common ansible group_vars files
+get_sudo_pass() {
+  # Prefer explicit environment variable
+  if [ -n "${SUDO_PASS:-}" ]; then
+    echo "Using SUDO_PASS from environment"
+    return 0
+  fi
+
+  local candidates=(
+    "$REPO_ROOT/ansible/inventory/group_vars/secrets.yml"
+    "$REPO_ROOT/ansible/inventory/group_vars/all.yml"
+    "$REPO_ROOT/ansible/group_vars/all.yml"
+    "$REPO_ROOT/ansible/inventory/group_vars/secrets.yml.example"
+  )
+
+  for f in "${candidates[@]}"; do
+    if [ -f "$f" ]; then
+      # If a vault password file is supplied, try to decrypt the file and extract variable
+      if [ -n "${ANSIBLE_VAULT_PASSWORD_FILE:-}${VAULT_PASSWORD_FILE:-}${VAULT_PASS_FILE:-}" ] && command -v ansible-vault >/dev/null 2>&1; then
+        local vault_file_var
+        vault_file_var="${ANSIBLE_VAULT_PASSWORD_FILE:-${VAULT_PASSWORD_FILE:-${VAULT_PASS_FILE:-}}}"
+        if [ -f "$vault_file_var" ]; then
+          # attempt to view decrypted content and parse variable
+          local dec
+          dec=$(ansible-vault view "$f" --vault-password-file "$vault_file_var" 2>/dev/null || true)
+          if [ -n "$dec" ]; then
+            local val
+            val=$(echo "$dec" | grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
+            if [ -n "$val" ] && ! echo "$val" | grep -q '{{'; then
+              export SUDO_PASS="$val"
+              echo "Found sudo password in (vault): $f"
+              return 0
+            fi
+          fi
+        fi
+      fi
+
+      # Look for common variable names in plaintext; ignore commented lines
+      local val
+      val=$(grep -E '^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:' "$f" | sed -E 's/^[[:space:]]*(vault_r430_sudo_password|ansible_become_pass)[[:space:]]*:[[:space:]]*\"?(.*)\"?/\2/' | sed 's/["'"']$//' | sed 's/^\s*//g' | head -n1 || true)
+      if [ -n "$val" ]; then
+        # skip templated placeholders like {{ ... }}
+        if echo "$val" | grep -q '{{'; then
+          continue
+        fi
+        export SUDO_PASS="$val"
+        echo "Found sudo password in: $f"
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
+# Helper to run a command on a remote host (no sudo)
+remote() {
+  local host="$1"; shift
+  local cmd="$*"
+  ssh "$host" bash -lc "$cmd"
+}
+
+# Helper to run a command on a remote host with sudo; if SUDO_PASS is set it will be
+# provided via stdin so sudo won't prompt interactively.
+remote_sudo() {
+  local host="$1"; shift
+  local cmd="$*"
+  if [ -n "${SUDO_PASS:-}" ]; then
+    printf "%s\n" "$SUDO_PASS" | ssh "$host" "sudo -S -p '' bash -lc '$cmd'"
+  else
+    ssh "$host" "sudo bash -lc '$cmd'"
+  fi
+}
+
+# Try to auto-discover sudo password (optional)
+if get_sudo_pass; then
+  :
+else
+  echo "Note: no sudo password discovered in repository files; the script may prompt for one when required." >&2
+fi
+
 # Function to check if homelab node exists
 check_homelab_node() {
     if ! kubectl get node homelab >/dev/null 2>&1; then
@@ -46,34 +131,34 @@ echo "=========================================="
 echo ""
 
 echo "1.1 Disabling swap (required for kubelet)..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo swapoff -a 2>/dev/null || echo "Swap already disabled"'
-ssh jashandeepjustinbains@192.168.4.62 'sudo sed -i "/\sswap\s/s/^/# /" /etc/fstab 2>/dev/null || echo "fstab already updated"'
+remote_sudo jashandeepjustinbains@192.168.4.62 "swapoff -a 2>/dev/null || echo 'Swap already disabled'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "sed -i '/\sswap\s/s/^/# /' /etc/fstab 2>/dev/null || echo 'fstab already updated'"
 echo "✓ Swap disabled"
 echo ""
 
 echo "1.2 Setting SELinux to permissive mode..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo setenforce 0 2>/dev/null || echo "SELinux already permissive"'
-ssh jashandeepjustinbains@192.168.4.62 'sudo sed -i "s/^SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config 2>/dev/null || echo "SELinux config already updated"'
+remote_sudo jashandeepjustinbains@192.168.4.62 "setenforce 0 2>/dev/null || echo 'SELinux already permissive'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config 2>/dev/null || echo 'SELinux config already updated'"
 echo "✓ SELinux set to permissive"
 echo ""
 
 echo "1.3 Loading required kernel modules..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo modprobe br_netfilter overlay nf_conntrack vxlan 2>/dev/null || echo "Modules already loaded"'
+remote_sudo jashandeepjustinbains@192.168.4.62 "modprobe br_netfilter overlay nf_conntrack vxlan 2>/dev/null || echo 'Modules already loaded'"
 echo "✓ Kernel modules loaded"
 echo ""
 
 echo "1.4 Configuring iptables backend for RHEL 10..."
 # Check if iptables-nft exists (RHEL 10)
-if ssh jashandeepjustinbains@192.168.4.62 'test -f /usr/sbin/iptables-nft' 2>/dev/null; then
+if remote jashandeepjustinbains@192.168.4.62 'test -f /usr/sbin/iptables-nft' 2>/dev/null; then
     echo "  Detected iptables-nft, configuring nftables backend..."
     
     # Install alternatives if they don't exist
-    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10 2>/dev/null || true'
-    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 2>/dev/null || true'
+  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10 2>/dev/null || true"
+  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 2>/dev/null || true"
     
-    # Set the backend
-    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || echo "iptables-nft already set"'
-    ssh jashandeepjustinbains@192.168.4.62 'sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || echo "ip6tables-nft already set"'
+  # Set the backend
+  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || echo 'iptables-nft already set'"
+  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || echo 'ip6tables-nft already set'"
 
     echo "  ✓ nftables backend configured"
 else
@@ -82,45 +167,45 @@ fi
 echo ""
 
 echo "1.5 Creating iptables lock file..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo touch /run/xtables.lock 2>/dev/null || echo "Lock file already exists"'
+remote_sudo jashandeepjustinbains@192.168.4.62 "touch /run/xtables.lock 2>/dev/null || echo 'Lock file already exists'"
 echo "✓ iptables lock file created"
 echo ""
 
 echo "1.6 Pre-creating kube-proxy iptables chains..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo bash -c "
-    # Create NAT table chains
-    iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
-    iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
-    iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
-    iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
+remote_sudo jashandeepjustinbains@192.168.4.62 "bash -lc '
+  # Create NAT table chains
+  iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
+  iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
+  iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
+  iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
     
-    # Create filter table chains
-    iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
-    iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
+  # Create filter table chains
+  iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
+  iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
     
-    # Link chains to base chains
-    iptables -t nat -C PREROUTING -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A PREROUTING -j KUBE-SERVICES
-    iptables -t nat -C OUTPUT -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A OUTPUT -j KUBE-SERVICES
-    iptables -t nat -C POSTROUTING -j KUBE-POSTROUTING 2>/dev/null || iptables -t nat -A POSTROUTING -j KUBE-POSTROUTING
-    iptables -t filter -C FORWARD -j KUBE-FORWARD 2>/dev/null || iptables -t filter -A FORWARD -j KUBE-FORWARD
-"'
+  # Link chains to base chains
+  iptables -t nat -C PREROUTING -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A PREROUTING -j KUBE-SERVICES
+  iptables -t nat -C OUTPUT -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A OUTPUT -j KUBE-SERVICES
+  iptables -t nat -C POSTROUTING -j KUBE-POSTROUTING 2>/dev/null || iptables -t nat -A POSTROUTING -j KUBE-POSTROUTING
+  iptables -t filter -C FORWARD -j KUBE-FORWARD 2>/dev/null || iptables -t filter -A FORWARD -j KUBE-FORWARD
+'"
 echo "✓ iptables chains pre-created"
 echo ""
 
 echo "1.7 Clearing stale network interfaces..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo ip link delete flannel.1 2>/dev/null || echo "No flannel.1 to delete"'
-ssh jashandeepjustinbains@192.168.4.62 'sudo ip link delete cni0 2>/dev/null || echo "No cni0 to delete"'
+remote_sudo jashandeepjustinbains@192.168.4.62 "ip link delete flannel.1 2>/dev/null || echo 'No flannel.1 to delete'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "ip link delete cni0 2>/dev/null || echo 'No cni0 to delete'"
 echo "✓ Stale interfaces cleared"
 echo ""
 
 echo "1.8 Clearing CNI configuration (will be regenerated)..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo rm -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo "No CNI config to remove"'
-ssh jashandeepjustinbains@192.168.4.62 'sudo rm -rf /var/lib/cni/flannel/* 2>/dev/null || echo "No flannel data to remove"'
+remote_sudo jashandeepjustinbains@192.168.4.62 "rm -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo 'No CNI config to remove'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "rm -rf /var/lib/cni/flannel/* 2>/dev/null || echo 'No flannel data to remove'"
 echo "✓ CNI configuration cleared"
 echo ""
 
 echo "1.9 Restarting kubelet..."
-ssh jashandeepjustinbains@192.168.4.62 'sudo systemctl restart kubelet'
+remote_sudo jashandeepjustinbains@192.168.4.62 "systemctl restart kubelet"
 sleep 5
 echo "✓ kubelet restarted"
 echo ""
