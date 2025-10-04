@@ -175,12 +175,17 @@
       register: flannel_check
       changed_when: false
 
-    - name: Detect if any node is RHEL 10+ (requires flannel nftables backend)
+    - name: Collect nodes' OS image strings via kubectl (control-plane)
+      ansible.builtin.shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{range .items[*]}{.metadata.name}::{.status.nodeInfo.osImage}{"\n"}{end}'
+      args:
+        executable: /bin/bash
+      register: node_osinfo
+      changed_when: false
+
+    - name: Set rhel10_present if any node's osImage indicates Red Hat Enterprise Linux 10
       ansible.builtin.set_fact:
-        rhel10_present: "{{ groups['all'] | select('defined', hostvars) | map('extract', hostvars, item, 'ansible_distribution') | list | select('equalto', 'RedHat') | list | length > 0 }}"
-      vars:
-        # fallback: mark false if facts not available
-        _rhel_detect_fallback: false
+        rhel10_present: "{{ node_osinfo.stdout_lines | select('search', 'Red Hat Enterprise Linux 10') | list | length > 0 }}"
       changed_when: false
 
     - name: Apply Flannel ConfigMap with EnableNFTables=true for RHEL 10+ (idempotent)
@@ -227,7 +232,7 @@
         YAML
       args:
         executable: /bin/bash
-      when: "rhel10_present"
+      when: rhel10_present | default(false)
       changed_when: true
 
     - name: Apply Flannel CNI manifest

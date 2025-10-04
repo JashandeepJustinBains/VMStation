@@ -36,3 +36,4 @@ I should be able to do 'deploy.sh' -> 'deploy.sh reset' -> 'deploy.sh' 100 times
 Thee playbooks should bee short and concise with no errors on any run/deployment.
 All the Main and deploy-cluster playbooks are corrupted or wrong. Ensure they are short concise but do exactly what is neded of them
 Do not put oveerly long timeouts it just leads to longer wait times for errors to appear, however I am certain you can accomplish this task the first time without errors.
+
