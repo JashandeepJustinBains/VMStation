@@ -87,15 +87,23 @@ remote() {
   ssh "$host" bash -lc "$cmd"
 }
 
-# Helper to run a command on a remote host with sudo; if SUDO_PASS is set it will be
-# provided via stdin so sudo won't prompt interactively.
+# Helper to run a command on a remote host with sudo; if SUDO_PASS is set it will
+# be provided first via stdin and then the command will be sent to remote sudo's stdin
+# so sudo -S can read the password, and bash -s executes the following commands.
 remote_sudo() {
-  local host="$1"; shift
-  local cmd="$*"
+  host="$1"; shift
+  cmd="$*"
   if [ -n "${SUDO_PASS:-}" ]; then
-    printf "%s\n" "$SUDO_PASS" | ssh "$host" "sudo -S -p '' bash -lc '$cmd'"
+    # Send password then the command script to remote sudo/bash via ssh stdin
+    (
+      printf "%s\n" "$SUDO_PASS"
+      printf "%s\n" "$cmd"
+    ) | ssh "$host" "sudo -S -p '' bash -s"
   else
-    ssh "$host" "sudo bash -lc '$cmd'"
+    # No password provided: run command via ssh -> sudo -> bash -s, sending the command on stdin
+    ssh "$host" "sudo bash -s" <<EOF
+$cmd
+EOF
   fi
 }
 
@@ -124,19 +132,29 @@ echo "=========================================="
 echo ""
 
 echo "1.1 Disabling swap (required for kubelet)..."
-remote_sudo jashandeepjustinbains@192.168.4.62 "swapoff -a 2>/dev/null || echo 'Swap already disabled'"
-remote_sudo jashandeepjustinbains@192.168.4.62 "sed -i '/\sswap\s/s/^/# /' /etc/fstab 2>/dev/null || echo 'fstab already updated'"
+# Use heredoc over ssh to avoid quoting/escaping issues with sed on the remote host.
+if [ -n "${SUDO_PASS:-}" ]; then
+  printf "%s\n" "$SUDO_PASS" | ssh jashandeepjustinbains@192.168.4.62 "sudo -S bash -s" <<'EOF'
+swapoff -a 2>/dev/null || echo "Swap already disabled"
+sed -i '/[[:space:]]swap[[:space:]]/s/^/# /' /etc/fstab 2>/dev/null || echo "fstab already updated"
+EOF
+else
+  ssh jashandeepjustinbains@192.168.4.62 "sudo bash -s" <<'EOF'
+swapoff -a 2>/dev/null || echo "Swap already disabled"
+sed -i '/[[:space:]]swap[[:space:]]/s/^/# /' /etc/fstab 2>/dev/null || echo "fstab already updated"
+EOF
+fi
 echo "✓ Swap disabled"
 echo ""
 
 echo "1.2 Setting SELinux to permissive mode..."
-remote_sudo jashandeepjustinbains@192.168.4.62 "setenforce 0 2>/dev/null || echo 'SELinux already permissive'"
-remote_sudo jashandeepjustinbains@192.168.4.62 "sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config 2>/dev/null || echo 'SELinux config already updated'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "setenforce 0 2>/dev/null || echo \"SELinux already permissive\""
+remote_sudo jashandeepjustinbains@192.168.4.62 "sed -i \"s/^SELINUX=enforcing/SELINUX=permissive/\" /etc/selinux/config 2>/dev/null || echo \"SELinux config already updated\""
 echo "✓ SELinux set to permissive"
 echo ""
 
 echo "1.3 Loading required kernel modules..."
-remote_sudo jashandeepjustinbains@192.168.4.62 "modprobe br_netfilter overlay nf_conntrack vxlan 2>/dev/null || echo 'Modules already loaded'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "modprobe br_netfilter overlay nf_conntrack vxlan 2>/dev/null || echo \"Modules already loaded\""
 echo "✓ Kernel modules loaded"
 echo ""
 
@@ -150,8 +168,8 @@ if remote jashandeepjustinbains@192.168.4.62 'test -f /usr/sbin/iptables-nft' 2>
   remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 2>/dev/null || true"
     
   # Set the backend
-  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || echo 'iptables-nft already set'"
-  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || echo 'ip6tables-nft already set'"
+  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --set iptables /usr/sbin/iptables-nft 2>/dev/null || echo \"iptables-nft already set\""
+  remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --set ip6tables /usr/sbin/ip6tables-nft 2>/dev/null || echo \"ip6tables-nft already set\""
 
     echo "  ✓ nftables backend configured"
 else
@@ -160,7 +178,7 @@ fi
 echo ""
 
 echo "1.5 Creating iptables lock file..."
-remote_sudo jashandeepjustinbains@192.168.4.62 "touch /run/xtables.lock 2>/dev/null || echo 'Lock file already exists'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "touch /run/xtables.lock 2>/dev/null || echo \"Lock file already exists\""
 echo "✓ iptables lock file created"
 echo ""
 
@@ -186,14 +204,14 @@ echo "✓ iptables chains pre-created"
 echo ""
 
 echo "1.7 Clearing stale network interfaces..."
-remote_sudo jashandeepjustinbains@192.168.4.62 "ip link delete flannel.1 2>/dev/null || echo 'No flannel.1 to delete'"
-remote_sudo jashandeepjustinbains@192.168.4.62 "ip link delete cni0 2>/dev/null || echo 'No cni0 to delete'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "ip link delete flannel.1 2>/dev/null || echo \"No flannel.1 to delete\""
+remote_sudo jashandeepjustinbains@192.168.4.62 "ip link delete cni0 2>/dev/null || echo \"No cni0 to delete\""
 echo "✓ Stale interfaces cleared"
 echo ""
 
 echo "1.8 Clearing CNI configuration (will be regenerated)..."
-remote_sudo jashandeepjustinbains@192.168.4.62 "rm -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo 'No CNI config to remove'"
-remote_sudo jashandeepjustinbains@192.168.4.62 "rm -rf /var/lib/cni/flannel/* 2>/dev/null || echo 'No flannel data to remove'"
+remote_sudo jashandeepjustinbains@192.168.4.62 "rm -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null || echo \"No CNI config to remove\""
+remote_sudo jashandeepjustinbains@192.168.4.62 "rm -rf /var/lib/cni/flannel/* 2>/dev/null || echo \"No flannel data to remove\""
 echo "✓ CNI configuration cleared"
 echo ""
 
