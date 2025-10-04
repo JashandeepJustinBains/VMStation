@@ -1,0 +1,8 @@
+egrep: warning: egrep is obsolescent; using grep -E
+root      710206  0.6  0.1 2991660 79132 ?       Ssl  16:47   0:51 /usr/bin/containerd
+root      712938  1.1  0.1 3040524 109972 ?      Ssl  16:49   1:37 /usr/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/lib/kubelet/config.yaml --container-runtime-endpoint=unix:///run/containerd/containerd.sock
+root      755352  0.0  0.0 1239132 17064 ?       Sl   19:02   0:00 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 33981f980ea21e84f6785092d3bd7753aee9c6d6b8e3d3a3130446dce8505892 -address /run/containerd/containerd.sock
+root      755690  0.0  0.0 1238876 16164 ?       Sl   19:03   0:00 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 291b02b860d205426328fb22c316fabaca3a1b7b1d9a616cba186d6ad2223155 -address /run/containerd/containerd.sock
+root      755930  0.0  0.0 1239132 17984 ?       Sl   19:04   0:00 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 0202fa40561d99f85a6a547412f18414fc02f646b247ed7dad3b3c843f7f4faf -address /run/containerd/containerd.sock
+root      756299  0.0  0.0 1239132 17564 ?       Sl   19:04   0:00 /usr/bin/containerd-shim-runc-v2 -namespace k8s.io -id 65b88dfeb01333524eadda8e2215a83c9b52b123d11cf1b7d08155cff1d8e38f -address /run/containerd/containerd.sock
+root      756437  0.0  0.0 227836  2212 pts/1    S    19:05   0:00 grep -E containerd|kubelet|kube-proxy|flanneld|flannel|coredns

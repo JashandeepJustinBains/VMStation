@@ -1,0 +1,22 @@
+total 81904
+drwxr-xr-x. 2 root root unconfined_u:object_r:usr_t:s0     4096 Oct  4 19:04 .
+drwxr-xr-x. 3 root root system_u:object_r:usr_t:s0           17 Oct  4 16:48 ..
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4109351 Dec  4  2023 bandwidth
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4652757 Dec  4  2023 bridge
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0 11050013 Dec  4  2023 dhcp
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4297556 Dec  4  2023 dummy
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4736299 Dec  4  2023 firewall
+-rwxr-xr-x. 1 root root system_u:object_r:usr_t:s0      3008243 Oct  4 19:04 flannel
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4191837 Dec  4  2023 host-device
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  3549866 Dec  4  2023 host-local
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4315686 Dec  4  2023 ipvlan
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  3636792 Dec  4  2023 loopback
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4349395 Dec  4  2023 macvlan
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4085020 Dec  4  2023 portmap
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4470977 Dec  4  2023 ptp
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  3851218 Dec  4  2023 sbr
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  3110828 Dec  4  2023 static
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4371897 Dec  4  2023 tap
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  3726382 Dec  4  2023 tuning
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4310173 Dec  4  2023 vlan
+-rwxr-xr-x. 1 root root unconfined_u:object_r:usr_t:s0  4001842 Dec  4  2023 vrf

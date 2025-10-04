@@ -1,0 +1,4 @@
+total 4
+drwxr-xr-x. 2 root root system_u:object_r:etc_t:s0  33 Oct  4 19:04 .
+drwxr-xr-x. 3 root root system_u:object_r:etc_t:s0  19 Oct  2 19:11 ..
+-rw-r--r--. 1 root root system_u:object_r:etc_t:s0 292 Oct  4 19:04 10-flannel.conflist

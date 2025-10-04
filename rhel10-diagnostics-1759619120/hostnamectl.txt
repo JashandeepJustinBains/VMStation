@@ -1,0 +1,16 @@
+ Static hostname: homelab
+       Icon name: computer-server
+         Chassis: server 🖳
+      Machine ID: 07bff45e6fe54e5a8006fa5cf8c19c93
+         Boot ID: 98f59178878f4f89be32ee5548c87ed8
+    Product UUID: 4c4c4544-0039-4810-8030-b3c04f594d32
+Operating System: Red Hat Enterprise Linux 10.0 (Coughlan)
+     CPE OS Name: cpe:/o:redhat:enterprise_linux:10::baseos
+          Kernel: Linux 6.12.0-55.9.1.el10_0.x86_64
+    Architecture: x86-64
+ Hardware Vendor: Dell Inc.
+  Hardware Model: PowerEdge R430
+ Hardware Serial: 39H0YM2
+Firmware Version: 2.11.0
+   Firmware Date: Mon 2019-12-23
+    Firmware Age: 5y 9month 1w 5d

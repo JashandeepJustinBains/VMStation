@@ -1,0 +1,11 @@
+State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                                    
+LISTEN 0      4096       127.0.0.1:631        0.0.0.0:*    users:(("cupsd",pid=1247,fd=8))                           
+LISTEN 0      128          0.0.0.0:22         0.0.0.0:*    users:(("sshd",pid=1256,fd=7))                            
+LISTEN 0      4096         0.0.0.0:111        0.0.0.0:*    users:(("rpcbind",pid=1066,fd=5),("systemd",pid=1,fd=152))
+LISTEN 0      4096       127.0.0.1:10248      0.0.0.0:*    users:(("kubelet",pid=712938,fd=17))                      
+LISTEN 0      4096       127.0.0.1:44571      0.0.0.0:*    users:(("containerd",pid=710206,fd=8))                    
+LISTEN 0      128             [::]:22            [::]:*    users:(("sshd",pid=1256,fd=8))                            
+LISTEN 0      4096            [::]:111           [::]:*    users:(("rpcbind",pid=1066,fd=7),("systemd",pid=1,fd=157))
+LISTEN 0      4096               *:10250            *:*    users:(("kubelet",pid=712938,fd=21))                      
+LISTEN 0      4096               *:9090             *:*    users:(("systemd",pid=1,fd=161))                          
+LISTEN 0      4096           [::1]:631           [::]:*    users:(("cupsd",pid=1247,fd=7))                           

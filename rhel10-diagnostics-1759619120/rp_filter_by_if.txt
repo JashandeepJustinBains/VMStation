@@ -1,0 +1,11 @@
+/proc/sys/net/ipv4/conf/all/rp_filter: 0
+/proc/sys/net/ipv4/conf/cni0/rp_filter: 1
+/proc/sys/net/ipv4/conf/default/rp_filter: 1
+/proc/sys/net/ipv4/conf/eno1/rp_filter: 1
+/proc/sys/net/ipv4/conf/eno2/rp_filter: 1
+/proc/sys/net/ipv4/conf/eno3/rp_filter: 1
+/proc/sys/net/ipv4/conf/eno4/rp_filter: 1
+/proc/sys/net/ipv4/conf/flannel.1/rp_filter: 1
+/proc/sys/net/ipv4/conf/lo/rp_filter: 1
+/proc/sys/net/ipv4/conf/veth144cd033/rp_filter: 1
+/proc/sys/net/ipv4/conf/veth8372ddeb/rp_filter: 1

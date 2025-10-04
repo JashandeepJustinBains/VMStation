@@ -1,0 +1,1 @@
+root root 644 /etc/cni/net.d/10-flannel.conflist

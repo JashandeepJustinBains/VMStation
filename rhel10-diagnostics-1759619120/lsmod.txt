@@ -1,0 +1,115 @@
+Module                  Size  Used by
+nft_masq               12288  2
+xt_statistic           12288  0
+veth                   40960  0
+vxlan                 155648  0
+ip6_udp_tunnel         16384  1 vxlan
+udp_tunnel             36864  1 vxlan
+nf_conntrack_netlink    61440  0
+xt_nat                 12288  4
+xt_MASQUERADE          16384  2
+xt_mark                12288  4
+xt_addrtype            12288  2
+ipt_REJECT             12288  0
+xt_conntrack           12288  19
+xt_comment             12288  53
+nft_compat             24576  88
+tls                   159744  0
+snd_seq_dummy          12288  0
+snd_hrtimer            12288  1
+snd_seq               131072  7 snd_seq_dummy
+snd_timer              57344  2 snd_seq,snd_hrtimer
+snd_seq_device         16384  1 snd_seq
+snd                   159744  5 snd_seq,snd_seq_device,snd_timer
+soundcore              16384  1 snd
+rpcsec_gss_krb5        45056  0
+auth_rpcgss           200704  1 rpcsec_gss_krb5
+nfsv4                1318912  1
+dns_resolver           16384  1 nfsv4
+nfs                   667648  2 nfsv4
+lockd                 196608  1 nfs
+grace                  12288  1 lockd
+nfs_localio            16384  1 nfs
+netfs                 589824  1 nfs
+nft_fib_inet           12288  0
+nft_fib_ipv4           12288  1 nft_fib_inet
+nft_fib_ipv6           12288  1 nft_fib_inet
+nft_fib                12288  3 nft_fib_ipv6,nft_fib_ipv4,nft_fib_inet
+nft_reject_inet        12288  0
+nf_reject_ipv4         16384  2 nft_reject_inet,ipt_REJECT
+nf_reject_ipv6         20480  1 nft_reject_inet
+nft_reject             12288  1 nft_reject_inet
+nft_ct                 28672  0
+nft_chain_nat          12288  7
+nf_nat                 69632  4 xt_nat,nft_masq,nft_chain_nat,xt_MASQUERADE
+ip_set                 69632  0
+nf_tables             393216  261 nft_ct,nft_compat,nft_reject_inet,nft_fib_ipv6,nft_fib_ipv4,nft_masq,nft_chain_nat,nft_reject,nft_fib,nft_fib_inet
+qrtr                   57344  2
+sunrpc                905216  12 nfs_localio,nfsv4,auth_rpcgss,lockd,rpcsec_gss_krb5,nfs
+vfat                   28672  1
+fat                   110592  1 vfat
+intel_rapl_msr         20480  0
+intel_rapl_common      53248  1 intel_rapl_msr
+intel_uncore_frequency    12288  0
+intel_uncore_frequency_common    16384  1 intel_uncore_frequency
+sb_edac                61440  0
+x86_pkg_temp_thermal    16384  0
+intel_powerclamp       24576  0
+coretemp               20480  0
+kvm_intel             446464  0
+platform_profile       12288  0
+kvm                  1400832  1 kvm_intel
+ipmi_ssif              49152  0
+dell_wmi_descriptor    20480  0
+sparse_keymap          12288  0
+rfkill                 40960  3
+video                  81920  0
+rapl                   24576  0
+iTCO_wdt               16384  0
+iTCO_vendor_support    12288  1 iTCO_wdt
+dcdbas                 24576  0
+intel_cstate           24576  0
+intel_uncore          274432  0
+pcspkr                 12288  0
+mxm_wmi                12288  0
+mei_me                 61440  0
+tg3                   245760  0
+mei                   208896  1 mei_me
+lpc_ich                32768  0
+ipmi_si                98304  0
+acpi_power_meter       24576  0
+acpi_ipmi              24576  1 acpi_power_meter
+ipmi_devintf           20480  0
+ipmi_msghandler       106496  4 ipmi_devintf,ipmi_si,acpi_ipmi,ipmi_ssif
+sg                     57344  0
+nf_conntrack          204800  7 xt_conntrack,nf_nat,nft_ct,xt_nat,nf_conntrack_netlink,nft_masq,xt_MASQUERADE
+nf_defrag_ipv6         24576  1 nf_conntrack
+nf_defrag_ipv4         12288  1 nf_conntrack
+ip6_tables             32768  0
+ip_tables              32768  0
+br_netfilter           36864  0
+bridge                417792  1 br_netfilter
+stp                    12288  1 bridge
+llc                    16384  2 bridge,stp
+overlay               245760  4
+dm_multipath           53248  0
+loop                   45056  0
+nfnetlink              20480  5 nft_compat,nf_conntrack_netlink,nf_tables,ip_set
+xfs                  3207168  4
+sd_mod                 90112  6
+ahci                   57344  0
+libahci                69632  1 ahci
+libata                512000  2 libahci,ahci
+crct10dif_pclmul       12288  1
+crc32_pclmul           12288  0
+crc32c_intel           16384  0
+megaraid_sas          266240  6
+ghash_clmulni_intel    16384  0
+mgag200                81920  2
+i2c_algo_bit           20480  1 mgag200
+wmi                    32768  3 video,dell_wmi_descriptor,mxm_wmi
+dm_mirror              28672  0
+dm_region_hash         28672  1 dm_mirror
+dm_log                 24576  2 dm_region_hash,dm_mirror
+dm_mod                245760  11 dm_multipath,dm_log,dm_mirror
+fuse                  253952  3

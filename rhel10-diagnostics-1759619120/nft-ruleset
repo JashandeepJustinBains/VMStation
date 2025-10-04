@@ -1,0 +1,296 @@
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy accept;
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}
+# Warning: table ip filter is managed by iptables-nft, do not touch!
+table ip filter {
+	chain FORWARD {
+		type filter hook forward priority filter; policy accept;
+		ct state new  counter packets 489 bytes 36708 jump KUBE-PROXY-FIREWALL
+		 counter packets 5466 bytes 1348135 jump KUBE-FORWARD
+		ct state new  counter packets 489 bytes 36708 jump KUBE-SERVICES
+		ct state new  counter packets 489 bytes 36708 jump KUBE-EXTERNAL-SERVICES
+		counter packets 489 bytes 36708 jump KUBE-FORWARD
+	}
+
+	chain KUBE-SERVICES {
+	}
+
+	chain KUBE-EXTERNAL-SERVICES {
+	}
+
+	chain KUBE-FORWARD {
+		ct state invalid counter packets 0 bytes 0 drop
+		 meta mark & 0x00004000 == 0x00004000 counter packets 0 bytes 0 accept
+		 ct state related,established counter packets 135 bytes 39144 accept
+	}
+
+	chain KUBE-NODEPORTS {
+	}
+
+	chain KUBE-FIREWALL {
+		ip saddr != 127.0.0.0/8 ip daddr 127.0.0.0/8  ct status dnat counter packets 0 bytes 0 drop
+	}
+
+	chain OUTPUT {
+		type filter hook output priority filter; policy accept;
+		ct state new  counter packets 1302 bytes 236136 jump KUBE-PROXY-FIREWALL
+		ct state new  counter packets 1302 bytes 236136 jump KUBE-SERVICES
+		counter packets 26891 bytes 3474506 jump KUBE-FIREWALL
+	}
+
+	chain INPUT {
+		type filter hook input priority filter; policy accept;
+		ct state new  counter packets 6192 bytes 1039088 jump KUBE-PROXY-FIREWALL
+		 counter packets 28210 bytes 21913482 jump KUBE-NODEPORTS
+		ct state new  counter packets 6192 bytes 1039088 jump KUBE-EXTERNAL-SERVICES
+		counter packets 28557 bytes 22337625 jump KUBE-FIREWALL
+	}
+
+	chain KUBE-KUBELET-CANARY {
+	}
+
+	chain KUBE-PROXY-CANARY {
+	}
+
+	chain KUBE-PROXY-FIREWALL {
+	}
+}
+# Warning: table ip nat is managed by iptables-nft, do not touch!
+table ip nat {
+	chain KUBE-SERVICES {
+		meta l4proto tcp ip daddr 10.96.0.10  tcp dport 9153 counter packets 0 bytes 0 jump KUBE-SVC-JD5MR3NA4I4DYORP
+		meta l4proto tcp ip daddr 10.96.0.1  tcp dport 443 counter packets 4 bytes 240 jump KUBE-SVC-NPX46M4PTMTKRN6Y
+		meta l4proto udp ip daddr 10.96.0.10  udp dport 53 counter packets 0 bytes 0 jump KUBE-SVC-TCOU7JCQXEZGVUNU
+		meta l4proto tcp ip daddr 10.96.0.10  tcp dport 53 counter packets 0 bytes 0 jump KUBE-SVC-ERIFXISQEP7F7OF4
+		 fib daddr type local counter packets 32 bytes 4224 jump KUBE-NODEPORTS
+	}
+
+	chain KUBE-NODEPORTS {
+	}
+
+	chain KUBE-POSTROUTING {
+		meta mark & 0x00004000 != 0x00004000 counter packets 124 bytes 30256 return
+		counter packets 1 bytes 60 meta mark set mark xor 0x4000
+		 counter packets 1 bytes 60 masquerade fully-random
+	}
+
+	chain KUBE-FIREWALL {
+	}
+
+	chain KUBE-MARK-MASQ {
+		counter packets 1 bytes 60 meta mark set mark or 0x4000
+	}
+
+	chain KUBE-MARK-DROP {
+	}
+
+	chain PREROUTING {
+		type nat hook prerouting priority dstnat; policy accept;
+		 counter packets 2045 bytes 264862 jump KUBE-SERVICES
+		counter packets 1899 bytes 262235 jump KUBE-SERVICES
+	}
+
+	chain OUTPUT {
+		type nat hook output priority dstnat; policy accept;
+		 counter packets 1229 bytes 229802 jump KUBE-SERVICES
+		counter packets 1203 bytes 228509 jump KUBE-SERVICES
+	}
+
+	chain POSTROUTING {
+		type nat hook postrouting priority srcnat; policy accept;
+		 counter packets 1459 bytes 248542 jump KUBE-POSTROUTING
+		counter packets 1433 bytes 247249 jump KUBE-POSTROUTING
+	}
+
+	chain KUBE-KUBELET-CANARY {
+	}
+
+	chain KUBE-PROXY-CANARY {
+	}
+
+	chain KUBE-SVC-NPX46M4PTMTKRN6Y {
+		meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.1  tcp dport 443 counter packets 1 bytes 60 jump KUBE-MARK-MASQ
+		 counter packets 7 bytes 420 jump KUBE-SEP-KSERYG5HKT6IOJHF
+	}
+
+	chain KUBE-SEP-KSERYG5HKT6IOJHF {
+		ip saddr 192.168.4.63  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		meta l4proto tcp  meta l4proto tcp counter packets 7 bytes 420 dnat to 192.168.4.63:6443
+	}
+
+	chain KUBE-SVC-JD5MR3NA4I4DYORP {
+		meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.10  tcp dport 9153 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		 counter packets 0 bytes 0 jump KUBE-SEP-ULDCLMLB7VLHOMJ5
+	}
+
+	chain KUBE-SEP-ULDCLMLB7VLHOMJ5 {
+		ip saddr 10.244.1.51  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.1.51:9153
+	}
+
+	chain KUBE-SVC-TCOU7JCQXEZGVUNU {
+		meta l4proto udp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.10  udp dport 53 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		 counter packets 0 bytes 0 jump KUBE-SEP-647RWIEZ6KB2IYOO
+	}
+
+	chain KUBE-SEP-647RWIEZ6KB2IYOO {
+		ip saddr 10.244.1.51  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		meta l4proto udp  meta l4proto udp counter packets 0 bytes 0 dnat to 10.244.1.51:53
+	}
+
+	chain KUBE-SVC-ERIFXISQEP7F7OF4 {
+		meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.10  tcp dport 53 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		 counter packets 0 bytes 0 jump KUBE-SEP-XJFYCII5DW3D2NNP
+	}
+
+	chain KUBE-SEP-XJFYCII5DW3D2NNP {
+		ip saddr 10.244.1.51  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+		meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.1.51:53
+	}
+}
+table ip mangle {
+	chain KUBE-IPTABLES-HINT {
+	}
+
+	chain KUBE-KUBELET-CANARY {
+	}
+
+	chain KUBE-PROXY-CANARY {
+	}
+}
+table ip6 mangle {
+	chain KUBE-IPTABLES-HINT {
+	}
+
+	chain KUBE-KUBELET-CANARY {
+	}
+
+	chain KUBE-PROXY-CANARY {
+	}
+}
+# Warning: table ip6 nat is managed by iptables-nft, do not touch!
+table ip6 nat {
+	chain KUBE-KUBELET-CANARY {
+	}
+
+	chain KUBE-PROXY-CANARY {
+	}
+
+	chain KUBE-SERVICES {
+		ip6 daddr != ::1  fib daddr type local counter packets 0 bytes 0 jump KUBE-NODEPORTS
+	}
+
+	chain OUTPUT {
+		type nat hook output priority dstnat; policy accept;
+		 counter packets 55 bytes 10945 jump KUBE-SERVICES
+	}
+
+	chain PREROUTING {
+		type nat hook prerouting priority dstnat; policy accept;
+		 counter packets 390 bytes 60870 jump KUBE-SERVICES
+	}
+
+	chain KUBE-POSTROUTING {
+		meta mark & 0x00004000 != 0x00004000 counter packets 2 bytes 398 return
+		counter packets 0 bytes 0 meta mark set mark xor 0x4000
+		 counter packets 0 bytes 0 # Warning: XT target MASQUERADE not found
+xt target "MASQUERADE"
+	}
+
+	chain POSTROUTING {
+		type nat hook postrouting priority srcnat; policy accept;
+		 counter packets 55 bytes 10945 jump KUBE-POSTROUTING
+	}
+
+	chain KUBE-NODEPORTS {
+	}
+
+	chain KUBE-MARK-MASQ {
+		counter packets 0 bytes 0 meta mark set mark or 0x4000
+	}
+}
+# Warning: table ip6 filter is managed by iptables-nft, do not touch!
+table ip6 filter {
+	chain KUBE-KUBELET-CANARY {
+	}
+
+	chain KUBE-PROXY-CANARY {
+	}
+
+	chain KUBE-EXTERNAL-SERVICES {
+	}
+
+	chain INPUT {
+		type filter hook input priority filter; policy accept;
+		counter packets 3638 bytes 553909 jump KUBE-FIREWALL
+		ct state new  counter packets 2244 bytes 466917 jump KUBE-PROXY-FIREWALL
+		 counter packets 3638 bytes 553909 jump KUBE-NODEPORTS
+		ct state new  counter packets 2244 bytes 466917 jump KUBE-EXTERNAL-SERVICES
+	}
+
+	chain FORWARD {
+		type filter hook forward priority filter; policy accept;
+		ct state new  counter packets 0 bytes 0 jump KUBE-PROXY-FIREWALL
+		 counter packets 1087 bytes 69212 jump KUBE-FORWARD
+		ct state new  counter packets 0 bytes 0 jump KUBE-SERVICES
+		ct state new  counter packets 0 bytes 0 jump KUBE-EXTERNAL-SERVICES
+	}
+
+	chain KUBE-NODEPORTS {
+	}
+
+	chain KUBE-SERVICES {
+	}
+
+	chain OUTPUT {
+		type filter hook output priority filter; policy accept;
+		counter packets 1127 bytes 165514 jump KUBE-FIREWALL
+		ct state new  counter packets 330 bytes 63690 jump KUBE-PROXY-FIREWALL
+		ct state new  counter packets 330 bytes 63690 jump KUBE-SERVICES
+	}
+
+	chain KUBE-FORWARD {
+		ct state invalid counter packets 0 bytes 0 drop
+		 meta mark & 0x00004000 == 0x00004000 counter packets 0 bytes 0 accept
+		 ct state related,established counter packets 0 bytes 0 accept
+	}
+
+	chain KUBE-PROXY-FIREWALL {
+	}
+
+	chain KUBE-FIREWALL {
+	}
+}
+table ip flannel-ipv4 {
+	comment "rules for flannel-ipv4"
+	chain postrtg {
+		comment "chain to manage traffic masquerading by flannel"
+		type nat hook postrouting priority srcnat; policy accept;
+		meta mark 0x00004000 return
+		ip saddr 10.244.1.0/24 ip daddr 10.244.0.0/16 return
+		ip saddr 10.244.0.0/16 ip daddr 10.244.1.0/24 return
+		ip saddr != 10.244.1.0/24 ip daddr 10.244.0.0/16 return
+		ip saddr 10.244.0.0/16 ip daddr != 224.0.0.0/4 masquerade fully-random
+		ip saddr != 10.244.0.0/16 ip daddr 10.244.0.0/16 masquerade fully-random
+	}
+
+	chain forward {
+		comment "chain to accept flannel traffic"
+		type filter hook forward priority filter; policy accept;
+		ip saddr 10.244.0.0/16 accept
+		ip daddr 10.244.0.0/16 accept
+	}
+}
+table ip6 flannel-ipv6 {
+	comment "rules for flannel-ipv6"
+}
