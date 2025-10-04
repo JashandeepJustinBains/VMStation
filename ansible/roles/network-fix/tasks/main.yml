@@ -92,6 +92,35 @@
     mode: '0755'
   ignore_errors: false
 
+- name: Pre-create Flannel CNI config on RHEL 10+ (workaround for SELinux/permission issues)
+  become: true
+  ansible.builtin.copy:
+    content: |
+      {
+        "name": "cni0",
+        "cniVersion": "0.3.1",
+        "plugins": [
+          {
+            "type": "flannel",
+            "delegate": {
+              "hairpinMode": true,
+              "isDefaultGateway": true
+            }
+          },
+          {
+            "type": "portmap",
+            "capabilities": {
+              "portMappings": true
+            }
+          }
+        ]
+      }
+    dest: /etc/cni/net.d/10-flannel.conflist
+    owner: root
+    group: root
+    mode: '0644'
+  when: ansible_facts['os_family'] == "RedHat"
+
 - name: Remove all conflicting CNI configs (keep only Flannel)
   become: true
   ansible.builtin.find:
