@@ -67,6 +67,8 @@
                 labels:
                   app.kubernetes.io/name: prometheus
               spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -230,6 +232,8 @@
                 labels:
                   app.kubernetes.io/name: grafana
               spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
@@ -325,6 +329,8 @@
                 labels:
                   app.kubernetes.io/name: loki
               spec:
+                nodeSelector:
+                  node-role.kubernetes.io/control-plane: ""
                 tolerations:
                 - key: node-role.kubernetes.io/control-plane
                   operator: Exists
