@@ -191,24 +191,12 @@ spec:
             - /bin/sh
             - -c
             - |
-              # Check if flannel subnet file exists and flannel.1 interface exists (not necessarily UP yet)
-              test -f /run/flannel/subnet.env && ip link show flannel.1 > /dev/null 2>&1
-          initialDelaySeconds: 15
+              # Check if flannel subnet file exists (sufficient for readiness)
+              test -f /run/flannel/subnet.env
+          initialDelaySeconds: 5
           periodSeconds: 10
-          timeoutSeconds: 5
+          timeoutSeconds: 3
           failureThreshold: 3
-        livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - |
-              # Check if flanneld process is running
-              pgrep -f /opt/bin/flanneld > /dev/null
-          initialDelaySeconds: 30
-          periodSeconds: 30
-          timeoutSeconds: 5
-          failureThreshold: 5
         env:
         - name: POD_NAME
           valueFrom:

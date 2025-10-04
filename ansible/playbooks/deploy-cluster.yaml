@@ -250,23 +250,15 @@
 
     - name: Verify CNI config exists on all nodes (critical for pod networking)
       ansible.builtin.shell: |
-        # Check CNI config via kubectl exec on Flannel pods (safer than SSH)
+        # Check CNI config directly on host filesystem (not in containers)
         all_present=true
         for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{.items[*].metadata.name}'); do
-          pod=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods \
-            --field-selector spec.nodeName=$node -l app=flannel -o jsonpath='{.items[0].metadata.name}')
-          
-          if [ -n "$pod" ]; then
-            # Check if CNI config was created by init container
-            if ! kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel exec $pod \
-              -- test -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null; then
-              echo "CNI config missing on node $node (pod: $pod)"
-              all_present=false
-            else
-              echo "✓ CNI config present on node $node"
-            fi
+          # SSH to node and check host filesystem
+          if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@$node \
+            "test -f /etc/cni/net.d/10-flannel.conflist" 2>/dev/null; then
+            echo "✓ CNI config present on node $node"
           else
-            echo "No Flannel pod found on node $node"
+            echo "CNI config missing on node $node"
             all_present=false
           fi
         done
@@ -280,7 +272,7 @@
       args:
         executable: /bin/bash
       retries: 10
-      delay: 10
+      delay: 5
       register: cni_config_check
       until: cni_config_check.rc == 0
 
