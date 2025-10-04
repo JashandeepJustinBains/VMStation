@@ -161,10 +161,13 @@ echo ""
 echo "1.1 Disabling swap (required for kubelet)..."
 # Use heredoc over ssh to avoid quoting/escaping issues with sed on the remote host.
 if [ -n "${SUDO_PASS:-}" ]; then
-  printf "%s\n" "$SUDO_PASS" | ssh jashandeepjustinbains@192.168.4.62 "sudo -S bash -s" <<'EOF'
+  (
+    printf "%s\n" "$SUDO_PASS"
+    cat <<'CMD'
 swapoff -a 2>/dev/null || echo "Swap already disabled"
 sed -i '/[[:space:]]swap[[:space:]]/s/^/# /' /etc/fstab 2>/dev/null || echo "fstab already updated"
-EOF
+CMD
+  ) | ssh jashandeepjustinbains@192.168.4.62 "sudo -S -p '' bash -s"
 else
   ssh jashandeepjustinbains@192.168.4.62 "sudo bash -s" <<'EOF'
 swapoff -a 2>/dev/null || echo "Swap already disabled"
