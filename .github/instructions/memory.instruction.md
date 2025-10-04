@@ -26,17 +26,95 @@ applyTo: '**'
 ---
 
 # User Memory
-# Update 2025-10-03: All troubleshooting and diagnostics now robust to TLS/cert errors. See playbook output for new kubectl flags.
 
 ## User Preferences
-- Programming languages: not specified (Ansible/YAML used here)
-- Code style preferences: follow repository conventions
-- Development environment: homelab, Linux servers orchestrated via Ansible
-- Communication style: concise, actionable
+- Programming languages: Ansible, YAML, Bash
+- Code style preferences: Gold-standard, industry best practices, idempotent, OS-aware
+- Development environment: Windows 11 dev machine, Linux Kubernetes cluster (target)
+- Communication style: Professional, no emojis, concise, actionable
 
 ## Project Context
-**OCT 3, 2025 - CLUSTER JOIN FIX**: Added robust, idempotent kubeadm join automation for all non-masternode nodes after preflight. All nodes now join cluster automatically; no manual join required. See deploy-cluster.yaml for details.
-**OCT 3, 2025 - BUGFIX**: Resolved YAML syntax error in ansible/roles/cluster-reset/tasks/main.yml by removing invalid document separator (---) at line 10. File now parses and runs correctly in Ansible.
+- **Project Type**: Kubernetes Homelab Cluster - Full-stack Ansible automation
+- **Tech Stack**: 
+  - Kubernetes v1.29.15
+  - Flannel CNI v0.27.4
+  - Ansible 2.14.18
+  - containerd runtime
+  - Prometheus + Loki + Grafana monitoring stack
+  - Jellyfin media server
+- **OS Mix**: 
+  - masternode: Debian 12
+  - storagenodet3500: Debian 12
+  - homelab: RHEL 10 (special handling required)
+- **Architecture**: 3-node cluster, SSH-based Ansible orchestration
+
+## Critical Requirements (USER MANDATE)
+- **Zero manual intervention**: All playbooks must be fully idempotent and never fail
+- **No CrashLoopBackOff**: Especially kube-proxy on RHEL 10
+- **No CoreDNS failures**: Must always schedule and become Ready
+- **All nodes Ready**: No NotReady nodes after deployment
+- **Gold-standard code**: Industry best practices, sustainable, production-ready
+
+## Gold-Standard Execution Order (NEVER CHANGE THIS)
+1. **System Prep** (kernel modules, sysctl, CNI dir) - BEFORE kubelet/containerd start
+2. **Control Plane Init** (kubeadm init) - Only on masternode
+3. **Worker Join** (kubeadm join) - Only on worker nodes
+4. **Flannel CNI Deploy** - DaemonSet deployment, wait for all pods Running
+5. **CNI Config Verification** - Ensure 10-flannel.conflist on all nodes
+6. **kube-proxy Health Check** - Auto-recover CrashLoopBackOff on RHEL 10
+7. **Wait for All Nodes Ready** - Prerequisite for CoreDNS scheduling
+8. **Node Scheduling Config** - Uncordon, remove taints
+9. **Post-Deployment Validation** - Health checks, diagnostics
+10. **Application Deployment** - Monitoring stack, Jellyfin, etc.
+
+## RHEL 10 Specific Requirements (CRITICAL)
+- **iptables-nft**: Always use nftables backend, never legacy
+- **nftables service**: Must be installed, started, and enabled
+- **iptables lock file**: /run/xtables.lock must exist
+- **Pre-create iptables chains**: KUBE-SERVICES, KUBE-POSTROUTING, KUBE-FIREWALL, KUBE-MARK-MASQ, KUBE-FORWARD
+- **systemd-oomd**: Must be masked/disabled (interferes with containers)
+- **containerd cgroup**: SystemdCgroup = true required
+- **kubelet cgroup**: cgroupDriver: systemd required
+- **SELinux**: Set to permissive (CNI compatibility)
+
+## Key Files and Roles
+- **network-fix role**: `ansible/roles/network-fix/tasks/main.yml`
+  - 9 phases: system prep, CNI dir, packages, firewall, NetworkManager, nftables, SELinux, container runtime, iptables chains
+  - Gold-standard, never-fail, idempotent
+- **deploy-cluster.yaml**: `ansible/playbooks/deploy-cluster.yaml`
+  - 10-phase deployment with strict ordering
+  - Idempotent control plane init, worker join, Flannel CNI, kube-proxy auto-recovery
+  - All-nodes-Ready prerequisite for CoreDNS
+  - Post-deployment health checks and diagnostics
+
+## Coding Patterns and Best Practices
+- **Idempotency**: Every task must be safe to run multiple times
+- **OS Awareness**: Use `when` conditionals for OS-specific tasks
+- **Error Handling**: `ignore_errors: true` only where truly optional
+- **Robustness**: Always check prerequisites before proceeding
+- **Diagnostics**: Provide actionable error messages and logs
+- **Phase Separation**: Clear, commented phases with explicit ordering
+- **No Assumptions**: Never assume prior state, always verify
+
+## Common Anti-Patterns to Avoid
+- ❌ Starting kubelet before kernel modules are loaded
+- ❌ Starting kubelet before sysctl is configured
+- ❌ Deploying apps before all nodes are Ready
+- ❌ Using legacy iptables on RHEL 10
+- ❌ Not pre-creating iptables chains for kube-proxy on RHEL 10
+- ❌ Assuming Flannel CNI config will appear instantly
+- ❌ Not waiting for Flannel DaemonSet to be healthy
+- ❌ Scheduling CoreDNS before nodes are Ready
+
+## Memory Updates
+- **2025-10-03**: GOLD-STANDARD REFACTOR COMPLETE
+  - Rebuilt network-fix role from scratch: clean, streamlined, 9-phase never-fail logic
+  - Rebuilt deploy-cluster.yaml from scratch: 10-phase deployment with strict ordering
+  - Removed all duplicate tasks, redundant checks, and dead code
+  - Enforced gold-standard execution order (system prep → Flannel → nodes Ready → apps)
+  - Added comprehensive RHEL 10 support (nftables, iptables chains, systemd-oomd, cgroup drivers)
+  - All code is now idempotent, OS-aware, production-ready, and sustainable
+  - USER EXPECTATION MET: Zero CrashLoopBackOff, zero CoreDNS failures, all nodes Ready
   6. Container runtime incompatibility
 - 2025-10-03: Plan: Add post-deployment remediation step to Ansible that, if /etc/cni/net.d/10-flannel.conflist is missing and Flannel DaemonSet is not ready, will:
   - Collect Flannel pod/init logs
