@@ -298,6 +298,15 @@
   ignore_errors: true
   changed_when: false
 
+- name: Check if kubelet config exists (RHEL 10+)
+  become: true
+  ansible.builtin.stat:
+    path: /var/lib/kubelet/config.yaml
+  register: kubelet_config_stat
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
 - name: Ensure kubelet uses systemd cgroup driver (RHEL 10+)
   become: true
   ansible.builtin.lineinfile:
@@ -308,6 +317,7 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
+    - kubelet_config_stat.stat.exists | default(false)
   notify: restart kubelet
   ignore_errors: true
 
@@ -317,12 +327,19 @@
   become: true
   ansible.builtin.shell: |
     # Create all required iptables chains for kube-proxy (idempotent)
+    # nat table chains
     iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
+    iptables -t nat -N KUBE-NODEPORTS 2>/dev/null || true
     iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
     iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
     iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
-    iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
+    iptables -t nat -N KUBE-MARK-DROP 2>/dev/null || true
+    
+    # filter table chains
     iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
+    iptables -t filter -N KUBE-EXTERNAL-SERVICES 2>/dev/null || true
+    iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
+    iptables -t filter -N KUBE-NODEPORTS 2>/dev/null || true
     
     # Link chains to base chains (check before add to ensure idempotency)
     iptables -t nat -C PREROUTING -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A PREROUTING -j KUBE-SERVICES

@@ -271,7 +271,7 @@ Deploy monitoring stack (Prometheus, Loki, Grafana) and applications (Jellyfin).
 - `ansible/roles/diagnostics/` - Post-deployment diagnostics
 
 ### Playbooks
-- `ansible/playbooks/deploy-cluster.yaml` - 10-phase cluster deployment
+- `ansible/playbooks/deploy-cluster.yaml` - 8-phase cluster deployment
 - `ansible/plays/deploy-apps.yaml` - Monitoring stack deployment
 - `ansible/plays/jellyfin.yml` - Jellyfin media server deployment
 

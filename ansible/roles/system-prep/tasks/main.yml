@@ -1,6 +1,20 @@
 - name: Debug become password variable
   debug:
     msg: "{{ inventory_hostname }}: ansible_become_pass is {{ ansible_become_pass | default('NOT SET') }}"
+
+- name: Ensure /etc/hosts has all cluster nodes
+  become: true
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    block: |
+      # VMStation Kubernetes Cluster Nodes
+      192.168.4.63 masternode
+      192.168.4.61 storagenodet3500
+      192.168.4.62 homelab
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - VMStation Cluster"
+    create: yes
+    backup: no
+
 - name: Check kubectl version
   ansible.builtin.command:
     cmd: kubectl version --client
