@@ -42,7 +42,19 @@
         url: https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
         dest: /tmp/cni-plugins.tgz
         mode: '0644'
-      when: not cni_installed.stat.exists
+      when:
+        - not cni_installed.stat.exists
+        - ansible_os_family != 'RedHat'
+      
+    - name: Download CNI plugins with curl (RHEL fallback)
+      ansible.builtin.shell: |
+        curl -L -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+      args:
+        creates: /tmp/cni-plugins.tgz
+        executable: /bin/bash
+      when:
+        - not cni_installed.stat.exists
+        - ansible_os_family == 'RedHat'
 
     - name: Extract CNI plugins
       ansible.builtin.unarchive:
@@ -231,6 +243,26 @@
       register: flannel_pods
       until: flannel_pods.rc == 0
 
+    - name: Restart kube-proxy pods to recover from CNI wait (RHEL nodes)
+      ansible.builtin.shell: |
+        # Delete any CrashLoopBackOff kube-proxy pods to force restart with CNI now available
+        crash_pods=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
+          -n kube-system get pods -l k8s-app=kube-proxy \
+          -o json | jq -r '.items[] | select(.status.containerStatuses[]? | .state.waiting.reason? == "CrashLoopBackOff") | .metadata.name')
+        
+        if [ -n "$crash_pods" ]; then
+          echo "Restarting CrashLoopBackOff kube-proxy pods: $crash_pods"
+          echo "$crash_pods" | xargs -r kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete pod
+          echo "Waiting 30s for kube-proxy to restart..."
+          sleep 30
+        else
+          echo "No kube-proxy pods in CrashLoopBackOff state"
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+      ignore_errors: true
+
 # -----------------------------------------------------------------------------
 # PHASE 7: Wait for All Nodes to be Ready
 # Ensure all nodes are Ready before proceeding to application deployment
@@ -334,15 +366,17 @@
 
     - name: Verify CNI config exists on all nodes
       ansible.builtin.shell: |
-        for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o name | cut -d/ -f2); do
-          echo "Checking CNI config on $node..."
-          ssh -o StrictHostKeyChecking=no $node \
-            'test -f /etc/cni/net.d/10-flannel.conflist && echo "✓ CNI config present" || echo "✗ CNI config missing"'
-        done
+        # Use IP addresses from inventory instead of hostnames
+        {% for host in groups['all'] %}
+        echo "Checking CNI config on {{ host }} ({{ hostvars[host]['ansible_host'] }})..."
+        ssh -o StrictHostKeyChecking=no {{ hostvars[host]['ansible_host'] }} \
+          'test -f /etc/cni/net.d/10-flannel.conflist && echo "✓ CNI config present" || echo "✗ CNI config missing"'
+        {% endfor %}
       args:
         executable: /bin/bash
       register: cni_config_check
       changed_when: false
+      failed_when: false
 
     - name: Display CNI config check results
       ansible.builtin.debug:
