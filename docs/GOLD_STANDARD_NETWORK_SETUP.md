@@ -50,8 +50,15 @@ systemctl mask systemd-oomd
 
 #### Required iptables Configuration
 ```bash
+# Idempotent approach: create alternatives if missing, then set
+update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10 || true
+update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 || true
+
+# Now safe to set backend
 update-alternatives --set iptables /usr/sbin/iptables-nft
 update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+
+# Create lock file to prevent race conditions
 touch /run/xtables.lock
 ```
 
@@ -84,6 +91,15 @@ cgroupDriver: systemd
 ```
 
 ### 3. System Prerequisites (Before kubelet starts)
+
+#### Swap Must Be Disabled
+```bash
+swapoff -a
+# Comment out swap in /etc/fstab for persistence
+sed -i '/\sswap\s/s/^/# /' /etc/fstab
+```
+
+**Why**: Kubelet refuses to start when swap is enabled. This is a hard requirement for Kubernetes.
 
 #### Kernel Modules
 ```bash
@@ -282,6 +298,7 @@ Deploy monitoring stack (Prometheus, Loki, Grafana) and applications (Jellyfin).
 ## Best Practices
 
 ### DO
+- ✅ Always disable swap before kubelet starts
 - ✅ Always run full system prep before kubelet starts
 - ✅ Always wait for Flannel DaemonSet ready before checking node status
 - ✅ Always verify CNI config exists on all nodes
@@ -289,14 +306,17 @@ Deploy monitoring stack (Prometheus, Loki, Grafana) and applications (Jellyfin).
 - ✅ Always pre-create iptables chains on RHEL 10
 - ✅ Always use idempotent checks (stat, grep -q, etc.)
 - ✅ Always provide actionable diagnostics on failure
+- ✅ Always use --install before --set for update-alternatives (RHEL 10)
 
 ### DON'T
+- ❌ Never start kubelet with swap enabled
 - ❌ Never start kubelet without kernel modules loaded
 - ❌ Never start kubelet without sysctl configured
 - ❌ Never deploy apps before all nodes Ready
 - ❌ Never use legacy iptables on RHEL 10
 - ❌ Never assume CNI config appears instantly
 - ❌ Never skip health checks between phases
+- ❌ Never use --set alternatives without checking if they exist first (RHEL 10)
 
 ## Success Criteria
 After deployment completes:

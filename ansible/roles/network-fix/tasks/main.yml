@@ -7,6 +7,21 @@
 
 # --- PHASE 1: System Prerequisites (BEFORE kubelet/containerd start) ---
 
+- name: Ensure swap is disabled (immediate, before kubelet)
+  become: true
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+  ignore_errors: true
+
+- name: Disable swap in /etc/fstab (persistent across reboots)
+  become: true
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\s+swap\s+.*)$'
+    replace: '# \1'
+    backup: yes
+  ignore_errors: true
+
 - name: Load all required kernel modules (immediate, before kubelet)
   become: true
   ansible.builtin.modprobe:
@@ -215,6 +230,37 @@
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
 
+- name: Check if iptables-nft binary exists (RHEL 10+)
+  become: true
+  ansible.builtin.stat:
+    path: /usr/sbin/iptables-nft
+  register: iptables_nft_binary
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Check if iptables alternatives entry exists (RHEL 10+)
+  become: true
+  ansible.builtin.stat:
+    path: /var/lib/alternatives/iptables
+  register: iptables_alt_exists
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Install iptables alternatives if missing (RHEL 10+)
+  become: true
+  ansible.builtin.command:
+    cmd: update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - iptables_nft_binary.stat.exists | default(false)
+    - not (iptables_alt_exists.stat.exists | default(false))
+  register: iptables_alt_install
+  changed_when: iptables_alt_install.rc == 0
+  ignore_errors: true
+
 - name: Configure iptables to use nftables backend (RHEL 10+)
   become: true
   ansible.builtin.command:
@@ -224,6 +270,37 @@
     - ansible_distribution_major_version is version('10', '>=')
   ignore_errors: true
   changed_when: false
+
+- name: Check if ip6tables-nft binary exists (RHEL 10+)
+  become: true
+  ansible.builtin.stat:
+    path: /usr/sbin/ip6tables-nft
+  register: ip6tables_nft_binary
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Check if ip6tables alternatives entry exists (RHEL 10+)
+  become: true
+  ansible.builtin.stat:
+    path: /var/lib/alternatives/ip6tables
+  register: ip6tables_alt_exists
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Install ip6tables alternatives if missing (RHEL 10+)
+  become: true
+  ansible.builtin.command:
+    cmd: update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - ip6tables_nft_binary.stat.exists | default(false)
+    - not (ip6tables_alt_exists.stat.exists | default(false))
+  register: ip6tables_alt_install
+  changed_when: ip6tables_alt_install.rc == 0
+  ignore_errors: true
 
 - name: Configure ip6tables to use nftables backend (RHEL 10+)
   become: true
