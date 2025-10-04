@@ -6,6 +6,7 @@ INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts"
 SPIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/spin-down-cluster.yaml"
 DEPLOY_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-cluster.yaml"
 RESET_PLAYBOOK="$REPO_ROOT/ansible/playbooks/reset-cluster.yaml"
+AUTOSLEEP_SETUP_PLAYBOOK="$REPO_ROOT/ansible/playbooks/setup-autosleep.yaml"
 
 info(){ echo "[INFO] $*" >&2; }
 warn(){ echo "[WARN] $*" >&2; }
@@ -17,14 +18,16 @@ Usage: $(basename "$0") [command]
 
 Commands:
   (no args)    Run main deploy playbook
+  setup        Setup auto-sleep monitoring (one-time setup)
   spindown     Cordon/drain and scale to zero on all nodes, then cleanup CNI/flannel artifacts (does NOT power off)
   reset        Comprehensive cluster reset - removes all K8s config/network (preserves SSH and ethernet)
   help         Show this message
 
 Examples:
-  ./deploy.sh
-  ./deploy.sh spindown
-  ./deploy.sh reset
+  ./deploy.sh              # Deploy cluster
+  ./deploy.sh setup        # Setup auto-sleep monitoring
+  ./deploy.sh spindown     # Graceful shutdown without power-off
+  ./deploy.sh reset        # Full reset before redeployment
 
 EOF
 }
@@ -107,7 +110,19 @@ run_cleanup_on_hosts(){
 cmd_deploy(){
   info "Running deploy playbook: ${DEPLOY_PLAYBOOK}"
   require_bin ansible-playbook
-  ansible-playbook -i "$INVENTORY_FILE" "$DEPLOY_PLAYBOOK"
+  
+  # Validate inventory file exists
+  if [ ! -f "$INVENTORY_FILE" ]; then
+    err "Inventory file not found: $INVENTORY_FILE"
+  fi
+  
+  # Run deployment
+  if ansible-playbook -i "$INVENTORY_FILE" "$DEPLOY_PLAYBOOK"; then
+    info "Deployment completed successfully"
+    info "Cluster is ready for use"
+  else
+    err "Deployment failed - check logs above for details"
+  fi
 }
 
 cmd_reset(){
@@ -115,7 +130,25 @@ cmd_reset(){
   info "Running comprehensive cluster reset playbook: ${RESET_PLAYBOOK}"
   info "This will remove all Kubernetes config and network interfaces"
   info "SSH keys and physical ethernet interfaces will be preserved"
-  ansible-playbook -i "$INVENTORY_FILE" "$RESET_PLAYBOOK"
+  
+  if ansible-playbook -i "$INVENTORY_FILE" "$RESET_PLAYBOOK"; then
+    info "Reset completed successfully"
+    info "Cluster is ready for fresh deployment"
+  else
+    err "Reset failed - check logs above for details"
+  fi
+}
+
+cmd_setup_autosleep(){
+  require_bin ansible-playbook
+  info "Setting up auto-sleep monitoring..."
+  
+  if ansible-playbook -i "$INVENTORY_FILE" "$AUTOSLEEP_SETUP_PLAYBOOK"; then
+    info "Auto-sleep monitoring setup complete"
+    info "Cluster will automatically sleep after 2 hours of inactivity"
+  else
+    err "Setup failed - check logs above for details"
+  fi
 }
 
 cmd_spindown(){
@@ -139,6 +172,7 @@ main(){
   fi
   case "$1" in
     help|-h|--help) usage; exit 0 ;;
+    setup) cmd_setup_autosleep ;;
     spindown) cmd_spindown ;;
     reset) cmd_reset ;;
     *) usage; err "unknown command: $1" ;;

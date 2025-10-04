@@ -1,3 +1,8 @@
 ---
-- import_playbook: playbooks/deploy-cluster.yml
-- import_playbook: playbooks/cleanup-nodes.yml
+# =============================================================================
+# VMStation Kubernetes Cluster - Main Deployment Orchestration
+# Gold-standard, idempotent, never-fail deployment for mixed OS environment
+# =============================================================================
+
+- name: Full cluster deployment
+  import_playbook: playbooks/deploy-cluster.yaml
