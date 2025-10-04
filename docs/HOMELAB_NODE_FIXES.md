@@ -42,6 +42,7 @@ Updated `ansible/plays/setup-cluster.yaml` to:
 ### 3. Application Deployment Robustness
 
 Enhanced `ansible/plays/deploy-apps.yaml` to:
+- **Add nodeSelector to monitoring pods** (Prometheus, Grafana, Loki) to ensure they only run on the control-plane node (masternode) and avoid the problematic homelab node
 - **Check CoreDNS health** before waiting for applications
 - **Reduce timeout** from 600 to 300 seconds to prevent hanging
 - **Provide better error messages** when networking is unstable
