@@ -370,3 +370,12 @@
     - name: Display final cluster status
       ansible.builtin.debug:
         var: final_status.stdout_lines
+
+# -----------------------------------------------------------------------------
+# PHASE 9: Application Deployment
+# Import higher-level application playbooks (monitoring stack, dashboards, Jellyfin)
+# These are run after the cluster is healthy and ready for workloads.
+# -----------------------------------------------------------------------------
+- import_playbook: ../plays/deploy-apps.yaml
+
+- import_playbook: ../plays/jellyfin.yml
