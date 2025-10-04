@@ -21,12 +21,14 @@ RHEL 10 uses nftables as default, but kube-proxy requires iptables. Without prop
 - iptables commands fail
 - kube-proxy cannot create required NAT/filter chains
 - kube-proxy crashes with exit code 2
+- Flannel detects nftables and switches to nftables mode, requiring the nftables service to be running
 
 ### 2. Missing System Prerequisites
 - Swap enabled (kubelet refuses to run)
 - SELinux enforcing mode
 - Required kernel modules not loaded
 - iptables chains not pre-created
+- nftables service not running (RHEL 10)
 
 ### 3. Stale Network Configuration
 - Old CNI configurations causing conflicts
@@ -42,6 +44,7 @@ The `fix_homelab_node_issues.sh` script addresses all these issues in 6 comprehe
 - Sets SELinux to permissive mode
 - Loads kernel modules: br_netfilter, overlay, nf_conntrack, vxlan
 - Configures iptables backend for RHEL 10 (nftables)
+- Enables and starts nftables service (required for Flannel nftables mode)
 - Creates xtables.lock file
 - Pre-creates kube-proxy iptables chains
 - Clears stale interfaces
@@ -175,6 +178,7 @@ kubectl get nodes -o wide
    ssh 192.168.4.62 'sudo swapon -s'
    ssh 192.168.4.62 'getenforce'
    ssh 192.168.4.62 'lsmod | grep -E "br_netfilter|vxlan|overlay"'
+   ssh 192.168.4.62 'sudo systemctl status nftables'
    ```
 
 ## Technical Details
@@ -184,6 +188,10 @@ kubectl get nodes -o wide
 The script configures iptables to use the nftables backend:
 
 ```bash
+# Enable and start nftables service (required for Flannel nftables mode)
+systemctl enable nftables
+systemctl start nftables
+
 # Install alternatives
 update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10
 update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10

@@ -193,6 +193,11 @@ echo "1.4 Configuring iptables backend for RHEL 10..."
 if remote jashandeepjustinbains@192.168.4.62 'test -f /usr/sbin/iptables-nft' 2>/dev/null; then
     echo "  Detected iptables-nft, configuring nftables backend..."
     
+    # Ensure nftables service is running (required for Flannel nftables mode)
+    echo "  Enabling and starting nftables service..."
+  remote_sudo jashandeepjustinbains@192.168.4.62 "systemctl enable nftables 2>/dev/null || true"
+  remote_sudo jashandeepjustinbains@192.168.4.62 "systemctl start nftables 2>/dev/null || echo \"nftables already running\""
+    
     # Install alternatives if they don't exist
   remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10 2>/dev/null || true"
   remote_sudo jashandeepjustinbains@192.168.4.62 "update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10 2>/dev/null || true"
