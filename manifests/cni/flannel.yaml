@@ -100,7 +100,7 @@ data:
   net-conf.json: |
     {
       "Network": "10.244.0.0/16",
-      "EnableNFTables": false,
+      "EnableNFTables": true,
       "Backend": {
         "Type": "vxlan"
       }
@@ -178,10 +178,37 @@ spec:
           requests:
             cpu: "100m"
             memory: "50Mi"
+          limits:
+            cpu: "200m"
+            memory: "100Mi"
         securityContext:
-          privileged: false
+          privileged: true
           capabilities:
             add: ["NET_ADMIN", "NET_RAW"]
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if flannel subnet file exists and flannel.1 interface is up
+              test -f /run/flannel/subnet.env && ip link show flannel.1 | grep -q 'state UP'
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if flanneld process is running
+              pgrep -f /opt/bin/flanneld > /dev/null
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
         env:
         - name: POD_NAME
           valueFrom:

@@ -161,11 +161,44 @@
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
 # Deploy Flannel CNI and wait for all pods to be Running
+# CRITICAL: Ensure host networking is stable before Flannel deployment
 # -----------------------------------------------------------------------------
 - name: Phase 5 - Deploy Flannel CNI
   hosts: monitoring_nodes
   become: true
   tasks:
+    - name: Ensure all nodes have stable networking before Flannel deployment
+      ansible.builtin.shell: |
+        # Verify all nodes are reachable and network is stable
+        nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+        
+        echo "Verifying network stability for nodes: $nodes"
+        all_stable=true
+        
+        for ip in $nodes; do
+          # Ping test
+          if ping -c 3 -W 2 $ip &>/dev/null; then
+            echo "✓ Node $ip is reachable"
+          else
+            echo "✗ Node $ip is not reachable"
+            all_stable=false
+          fi
+        done
+        
+        if [ "$all_stable" = "true" ]; then
+          echo "All nodes have stable networking"
+          exit 0
+        else
+          echo "Some nodes have unstable networking"
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      register: network_stability
+      retries: 5
+      delay: 10
+      until: network_stability.rc == 0
+
     - name: Check if Flannel is already deployed
       ansible.builtin.shell: |
         kubectl --kubeconfig=/etc/kubernetes/admin.conf \
@@ -174,66 +207,6 @@
         executable: /bin/bash
       register: flannel_check
       changed_when: false
-
-    - name: Collect nodes' OS image strings via kubectl (control-plane)
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{range .items[*]}{.metadata.name}::{.status.nodeInfo.osImage}{"\n"}{end}'
-      args:
-        executable: /bin/bash
-      register: node_osinfo
-      changed_when: false
-
-    - name: Set rhel10_present if any node's osImage indicates Red Hat Enterprise Linux 10
-      ansible.builtin.set_fact:
-        rhel10_present: "{{ node_osinfo.stdout_lines | select('search', 'Red Hat Enterprise Linux 10') | list | length > 0 }}"
-      changed_when: false
-
-    - name: Apply Flannel ConfigMap with EnableNFTables=true for RHEL 10+ (idempotent)
-      ansible.builtin.shell: |
-        cat <<'YAML' | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
-        apiVersion: v1
-        kind: ConfigMap
-        metadata:
-          name: kube-flannel-cfg
-          namespace: kube-flannel
-          labels:
-            tier: node
-            k8s-app: flannel
-            app: flannel
-        data:
-          cni-conf.json: |
-            {
-              "name": "cni0",
-              "cniVersion": "0.3.1",
-              "plugins": [
-                {
-                  "type": "flannel",
-                  "delegate": {
-                    "hairpinMode": true,
-                    "isDefaultGateway": true
-                  }
-                },
-                {
-                  "type": "portmap",
-                  "capabilities": {
-                    "portMappings": true
-                  }
-                }
-              ]
-            }
-          net-conf.json: |
-            {
-              "Network": "10.244.0.0/16",
-              "EnableNFTables": true,
-              "Backend": {
-                "Type": "vxlan"
-              }
-            }
-        YAML
-      args:
-        executable: /bin/bash
-      when: rhel10_present | default(false)
-      changed_when: true
 
     - name: Apply Flannel CNI manifest
       ansible.builtin.shell: |
@@ -246,11 +219,15 @@
     - name: Wait for Flannel DaemonSet to be ready
       ansible.builtin.shell: |
         kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=180s
+          -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=240s
       args:
         executable: /bin/bash
+      retries: 2
+      delay: 10
+      register: flannel_rollout
+      until: flannel_rollout.rc == 0
 
-    - name: Verify Flannel pods are Running
+    - name: Verify Flannel pods are Running on all nodes
       ansible.builtin.shell: |
         total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
         running_pods=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
@@ -266,30 +243,88 @@
         fi
       args:
         executable: /bin/bash
-      retries: 12
+      retries: 15
       delay: 10
       register: flannel_pods
       until: flannel_pods.rc == 0
 
-    - name: Restart kube-proxy pods to recover from CNI wait (RHEL nodes)
+    - name: Verify CNI config exists on all nodes (critical for pod networking)
       ansible.builtin.shell: |
-        # Delete any CrashLoopBackOff kube-proxy pods to force restart with CNI now available
+        # Check CNI config via kubectl exec on Flannel pods (safer than SSH)
+        all_present=true
+        for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{.items[*].metadata.name}'); do
+          pod=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods \
+            --field-selector spec.nodeName=$node -l app=flannel -o jsonpath='{.items[0].metadata.name}')
+          
+          if [ -n "$pod" ]; then
+            # Check if CNI config was created by init container
+            if ! kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel exec $pod \
+              -- test -f /etc/cni/net.d/10-flannel.conflist 2>/dev/null; then
+              echo "CNI config missing on node $node (pod: $pod)"
+              all_present=false
+            else
+              echo "✓ CNI config present on node $node"
+            fi
+          else
+            echo "No Flannel pod found on node $node"
+            all_present=false
+          fi
+        done
+        
+        if [ "$all_present" = "true" ]; then
+          exit 0
+        else
+          echo "Not all nodes have CNI config"
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      retries: 10
+      delay: 10
+      register: cni_config_check
+      until: cni_config_check.rc == 0
+
+    - name: Restart kube-proxy pods to recover from CrashLoopBackOff (if any)
+      ansible.builtin.shell: |
+        # Delete any CrashLoopBackOff or Error kube-proxy pods to force clean restart
         crash_pods=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
           -n kube-system get pods -l k8s-app=kube-proxy \
-          -o json | jq -r '.items[] | select(.status.containerStatuses[]? | .state.waiting.reason? == "CrashLoopBackOff") | .metadata.name')
+          -o json | jq -r '.items[] | select(.status.containerStatuses[]? | (.state.waiting.reason? == "CrashLoopBackOff" or .state.waiting.reason? == "Error")) | .metadata.name')
         
         if [ -n "$crash_pods" ]; then
-          echo "Restarting CrashLoopBackOff kube-proxy pods: $crash_pods"
-          echo "$crash_pods" | xargs -r kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete pod
-          echo "Waiting 30s for kube-proxy to restart..."
-          sleep 30
+          echo "Restarting CrashLoopBackOff/Error kube-proxy pods:"
+          echo "$crash_pods"
+          echo "$crash_pods" | xargs -r kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete pod --wait=false
+          echo "Waiting 45s for kube-proxy to restart with CNI now available..."
+          sleep 45
         else
-          echo "No kube-proxy pods in CrashLoopBackOff state"
+          echo "No kube-proxy pods in CrashLoopBackOff/Error state"
         fi
       args:
         executable: /bin/bash
       changed_when: false
       ignore_errors: true
+
+    - name: Wait for all kube-proxy pods to be Running
+      ansible.builtin.shell: |
+        total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
+        running_proxies=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
+          -n kube-system get pods -l k8s-app=kube-proxy --field-selector=status.phase=Running --no-headers | wc -l)
+        
+        if [ "$running_proxies" -eq "$total_nodes" ]; then
+          echo "All kube-proxy pods running: $running_proxies/$total_nodes"
+          exit 0
+        else
+          echo "kube-proxy pods not all running: $running_proxies/$total_nodes"
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -l k8s-app=kube-proxy -o wide
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      retries: 12
+      delay: 10
+      register: proxy_pods
+      until: proxy_pods.rc == 0
 
 # -----------------------------------------------------------------------------
 # PHASE 6: Wait for All Nodes to be Ready

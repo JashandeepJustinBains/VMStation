@@ -109,6 +109,27 @@
   loop: "{{ cni_conflicting_files.files }}"
   when: cni_conflicting_files.matched > 0
 
+- name: Remove stale CNI bridge interfaces (prevents pod sandbox issues)
+  become: true
+  ansible.builtin.shell: |
+    # Delete cni0 bridge if it exists (will be recreated by Flannel)
+    if ip link show cni0 &>/dev/null; then
+      ip link set cni0 down 2>/dev/null || true
+      ip link delete cni0 2>/dev/null || true
+      echo "Removed stale cni0 bridge"
+    fi
+    
+    # Clean up any veth interfaces
+    for iface in $(ip link show type veth | grep -o 'veth[^@:]*' || true); do
+      ip link delete $iface 2>/dev/null || true
+    done
+    
+    echo "CNI interfaces cleaned"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
 # --- PHASE 3: OS-Specific Network Packages ---
 
 - name: Install required network packages (RHEL/CentOS)
@@ -229,6 +250,37 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
+
+- name: Configure nftables to allow Flannel VXLAN and pod traffic (RHEL 10+)
+  become: true
+  ansible.builtin.shell: |
+    # Create minimal nftables rules that allow Flannel to work
+    # This prevents nftables from blocking VXLAN overlay or pod traffic
+    
+    # Check if our table exists
+    if ! nft list table inet filter &>/dev/null; then
+      # Create a permissive filter table for Flannel
+      nft add table inet filter
+      nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
+      nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
+      nft add chain inet filter output '{ type filter hook output priority 0; policy accept; }'
+    fi
+    
+    # Ensure FORWARD policy is ACCEPT (critical for pod-to-pod traffic)
+    nft list chain inet filter forward | grep -q 'policy accept' || \
+      nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
+    
+    # Save nftables rules
+    nft list ruleset > /etc/sysconfig/nftables.conf
+    
+    echo "nftables configured for Flannel compatibility"
+  args:
+    executable: /bin/bash
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  changed_when: false
+  ignore_errors: true
 
 - name: Check if iptables-nft binary exists (RHEL 10+)
   become: true

@@ -37,3 +37,531 @@ Thee playbooks should bee short and concise with no errors on any run/deployment
 All the Main and deploy-cluster playbooks are corrupted or wrong. Ensure they are short concise but do exactly what is neded of them
 Do not put oveerly long timeouts it just leads to longer wait times for errors to appear, however I am certain you can accomplish this task the first time without errors.
 
+
+
+root@masternode:/srv/monitoring_data/VMStation# ./scripts/fix_homelab_node_issues.sh
+=== Homelab Node Comprehensive Fix ===
+
+This script fixes:
+  - Flannel CrashLoopBackOff on homelab node
+  - kube-proxy crashes on RHEL 10
+  - CoreDNS scheduling issues
+  - Stuck ContainerCreating pods
+
+Please enter the sudo password for remote operations:
+Sudo password:
+Using the provided sudo password for remote operations.
+==========================================
+STEP 1: System-level fixes on homelab node
+==========================================
+
+1.1 Disabling swap (required for kubelet)...
+✓ Swap disabled
+
+1.2 Setting SELinux to permissive mode...
+✓ SELinux set to permissive
+
+1.3 Loading required kernel modules...
+✓ Kernel modules loaded
+
+1.4 Configuring iptables backend for RHEL 10...
+  iptables-legacy detected, no backend change needed
+
+1.5 Creating iptables lock file...
+✓ iptables lock file created
+
+1.6 Pre-creating kube-proxy iptables chains...
+✓ iptables chains pre-created
+
+1.7 Clearing stale network interfaces...
+No cni0 to delete
+✓ Stale interfaces cleared
+
+1.8 Clearing CNI configuration (will be regenerated)...
+✓ CNI configuration cleared
+
+1.9 Restarting kubelet...
+✓ kubelet restarted
+
+Waiting for Kubernetes API to become available...
+✓ Kubernetes API is available
+
+✓ homelab node found
+
+==========================================
+STEP 2: Fix Flannel CrashLoopBackOff
+==========================================
+
+2.1 Checking current Flannel pod status...
+NAME                    READY   STATUS   RESTARTS   AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+kube-flannel-ds-gb25t   0/1     Error    7          14m   192.168.4.62   homelab   <none>           <none>
+
+2.2 Deleting Flannel pod to force recreation...
+  Deleting pod: kube-flannel-ds-gb25t
+pod "kube-flannel-ds-gb25t" deleted from kube-flannel namespace
+✓ Flannel pod deleted
+
+2.3 Waiting for Flannel to restart (30 seconds)...
+
+2.4 Checking new Flannel pod status...
+NAME                    READY   STATUS    RESTARTS   AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+kube-flannel-ds-kntvr   1/1     Running   0          29s   192.168.4.62   homelab   <none>           <none>
+
+==========================================
+STEP 3: Fix kube-proxy CrashLoopBackOff
+==========================================
+
+3.1 Checking current kube-proxy pod status...
+NAME               READY   STATUS    RESTARTS      AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+kube-proxy-96b7q   1/1     Running   8 (33s ago)   14m   192.168.4.62   homelab   <none>           <none>
+
+3.2 Deleting kube-proxy pod to force recreation with new iptables config...
+  Deleting pod: kube-proxy-96b7q
+pod "kube-proxy-96b7q" deleted from kube-system namespace
+✓ kube-proxy pod deleted
+
+3.3 Waiting for kube-proxy to restart (30 seconds)...
+
+3.4 Checking new kube-proxy pod status...
+NAME               READY   STATUS    RESTARTS   AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+kube-proxy-fftnb   1/1     Running   0          30s   192.168.4.62   homelab   <none>           <none>
+
+==========================================
+STEP 4: Fix CoreDNS Scheduling
+==========================================
+
+4.1 Checking CoreDNS pod placement...
+NAME                       READY   STATUS    RESTARTS   AGE   IP            NODE               NOMINATED NODE   READINESS GATES
+coredns-68444cf7cd-9cqxj   1/1     Running   0          14m   10.244.2.4    storagenodet3500   <none>           <none>
+coredns-68444cf7cd-bdg9w   1/1     Running   0          14m   10.244.0.10   masternode         <none>           <none>
+
+4.2 Patching CoreDNS to prefer control-plane nodes...
+deployment.apps/coredns patched (no change)
+✓ CoreDNS scheduling configuration updated
+
+==========================================
+STEP 5: Restart Stuck ContainerCreating Pods
+==========================================
+
+5.1 Checking for stuck pods...
+  No stuck ContainerCreating pods found
+
+==========================================
+STEP 6: Final Validation
+==========================================
+
+6.1 Waiting for pods to stabilize (60 seconds)...
+
+6.2 Checking for CrashLoopBackOff pods...
+✓ No CrashLoopBackOff pods detected
+
+6.3 Final cluster status:
+
+--- Nodes ---
+NAME               STATUS   ROLES           AGE    VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME
+homelab            Ready    <none>          117m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.28
+masternode         Ready    control-plane   118m   v1.29.15   192.168.4.63   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-32-amd64                containerd://1.6.20
+storagenodet3500   Ready    <none>          117m   v1.29.15   192.168.4.61   <none>        Debian GNU/Linux 12 (bookworm)             6.1.0-34-amd64                containerd://1.6.20
+
+--- Flannel Pods ---
+NAME                    READY   STATUS    RESTARTS      AGE    IP             NODE               NOMINATED NODE   READINESS GATES
+kube-flannel-ds-8lgft   1/1     Running   0             117m   192.168.4.63   masternode         <none>           <none>
+kube-flannel-ds-f4scr   1/1     Running   0             117m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-flannel-ds-kntvr   1/1     Running   1 (36s ago)   119s   192.168.4.62   homelab            <none>           <none>
+
+--- kube-system Pods (on homelab) ---
+NAME               READY   STATUS    RESTARTS      AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+kube-proxy-fftnb   1/1     Running   1 (10s ago)   90s   192.168.4.62   homelab   <none>           <none>
+
+--- CoreDNS Pods ---
+NAME                       READY   STATUS    RESTARTS   AGE   IP            NODE               NOMINATED NODE   READINESS GATES
+coredns-68444cf7cd-9cqxj   1/1     Running   0          15m   10.244.2.4    storagenodet3500   <none>           <none>
+coredns-68444cf7cd-bdg9w   1/1     Running   0          15m   10.244.0.10   masternode         <none>           <none>
+
+==========================================
+=== Fix Complete ===
+==========================================
+
+Summary:
+  ✓ System-level fixes applied to homelab node
+  ✓ Flannel pod restarted
+  ✓ kube-proxy pod restarted with proper iptables config
+  ✓ CoreDNS scheduling optimized
+  ✓ Stuck pods cleaned up
+
+If issues persist:
+  1. Check pod logs: kubectl logs -n <namespace> <pod-name>
+  2. Run diagnostics: ./scripts/diagnose-homelab-issues.sh
+  3. Check node status: kubectl describe node homelab
+
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -o wide -A
+NAMESPACE              NAME                                       READY   STATUS    RESTARTS      AGE     IP             NODE               NOMINATED NODE   READINESS GATES
+jellyfin               jellyfin                                   1/1     Running   0             104m    10.244.2.3     storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-8lgft                      1/1     Running   0             119m    192.168.4.63   masternode         <none>           <none>
+kube-flannel           kube-flannel-ds-f4scr                      1/1     Running   0             119m    192.168.4.61   storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-kntvr                      1/1     Running   2 (36s ago)   3m20s   192.168.4.62   homelab            <none>           <none>
+kube-system            coredns-68444cf7cd-9cqxj                   1/1     Running   0             16m     10.244.2.4     storagenodet3500   <none>           <none>
+kube-system            coredns-68444cf7cd-bdg9w                   1/1     Running   0             16m     10.244.0.10    masternode         <none>           <none>
+kube-system            etcd-masternode                            1/1     Running   27            119m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-apiserver-masternode                  1/1     Running   48            119m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-controller-manager-masternode         1/1     Running   69            119m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-24wjl                           1/1     Running   0             119m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-77l8f                           1/1     Running   0             119m    192.168.4.61   storagenodet3500   <none>           <none>
+kube-system            kube-proxy-fftnb                           1/1     Running   2 (28s ago)   2m51s   192.168.4.62   homelab            <none>           <none>
+kube-system            kube-scheduler-masternode                  1/1     Running   69            119m    192.168.4.63   masternode         <none>           <none>
+kubernetes-dashboard   dashboard-metrics-scraper-fbd9c767-fd6mv   1/1     Running   0             105m    10.244.0.9     masternode         <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-547749b7d9-q8vbp      1/1     Running   0             118m    10.244.0.5     masternode         <none>           <none>
+monitoring             grafana-59b7bdb979-blbxf                   1/1     Running   0             118m    10.244.0.3     masternode         <none>           <none>
+monitoring             loki-85d467fb56-xjkbk                      1/1     Running   0             118m    10.244.0.4     masternode         <none>           <none>
+monitoring             prometheus-74887c8bb6-72mcq                1/1     Running   0             118m    10.244.0.2     masternode         <none>           <none>
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -o wide -A
+NAMESPACE              NAME                                       READY   STATUS    RESTARTS      AGE     IP             NODE               NOMINATED NODE   READINESS GATES
+jellyfin               jellyfin                                   1/1     Running   0             105m    10.244.2.3     storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-8lgft                      1/1     Running   0             119m    192.168.4.63   masternode         <none>           <none>
+kube-flannel           kube-flannel-ds-f4scr                      1/1     Running   0             119m    192.168.4.61   storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-kntvr                      1/1     Running   2 (83s ago)   4m7s    192.168.4.62   homelab            <none>           <none>
+kube-system            coredns-68444cf7cd-9cqxj                   1/1     Running   0             17m     10.244.2.4     storagenodet3500   <none>           <none>
+kube-system            coredns-68444cf7cd-bdg9w                   1/1     Running   0             17m     10.244.0.10    masternode         <none>           <none>
+kube-system            etcd-masternode                            1/1     Running   27            120m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-apiserver-masternode                  1/1     Running   48            120m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-controller-manager-masternode         1/1     Running   69            120m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-24wjl                           1/1     Running   0             120m    192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-77l8f                           1/1     Running   0             119m    192.168.4.61   storagenodet3500   <none>           <none>
+kube-system            kube-proxy-fftnb                           1/1     Running   2 (75s ago)   3m38s   192.168.4.62   homelab            <none>           <none>
+kube-system            kube-scheduler-masternode                  1/1     Running   69            120m    192.168.4.63   masternode         <none>           <none>
+kubernetes-dashboard   dashboard-metrics-scraper-fbd9c767-fd6mv   1/1     Running   0             105m    10.244.0.9     masternode         <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-547749b7d9-q8vbp      1/1     Running   0             119m    10.244.0.5     masternode         <none>           <none>
+monitoring             grafana-59b7bdb979-blbxf                   1/1     Running   0             119m    10.244.0.3     masternode         <none>           <none>
+monitoring             loki-85d467fb56-xjkbk                      1/1     Running   0             119m    10.244.0.4     masternode         <none>           <none>
+monitoring             prometheus-74887c8bb6-72mcq                1/1     Running   0             119m    10.244.0.2     masternode         <none>           <none>
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -o wide -A
+NAMESPACE              NAME                                       READY   STATUS             RESTARTS        AGE    IP             NODE               NOMINATED NODE   READINESS GATES
+jellyfin               jellyfin                                   1/1     Running            0               119m   10.244.2.3     storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-8lgft                      1/1     Running            0               133m   192.168.4.63   masternode         <none>           <none>
+kube-flannel           kube-flannel-ds-f4scr                      1/1     Running            0               133m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-flannel           kube-flannel-ds-kntvr                      0/1     CrashLoopBackOff   6 (2m25s ago)   17m    192.168.4.62   homelab            <none>           <none>
+kube-system            coredns-68444cf7cd-9cqxj                   1/1     Running            0               30m    10.244.2.4     storagenodet3500   <none>           <none>
+kube-system            coredns-68444cf7cd-bdg9w                   1/1     Running            0               30m    10.244.0.10    masternode         <none>           <none>
+kube-system            etcd-masternode                            1/1     Running            27              133m   192.168.4.63   masternode         <none>           <none>
+kube-system            kube-apiserver-masternode                  1/1     Running            48              133m   192.168.4.63   masternode         <none>           <none>
+kube-system            kube-controller-manager-masternode         1/1     Running            69              133m   192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-24wjl                           1/1     Running            0               133m   192.168.4.63   masternode         <none>           <none>
+kube-system            kube-proxy-77l8f                           1/1     Running            0               133m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-system            kube-proxy-fftnb                           0/1     CrashLoopBackOff   6 (2m35s ago)   17m    192.168.4.62   homelab            <none>           <none>
+kube-system            kube-scheduler-masternode                  1/1     Running            69              133m   192.168.4.63   masternode         <none>           <none>
+kubernetes-dashboard   dashboard-metrics-scraper-fbd9c767-fd6mv   1/1     Running            0               119m   10.244.0.9     masternode         <none>           <none>
+kubernetes-dashboard   kubernetes-dashboard-547749b7d9-q8vbp      1/1     Running            0               133m   10.244.0.5     masternode         <none>           <none>
+monitoring             grafana-59b7bdb979-blbxf                   1/1     Running            0               133m   10.244.0.3     masternode         <none>           <none>
+monitoring             loki-85d467fb56-xjkbk                      1/1     Running            0               133m   10.244.0.4     masternode         <none>           <none>
+monitoring             prometheus-74887c8bb6-72mcq                1/1     Running            0               133m   10.244.0.2     masternode         <none>           <none>
+root@masternode:/srv/monitoring_data/VMStation# kubectl describe pod kube-flannel-ds-kntvr -n kube-flannel
+Name:                 kube-flannel-ds-kntvr
+Namespace:            kube-flannel
+Priority:             2000001000
+Priority Class Name:  system-node-critical
+Service Account:      flannel
+Node:                 homelab/192.168.4.62
+Start Time:           Sat, 04 Oct 2025 15:08:36 -0400
+Labels:               app=flannel
+                      controller-revision-hash=b954df96
+                      k8s-app=flannel
+                      pod-template-generation=1
+                      tier=node
+Annotations:          <none>
+Status:               Running
+IP:                   192.168.4.62
+IPs:
+  IP:           192.168.4.62
+Controlled By:  DaemonSet/kube-flannel-ds
+Init Containers:
+  install-cni-plugin:
+    Container ID:  containerd://de7b89fbd48918ade99db4477ee1523b11d414b5ac95517c13fdbde13694b1f7
+    Image:         ghcr.io/flannel-io/flannel-cni-plugin:v1.8.0-flannel1
+    Image ID:      ghcr.io/flannel-io/flannel-cni-plugin@sha256:25bd091c1867d0237432a4bcb5da720f39198b7d80edcae3bdf08262d242985c
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      cp
+    Args:
+      -f
+      /flannel
+      /opt/cni/bin/flannel
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sat, 04 Oct 2025 15:23:47 -0400
+      Finished:     Sat, 04 Oct 2025 15:23:47 -0400
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /opt/cni/bin from cni-plugin (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-s85n7 (ro)
+  install-cni:
+    Container ID:  containerd://cf5856d48217bd30090da24ba3c2feb67deb715d03d0b86058fe60ab58a1e698
+    Image:         ghcr.io/flannel-io/flannel:v0.27.4
+    Image ID:      ghcr.io/flannel-io/flannel@sha256:2ff3c5cb44d0e27b09f27816372084c98fa12486518ca95cb4a970f4a1a464c4
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      cp
+    Args:
+      -f
+      /etc/kube-flannel/cni-conf.json
+      /etc/cni/net.d/10-flannel.conflist
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sat, 04 Oct 2025 15:23:48 -0400
+      Finished:     Sat, 04 Oct 2025 15:23:48 -0400
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /etc/cni/net.d from cni (rw)
+      /etc/kube-flannel/ from flannel-cfg (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-s85n7 (ro)
+Containers:
+  kube-flannel:
+    Container ID:  containerd://db8dc6ff4e1001490ddddfced52497e4a4bda36e239cc8572ce0783cfcd52512
+    Image:         ghcr.io/flannel-io/flannel:v0.27.4
+    Image ID:      ghcr.io/flannel-io/flannel@sha256:2ff3c5cb44d0e27b09f27816372084c98fa12486518ca95cb4a970f4a1a464c4
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /opt/bin/flanneld
+    Args:
+      --ip-masq
+      --kube-subnet-mgr
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sat, 04 Oct 2025 15:22:35 -0400
+      Finished:     Sat, 04 Oct 2025 15:23:45 -0400
+    Ready:          False
+    Restart Count:  6
+    Requests:
+      cpu:     100m
+      memory:  50Mi
+    Environment:
+      POD_NAME:                   kube-flannel-ds-kntvr (v1:metadata.name)
+      POD_NAMESPACE:              kube-flannel (v1:metadata.namespace)
+      EVENT_QUEUE_DEPTH:          5000
+      CONT_WHEN_CACHE_NOT_READY:  false
+    Mounts:
+      /etc/kube-flannel/ from flannel-cfg (rw)
+      /run/flannel from run (rw)
+      /run/xtables.lock from xtables-lock (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-s85n7 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       False
+  ContainersReady             False
+  PodScheduled                True
+Volumes:
+  run:
+    Type:          HostPath (bare host directory volume)
+    Path:          /run/flannel
+    HostPathType:
+  cni-plugin:
+    Type:          HostPath (bare host directory volume)
+    Path:          /opt/cni/bin
+    HostPathType:
+  cni:
+    Type:          HostPath (bare host directory volume)
+    Path:          /etc/cni/net.d
+    HostPathType:
+  flannel-cfg:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      kube-flannel-cfg
+    Optional:  false
+  xtables-lock:
+    Type:          HostPath (bare host directory volume)
+    Path:          /run/xtables.lock
+    HostPathType:  FileOrCreate
+  kube-api-access-s85n7:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 :NoSchedule op=Exists
+                             node.kubernetes.io/disk-pressure:NoSchedule op=Exists
+                             node.kubernetes.io/memory-pressure:NoSchedule op=Exists
+                             node.kubernetes.io/network-unavailable:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists
+                             node.kubernetes.io/pid-pressure:NoSchedule op=Exists
+                             node.kubernetes.io/unreachable:NoExecute op=Exists
+                             node.kubernetes.io/unschedulable:NoSchedule op=Exists
+Events:
+  Type    Reason          Age                  From               Message
+  ----    ------          ----                 ----               -------
+  Normal  Scheduled       17m                  default-scheduler  Successfully assigned kube-flannel/kube-flannel-ds-kntvr to homelab
+  Normal  Pulled          16m (x2 over 17m)    kubelet            Container image "ghcr.io/flannel-io/flannel:v0.27.4" already present on machine
+  Normal  Created         16m (x2 over 17m)    kubelet            Created container: install-cni
+  Normal  Started         16m (x2 over 17m)    kubelet            Started container install-cni
+  Normal  Pulled          16m (x2 over 17m)    kubelet            Container image "ghcr.io/flannel-io/flannel:v0.27.4" already present on machine
+  Normal  Created         16m (x2 over 17m)    kubelet            Created container: kube-flannel
+  Normal  Started         16m (x2 over 17m)    kubelet            Started container kube-flannel
+  Normal  Pulled          15m (x3 over 17m)    kubelet            Container image "ghcr.io/flannel-io/flannel-cni-plugin:v1.8.0-flannel1" already present on machine
+  Normal  Created         15m (x3 over 17m)    kubelet            Created container: install-cni-plugin
+  Normal  Started         15m (x3 over 17m)    kubelet            Started container install-cni-plugin
+  Normal  SandboxChanged  15m (x2 over 16m)    kubelet            Pod sandbox changed, it will be killed and re-created.
+  Normal  Killing         2m45s (x7 over 16m)  kubelet            Stopping container kube-flannel
+root@masternode:/srv/monitoring_data/VMStation# kubectl describe pod kube-proxy-fftnb  -n kube-system
+Name:                 kube-proxy-fftnb
+Namespace:            kube-system
+Priority:             2000001000
+Priority Class Name:  system-node-critical
+Service Account:      kube-proxy
+Node:                 homelab/192.168.4.62
+Start Time:           Sat, 04 Oct 2025 15:09:05 -0400
+Labels:               controller-revision-hash=5787cd6d6c
+                      k8s-app=kube-proxy
+                      pod-template-generation=1
+Annotations:          <none>
+Status:               Running
+IP:                   192.168.4.62
+IPs:
+  IP:           192.168.4.62
+Controlled By:  DaemonSet/kube-proxy
+Containers:
+  kube-proxy:
+    Container ID:  containerd://60f41f2da939bf83f1bc02f55a4b356fac80e4ee14232bc6e5839b63eef0dd68
+    Image:         registry.k8s.io/kube-proxy:v1.29.15
+    Image ID:      registry.k8s.io/kube-proxy@sha256:243026cfce3209b89d9f883789108276ffec87d98190ac2a77776edd4e0e6015
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      /usr/local/bin/kube-proxy
+      --config=/var/lib/kube-proxy/config.conf
+      --hostname-override=$(NODE_NAME)
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    2
+      Started:      Sat, 04 Oct 2025 15:22:22 -0400
+      Finished:     Sat, 04 Oct 2025 15:23:35 -0400
+    Ready:          False
+    Restart Count:  6
+    Environment:
+      NODE_NAME:   (v1:spec.nodeName)
+    Mounts:
+      /lib/modules from lib-modules (ro)
+      /run/xtables.lock from xtables-lock (rw)
+      /var/lib/kube-proxy from kube-proxy (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-sp4m6 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       False
+  ContainersReady             False
+  PodScheduled                True
+Volumes:
+  kube-proxy:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      kube-proxy
+    Optional:  false
+  xtables-lock:
+    Type:          HostPath (bare host directory volume)
+    Path:          /run/xtables.lock
+    HostPathType:  FileOrCreate
+  lib-modules:
+    Type:          HostPath (bare host directory volume)
+    Path:          /lib/modules
+    HostPathType:
+  kube-api-access-sp4m6:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              kubernetes.io/os=linux
+Tolerations:                 op=Exists
+                             node.kubernetes.io/disk-pressure:NoSchedule op=Exists
+                             node.kubernetes.io/memory-pressure:NoSchedule op=Exists
+                             node.kubernetes.io/network-unavailable:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists
+                             node.kubernetes.io/pid-pressure:NoSchedule op=Exists
+                             node.kubernetes.io/unreachable:NoExecute op=Exists
+                             node.kubernetes.io/unschedulable:NoSchedule op=Exists
+Events:
+  Type     Reason          Age                   From               Message
+  ----     ------          ----                  ----               -------
+  Normal   Scheduled       17m                   default-scheduler  Successfully assigned kube-system/kube-proxy-fftnb to homelab
+  Normal   SandboxChanged  13m (x3 over 16m)     kubelet            Pod sandbox changed, it will be killed and re-created.
+  Normal   Pulled          13m (x4 over 17m)     kubelet            Container image "registry.k8s.io/kube-proxy:v1.29.15" already present on machine
+  Normal   Created         13m (x4 over 17m)     kubelet            Created container: kube-proxy
+  Normal   Started         13m (x4 over 17m)     kubelet            Started container kube-proxy
+  Normal   Killing         7m18s (x6 over 16m)   kubelet            Stopping container kube-proxy
+  Warning  BackOff         2m38s (x38 over 15m)  kubelet            Back-off restarting failed container kube-proxy in pod kube-proxy-fftnb_kube-system(c7071ef0-dd87-475b-b466-a5e1f56288cb)
+root@masternode:/srv/monitoring_data/VMStation# kubectl logs kube-proxy-fftnb  -n kube-system
+I1004 19:22:22.119171       1 server_others.go:72] "Using iptables proxy"
+I1004 19:22:22.138677       1 server.go:1050] "Successfully retrieved node IP(s)" IPs=["192.168.4.62"]
+I1004 19:22:22.146570       1 conntrack.go:58] "Setting nf_conntrack_max" nfConntrackMax=524288
+I1004 19:22:22.169443       1 server.go:652] "kube-proxy running in dual-stack mode" primary ipFamily="IPv4"
+I1004 19:22:22.169583       1 server_others.go:168] "Using iptables Proxier"
+I1004 19:22:22.171965       1 server_others.go:512] "Detect-local-mode set to ClusterCIDR, but no cluster CIDR for family" ipFamily="IPv6"
+I1004 19:22:22.171976       1 server_others.go:529] "Defaulting to no-op detect-local"
+I1004 19:22:22.171994       1 proxier.go:245] "Setting route_localnet=1 to allow node-ports on localhost; to change this either disable iptables.localhostNodePorts (--iptables-localhost-nodeports) or set nodePortAddresses (--nodeport-addresses) to filter loopback addresses"
+I1004 19:22:22.172195       1 server.go:865] "Version info" version="v1.29.15"
+I1004 19:22:22.172208       1 server.go:867] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
+I1004 19:22:22.173122       1 config.go:188] "Starting service config controller"
+I1004 19:22:22.173138       1 config.go:315] "Starting node config controller"
+I1004 19:22:22.173147       1 shared_informer.go:311] Waiting for caches to sync for service config
+I1004 19:22:22.173153       1 shared_informer.go:311] Waiting for caches to sync for node config
+I1004 19:22:22.173180       1 config.go:97] "Starting endpoint slice config controller"
+I1004 19:22:22.173198       1 shared_informer.go:311] Waiting for caches to sync for endpoint slice config
+I1004 19:22:22.273296       1 shared_informer.go:318] Caches are synced for service config
+I1004 19:22:22.273345       1 shared_informer.go:318] Caches are synced for node config
+I1004 19:22:22.274447       1 shared_informer.go:318] Caches are synced for endpoint slice config
+root@masternode:/srv/monitoring_data/VMStation# kubectl logs kube-flannel-ds-kntvr -n kube-flannel
+Defaulted container "kube-flannel" out of: kube-flannel, install-cni-plugin (init), install-cni (init)
+I1004 19:22:35.050871       1 main.go:215] CLI flags config: {etcdEndpoints:http://127.0.0.1:4001,http://127.0.0.1:2379 etcdPrefix:/coreos.com/network etcdKeyfile: etcdCertfile: etcdCAFile: etcdUsername: etcdPassword: version:false kubeSubnetMgr:true kubeApiUrl: kubeAnnotationPrefix:flannel.alpha.coreos.com kubeConfigFile: iface:[] ifaceRegex:[] ipMasq:true ipMasqRandomFullyDisable:false ifaceCanReach: subnetFile:/run/flannel/subnet.env publicIP: publicIPv6: subnetLeaseRenewMargin:60 healthzIP:0.0.0.0 healthzPort:0 iptablesResyncSeconds:5 iptablesForwardRules:true blackholeRoute:false netConfPath:/etc/kube-flannel/net-conf.json setNodeNetworkUnavailable:true}
+W1004 19:22:35.050999       1 client_config.go:659] Neither --kubeconfig nor --master was specified.  Using the inClusterConfig.  This might not work.
+I1004 19:22:35.073633       1 kube.go:139] Waiting 10m0s for node controller to sync
+I1004 19:22:35.073681       1 kube.go:537] Starting kube subnet manager
+I1004 19:22:35.078859       1 kube.go:558] Creating the node lease for IPv4. This is the n.Spec.PodCIDRs: [10.244.1.0/24]
+I1004 19:22:35.078889       1 kube.go:558] Creating the node lease for IPv4. This is the n.Spec.PodCIDRs: [10.244.0.0/24]
+I1004 19:22:35.078898       1 kube.go:558] Creating the node lease for IPv4. This is the n.Spec.PodCIDRs: [10.244.2.0/24]
+I1004 19:22:36.074006       1 kube.go:163] Node controller sync successful
+I1004 19:22:36.074035       1 main.go:241] Created subnet manager: Kubernetes Subnet Manager - homelab
+I1004 19:22:36.074057       1 main.go:244] Installing signal handlers
+I1004 19:22:36.074181       1 main.go:523] Found network config - Backend type: vxlan
+I1004 19:22:36.080032       1 kube.go:737] List of node(homelab) annotations: map[string]string{"flannel.alpha.coreos.com/backend-data":"{\"VNI\":1,\"VtepMAC\":\"72:d4:ac:95:3e:d5\"}", "flannel.alpha.coreos.com/backend-type":"vxlan", "flannel.alpha.coreos.com/kube-subnet-manager":"true", "flannel.alpha.coreos.com/public-ip":"192.168.4.62", "kubeadm.alpha.kubernetes.io/cri-socket":"unix:///var/run/containerd/containerd.sock", "node.alpha.kubernetes.io/ttl":"0", "volumes.kubernetes.io/controller-managed-attach-detach":"true"}
+I1004 19:22:36.080112       1 match.go:211] Determining IP address of default interface
+I1004 19:22:36.081655       1 match.go:269] Using interface with name eno1 and address 192.168.4.62
+I1004 19:22:36.081691       1 match.go:291] Defaulting external address to interface address (192.168.4.62)
+I1004 19:22:36.081762       1 vxlan.go:128] VXLAN config: VNI=1 Port=0 GBP=false Learning=false DirectRouting=false
+I1004 19:22:36.086520       1 kube.go:704] List of node(homelab) annotations: map[string]string{"flannel.alpha.coreos.com/backend-data":"{\"VNI\":1,\"VtepMAC\":\"72:d4:ac:95:3e:d5\"}", "flannel.alpha.coreos.com/backend-type":"vxlan", "flannel.alpha.coreos.com/kube-subnet-manager":"true", "flannel.alpha.coreos.com/public-ip":"192.168.4.62", "kubeadm.alpha.kubernetes.io/cri-socket":"unix:///var/run/containerd/containerd.sock", "node.alpha.kubernetes.io/ttl":"0", "volumes.kubernetes.io/controller-managed-attach-detach":"true"}
+I1004 19:22:36.086556       1 vxlan.go:199] Interface flannel.1 mac address set to: 72:d4:ac:95:3e:d5
+I1004 19:22:36.087239       1 main.go:378] Cleaning-up unused traffic manager rules
+I1004 19:22:36.087261       1 iptables.go:59] Cleaning-up iptables rules...
+I1004 19:22:36.116013       1 nftables.go:43] Starting flannel in nftables mode...
+W1004 19:22:36.166531       1 main.go:612] no subnet found for key: FLANNEL_IPV6_NETWORK in file: /run/flannel/subnet.env
+W1004 19:22:36.166592       1 main.go:612] no subnet found for key: FLANNEL_IPV6_SUBNET in file: /run/flannel/subnet.env
+I1004 19:22:36.166604       1 nftables.go:155] nftables: setting up masking rules (ipv4)
+I1004 19:22:36.207963       1 nftables.go:80] Changing default FORWARD chain policy to ACCEPT
+I1004 19:22:36.227252       1 main.go:467] Wrote subnet file to /run/flannel/subnet.env
+I1004 19:22:36.227286       1 main.go:471] Running backend.
+I1004 19:22:36.227414       1 vxlan_network.go:68] watching for new subnet leases
+I1004 19:22:36.227465       1 vxlan_network.go:115] starting vxlan device watcher
+I1004 19:22:36.227519       1 subnet.go:150] Batch elem [0] is { lease.Event{Type:0, Lease:lease.Lease{EnableIPv4:true, EnableIPv6:false, Subnet:ip.IP4Net{IP:0xaf40000, PrefixLen:0x18}, IPv6Subnet:ip.IP6Net{IP:(*ip.IP6)(nil), PrefixLen:0x0}, Attrs:lease.LeaseAttrs{PublicIP:0xc0a8043f, PublicIPv6:(*ip.IP6)(nil), BackendType:"vxlan", BackendData:json.RawMessage{0x7b, 0x22, 0x56, 0x4e, 0x49, 0x22, 0x3a, 0x31, 0x2c, 0x22, 0x56, 0x74, 0x65, 0x70, 0x4d, 0x41, 0x43, 0x22, 0x3a, 0x22, 0x61, 0x32, 0x3a, 0x35, 0x64, 0x3a, 0x63, 0x32, 0x3a, 0x66, 0x62, 0x3a, 0x39, 0x37, 0x3a, 0x37, 0x66, 0x22, 0x7d}, BackendV6Data:json.RawMessage(nil)}, Expiration:time.Date(1, time.January, 1, 0, 0, 0, 0, time.UTC), Asof:0}} }
+I1004 19:22:36.227680       1 subnet.go:150] Batch elem [0] is { lease.Event{Type:0, Lease:lease.Lease{EnableIPv4:true, EnableIPv6:false, Subnet:ip.IP4Net{IP:0xaf40200, PrefixLen:0x18}, IPv6Subnet:ip.IP6Net{IP:(*ip.IP6)(nil), PrefixLen:0x0}, Attrs:lease.LeaseAttrs{PublicIP:0xc0a8043d, PublicIPv6:(*ip.IP6)(nil), BackendType:"vxlan", BackendData:json.RawMessage{0x7b, 0x22, 0x56, 0x4e, 0x49, 0x22, 0x3a, 0x31, 0x2c, 0x22, 0x56, 0x74, 0x65, 0x70, 0x4d, 0x41, 0x43, 0x22, 0x3a, 0x22, 0x64, 0x61, 0x3a, 0x36, 0x31, 0x3a, 0x31, 0x30, 0x3a, 0x38, 0x38, 0x3a, 0x65, 0x61, 0x3a, 0x36, 0x39, 0x22, 0x7d}, BackendV6Data:json.RawMessage(nil)}, Expiration:time.Date(1, time.January, 1, 0, 0, 0, 0, time.UTC), Asof:0}} }
+I1004 19:22:36.227743       1 vxlan_network.go:265] Received Subnet Event with VxLan: BackendType: vxlan, PublicIP: 192.168.4.63, PublicIPv6: (nil), BackendData: {"VNI":1,"VtepMAC":"a2:5d:c2:fb:97:7f"}, BackendV6Data: (nil)
+I1004 19:22:36.228396       1 vxlan_network.go:265] Received Subnet Event with VxLan: BackendType: vxlan, PublicIP: 192.168.4.61, PublicIPv6: (nil), BackendData: {"VNI":1,"VtepMAC":"da:61:10:88:ea:69"}, BackendV6Data: (nil)
+I1004 19:22:36.244750       1 main.go:492] Waiting for all goroutines to exit
+I1004 19:23:45.941823       1 main.go:507] shutdownHandler sent cancel signal...
+I1004 19:23:45.941841       1 vxlan_network.go:134] stopping vxlan device watcher
+E1004 19:23:45.941861       1 subnet.go:135] could not watch leases: context canceled
+I1004 19:23:45.941897       1 vxlan_network.go:99] vxlanMissingChan closed
+I1004 19:23:45.942416       1 main.go:495] Exiting cleanly...

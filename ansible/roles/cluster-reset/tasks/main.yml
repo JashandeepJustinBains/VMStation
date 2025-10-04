@@ -83,6 +83,26 @@
     iptables -t mangle -X
   ignore_errors: true
 
+- name: Flush nftables rules on RHEL 10+ (cleanup nftables tables)
+  ansible.builtin.shell: |
+    # Flush all nftables rules while preserving system defaults
+    nft flush ruleset
+    
+    # Recreate basic permissive ruleset for next deployment
+    nft add table inet filter
+    nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
+    nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
+    nft add chain inet filter output '{ type filter hook output priority 0; policy accept; }'
+    
+    # Save the clean ruleset
+    nft list ruleset > /etc/sysconfig/nftables.conf || true
+  args:
+    executable: /bin/bash
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
 - name: Remove ipvs rules if present
   ansible.builtin.shell: |
     if command -v ipvsadm >/dev/null 2>&1; then

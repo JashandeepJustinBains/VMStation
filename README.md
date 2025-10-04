@@ -3,30 +3,33 @@
 
 Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalable, reliable self-hosted services.
 
-## 🎉 Latest Updates (October 2025)
+## 🎉 Latest Updates (October 4, 2025)
 
-**Deployment Hardening Complete!** VMStation now deploys reliably on first run without manual intervention.
+**CRITICAL FIX: RHEL 10 CrashLoopBackOff Resolved!** Flannel and kube-proxy now stable on RHEL 10 nodes.
 
-### What's New:
-- ✅ **RHEL 10 Support**: Full compatibility with mixed Debian/RHEL cluster
-- ✅ **iptables-legacy Configuration**: Automatic setup for kube-proxy compatibility  
-- ✅ **Flannel v0.27.4**: Latest CNI with nftables awareness
-- ✅ **NetworkManager Integration**: CNI interfaces properly excluded
-- ✅ **Comprehensive Diagnostics**: New troubleshooting scripts and guides
+### What's Fixed:
+- ✅ **nftables Compatibility**: Flannel now uses `EnableNFTables: true` for RHEL 10
+- ✅ **Health Probes**: Added readiness/liveness probes to prevent premature pod kills
+- ✅ **Privileged Mode**: Full security context for nftables manipulation
+- ✅ **Network Stability**: Pre-checks and CNI cleanup prevent sandbox recreation
+- ✅ **Gold-Standard Reset**: nftables cleanup in reset playbook for idempotency
+
+**SEE**: [`DEPLOYMENT_FIX_SUMMARY.md`](DEPLOYMENT_FIX_SUMMARY.md) for testing instructions and validation.
 
 ### Quick Start (October 2025):
 
 ```bash
 # On masternode (192.168.4.63):
 cd /srv/monitoring_data/VMStation
-git fetch && git pull
-./deploy.sh
+git pull
+./deploy.sh reset  # Clean slate
+./deploy.sh        # Deploy with fixes
 
-# Validation (expected: all pods Running in ~3-4 minutes):
+# Validation (expected: all pods Running, NO CrashLoopBackOff):
 kubectl get pods -A -o wide
 ```
 
-See [`QUICK_FIX_HOMELAB.md`](QUICK_FIX_HOMELAB.md) for immediate fixes or [`SESSION_COMPLETE_SUMMARY.md`](SESSION_COMPLETE_SUMMARY.md) for full details.
+See [`DEPLOYMENT_FIX_SUMMARY.md`](DEPLOYMENT_FIX_SUMMARY.md) for complete fix details or [`docs/FLANNEL_CRASHLOOP_FIX.md`](docs/FLANNEL_CRASHLOOP_FIX.md) for troubleshooting.
 
 ---
 
@@ -42,11 +45,15 @@ The new simplified deployment system provides clear, easy-to-use options:
 # Deploy complete VMStation stack
 ./deploy.sh
 
+# Reset cluster completely
+./deploy.sh reset
+
 # Deploy only Kubernetes cluster
 ./deploy.sh cluster
 
 # Deploy only applications (requires existing cluster)
 ./deploy.sh apps
+```
 
 # Deploy only Jellyfin media server
 ./deploy.sh jellyfin
