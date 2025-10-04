@@ -259,3 +259,1343 @@ applyTo: '**'
 - Validate all nodes become Ready and Flannel CNI config is created on all nodes
 - If successful, deployment is robust and production-ready for homelab cluster
 - No post-deployment fix scripts needed - everything works on first deployment
+
+
+## Latest deployment output
+root@masternode:/srv/monitoring_data/VMStation# ./deploy.sh
+[INFO] Running deploy playbook: /srv/monitoring_data/VMStation/ansible/playbooks/deploy-cluster.yaml
+[WARNING]: Collection community.general does not support Ansible version 2.14.18
+[WARNING]: Collection ansible.posix does not support Ansible version 2.14.18
+[DEPRECATION WARNING]: community.general.yaml has been deprecated. The plugin has been superseded by the the option `result_format=yaml` in callback plugin ansible.builtin.default from ansible-core
+2.13 onwards. This feature will be removed from community.general in version 12.0.0. Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+
+PLAY [Phase 1 - System preparation on all nodes] ******************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [system-prep : Debug become password variable] ***************************************************************************************************************************************************
+ok: [masternode] =>
+  msg: 'masternode: ansible_become_pass is hidden'
+ok: [storagenodet3500] =>
+  msg: 'storagenodet3500: ansible_become_pass is hidden'
+ok: [homelab] =>
+  msg: 'homelab: ansible_become_pass is hidden'
+
+TASK [system-prep : Check kubectl version] ************************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+changed: [homelab]
+
+TASK [system-prep : Check kubelet version] ************************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+changed: [homelab]
+
+TASK [system-prep : Gather package manager info (apt)] ************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [system-prep : Warn about version skew between client and server if known] ***********************************************************************************************************************
+ok: [masternode] =>
+  msg: |-
+    kubectl: Client Version: v1.34.0
+    Kustomize Version: v5.7.1
+    kubelet: Kubernetes v1.29.15
+ok: [storagenodet3500] =>
+  msg: |-
+    kubectl: Client Version: v1.29.15
+    Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
+    kubelet: Kubernetes v1.29.15
+ok: [homelab] =>
+  msg: |-
+    kubectl: Client Version: v1.29.15
+    Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
+    kubelet: Kubernetes v1.29.15
+
+TASK [preflight : Check for connectivity to all hosts] ************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Ensure required kernel modules present (overlay, br_netfilter)] *********************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Verify sysctl parameters] ***********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Fail if kubelet not present] ********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Abort when kubelet missing] *********************************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [network-fix : Load all required kernel modules (immediate, before kubelet)] *********************************************************************************************************************
+ok: [masternode] => (item=br_netfilter)
+ok: [storagenodet3500] => (item=br_netfilter)
+ok: [homelab] => (item=br_netfilter)
+ok: [masternode] => (item=overlay)
+ok: [storagenodet3500] => (item=overlay)
+ok: [masternode] => (item=nf_conntrack)
+ok: [homelab] => (item=overlay)
+ok: [storagenodet3500] => (item=nf_conntrack)
+ok: [masternode] => (item=vxlan)
+ok: [storagenodet3500] => (item=vxlan)
+ok: [homelab] => (item=nf_conntrack)
+ok: [homelab] => (item=vxlan)
+
+TASK [network-fix : Persist kernel modules for boot] **************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Set all required sysctl parameters (immediate, before kubelet)] *******************************************************************************************************************
+ok: [masternode] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [storagenodet3500] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [masternode] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [storagenodet3500] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [masternode] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [storagenodet3500] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+
+TASK [network-fix : Persist sysctl settings for boot] *************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Apply all sysctl settings] ********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure /etc/cni/net.d exists with correct permissions] ****************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Remove all conflicting CNI configs (keep only Flannel)] ***************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Delete conflicting CNI configs] ***************************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [network-fix : Install required network packages (RHEL/CentOS)] **********************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Install iptables-nft and nftables for RHEL 10+ (kube-proxy compatibility)] ********************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Install required network packages (Debian/Ubuntu)] ********************************************************************************************************************************
+skipping: [homelab]
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [network-fix : Set iptables FORWARD policy to ACCEPT] ********************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Check if ufw exists] **************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Stop and disable ufw if present] **************************************************************************************************************************************************
+skipping: [homelab]
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [network-fix : Stop and disable firewalld on RHEL (Flannel VXLAN requires open communication)] ***************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure NetworkManager conf.d directory exists] ************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Configure NetworkManager to ignore CNI interfaces] ********************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure nftables is installed and enabled (RHEL 10+)] ******************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure nftables service is running (RHEL 10+)] ************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Configure iptables to use nftables backend (RHEL 10+)] ****************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Configure ip6tables to use nftables backend (RHEL 10+)] ***************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+fatal: [homelab]: FAILED! => changed=false
+  cmd:
+  - update-alternatives
+  - --set
+  - ip6tables
+  - /usr/sbin/ip6tables-nft
+  delta: '0:00:00.003759'
+  end: '2025-10-03 21:39:31.068457'
+  msg: non-zero return code
+  rc: 2
+  start: '2025-10-03 21:39:31.064698'
+  stderr: 'cannot access /var/lib/alternatives/ip6tables: No such file or directory'
+  stderr_lines: <omitted>
+  stdout: ''
+  stdout_lines: <omitted>
+...ignoring
+
+TASK [network-fix : Ensure iptables lock file exists (RHEL 10+)] **************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+changed: [homelab]
+
+TASK [network-fix : Set SELinux to permissive mode (RHEL, for CNI compatibility)] *********************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure SELinux permissive persists on reboot (RHEL)] ******************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Disable systemd-oomd interference with containers (RHEL 10+)] *********************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure containerd cgroup driver is systemd (RHEL 10+)] ****************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure kubelet uses systemd cgroup driver (RHEL 10+)] *****************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Pre-create all iptables chains for kube-proxy (RHEL 10+)] *************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+PLAY [Phase 2 - Install CNI plugins on all nodes] *****************************************************************************************************************************************************
+
+TASK [Ensure /opt/cni/bin directory exists] ***********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Check if CNI plugins are already installed] *****************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Download CNI plugins (if not present)] **********************************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [Extract CNI plugins] ****************************************************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [Ensure CNI plugins are executable] **************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+PLAY [Phase 3 - Pre-create iptables chains for kube-proxy (RHEL 10)] **********************************************************************************************************************************
+
+TASK [Pre-create kube-proxy iptables chains (RHEL 10)] ************************************************************************************************************************************************
+ok: [homelab]
+
+PLAY [Phase 4 - Initialize Kubernetes control plane] **************************************************************************************************************************************************
+
+TASK [Check if control plane is already initialized] **************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Initialize control plane with kubeadm] **********************************************************************************************************************************************************
+skipping: [masternode]
+
+TASK [Display kubeadm init output] ********************************************************************************************************************************************************************
+skipping: [masternode]
+
+TASK [Wait for API server to be ready] ****************************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Ensure KUBECONFIG is set for root] **************************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Set KUBECONFIG for current session] *************************************************************************************************************************************************************
+ok: [masternode]
+
+PLAY [Phase 5 - Join worker nodes to cluster] *********************************************************************************************************************************************************
+
+TASK [Check if node is already joined] ****************************************************************************************************************************************************************
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Generate join token on control plane] ***********************************************************************************************************************************************************
+skipping: [storagenodet3500]
+
+TASK [Join worker node to cluster] ********************************************************************************************************************************************************************
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [Wait for kubelet to start] **********************************************************************************************************************************************************************
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+PLAY [Phase 6 - Deploy Flannel CNI] *******************************************************************************************************************************************************************
+
+TASK [Check if Flannel is already deployed] ***********************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Apply Flannel CNI manifest] *********************************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Wait for Flannel DaemonSet to be ready] *********************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Verify Flannel pods are Running] ****************************************************************************************************************************************************************
+changed: [masternode]
+
+PLAY [Phase 7 - Wait for all nodes to be Ready] *******************************************************************************************************************************************************
+
+TASK [Wait for all nodes to be Ready] *****************************************************************************************************************************************************************
+changed: [masternode]
+
+PLAY [Phase 8 - Configure node scheduling] ************************************************************************************************************************************************************
+
+TASK [Remove NoSchedule taint from control-plane (allow scheduling)] **********************************************************************************************************************************
+ok: [masternode]
+
+TASK [Uncordon all nodes] *****************************************************************************************************************************************************************************
+ok: [masternode]
+
+PLAY [Phase 9 - Post-deployment validation] ***********************************************************************************************************************************************************
+
+TASK [Verify kube-system pods are Running] ************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display kube-system pod status] *****************************************************************************************************************************************************************
+ok: [masternode] =>
+  kube_system_pods.stdout_lines:
+  - NAME                                 READY   STATUS             RESTARTS         AGE     IP             NODE               NOMINATED NODE   READINESS GATES
+  - coredns-76f75df574-jl7dw             1/1     Running            1 (11s ago)      3h36m   10.244.2.7     homelab            <none>           <none>
+  - coredns-76f75df574-phj6d             1/1     Running            1 (11s ago)      3h36m   10.244.2.9     homelab            <none>           <none>
+  - etcd-masternode                      1/1     Running            22               3h37m   192.168.4.63   masternode         <none>           <none>
+  - kube-apiserver-masternode            1/1     Running            43               3h36m   192.168.4.63   masternode         <none>           <none>
+  - kube-controller-manager-masternode   1/1     Running            64               3h36m   192.168.4.63   masternode         <none>           <none>
+  - kube-proxy-27gvw                     0/1     CrashLoopBackOff   10 (3m21s ago)   43m     192.168.4.62   homelab            <none>           <none>
+  - kube-proxy-qqdmh                     1/1     Running            0                3h36m   192.168.4.61   storagenodet3500   <none>           <none>
+  - kube-proxy-t9gg6                     1/1     Running            0                3h36m   192.168.4.63   masternode         <none>           <none>
+  - kube-scheduler-masternode            1/1     Running            64               3h37m   192.168.4.63   masternode         <none>           <none>
+
+TASK [Check for CrashLoopBackOff pods] ****************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display crash check result] *********************************************************************************************************************************************************************
+ok: [masternode] =>
+  crash_check.stdout_lines:
+  - 'WARNING: CrashLoopBackOff pods detected:'
+  - kube-proxy-27gvw
+
+TASK [Verify CNI config exists on all nodes] **********************************************************************************************************************************************************
+fatal: [masternode]: FAILED! => changed=false
+  cmd: |-
+    for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o name | cut -d/ -f2); do
+      echo "Checking CNI config on $node..."
+      ssh -o StrictHostKeyChecking=no $node    'test -f /etc/cni/net.d/10-flannel.conflist && echo "✓ CNI config present" || echo "✗ CNI config missing"'
+    done
+  delta: '0:00:00.593764'
+  end: '2025-10-03 21:40:08.020472'
+  msg: non-zero return code
+  rc: 255
+  start: '2025-10-03 21:40:07.426708'
+  stderr: |-
+    ssh: Could not resolve hostname homelab: Name or service not known
+    Warning: Permanently added 'masternode' (ED25519) to the list of known hosts.
+    ssh: Could not resolve hostname storagenodet3500: Name or service not known
+  stderr_lines: <omitted>
+  stdout: |-
+    Checking CNI config on homelab...
+    Checking CNI config on masternode...
+    ✓ CNI config present
+    Checking CNI config on storagenodet3500...
+  stdout_lines: <omitted>
+
+PLAY RECAP ********************************************************************************************************************************************************************************************
+homelab                    : ok=40   changed=3    unreachable=0    failed=0    skipped=8    rescued=0    ignored=1
+masternode                 : ok=41   changed=8    unreachable=0    failed=1    skipped=20   rescued=0    ignored=0
+storagenodet3500           : ok=27   changed=2    unreachable=0    failed=0    skipped=21   rescued=0    ignored=0
+
+[ERROR] Deployment failed - check logs above for details
+root@masternode:/srv/monitoring_data/VMStation# ./deploy.sh reset
+[INFO] Running comprehensive cluster reset playbook: /srv/monitoring_data/VMStation/ansible/playbooks/reset-cluster.yaml
+[INFO] This will remove all Kubernetes config and network interfaces
+[INFO] SSH keys and physical ethernet interfaces will be preserved
+[WARNING]: Collection community.general does not support Ansible version 2.14.18
+[DEPRECATION WARNING]: community.general.yaml has been deprecated. The plugin has been superseded by the the option `result_format=yaml` in callback plugin ansible.builtin.default from ansible-core
+2.13 onwards. This feature will be removed from community.general in version 12.0.0. Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+
+PLAY [Pre-reset validation and spin-down] *************************************************************************************************************************************************************
+
+TASK [Confirm reset operation] ************************************************************************************************************************************************************************
+[Confirm reset operation]
+⚠️  CLUSTER RESET OPERATION ⚠️
+
+This will:
+- Stop all Kubernetes workloads
+- Run kubeadm reset on all nodes
+- Remove all Kubernetes config files
+- Delete all Kubernetes network interfaces
+- Clean container runtime state
+
+This will NOT affect:
+- SSH keys and access
+- Physical ethernet interfaces
+- Container runtime binaries
+
+Type 'yes' to proceed with reset
+:
+yes^Mok: [localhost]
+
+TASK [Abort if not confirmed] *************************************************************************************************************************************************************************
+skipping: [localhost]
+
+TASK [Generate spin targets from cluster] *************************************************************************************************************************************************************
+ok: [localhost]
+
+TASK [Set spin_targets fact] **************************************************************************************************************************************************************************
+ok: [localhost]
+
+TASK [Display nodes to be reset] **********************************************************************************************************************************************************************
+ok: [localhost] =>
+  msg: 'Nodes to reset: homelab, masternode, storagenodet3500'
+
+PLAY [Drain and cordon nodes gracefully] **************************************************************************************************************************************************************
+
+TASK [Cordon nodes to prevent new pods] ***************************************************************************************************************************************************************
+changed: [localhost] => (item=homelab)
+changed: [localhost] => (item=masternode)
+changed: [localhost] => (item=storagenodet3500)
+
+TASK [Drain nodes safely] *****************************************************************************************************************************************************************************
+changed: [localhost] => (item=homelab)
+changed: [localhost] => (item=masternode)
+changed: [localhost] => (item=storagenodet3500)
+
+TASK [Wait for pods to terminate] *********************************************************************************************************************************************************************
+Pausing for 10 seconds
+(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+ok: [localhost]
+
+PLAY [Reset all worker nodes] *************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************
+ok: [storagenodet3500]
+
+TASK [cluster-reset : Stop kubelet service before reset] **********************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Run kubeadm reset with force flag] **********************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Display kubeadm reset output] ***************************************************************************************************************************************************
+ok: [storagenodet3500] =>
+  kubeadm_reset_result.stdout_lines:
+  - '[preflight] Running pre-flight checks'
+  - '[reset] Deleted contents of the etcd data directory: /var/lib/etcd'
+  - '[reset] Stopping the kubelet service'
+  - '[reset] Unmounting mounted directories in "/var/lib/kubelet"'
+  - '[reset] Deleting contents of directories: [/etc/kubernetes/manifests /var/lib/kubelet /etc/kubernetes/pki]'
+  - '[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]'
+  - ''
+  - The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
+  - ''
+  - The reset process does not reset or clean up iptables rules or IPVS tables.
+  - If you wish to reset iptables, you must do so manually by using the "iptables" command.
+  - ''
+  - If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
+  - to reset your system's IPVS tables.
+  - ''
+  - The reset process does not clean your kubeconfig files and you must remove them manually.
+  - Please, check the contents of the $HOME/.kube/config file.
+
+TASK [cluster-reset : Remove all CNI config files (cni/cbr cleanup)] **********************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Remove Kubernetes config directories (except /etc/cni/net.d)] *******************************************************************************************************************
+changed: [storagenodet3500] => (item=/etc/kubernetes)
+changed: [storagenodet3500] => (item=/var/lib/kubelet)
+ok: [storagenodet3500] => (item=/var/lib/etcd)
+changed: [storagenodet3500] => (item=/var/lib/cni)
+changed: [storagenodet3500] => (item=/run/flannel)
+ok: [storagenodet3500] => (item=/var/lib/flannel)
+ok: [storagenodet3500] => (item=/var/run/flannel)
+changed: [storagenodet3500] => (item=/opt/cni/bin)
+
+TASK [cluster-reset : Identify Kubernetes-related network interfaces] *********************************************************************************************************************************
+ok: [storagenodet3500]
+
+TASK [cluster-reset : Display identified Kubernetes interfaces] ***************************************************************************************************************************************
+ok: [storagenodet3500] =>
+  msg: 'Kubernetes interfaces to remove: [''flannel.1'', ''cni0'']'
+
+TASK [cluster-reset : Recreate /etc/kubernetes/manifests directory (empty)] ***************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Bring down Kubernetes network interfaces] ***************************************************************************************************************************************
+changed: [storagenodet3500] => (item=flannel.1)
+changed: [storagenodet3500] => (item=cni0)
+
+TASK [cluster-reset : Delete Kubernetes network interfaces] *******************************************************************************************************************************************
+changed: [storagenodet3500] => (item=flannel.1)
+changed: [storagenodet3500] => (item=cni0)
+
+TASK [cluster-reset : Remove iptables rules created by Kubernetes (flush all chains)] *****************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Remove ipvs rules if present] ***************************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Clean container runtime state (containerd)] *************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Restart containerd after cleanup] ***********************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Remove any remaining Kubernetes processes] **************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [cluster-reset : Find all authorized_keys files] *************************************************************************************************************************************************
+ok: [storagenodet3500]
+
+TASK [cluster-reset : Assert at least one SSH authorized_keys file exists] ****************************************************************************************************************************
+ok: [storagenodet3500] => changed=false
+  msg: SSH keys preserved successfully
+
+TASK [cluster-reset : Verify physical ethernet interfaces are preserved] ******************************************************************************************************************************
+ok: [storagenodet3500]
+
+TASK [cluster-reset : Assert physical interfaces still exist] *****************************************************************************************************************************************
+ok: [storagenodet3500] => changed=false
+  msg: Physical ethernet interfaces preserved successfully
+
+TASK [cluster-reset : Display reset completion summary] ***********************************************************************************************************************************************
+ok: [storagenodet3500] =>
+  msg: |-
+    Kubernetes cluster reset completed successfully:
+    - kubeadm reset: OK
+    - Kubernetes interfaces removed: 2
+    - SSH keys: preserved
+    - Physical interfaces: preserved
+    - Node is ready for fresh cluster deployment
+
+PLAY [Reset all worker nodes] *************************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [cluster-reset : Stop kubelet service before reset] **********************************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Run kubeadm reset with force flag] **********************************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Display kubeadm reset output] ***************************************************************************************************************************************************
+ok: [homelab] =>
+  kubeadm_reset_result.stdout_lines:
+  - '[preflight] Running pre-flight checks'
+  - '[reset] Deleted contents of the etcd data directory: /var/lib/etcd'
+  - '[reset] Stopping the kubelet service'
+  - '[reset] Unmounting mounted directories in "/var/lib/kubelet"'
+  - '[reset] Deleting contents of directories: [/etc/kubernetes/manifests /var/lib/kubelet /etc/kubernetes/pki]'
+  - '[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]'
+  - ''
+  - The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
+  - ''
+  - The reset process does not reset or clean up iptables rules or IPVS tables.
+  - If you wish to reset iptables, you must do so manually by using the "iptables" command.
+  - ''
+  - If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
+  - to reset your system's IPVS tables.
+  - ''
+  - The reset process does not clean your kubeconfig files and you must remove them manually.
+  - Please, check the contents of the $HOME/.kube/config file.
+
+TASK [cluster-reset : Remove all CNI config files (cni/cbr cleanup)] **********************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Remove Kubernetes config directories (except /etc/cni/net.d)] *******************************************************************************************************************
+changed: [homelab] => (item=/etc/kubernetes)
+changed: [homelab] => (item=/var/lib/kubelet)
+ok: [homelab] => (item=/var/lib/etcd)
+changed: [homelab] => (item=/var/lib/cni)
+changed: [homelab] => (item=/run/flannel)
+ok: [homelab] => (item=/var/lib/flannel)
+ok: [homelab] => (item=/var/run/flannel)
+changed: [homelab] => (item=/opt/cni/bin)
+
+TASK [cluster-reset : Identify Kubernetes-related network interfaces] *********************************************************************************************************************************
+ok: [homelab]
+
+TASK [cluster-reset : Display identified Kubernetes interfaces] ***************************************************************************************************************************************
+ok: [homelab] =>
+  msg: 'Kubernetes interfaces to remove: [''flannel.1'', ''cni0'']'
+
+TASK [cluster-reset : Recreate /etc/kubernetes/manifests directory (empty)] ***************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Bring down Kubernetes network interfaces] ***************************************************************************************************************************************
+changed: [homelab] => (item=flannel.1)
+changed: [homelab] => (item=cni0)
+
+TASK [cluster-reset : Delete Kubernetes network interfaces] *******************************************************************************************************************************************
+changed: [homelab] => (item=flannel.1)
+changed: [homelab] => (item=cni0)
+
+TASK [cluster-reset : Remove iptables rules created by Kubernetes (flush all chains)] *****************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Remove ipvs rules if present] ***************************************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Clean container runtime state (containerd)] *************************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Restart containerd after cleanup] ***********************************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Remove any remaining Kubernetes processes] **************************************************************************************************************************************
+changed: [homelab]
+
+TASK [cluster-reset : Find all authorized_keys files] *************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [cluster-reset : Assert at least one SSH authorized_keys file exists] ****************************************************************************************************************************
+ok: [homelab] => changed=false
+  msg: SSH keys preserved successfully
+
+TASK [cluster-reset : Verify physical ethernet interfaces are preserved] ******************************************************************************************************************************
+ok: [homelab]
+
+TASK [cluster-reset : Assert physical interfaces still exist] *****************************************************************************************************************************************
+ok: [homelab] => changed=false
+  msg: Physical ethernet interfaces preserved successfully
+
+TASK [cluster-reset : Display reset completion summary] ***********************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    Kubernetes cluster reset completed successfully:
+    - kubeadm reset: OK
+    - Kubernetes interfaces removed: 2
+    - SSH keys: preserved
+    - Physical interfaces: preserved
+    - Node is ready for fresh cluster deployment
+
+PLAY [Reset control plane node] ***********************************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [cluster-reset : Stop kubelet service before reset] **********************************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Run kubeadm reset with force flag] **********************************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Display kubeadm reset output] ***************************************************************************************************************************************************
+ok: [masternode] =>
+  kubeadm_reset_result.stdout_lines:
+  - '[reset] Reading configuration from the cluster...'
+  - '[reset] FYI: You can look at this config file with ''kubectl -n kube-system get cm kubeadm-config -o yaml'''
+  - '[preflight] Running pre-flight checks'
+  - '[reset] Deleted contents of the etcd data directory: /var/lib/etcd'
+  - '[reset] Stopping the kubelet service'
+  - '[reset] Unmounting mounted directories in "/var/lib/kubelet"'
+  - '[reset] Deleting contents of directories: [/etc/kubernetes/manifests /var/lib/kubelet /etc/kubernetes/pki]'
+  - '[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]'
+  - ''
+  - The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
+  - ''
+  - The reset process does not reset or clean up iptables rules or IPVS tables.
+  - If you wish to reset iptables, you must do so manually by using the "iptables" command.
+  - ''
+  - If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
+  - to reset your system's IPVS tables.
+  - ''
+  - The reset process does not clean your kubeconfig files and you must remove them manually.
+  - Please, check the contents of the $HOME/.kube/config file.
+
+TASK [cluster-reset : Remove all CNI config files (cni/cbr cleanup)] **********************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Remove Kubernetes config directories (except /etc/cni/net.d)] *******************************************************************************************************************
+changed: [masternode] => (item=/etc/kubernetes)
+changed: [masternode] => (item=/var/lib/kubelet)
+changed: [masternode] => (item=/var/lib/etcd)
+changed: [masternode] => (item=/var/lib/cni)
+changed: [masternode] => (item=/run/flannel)
+ok: [masternode] => (item=/var/lib/flannel)
+ok: [masternode] => (item=/var/run/flannel)
+changed: [masternode] => (item=/opt/cni/bin)
+
+TASK [cluster-reset : Identify Kubernetes-related network interfaces] *********************************************************************************************************************************
+ok: [masternode]
+
+TASK [cluster-reset : Display identified Kubernetes interfaces] ***************************************************************************************************************************************
+ok: [masternode] =>
+  msg: 'Kubernetes interfaces to remove: [''flannel.1'', ''cni0'']'
+
+TASK [cluster-reset : Recreate /etc/kubernetes/manifests directory (empty)] ***************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Bring down Kubernetes network interfaces] ***************************************************************************************************************************************
+changed: [masternode] => (item=flannel.1)
+changed: [masternode] => (item=cni0)
+
+TASK [cluster-reset : Delete Kubernetes network interfaces] *******************************************************************************************************************************************
+changed: [masternode] => (item=flannel.1)
+changed: [masternode] => (item=cni0)
+
+TASK [cluster-reset : Remove iptables rules created by Kubernetes (flush all chains)] *****************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Remove ipvs rules if present] ***************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Clean container runtime state (containerd)] *************************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Restart containerd after cleanup] ***********************************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Remove any remaining Kubernetes processes] **************************************************************************************************************************************
+changed: [masternode]
+
+TASK [cluster-reset : Find all authorized_keys files] *************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [cluster-reset : Assert at least one SSH authorized_keys file exists] ****************************************************************************************************************************
+ok: [masternode] => changed=false
+  msg: SSH keys preserved successfully
+
+TASK [cluster-reset : Verify physical ethernet interfaces are preserved] ******************************************************************************************************************************
+ok: [masternode]
+
+TASK [cluster-reset : Assert physical interfaces still exist] *****************************************************************************************************************************************
+ok: [masternode] => changed=false
+  msg: Physical ethernet interfaces preserved successfully
+
+TASK [cluster-reset : Display reset completion summary] ***********************************************************************************************************************************************
+ok: [masternode] =>
+  msg: |-
+    Kubernetes cluster reset completed successfully:
+    - kubeadm reset: OK
+    - Kubernetes interfaces removed: 2
+    - SSH keys: preserved
+    - Physical interfaces: preserved
+    - Node is ready for fresh cluster deployment
+
+PLAY [Post-reset validation] **************************************************************************************************************************************************************************
+
+TASK [Verify kubelet is stopped] **********************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Verify no Kubernetes config remains] ************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Assert clean state] *****************************************************************************************************************************************************************************
+ok: [masternode] => changed=false
+  msg: Clean reset verified on masternode
+ok: [storagenodet3500] => changed=false
+  msg: Clean reset verified on storagenodet3500
+ok: [homelab] => changed=false
+  msg: Clean reset verified on homelab
+
+TASK [Verify SSH connectivity after reset] ************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Display final reset summary] ********************************************************************************************************************************************************************
+ok: [masternode] =>
+  msg: |-
+    ✅ Cluster reset completed successfully on masternode
+    - Kubernetes config removed
+    - Network interfaces cleaned
+    - SSH access preserved
+    - Ready for fresh deployment
+ok: [storagenodet3500] =>
+  msg: |-
+    ✅ Cluster reset completed successfully on storagenodet3500
+    - Kubernetes config removed
+    - Network interfaces cleaned
+    - SSH access preserved
+    - Ready for fresh deployment
+ok: [homelab] =>
+  msg: |-
+    ✅ Cluster reset completed successfully on homelab
+    - Kubernetes config removed
+    - Network interfaces cleaned
+    - SSH access preserved
+    - Ready for fresh deployment
+
+PLAY [Final summary] **********************************************************************************************************************************************************************************
+
+TASK [Display completion message] *********************************************************************************************************************************************************************
+ok: [localhost] =>
+  msg: |2-
+
+    ╔════════════════════════════════════════════════════════════╗
+    ║         CLUSTER RESET COMPLETED SUCCESSFULLY              ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    All nodes have been reset and are ready for deployment.
+
+    Next steps:
+    1. Run deployment: ./deploy.sh
+    2. Or manually: ansible-playbook -i ansible/inventory/hosts ansible/playbooks/deploy-cluster.yaml
+
+    All nodes are now in a clean state with:
+    ✅ No Kubernetes configuration
+    ✅ No CNI network interfaces
+    ✅ SSH access preserved
+    ✅ Physical interfaces intact
+
+PLAY RECAP ********************************************************************************************************************************************************************************************
+homelab                    : ok=26   changed=12   unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+localhost                  : ok=8    changed=2    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+masternode                 : ok=26   changed=12   unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+storagenodet3500           : ok=26   changed=12   unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+[INFO] Reset completed successfully
+[INFO] Cluster is ready for fresh deployment
+root@masternode:/srv/monitoring_data/VMStation# ./deploy.sh
+[INFO] Running deploy playbook: /srv/monitoring_data/VMStation/ansible/playbooks/deploy-cluster.yaml
+[WARNING]: Collection community.general does not support Ansible version 2.14.18
+[WARNING]: Collection ansible.posix does not support Ansible version 2.14.18
+[DEPRECATION WARNING]: community.general.yaml has been deprecated. The plugin has been superseded by the the option `result_format=yaml` in callback plugin ansible.builtin.default from ansible-core
+2.13 onwards. This feature will be removed from community.general in version 12.0.0. Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+
+PLAY [Phase 1 - System preparation on all nodes] ******************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [system-prep : Debug become password variable] ***************************************************************************************************************************************************
+ok: [masternode] =>
+  msg: 'masternode: ansible_become_pass is hidden'
+ok: [storagenodet3500] =>
+  msg: 'storagenodet3500: ansible_become_pass is hidden'
+ok: [homelab] =>
+  msg: 'homelab: ansible_become_pass is hidden'
+
+TASK [system-prep : Check kubectl version] ************************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+changed: [homelab]
+
+TASK [system-prep : Check kubelet version] ************************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+changed: [homelab]
+
+TASK [system-prep : Gather package manager info (apt)] ************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [system-prep : Warn about version skew between client and server if known] ***********************************************************************************************************************
+ok: [masternode] =>
+  msg: |-
+    kubectl: Client Version: v1.34.0
+    Kustomize Version: v5.7.1
+    kubelet: Kubernetes v1.29.15
+ok: [storagenodet3500] =>
+  msg: |-
+    kubectl: Client Version: v1.29.15
+    Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
+    kubelet: Kubernetes v1.29.15
+ok: [homelab] =>
+  msg: |-
+    kubectl: Client Version: v1.29.15
+    Kustomize Version: v5.0.4-0.20230601165947-6ce0bf390ce3
+    kubelet: Kubernetes v1.29.15
+
+TASK [preflight : Check for connectivity to all hosts] ************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Ensure required kernel modules present (overlay, br_netfilter)] *********************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Verify sysctl parameters] ***********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Fail if kubelet not present] ********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [preflight : Abort when kubelet missing] *********************************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [network-fix : Load all required kernel modules (immediate, before kubelet)] *********************************************************************************************************************
+ok: [masternode] => (item=br_netfilter)
+ok: [storagenodet3500] => (item=br_netfilter)
+ok: [homelab] => (item=br_netfilter)
+ok: [masternode] => (item=overlay)
+ok: [storagenodet3500] => (item=overlay)
+ok: [masternode] => (item=nf_conntrack)
+ok: [homelab] => (item=overlay)
+ok: [storagenodet3500] => (item=nf_conntrack)
+ok: [masternode] => (item=vxlan)
+ok: [storagenodet3500] => (item=vxlan)
+ok: [homelab] => (item=nf_conntrack)
+ok: [homelab] => (item=vxlan)
+
+TASK [network-fix : Persist kernel modules for boot] **************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Set all required sysctl parameters (immediate, before kubelet)] *******************************************************************************************************************
+ok: [masternode] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [storagenodet3500] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [masternode] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [storagenodet3500] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [masternode] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [storagenodet3500] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+
+TASK [network-fix : Persist sysctl settings for boot] *************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Apply all sysctl settings] ********************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure /etc/cni/net.d exists with correct permissions] ****************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Remove all conflicting CNI configs (keep only Flannel)] ***************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Delete conflicting CNI configs] ***************************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+skipping: [homelab]
+
+TASK [network-fix : Install required network packages (RHEL/CentOS)] **********************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Install iptables-nft and nftables for RHEL 10+ (kube-proxy compatibility)] ********************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Install required network packages (Debian/Ubuntu)] ********************************************************************************************************************************
+skipping: [homelab]
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [network-fix : Set iptables FORWARD policy to ACCEPT] ********************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Check if ufw exists] **************************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Stop and disable ufw if present] **************************************************************************************************************************************************
+skipping: [homelab]
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [network-fix : Stop and disable firewalld on RHEL (Flannel VXLAN requires open communication)] ***************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure NetworkManager conf.d directory exists] ************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Configure NetworkManager to ignore CNI interfaces] ********************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure nftables is installed and enabled (RHEL 10+)] ******************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure nftables service is running (RHEL 10+)] ************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Configure iptables to use nftables backend (RHEL 10+)] ****************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Configure ip6tables to use nftables backend (RHEL 10+)] ***************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+fatal: [homelab]: FAILED! => changed=false
+  cmd:
+  - update-alternatives
+  - --set
+  - ip6tables
+  - /usr/sbin/ip6tables-nft
+  delta: '0:00:00.003333'
+  end: '2025-10-03 21:42:36.211708'
+  msg: non-zero return code
+  rc: 2
+  start: '2025-10-03 21:42:36.208375'
+  stderr: 'cannot access /var/lib/alternatives/ip6tables: No such file or directory'
+  stderr_lines: <omitted>
+  stdout: ''
+  stdout_lines: <omitted>
+...ignoring
+
+TASK [network-fix : Ensure iptables lock file exists (RHEL 10+)] **************************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+changed: [homelab]
+
+TASK [network-fix : Set SELinux to permissive mode (RHEL, for CNI compatibility)] *********************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure SELinux permissive persists on reboot (RHEL)] ******************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Disable systemd-oomd interference with containers (RHEL 10+)] *********************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure containerd cgroup driver is systemd (RHEL 10+)] ****************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+TASK [network-fix : Ensure kubelet uses systemd cgroup driver (RHEL 10+)] *****************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+fatal: [homelab]: FAILED! => changed=false
+  msg: Destination /var/lib/kubelet/config.yaml does not exist !
+  rc: 257
+...ignoring
+
+TASK [network-fix : Pre-create all iptables chains for kube-proxy (RHEL 10+)] *************************************************************************************************************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+ok: [homelab]
+
+PLAY [Phase 2 - Install CNI plugins on all nodes] *****************************************************************************************************************************************************
+
+TASK [Ensure /opt/cni/bin directory exists] ***********************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+changed: [homelab]
+
+TASK [Check if CNI plugins are already installed] *****************************************************************************************************************************************************
+ok: [masternode]
+ok: [storagenodet3500]
+ok: [homelab]
+
+TASK [Download CNI plugins (if not present)] **********************************************************************************************************************************************************
+fatal: [homelab]: FAILED! => changed=false
+  dest: /tmp/cni-plugins.tgz
+  elapsed: 0
+  gid: 0
+  group: root
+  mode: '0644'
+  msg: 'An unknown error occurred: HTTPSConnection.__init__() got an unexpected keyword argument ''cert_file'''
+  owner: root
+  secontext: unconfined_u:object_r:user_tmp_t:s0
+  size: 46940483
+  state: file
+  uid: 0
+  url: https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+ok: [storagenodet3500]
+ok: [masternode]
+
+TASK [Extract CNI plugins] ****************************************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+
+TASK [Ensure CNI plugins are executable] **************************************************************************************************************************************************************
+changed: [masternode]
+changed: [storagenodet3500]
+
+PLAY [Phase 3 - Pre-create iptables chains for kube-proxy (RHEL 10)] **********************************************************************************************************************************
+
+PLAY [Phase 4 - Initialize Kubernetes control plane] **************************************************************************************************************************************************
+
+TASK [Check if control plane is already initialized] **************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Initialize control plane with kubeadm] **********************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Display kubeadm init output] ********************************************************************************************************************************************************************
+ok: [masternode] =>
+  kubeadm_init.stdout_lines:
+  - '[init] Using Kubernetes version: v1.29.15'
+  - '[preflight] Running pre-flight checks'
+  - '[preflight] Pulling images required for setting up a Kubernetes cluster'
+  - '[preflight] This might take a minute or two, depending on the speed of your internet connection'
+  - '[preflight] You can also perform this action in beforehand using ''kubeadm config images pull'''
+  - '[certs] Using certificateDir folder "/etc/kubernetes/pki"'
+  - '[certs] Generating "ca" certificate and key'
+  - '[certs] Generating "apiserver" certificate and key'
+  - '[certs] apiserver serving cert is signed for DNS names [kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local masternode] and IPs [10.96.0.1 192.168.4.63]'
+  - '[certs] Generating "apiserver-kubelet-client" certificate and key'
+  - '[certs] Generating "front-proxy-ca" certificate and key'
+  - '[certs] Generating "front-proxy-client" certificate and key'
+  - '[certs] Generating "etcd/ca" certificate and key'
+  - '[certs] Generating "etcd/server" certificate and key'
+  - '[certs] etcd/server serving cert is signed for DNS names [localhost masternode] and IPs [192.168.4.63 127.0.0.1 ::1]'
+  - '[certs] Generating "etcd/peer" certificate and key'
+  - '[certs] etcd/peer serving cert is signed for DNS names [localhost masternode] and IPs [192.168.4.63 127.0.0.1 ::1]'
+  - '[certs] Generating "etcd/healthcheck-client" certificate and key'
+  - '[certs] Generating "apiserver-etcd-client" certificate and key'
+  - '[certs] Generating "sa" key and public key'
+  - '[kubeconfig] Using kubeconfig folder "/etc/kubernetes"'
+  - '[kubeconfig] Writing "admin.conf" kubeconfig file'
+  - '[kubeconfig] Writing "super-admin.conf" kubeconfig file'
+  - '[kubeconfig] Writing "kubelet.conf" kubeconfig file'
+  - '[kubeconfig] Writing "controller-manager.conf" kubeconfig file'
+  - '[kubeconfig] Writing "scheduler.conf" kubeconfig file'
+  - '[etcd] Creating static Pod manifest for local etcd in "/etc/kubernetes/manifests"'
+  - '[control-plane] Using manifest folder "/etc/kubernetes/manifests"'
+  - '[control-plane] Creating static Pod manifest for "kube-apiserver"'
+  - '[control-plane] Creating static Pod manifest for "kube-controller-manager"'
+  - '[control-plane] Creating static Pod manifest for "kube-scheduler"'
+  - '[kubelet-start] Writing kubelet environment file with flags to file "/var/lib/kubelet/kubeadm-flags.env"'
+  - '[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"'
+  - '[kubelet-start] Starting the kubelet'
+  - '[wait-control-plane] Waiting for the kubelet to boot up the control plane as static Pods from directory "/etc/kubernetes/manifests". This can take up to 4m0s'
+  - '[apiclient] All control plane components are healthy after 6.502460 seconds'
+  - '[upload-config] Storing the configuration used in ConfigMap "kubeadm-config" in the "kube-system" Namespace'
+  - '[kubelet] Creating a ConfigMap "kubelet-config" in namespace kube-system with the configuration for the kubelets in the cluster'
+  - '[upload-certs] Storing the certificates in Secret "kubeadm-certs" in the "kube-system" Namespace'
+  - '[upload-certs] Using certificate key:'
+  - 62180e7ca6749e6e0f573fe265fe40461996580ffb2424fc56fc6a68199a6a20
+  - '[mark-control-plane] Marking the node masternode as control-plane by adding the labels: [node-role.kubernetes.io/control-plane node.kubernetes.io/exclude-from-external-load-balancers]'
+  - '[mark-control-plane] Marking the node masternode as control-plane by adding the taints [node-role.kubernetes.io/control-plane:NoSchedule]'
+  - '[bootstrap-token] Using token: dn4ne3.gxmzimtcu33w3hp0'
+  - '[bootstrap-token] Configuring bootstrap tokens, cluster-info ConfigMap, RBAC Roles'
+  - '[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to get nodes'
+  - '[bootstrap-token] Configured RBAC rules to allow Node Bootstrap tokens to post CSRs in order for nodes to get long term certificate credentials'
+  - '[bootstrap-token] Configured RBAC rules to allow the csrapprover controller automatically approve CSRs from a Node Bootstrap Token'
+  - '[bootstrap-token] Configured RBAC rules to allow certificate rotation for all node client certificates in the cluster'
+  - '[bootstrap-token] Creating the "cluster-info" ConfigMap in the "kube-public" namespace'
+  - '[kubelet-finalize] Updating "/etc/kubernetes/kubelet.conf" to point to a rotatable kubelet client certificate and key'
+  - '[addons] Applied essential addon: CoreDNS'
+  - '[addons] Applied essential addon: kube-proxy'
+  - ''
+  - Your Kubernetes control-plane has initialized successfully!
+  - ''
+  - 'To start using your cluster, you need to run the following as a regular user:'
+  - ''
+  - '  mkdir -p $HOME/.kube'
+  - '  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config'
+  - '  sudo chown $(id -u):$(id -g) $HOME/.kube/config'
+  - ''
+  - 'Alternatively, if you are the root user, you can run:'
+  - ''
+  - '  export KUBECONFIG=/etc/kubernetes/admin.conf'
+  - ''
+  - You should now deploy a pod network to the cluster.
+  - 'Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:'
+  - '  https://kubernetes.io/docs/concepts/cluster-administration/addons/'
+  - ''
+  - 'You can now join any number of the control-plane node running the following command on each as root:'
+  - ''
+  - '  kubeadm join 192.168.4.63:6443 --token dn4ne3.gxmzimtcu33w3hp0 \'
+  - "\t--discovery-token-ca-cert-hash sha256:f022819329c0a58f09888a061b7a18166ae935a5a7abfd577630f55a62e1e653 \\"
+  - "\t--control-plane --certificate-key 62180e7ca6749e6e0f573fe265fe40461996580ffb2424fc56fc6a68199a6a20"
+  - ''
+  - Please note that the certificate-key gives access to cluster sensitive data, keep it secret!
+  - As a safeguard, uploaded-certs will be deleted in two hours; If necessary, you can use
+  - '"kubeadm init phase upload-certs --upload-certs" to reload certs afterward.'
+  - ''
+  - 'Then you can join any number of worker nodes by running the following on each as root:'
+  - ''
+  - kubeadm join 192.168.4.63:6443 --token dn4ne3.gxmzimtcu33w3hp0 \
+  - "\t--discovery-token-ca-cert-hash sha256:f022819329c0a58f09888a061b7a18166ae935a5a7abfd577630f55a62e1e653 "
+
+TASK [Wait for API server to be ready] ****************************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Ensure KUBECONFIG is set for root] **************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Set KUBECONFIG for current session] *************************************************************************************************************************************************************
+ok: [masternode]
+
+PLAY [Phase 5 - Join worker nodes to cluster] *********************************************************************************************************************************************************
+
+TASK [Check if node is already joined] ****************************************************************************************************************************************************************
+ok: [storagenodet3500]
+
+TASK [Generate join token on control plane] ***********************************************************************************************************************************************************
+changed: [storagenodet3500 -> masternode(192.168.4.63)]
+
+TASK [Join worker node to cluster] ********************************************************************************************************************************************************************
+changed: [storagenodet3500]
+
+TASK [Wait for kubelet to start] **********************************************************************************************************************************************************************
+ok: [storagenodet3500]
+
+PLAY [Phase 6 - Deploy Flannel CNI] *******************************************************************************************************************************************************************
+
+TASK [Check if Flannel is already deployed] ***********************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Apply Flannel CNI manifest] *********************************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Wait for Flannel DaemonSet to be ready] *********************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Verify Flannel pods are Running] ****************************************************************************************************************************************************************
+changed: [masternode]
+
+PLAY [Phase 7 - Wait for all nodes to be Ready] *******************************************************************************************************************************************************
+
+TASK [Wait for all nodes to be Ready] *****************************************************************************************************************************************************************
+changed: [masternode]
+
+PLAY [Phase 8 - Configure node scheduling] ************************************************************************************************************************************************************
+
+TASK [Remove NoSchedule taint from control-plane (allow scheduling)] **********************************************************************************************************************************
+ok: [masternode]
+
+TASK [Uncordon all nodes] *****************************************************************************************************************************************************************************
+ok: [masternode]
+
+PLAY [Phase 9 - Post-deployment validation] ***********************************************************************************************************************************************************
+
+TASK [Verify kube-system pods are Running] ************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display kube-system pod status] *****************************************************************************************************************************************************************
+ok: [masternode] =>
+  kube_system_pods.stdout_lines:
+  - NAME                                 READY   STATUS              RESTARTS   AGE   IP             NODE               NOMINATED NODE   READINESS GATES
+  - coredns-76f75df574-5rrgf             0/1     ContainerCreating   0          13s   <none>         masternode         <none>           <none>
+  - coredns-76f75df574-7v4r2             0/1     ContainerCreating   0          13s   <none>         masternode         <none>           <none>
+  - etcd-masternode                      1/1     Running             23         26s   192.168.4.63   masternode         <none>           <none>
+  - kube-apiserver-masternode            1/1     Running             44         26s   192.168.4.63   masternode         <none>           <none>
+  - kube-controller-manager-masternode   1/1     Running             65         26s   192.168.4.63   masternode         <none>           <none>
+  - kube-proxy-69c28                     1/1     Running             0          10s   192.168.4.61   storagenodet3500   <none>           <none>
+  - kube-proxy-8mhh6                     1/1     Running             0          13s   192.168.4.63   masternode         <none>           <none>
+  - kube-scheduler-masternode            1/1     Running             65         27s   192.168.4.63   masternode         <none>           <none>
+
+TASK [Check for CrashLoopBackOff pods] ****************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display crash check result] *********************************************************************************************************************************************************************
+ok: [masternode] =>
+  crash_check.stdout_lines:
+  - No CrashLoopBackOff pods detected
+
+TASK [Verify CNI config exists on all nodes] **********************************************************************************************************************************************************
+fatal: [masternode]: FAILED! => changed=false
+  cmd: |-
+    for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o name | cut -d/ -f2); do
+      echo "Checking CNI config on $node..."
+      ssh -o StrictHostKeyChecking=no $node    'test -f /etc/cni/net.d/10-flannel.conflist && echo "✓ CNI config present" || echo "✗ CNI config missing"'
+    done
+  delta: '0:00:00.446113'
+  end: '2025-10-03 21:43:45.680482'
+  msg: non-zero return code
+  rc: 255
+  start: '2025-10-03 21:43:45.234369'
+  stderr: 'ssh: Could not resolve hostname storagenodet3500: Name or service not known'
+  stderr_lines: <omitted>
+  stdout: |-
+    Checking CNI config on masternode...
+    ✓ CNI config present
+    Checking CNI config on storagenodet3500...
+  stdout_lines: <omitted>
+
+PLAY RECAP ********************************************************************************************************************************************************************************************
+homelab                    : ok=37   changed=4    unreachable=0    failed=1    skipped=4    rescued=0    ignored=2
+masternode                 : ok=45   changed=11   unreachable=0    failed=1    skipped=16   rescued=0    ignored=0
+storagenodet3500           : ok=32   changed=7    unreachable=0    failed=0    skipped=16   rescued=0    ignored=0
+
