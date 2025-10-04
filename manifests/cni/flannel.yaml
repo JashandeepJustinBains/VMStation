@@ -191,9 +191,9 @@ spec:
             - /bin/sh
             - -c
             - |
-              # Check if flannel subnet file exists and flannel.1 interface is up
-              test -f /run/flannel/subnet.env && ip link show flannel.1 | grep -q 'state UP'
-          initialDelaySeconds: 10
+              # Check if flannel subnet file exists and flannel.1 interface exists (not necessarily UP yet)
+              test -f /run/flannel/subnet.env && ip link show flannel.1 > /dev/null 2>&1
+          initialDelaySeconds: 15
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
