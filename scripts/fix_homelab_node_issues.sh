@@ -107,13 +107,13 @@ EOF
   fi
 }
 
-# Try to auto-discover sudo password (optional)
-if get_sudo_pass; then
-  :
+# Check if SUDO_PASS is already set via environment variable
+if [ -n "${SUDO_PASS:-}" ]; then
+  echo "Using SUDO_PASS from environment variable" >&2
 else
-  # If running interactively, prompt the user for the sudo password so they can type it
+  # If running interactively, always prompt the user for the sudo password
   if [ -t 0 ]; then
-    echo "No sudo password discovered in repository files. Please enter the sudo password for remote operations." >&2
+    echo "Please enter the sudo password for remote operations:" >&2
     # read silently
     read -s -p "Sudo password: " SUDO_PASS_INPUT
     echo
@@ -122,10 +122,22 @@ else
       unset SUDO_PASS_INPUT
       echo "Using the provided sudo password for remote operations." >&2
     else
-      echo "No password entered; continuing without a provided sudo password. Remote sudo may prompt interactively or fail." >&2
+      echo "No password entered; trying to auto-discover from repository files..." >&2
+      # Try to auto-discover as fallback
+      if get_sudo_pass; then
+        :
+      else
+        echo "Note: no sudo password provided or discovered; the script may prompt for one when required (or fail)." >&2
+      fi
     fi
   else
-    echo "Note: no sudo password discovered in repository files; the script may prompt for one when required (non-interactive)." >&2
+    # Non-interactive: try to auto-discover
+    echo "Non-interactive mode: attempting to auto-discover sudo password from repository files..." >&2
+    if get_sudo_pass; then
+      :
+    else
+      echo "Note: no sudo password discovered in repository files; the script may prompt for one when required (non-interactive)." >&2
+    fi
   fi
 fi
 
