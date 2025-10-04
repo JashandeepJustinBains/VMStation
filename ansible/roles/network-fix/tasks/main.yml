@@ -1,29 +1,22 @@
-﻿---
+---
 # ===================================================================================
-# GOLD-STANDARD KUBERNETES NETWORK SETUP
-# Never-fail, idempotent, OS-aware configuration for Flannel CNI + kube-proxy
-# Execution order is CRITICAL for zero CrashLoopBackOff and zero CoreDNS failures
+# Network prerequisites for Kubernetes with Flannel CNI
+# OS-aware setup for Debian (iptables) and RHEL 10 (nftables)
 # ===================================================================================
 
-# --- PHASE 1: System Prerequisites (BEFORE kubelet/containerd start) ---
-
-- name: Ensure swap is disabled (immediate, before kubelet)
-  become: true
+- name: Disable swap
   ansible.builtin.command: swapoff -a
   changed_when: false
   ignore_errors: true
 
-- name: Disable swap in /etc/fstab (persistent across reboots)
-  become: true
+- name: Disable swap in fstab
   ansible.builtin.replace:
     path: /etc/fstab
     regexp: '^([^#].*\s+swap\s+.*)$'
     replace: '# \1'
-    backup: yes
   ignore_errors: true
 
-- name: Load all required kernel modules (immediate, before kubelet)
-  become: true
+- name: Load kernel modules
   ansible.builtin.modprobe:
     name: "{{ item }}"
     state: present
@@ -32,24 +25,18 @@
     - overlay
     - nf_conntrack
     - vxlan
-  ignore_errors: false
 
-- name: Persist kernel modules for boot
-  become: true
+- name: Persist kernel modules
   ansible.builtin.copy:
     dest: /etc/modules-load.d/kubernetes.conf
     content: |
-      # Kubernetes required modules
       br_netfilter
       overlay
       nf_conntrack
       vxlan
-    owner: root
-    group: root
     mode: '0644'
 
-- name: Set all required sysctl parameters (immediate, before kubelet)
-  become: true
+- name: Set sysctl parameters
   ansible.builtin.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
@@ -60,135 +47,43 @@
     - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
     - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
     - { name: 'net.ipv4.ip_forward', value: '1' }
-  ignore_errors: false
 
-- name: Persist sysctl settings for boot
-  become: true
+- name: Persist sysctl settings
   ansible.builtin.copy:
     dest: /etc/sysctl.d/99-k8s.conf
     content: |
       net.bridge.bridge-nf-call-iptables = 1
       net.bridge.bridge-nf-call-ip6tables = 1
       net.ipv4.ip_forward = 1
-    owner: root
-    group: root
     mode: '0644'
 
-- name: Apply all sysctl settings
-  become: true
-  ansible.builtin.command:
-    cmd: sysctl --system
-  changed_when: false
-
-# --- PHASE 2: CNI Directory Preparation (BEFORE kubelet starts) ---
-
-- name: Ensure /etc/cni/net.d exists with correct permissions
-  become: true
+- name: Ensure /etc/cni/net.d exists
   ansible.builtin.file:
     path: /etc/cni/net.d
     state: directory
-    owner: root
-    group: root
     mode: '0755'
-  ignore_errors: false
 
-- name: Pre-create Flannel CNI config on RHEL 10+ (workaround for SELinux/permission issues)
-  become: true
-  ansible.builtin.copy:
-    content: |
-      {
-        "name": "cni0",
-        "cniVersion": "0.3.1",
-        "plugins": [
-          {
-            "type": "flannel",
-            "delegate": {
-              "hairpinMode": true,
-              "isDefaultGateway": true
-            }
-          },
-          {
-            "type": "portmap",
-            "capabilities": {
-              "portMappings": true
-            }
-          }
-        ]
-      }
-    dest: /etc/cni/net.d/10-flannel.conflist
-    owner: root
-    group: root
-    mode: '0644'
-  when: ansible_facts['os_family'] == "RedHat"
-
-- name: Remove all conflicting CNI configs (keep only Flannel)
-  become: true
-  ansible.builtin.find:
-    paths: /etc/cni/net.d
-    patterns: '*'
-    excludes: '10-flannel.conflist'
-    file_type: file
-  register: cni_conflicting_files
-
-- name: Delete conflicting CNI configs
-  become: true
+- name: Ensure /run/xtables.lock exists
   ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: absent
-  loop: "{{ cni_conflicting_files.files }}"
-  when: cni_conflicting_files.matched > 0
-
-- name: Remove stale CNI bridge interfaces (prevents pod sandbox issues)
-  become: true
-  ansible.builtin.shell: |
-    # Delete cni0 bridge if it exists (will be recreated by Flannel)
-    if ip link show cni0 &>/dev/null; then
-      ip link set cni0 down 2>/dev/null || true
-      ip link delete cni0 2>/dev/null || true
-      echo "Removed stale cni0 bridge"
-    fi
-    
-    # Clean up any veth interfaces
-    for iface in $(ip link show type veth | grep -o 'veth[^@:]*' || true); do
-      ip link delete $iface 2>/dev/null || true
-    done
-    
-    echo "CNI interfaces cleaned"
-  args:
-    executable: /bin/bash
-  changed_when: false
+    path: /run/xtables.lock
+    state: touch
+    mode: '0644'
   ignore_errors: true
 
-# --- PHASE 3: OS-Specific Network Packages ---
-
-- name: Install required network packages (RHEL/CentOS)
-  become: true
+# OS-specific package installation
+- name: Install network packages (RHEL)
   ansible.builtin.package:
     name:
       - iptables
-      - iptables-services
+      - iptables-nft
+      - nftables
       - conntrack-tools
       - socat
       - iproute-tc
     state: present
   when: ansible_os_family == 'RedHat'
-  ignore_errors: false
 
-- name: Install iptables-nft and nftables for RHEL 10+ (kube-proxy compatibility)
-  become: true
-  ansible.builtin.package:
-    name:
-      - iptables-nft
-      - iptables-nft-services
-      - nftables
-    state: present
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: false
-
-- name: Install required network packages (Debian/Ubuntu)
-  become: true
+- name: Install network packages (Debian)
   ansible.builtin.package:
     name:
       - iptables
@@ -197,34 +92,9 @@
       - iproute2
     state: present
   when: ansible_os_family == 'Debian'
-  ignore_errors: false
 
-# --- PHASE 4: Firewall Disablement (VXLAN overlay requires open node-to-node communication) ---
-
-- name: Set iptables FORWARD policy to ACCEPT
-  become: true
-  ansible.builtin.command:
-    cmd: iptables -P FORWARD ACCEPT
-  ignore_errors: true
-  changed_when: false
-
-- name: Check if ufw exists
-  become: true
-  ansible.builtin.stat:
-    path: /usr/sbin/ufw
-  register: ufw_path
-
-- name: Stop and disable ufw if present
-  become: true
-  ansible.builtin.service:
-    name: ufw
-    state: stopped
-    enabled: false
-  when: ufw_path.stat.exists
-  ignore_errors: true
-
-- name: Stop and disable firewalld on RHEL (Flannel VXLAN requires open communication)
-  become: true
+# Firewall configuration
+- name: Stop and disable firewalld (RHEL)
   ansible.builtin.service:
     name: firewalld
     state: stopped
@@ -232,285 +102,49 @@
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
-# --- PHASE 5: NetworkManager Configuration ---
-
-- name: Ensure NetworkManager conf.d directory exists
-  become: true
-  ansible.builtin.file:
-    path: /etc/NetworkManager/conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: '0755'
-  when: ansible_service_mgr == 'systemd'
+- name: Set iptables FORWARD policy to ACCEPT
+  ansible.builtin.command: iptables -P FORWARD ACCEPT
   ignore_errors: true
+  changed_when: false
 
-- name: Configure NetworkManager to ignore CNI interfaces
-  become: true
-  ansible.builtin.copy:
-    dest: /etc/NetworkManager/conf.d/99-kubernetes.conf
-    content: |
-      [keyfile]
-      unmanaged-devices=interface-name:cni*;interface-name:flannel*;interface-name:veth*
-    owner: root
-    group: root
-    mode: '0644'
-  notify: restart NetworkManager
-  when: ansible_service_mgr == 'systemd'
-  ignore_errors: true
-
-# --- PHASE 6: RHEL 10 Specific nftables/iptables Setup ---
-
-- name: Ensure nftables is installed and enabled (RHEL 10+)
-  become: true
-  ansible.builtin.package:
-    name: nftables
-    state: present
+# RHEL 10 nftables backend configuration
+- name: Configure iptables to use nftables backend (RHEL 10+)
+  ansible.builtin.command: update-alternatives --set iptables /usr/sbin/iptables-nft
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+  changed_when: false
 
-- name: Ensure nftables service is running (RHEL 10+)
-  become: true
-  ansible.builtin.service:
-    name: nftables
-    state: started
-    enabled: true
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-
-- name: Configure nftables to allow Flannel VXLAN and pod traffic (RHEL 10+)
-  become: true
+- name: Configure nftables permissive rules (RHEL 10+)
   ansible.builtin.shell: |
-    # Create minimal nftables rules that allow Flannel to work
-    # This prevents nftables from blocking VXLAN overlay or pod traffic
-    
-    # Check if our table exists
     if ! nft list table inet filter &>/dev/null; then
-      # Create a permissive filter table for Flannel
       nft add table inet filter
       nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
       nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
       nft add chain inet filter output '{ type filter hook output priority 0; policy accept; }'
+      nft list ruleset > /etc/sysconfig/nftables.conf || true
     fi
-    
-    # Ensure FORWARD policy is ACCEPT (critical for pod-to-pod traffic)
-    nft list chain inet filter forward | grep -q 'policy accept' || \
-      nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
-    
-    # Save nftables rules
-    nft list ruleset > /etc/sysconfig/nftables.conf
-    
-    echo "nftables configured for Flannel compatibility"
   args:
     executable: /bin/bash
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
-  changed_when: false
-  ignore_errors: true
-
-- name: Check if iptables-nft binary exists (RHEL 10+)
-  become: true
-  ansible.builtin.stat:
-    path: /usr/sbin/iptables-nft
-  register: iptables_nft_binary
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-
-- name: Check if iptables alternatives entry exists (RHEL 10+)
-  become: true
-  ansible.builtin.stat:
-    path: /var/lib/alternatives/iptables
-  register: iptables_alt_exists
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-
-- name: Install iptables alternatives if missing (RHEL 10+)
-  become: true
-  ansible.builtin.command:
-    cmd: update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-    - iptables_nft_binary.stat.exists | default(false)
-    - not (iptables_alt_exists.stat.exists | default(false))
-  register: iptables_alt_install
-  changed_when: iptables_alt_install.rc == 0
-  ignore_errors: true
-
-- name: Configure iptables to use nftables backend (RHEL 10+)
-  become: true
-  ansible.builtin.command:
-    cmd: update-alternatives --set iptables /usr/sbin/iptables-nft
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
   ignore_errors: true
   changed_when: false
 
-- name: Check if ip6tables-nft binary exists (RHEL 10+)
-  become: true
-  ansible.builtin.stat:
-    path: /usr/sbin/ip6tables-nft
-  register: ip6tables_nft_binary
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-
-- name: Check if ip6tables alternatives entry exists (RHEL 10+)
-  become: true
-  ansible.builtin.stat:
-    path: /var/lib/alternatives/ip6tables
-  register: ip6tables_alt_exists
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-
-- name: Install ip6tables alternatives if missing (RHEL 10+)
-  become: true
-  ansible.builtin.command:
-    cmd: update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-    - ip6tables_nft_binary.stat.exists | default(false)
-    - not (ip6tables_alt_exists.stat.exists | default(false))
-  register: ip6tables_alt_install
-  changed_when: ip6tables_alt_install.rc == 0
-  ignore_errors: true
-
-- name: Configure ip6tables to use nftables backend (RHEL 10+)
-  become: true
-  ansible.builtin.command:
-    cmd: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: true
-  changed_when: false
-
-- name: Ensure iptables lock file exists (RHEL 10+)
-  become: true
-  ansible.builtin.file:
-    path: /run/xtables.lock
-    state: touch
-    owner: root
-    group: root
-    mode: '0644'
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: true
-
-# --- PHASE 7: SELinux Configuration (RHEL) ---
-
-- name: Set SELinux to permissive mode (RHEL, for CNI compatibility)
-  become: true
+# SELinux configuration (RHEL)
+- name: Set SELinux to permissive (RHEL)
   ansible.posix.selinux:
     policy: targeted
     state: permissive
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
 
-- name: Ensure SELinux permissive persists on reboot (RHEL)
-  become: true
+- name: Persist SELinux permissive (RHEL)
   ansible.builtin.lineinfile:
     path: /etc/selinux/config
     regexp: '^SELINUX='
     line: 'SELINUX=permissive'
-    state: present
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
-
-# --- PHASE 8: RHEL 10 Container Runtime Hardening ---
-
-- name: Disable systemd-oomd interference with containers (RHEL 10+)
-  become: true
-  ansible.builtin.systemd:
-    name: systemd-oomd
-    state: stopped
-    enabled: false
-    masked: true
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: true
-
-- name: Ensure containerd cgroup driver is systemd (RHEL 10+)
-  become: true
-  ansible.builtin.shell: |
-    if [ -f /etc/containerd/config.toml ]; then
-      if ! grep -q "SystemdCgroup = true" /etc/containerd/config.toml; then
-        mkdir -p /etc/containerd
-        containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
-      fi
-    fi
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  notify: restart containerd
-  ignore_errors: true
-  changed_when: false
-
-- name: Check if kubelet config exists (RHEL 10+)
-  become: true
-  ansible.builtin.stat:
-    path: /var/lib/kubelet/config.yaml
-  register: kubelet_config_stat
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-
-- name: Ensure kubelet uses systemd cgroup driver (RHEL 10+)
-  become: true
-  ansible.builtin.lineinfile:
-    path: /var/lib/kubelet/config.yaml
-    regexp: '^cgroupDriver:'
-    line: 'cgroupDriver: systemd'
-    state: present
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-    - kubelet_config_stat.stat.exists | default(false)
-  notify: restart kubelet
-  ignore_errors: true
-
-# --- PHASE 9: RHEL 10 kube-proxy iptables chains (prevents CrashLoopBackOff) ---
-
-- name: Pre-create all iptables chains for kube-proxy (RHEL 10+)
-  become: true
-  ansible.builtin.shell: |
-    # Create all required iptables chains for kube-proxy (idempotent)
-    # nat table chains
-    iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
-    iptables -t nat -N KUBE-NODEPORTS 2>/dev/null || true
-    iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
-    iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
-    iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
-    iptables -t nat -N KUBE-MARK-DROP 2>/dev/null || true
-    
-    # filter table chains
-    iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
-    iptables -t filter -N KUBE-EXTERNAL-SERVICES 2>/dev/null || true
-    iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
-    iptables -t filter -N KUBE-NODEPORTS 2>/dev/null || true
-    
-    # Link chains to base chains (check before add to ensure idempotency)
-    iptables -t nat -C PREROUTING -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A PREROUTING -j KUBE-SERVICES
-    iptables -t nat -C OUTPUT -j KUBE-SERVICES 2>/dev/null || iptables -t nat -A OUTPUT -j KUBE-SERVICES
-    iptables -t nat -C POSTROUTING -j KUBE-POSTROUTING 2>/dev/null || iptables -t nat -A POSTROUTING -j KUBE-POSTROUTING
-    iptables -t filter -C FORWARD -j KUBE-FORWARD 2>/dev/null || iptables -t filter -A FORWARD -j KUBE-FORWARD
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: true
-  changed_when: false
-
-# ===================================================================================
-# END OF ROLE: Network prerequisites are now ready for Flannel CNI deployment
-# Next step (in playbook): Deploy Flannel DaemonSet, wait for CNI config, then restart kubelet
-# ===================================================================================

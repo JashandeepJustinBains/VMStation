@@ -1,28 +1,35 @@
 ---
 # =============================================================================
 # VMStation Kubernetes Cluster - Deploy Playbook
-# Gold-standard, idempotent, OS-aware deployment
-# Guarantees: No CrashLoopBackOff, No CoreDNS failures, All nodes Ready
+# Idempotent deployment for mixed OS cluster (Debian + RHEL 10)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# PHASE 1: System Preparation (All Nodes)
-# Prepare system prerequisites before any Kubernetes components start
+# PHASE 1: System Preparation
 # -----------------------------------------------------------------------------
-- name: Phase 1 - System preparation on all nodes
+- name: Phase 1 - System preparation
   hosts: all
   become: true
   gather_facts: true
+  tasks:
+    - name: Ensure /etc/hosts has cluster nodes
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        block: |
+          192.168.4.63 masternode
+          192.168.4.61 storagenodet3500
+          192.168.4.62 homelab
+        marker: "# {mark} VMStation Cluster"
+        create: yes
+
   roles:
-    - system-prep
     - preflight
     - network-fix
 
 # -----------------------------------------------------------------------------
-# PHASE 2: CNI Plugins Installation (All Nodes)
-# Install CNI plugins before cluster initialization
+# PHASE 2: CNI Plugins Installation
 # -----------------------------------------------------------------------------
-- name: Phase 2 - Install CNI plugins on all nodes
+- name: Phase 2 - Install CNI plugins
   hosts: all
   become: true
   tasks:
@@ -32,29 +39,18 @@
         state: directory
         mode: '0755'
 
-    - name: Check if CNI plugins are already installed
+    - name: Check if CNI plugins installed
       ansible.builtin.stat:
         path: /opt/cni/bin/loopback
       register: cni_installed
 
-    - name: Download CNI plugins (if not present)
+    - name: Download CNI plugins
       ansible.builtin.get_url:
-        url: https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+        url: https://github.com/containernetworking/plugins/releases/download/v1.6.1/cni-plugins-linux-amd64-v1.6.1.tgz
         dest: /tmp/cni-plugins.tgz
         mode: '0644'
-      when:
-        - not cni_installed.stat.exists
-        - ansible_os_family != 'RedHat'
-      
-    - name: Download CNI plugins with curl (RHEL fallback)
-      ansible.builtin.shell: |
-        curl -L -o /tmp/cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
-      args:
-        creates: /tmp/cni-plugins.tgz
-        executable: /bin/bash
-      when:
-        - not cni_installed.stat.exists
-        - ansible_os_family == 'RedHat'
+        timeout: 60
+      when: not cni_installed.stat.exists
 
     - name: Extract CNI plugins
       ansible.builtin.unarchive:
@@ -63,406 +59,136 @@
         remote_src: yes
       when: not cni_installed.stat.exists
 
-    - name: Ensure CNI plugins are executable
-      ansible.builtin.file:
-        path: /opt/cni/bin
-        recurse: yes
-        mode: '0755'
-
 # -----------------------------------------------------------------------------
 # PHASE 3: Control Plane Initialization
-# Initialize Kubernetes control plane on masternode (idempotent)
 # -----------------------------------------------------------------------------
-- name: Phase 3 - Initialize Kubernetes control plane
+- name: Phase 3 - Initialize control plane
   hosts: monitoring_nodes
   become: true
   tasks:
-    - name: Check if control plane is already initialized
+    - name: Check if control plane initialized
       ansible.builtin.stat:
         path: /etc/kubernetes/admin.conf
       register: admin_conf
 
-    - name: Initialize control plane with kubeadm
+    - name: Initialize control plane
       ansible.builtin.shell: |
         kubeadm init \
-          --pod-network-cidr={{ pod_network_cidr }} \
-          --service-cidr={{ service_network_cidr }} \
-          --upload-certs \
-          --control-plane-endpoint={{ control_plane_endpoint }}
-      args:
-        executable: /bin/bash
+          --pod-network-cidr=10.244.0.0/16 \
+          --service-cidr=10.96.0.0/12 \
+          --upload-certs
       when: not admin_conf.stat.exists
-      register: kubeadm_init
 
-    - name: Display kubeadm init output
-      ansible.builtin.debug:
-        var: kubeadm_init.stdout_lines
-      when: kubeadm_init is changed
-
-    - name: Wait for API server to be ready
-      ansible.builtin.shell: |
-        for i in {1..30}; do
-          if kubectl --kubeconfig=/etc/kubernetes/admin.conf version &>/dev/null; then
-            echo "API server ready"
-            exit 0
-          fi
-          echo "Waiting for API server... ($i/30)"
-          sleep 2
-        done
-        echo "API server not ready after 60 seconds"
-        exit 1
-      args:
-        executable: /bin/bash
-
-    - name: Ensure KUBECONFIG is set for root
+    - name: Set KUBECONFIG
       ansible.builtin.lineinfile:
         path: /root/.bashrc
         line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
         create: yes
 
-    - name: Set KUBECONFIG for current session
-      ansible.builtin.set_fact:
-        ansible_env_kubeconfig: /etc/kubernetes/admin.conf
+    - name: Wait for API server
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 6443
+        timeout: 60
 
 # -----------------------------------------------------------------------------
 # PHASE 4: Worker Node Join
-# Join worker nodes to cluster (idempotent)
 # -----------------------------------------------------------------------------
-- name: Phase 4 - Join worker nodes to cluster
+- name: Phase 4 - Join worker nodes
   hosts: storage_nodes:compute_nodes
   become: true
   tasks:
-    - name: Check if node is already joined
+    - name: Check if node already joined
       ansible.builtin.stat:
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: Generate join token on control plane
+    - name: Generate join command
       ansible.builtin.shell: kubeadm token create --print-join-command
-      args:
-        executable: /bin/bash
       delegate_to: "{{ groups['monitoring_nodes'][0] }}"
       register: join_command
       when: not kubelet_conf.stat.exists
       run_once: true
 
-    - name: Join worker node to cluster
-      ansible.builtin.shell: "{{ join_command.stdout }} --ignore-preflight-errors=all"
-      args:
-        executable: /bin/bash
-      when: not kubelet_conf.stat.exists
-
-    - name: Wait for kubelet to start
-      ansible.builtin.systemd:
-        name: kubelet
-        state: started
+    - name: Join worker to cluster
+      ansible.builtin.shell: "{{ join_command.stdout }}"
       when: not kubelet_conf.stat.exists
 
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
-# Deploy Flannel CNI and wait for all pods to be Running
-# CRITICAL: Ensure host networking is stable before Flannel deployment
 # -----------------------------------------------------------------------------
 - name: Phase 5 - Deploy Flannel CNI
   hosts: monitoring_nodes
   become: true
   tasks:
-    - name: Ensure all nodes have stable networking before Flannel deployment
+    - name: Apply Flannel manifest
       ansible.builtin.shell: |
-        # Verify all nodes are reachable and network is stable
-        nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
-        
-        echo "Verifying network stability for nodes: $nodes"
-        all_stable=true
-        
-        for ip in $nodes; do
-          # Ping test
-          if ping -c 3 -W 2 $ip &>/dev/null; then
-            echo "✓ Node $ip is reachable"
-          else
-            echo "✗ Node $ip is not reachable"
-            all_stable=false
-          fi
-        done
-        
-        if [ "$all_stable" = "true" ]; then
-          echo "All nodes have stable networking"
-          exit 0
-        else
-          echo "Some nodes have unstable networking"
-          exit 1
-        fi
-      args:
-        executable: /bin/bash
-      register: network_stability
-      retries: 5
-      delay: 10
-      until: network_stability.rc == 0
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
+      register: flannel_apply
+      changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
 
-    - name: Check if Flannel is already deployed
+    - name: Wait for Flannel DaemonSet rollout
       ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-flannel get daemonset kube-flannel-ds &>/dev/null && echo "exists" || echo "missing"
-      args:
-        executable: /bin/bash
-      register: flannel_check
-      changed_when: false
-
-    - name: Apply Flannel CNI manifest
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
-      args:
-        executable: /bin/bash
-      when: flannel_check.stdout == "missing"
-
-    - name: Wait for Flannel DaemonSet to be ready
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=240s
-      args:
-        executable: /bin/bash
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=180s
       retries: 2
-      delay: 10
+      delay: 5
       register: flannel_rollout
       until: flannel_rollout.rc == 0
 
-    - name: Verify Flannel pods are Running on all nodes
+    - name: Wait for all nodes Ready
       ansible.builtin.shell: |
-        total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
-        running_pods=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-flannel get pods -l app=flannel --field-selector=status.phase=Running --no-headers | wc -l)
-        
-        if [ "$running_pods" -eq "$total_nodes" ]; then
-          echo "All Flannel pods running: $running_pods/$total_nodes"
-          exit 0
-        else
-          echo "Flannel pods not all running: $running_pods/$total_nodes"
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -o wide
-          exit 1
-        fi
-      args:
-        executable: /bin/bash
-      retries: 15
-      delay: 10
-      register: flannel_pods
-      until: flannel_pods.rc == 0
-
-    - name: Verify CNI config exists on all nodes (critical for pod networking)
-      ansible.builtin.shell: |
-        # Check CNI config directly on host filesystem (not in containers)
-        all_present=true
-        for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o jsonpath='{.items[*].metadata.name}'); do
-          # SSH to node and check host filesystem
-          if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@$node \
-            "test -f /etc/cni/net.d/10-flannel.conflist" 2>/dev/null; then
-            echo "✓ CNI config present on node $node"
-          else
-            echo "CNI config missing on node $node"
-            all_present=false
-          fi
-        done
-        
-        if [ "$all_present" = "true" ]; then
-          exit 0
-        else
-          echo "Not all nodes have CNI config"
-          exit 1
-        fi
-      args:
-        executable: /bin/bash
-      retries: 10
+        total=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
+        ready=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | grep ' Ready ' | wc -l)
+        test $ready -eq $total
+      retries: 30
       delay: 5
-      register: cni_config_check
-      until: cni_config_check.rc == 0
-
-    - name: Restart kube-proxy pods to recover from CrashLoopBackOff (if any)
-      ansible.builtin.shell: |
-        # Delete any CrashLoopBackOff or Error kube-proxy pods to force clean restart
-        crash_pods=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-system get pods -l k8s-app=kube-proxy \
-          -o json | jq -r '.items[] | select(.status.containerStatuses[]? | (.state.waiting.reason? == "CrashLoopBackOff" or .state.waiting.reason? == "Error")) | .metadata.name')
-        
-        if [ -n "$crash_pods" ]; then
-          echo "Restarting CrashLoopBackOff/Error kube-proxy pods:"
-          echo "$crash_pods"
-          echo "$crash_pods" | xargs -r kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete pod --wait=false
-          echo "Waiting 45s for kube-proxy to restart with CNI now available..."
-          sleep 45
-        else
-          echo "No kube-proxy pods in CrashLoopBackOff/Error state"
-        fi
-      args:
-        executable: /bin/bash
-      changed_when: false
-      ignore_errors: true
-
-    - name: Wait for all kube-proxy pods to be Running
-      ansible.builtin.shell: |
-        total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
-        running_proxies=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-system get pods -l k8s-app=kube-proxy --field-selector=status.phase=Running --no-headers | wc -l)
-        
-        if [ "$running_proxies" -eq "$total_nodes" ]; then
-          echo "All kube-proxy pods running: $running_proxies/$total_nodes"
-          exit 0
-        else
-          echo "kube-proxy pods not all running: $running_proxies/$total_nodes"
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -l k8s-app=kube-proxy -o wide
-          exit 1
-        fi
-      args:
-        executable: /bin/bash
-      retries: 12
-      delay: 10
-      register: proxy_pods
-      until: proxy_pods.rc == 0
-
-# -----------------------------------------------------------------------------
-# PHASE 6: Wait for All Nodes to be Ready
-# Ensure all nodes are Ready before proceeding to application deployment
-# -----------------------------------------------------------------------------
-- name: Phase 6 - Wait for all nodes to be Ready
-  hosts: monitoring_nodes
-  become: true
-  tasks:
-    - name: Wait for all nodes to be Ready
-      ansible.builtin.shell: |
-        for i in {1..18}; do
-          total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
-          ready_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-            get nodes --no-headers | awk '$2 == "Ready"' | wc -l)
-          
-          if [ "$ready_nodes" -eq "$total_nodes" ] && [ "$total_nodes" -gt 0 ]; then
-            echo "All nodes Ready: $ready_nodes/$total_nodes"
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
-            exit 0
-          fi
-          
-          echo "Waiting for nodes to be Ready: $ready_nodes/$total_nodes ($i/18)"
-          sleep 10
-        done
-        
-        echo "Not all nodes Ready after 3 minutes"
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
-        exit 1
-      args:
-        executable: /bin/bash
-
-# -----------------------------------------------------------------------------
-# PHASE 7: Node Configuration
-# Remove taints and uncordon nodes for workload scheduling
-# -----------------------------------------------------------------------------
-- name: Phase 7 - Configure node scheduling
-  hosts: monitoring_nodes
-  become: true
-  tasks:
-    - name: Remove NoSchedule taint from control-plane (allow scheduling)
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- || true
-      args:
-        executable: /bin/bash
-      changed_when: false
+      register: nodes_ready
+      until: nodes_ready.rc == 0
 
     - name: Uncordon all nodes
       ansible.builtin.shell: |
-        for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o name); do
-          kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon $node || true
-        done
-      args:
-        executable: /bin/bash
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon --all
+      changed_when: false
+      ignore_errors: true
+
+    - name: Remove control-plane taint
+      ansible.builtin.shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule- || true
       changed_when: false
 
 # -----------------------------------------------------------------------------
-# PHASE 8: Post-Deployment Validation
-# Verify cluster health and component status
+# PHASE 6: Validation
 # -----------------------------------------------------------------------------
-- name: Phase 8 - Post-deployment validation
+- name: Phase 6 - Validate deployment
   hosts: monitoring_nodes
   become: true
   tasks:
-    - name: Verify kube-system pods are Running
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          -n kube-system get pods -o wide
-      args:
-        executable: /bin/bash
-      register: kube_system_pods
-      changed_when: false
-
-    - name: Display kube-system pod status
-      ansible.builtin.debug:
-        var: kube_system_pods.stdout_lines
-
     - name: Check for CrashLoopBackOff pods
       ansible.builtin.shell: |
-        crash_pods=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf \
-          get pods -A --field-selector=status.phase=Running \
-          -o json | jq -r '.items[] | select(.status.containerStatuses[]? | .state.waiting.reason? == "CrashLoopBackOff") | .metadata.name')
-        
-        if [ -n "$crash_pods" ]; then
-          echo "WARNING: CrashLoopBackOff pods detected:"
-          echo "$crash_pods"
-          exit 1
-        else
-          echo "No CrashLoopBackOff pods detected"
-          exit 0
-        fi
-      args:
-        executable: /bin/bash
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A | grep -i crash || echo "No CrashLoopBackOff pods"
       register: crash_check
       changed_when: false
-      failed_when: false
+      failed_when: "'CrashLoop' in crash_check.stdout"
 
-    - name: Display crash check result
-      ansible.builtin.debug:
-        var: crash_check.stdout_lines
-
-    - name: Verify CNI config exists on all nodes
+    - name: Display cluster status
       ansible.builtin.shell: |
-        # Use IP addresses from inventory instead of hostnames
-        {% for host in groups['all'] %}
-        echo "Checking CNI config on {{ host }} ({{ hostvars[host]['ansible_host'] }})..."
-        ssh -o StrictHostKeyChecking=no {{ hostvars[host]['ansible_host'] }} \
-          'test -f /etc/cni/net.d/10-flannel.conflist && echo "✓ CNI config present" || echo "✗ CNI config missing"'
-        {% endfor %}
-      args:
-        executable: /bin/bash
-      register: cni_config_check
-      changed_when: false
-      failed_when: false
-
-    - name: Display CNI config check results
-      ansible.builtin.debug:
-        var: cni_config_check.stdout_lines
-
-    - name: Final cluster status summary
-      ansible.builtin.shell: |
-        echo "=== Cluster Deployment Complete ==="
-        echo ""
-        echo "Nodes:"
+        echo "=== Nodes ==="
         kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
         echo ""
-        echo "Pods (kube-system):"
+        echo "=== kube-system pods ==="
         kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -o wide
         echo ""
-        echo "Pods (kube-flannel):"
+        echo "=== Flannel pods ==="
         kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -o wide
-      args:
-        executable: /bin/bash
-      register: final_status
+      register: cluster_status
       changed_when: false
 
-    - name: Display final cluster status
+    - name: Show cluster status
       ansible.builtin.debug:
-        var: final_status.stdout_lines
+        var: cluster_status.stdout_lines
 
 # -----------------------------------------------------------------------------
-# PHASE 9: Application Deployment
-# Import higher-level application playbooks (monitoring stack, dashboards, Jellyfin)
-# These are run after the cluster is healthy and ready for workloads.
+# PHASE 7: Application Deployment
 # -----------------------------------------------------------------------------
 - import_playbook: ../plays/deploy-apps.yaml
-
 - import_playbook: ../plays/jellyfin.yml
