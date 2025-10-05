@@ -25,10 +25,14 @@
   hosts: masternode
   become: yes
   gather_facts: no
+  vars:
+    # Default repo root where the manifests live on the masternode. Update if your checkout
+    # lives in a different location.
+    repo_root: /srv/monitoring_data/VMStation
   
   tasks:
     - name: Apply updated Flannel manifest
-      ansible.builtin.command: kubectl apply -f /root/VMStation/manifests/cni/flannel.yaml
+      ansible.builtin.command: kubectl apply -f {{ repo_root }}/manifests/cni/flannel.yaml
       register: flannel_apply
       changed_when: "'configured' in flannel_apply.stdout or 'created' in flannel_apply.stdout"
 

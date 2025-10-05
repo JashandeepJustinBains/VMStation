@@ -5,7 +5,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ANSIBLE_DIR="$SCRIPT_DIR/ansible"
+# The ansible directory lives at the repo root under 'ansible'. From scripts/ the correct
+# relative path is one level up.
+ANSIBLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/ansible"
 
 echo "========================================="
 echo "RHEL 10 CrashLoopBackOff Emergency Fix"
