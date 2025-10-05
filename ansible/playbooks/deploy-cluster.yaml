@@ -165,25 +165,18 @@
       register: flannel_ready
       until: flannel_ready.rc == 0
 
-    - name: Verify subnet.env exists on all nodes
+    - name: Verify subnet.env exists on this node
       ansible.builtin.stat:
         path: /run/flannel/subnet.env
-      delegate_to: "{{ item }}"
-      loop:
-        - masternode
-        - storagenodet3500
-        - homelab
-      register: subnet_check
+      register: subnet_env_stat
       retries: 10
       delay: 5
-      until: subnet_check is defined and (subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3))
-      failed_when: subnet_check is not defined or (subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length != 3)) or (subnet_check.results is not defined)
+      until: subnet_env_stat.stat.exists
+      failed_when: not subnet_env_stat.stat.exists
 
-    - name: Debug missing subnet.env nodes
+    - name: Debug subnet.env status on this node
       ansible.builtin.debug:
-        msg: "subnet.env missing on: {{ item.item }}"
-      loop: "{{ subnet_check.results | rejectattr('stat.exists', 'equalto', true) | list }}"
-      when: subnet_check is defined and subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length != 3)
+        msg: "/run/flannel/subnet.env exists: {{ subnet_env_stat.stat.exists }} on {{ inventory_hostname }}"
 
     - name: Verify CNI config exists on all nodes via SSH
       ansible.builtin.stat:
