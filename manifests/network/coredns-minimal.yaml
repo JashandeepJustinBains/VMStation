@@ -201,10 +201,10 @@ spec:
             path: /ready
             port: 8181
             scheme: HTTP
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           timeoutSeconds: 5
           successThreshold: 1
-          failureThreshold: 3
+          failureThreshold: 10
       dnsPolicy: Default
       volumes:
       - name: config-volume

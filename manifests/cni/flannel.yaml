@@ -191,12 +191,10 @@ spec:
             - /bin/sh
             - -c
             - test -f /run/flannel/subnet.env
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
-          failureThreshold: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
+          failureThreshold: 10
         env:
         - name: POD_NAME
           valueFrom:

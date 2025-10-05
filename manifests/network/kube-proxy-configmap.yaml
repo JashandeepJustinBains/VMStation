@@ -14,7 +14,7 @@ data:
     metricsBindAddress: 127.0.0.1:10249
     enableProfiling: false
     clusterCIDR: "10.244.0.0/16"
-  mode: "nft"
+  mode: "iptables"
     portRange: ""
     udpIdleTimeout: 250ms
     nodePortAddresses: null
