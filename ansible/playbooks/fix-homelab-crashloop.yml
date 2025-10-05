@@ -119,3 +119,64 @@
     - name: Display node status
       ansible.builtin.debug:
         msg: "{{ node_status.stdout_lines }}"
+
+
+- name: Collect host-level diagnostics from homelab
+  hosts: homelab
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Collect last 200 lines of kubelet journal
+      ansible.builtin.shell: journalctl -u kubelet --no-pager -n 200 || true
+      register: homelab_kubelet
+      changed_when: false
+
+    - name: Show kubelet journal snippet
+      ansible.builtin.debug:
+        msg: "--- kubelet journal (homelab) ---\n{{ homelab_kubelet.stdout }}"
+
+    - name: Collect last 200 lines of containerd journal
+      ansible.builtin.shell: journalctl -u containerd --no-pager -n 200 || true
+      register: homelab_containerd
+      changed_when: false
+
+    - name: Show containerd journal snippet
+      ansible.builtin.debug:
+        msg: "--- containerd journal (homelab) ---\n{{ homelab_containerd.stdout }}"
+
+    - name: Dump nftables ruleset
+      ansible.builtin.shell: nft list ruleset || true
+      register: homelab_nft
+      changed_when: false
+
+    - name: Show nftables ruleset
+      ansible.builtin.debug:
+        msg: "--- nft ruleset (homelab) ---\n{{ homelab_nft.stdout }}"
+
+    - name: Dump iptables-save (IPv4)
+      ansible.builtin.shell: iptables-save -c || true
+      register: homelab_iptables
+      changed_when: false
+
+    - name: Show iptables-save
+      ansible.builtin.debug:
+        msg: "--- iptables-save (homelab) ---\n{{ homelab_iptables.stdout }}"
+
+    - name: Show last dmesg lines
+      ansible.builtin.shell: dmesg --ctime | tail -n 200 || true
+      register: homelab_dmesg
+      changed_when: false
+
+    - name: Show dmesg tail
+      ansible.builtin.debug:
+        msg: "--- dmesg (homelab) ---\n{{ homelab_dmesg.stdout }}"
+
+    - name: Show /run/flannel/subnet.env if present
+      ansible.builtin.shell: test -s /run/flannel/subnet.env && cat /run/flannel/subnet.env || echo 'no-subnet-env'
+      register: homelab_subnet_env
+      changed_when: false
+
+    - name: Display flannel subnet.env
+      ansible.builtin.debug:
+        msg: "--- /run/flannel/subnet.env (homelab) ---\n{{ homelab_subnet_env.stdout }}"
