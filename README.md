@@ -33,6 +33,60 @@ See [`DEPLOYMENT_FIX_SUMMARY.md`](DEPLOYMENT_FIX_SUMMARY.md) for complete fix de
 
 ---
 
+## Testing and Validation
+
+VMStation provides comprehensive test infrastructure for validating the mixed OS environment (Debian + RHEL 10) with different authentication methods.
+
+### Pre-Deployment Environment Test
+
+Validate your environment before deployment:
+
+```bash
+# On masternode (192.168.4.63):
+cd /srv/monitoring_data/VMStation
+ansible-playbook -i ansible/inventory/hosts.yml \
+  ansible/playbooks/test-environment.yaml \
+  --ask-vault-pass
+```
+
+This validates:
+- ✅ Connectivity to all nodes
+- ✅ Authentication (root on Debian, sudo on RHEL)
+- ✅ Required packages and binaries
+- ✅ OS-specific configuration (nftables, SELinux)
+- ✅ Network prerequisites
+
+### Idempotency Testing
+
+Test that deploy → reset → deploy works reliably:
+
+```bash
+# Run 5 cycles (recommended for validation)
+ansible-playbook -i ansible/inventory/hosts.yml \
+  ansible/playbooks/test-idempotency.yaml \
+  --ask-vault-pass \
+  -e "test_iterations=5"
+
+# Run 100 cycles (production validation)
+ansible-playbook -i ansible/inventory/hosts.yml \
+  ansible/playbooks/test-idempotency.yaml \
+  --ask-vault-pass \
+  -e "test_iterations=100"
+```
+
+### Complete Testing Guide
+
+For comprehensive testing instructions including:
+- Test environment setup
+- Authentication configuration (Ansible Vault)
+- Troubleshooting common issues
+- Performance benchmarks
+- Success criteria
+
+See: [`TEST_ENVIRONMENT_GUIDE.md`](TEST_ENVIRONMENT_GUIDE.md)
+
+---
+
 ## Simplified Deployment System
 
 VMStation uses a **simplified deployment system** that reduces complexity by 85% while maintaining all functionality. The new system replaces the previous complex modular approach with clean, reliable deployment options.
