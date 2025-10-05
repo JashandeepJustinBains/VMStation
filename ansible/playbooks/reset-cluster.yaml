@@ -28,11 +28,14 @@
           
           Type 'yes' to proceed with reset
       register: reset_confirmation
+      when: reset_confirm is not defined or not reset_confirm | bool
       
     - name: Abort if not confirmed
       ansible.builtin.fail:
         msg: "Reset operation cancelled by user"
-      when: reset_confirmation.user_input | lower != 'yes'
+      when: 
+        - reset_confirm is not defined or not reset_confirm | bool
+        - reset_confirmation.user_input | lower != 'yes'
       
     - name: Generate spin targets from cluster
       ansible.builtin.shell: |

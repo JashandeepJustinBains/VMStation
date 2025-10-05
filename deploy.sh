@@ -131,7 +131,7 @@ cmd_reset(){
   info "This will remove all Kubernetes config and network interfaces"
   info "SSH keys and physical ethernet interfaces will be preserved"
   
-  if ansible-playbook -i "$INVENTORY_FILE" "$RESET_PLAYBOOK"; then
+  if ansible-playbook -i "$INVENTORY_FILE" "$RESET_PLAYBOOK" -e "reset_confirm=true"; then
     info "Reset completed successfully"
     info "Cluster is ready for fresh deployment"
   else
