@@ -1,1 +1,0 @@
-Linux homelab 6.12.0-55.9.1.el10_0.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Mar 25 09:14:09 EDT 2025 x86_64 GNU/Linux

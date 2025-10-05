@@ -1,9 +1,0 @@
-1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
-2: eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000\    link/ether d0:94:66:30:d6:63 brd ff:ff:ff:ff:ff:ff\    altname enp2s0f0\    altname enxd0946630d663
-3: eno2: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN mode DEFAULT group default qlen 1000\    link/ether d0:94:66:30:d6:64 brd ff:ff:ff:ff:ff:ff\    altname enp2s0f1\    altname enxd0946630d664
-4: eno3: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN mode DEFAULT group default qlen 1000\    link/ether d0:94:66:30:d6:65 brd ff:ff:ff:ff:ff:ff\    altname enp3s0f0\    altname enxd0946630d665
-5: eno4: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc mq state DOWN mode DEFAULT group default qlen 1000\    link/ether d0:94:66:30:d6:66 brd ff:ff:ff:ff:ff:ff\    altname enp3s0f1\    altname enxd0946630d666
-209: flannel.1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UNKNOWN mode DEFAULT group default \    link/ether 12:b4:9d:f7:9c:d2 brd ff:ff:ff:ff:ff:ff
-210: cni0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP mode DEFAULT group default qlen 1000\    link/ether 22:09:17:25:71:a5 brd ff:ff:ff:ff:ff:ff
-262: veth144cd033@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT group default \    link/ether 9a:6f:df:3e:0d:a9 brd ff:ff:ff:ff:ff:ff link-netns cni-92c69054-95a1-567a-80d1-3fd24fd2990e
-263: veth8372ddeb@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue master cni0 state UP mode DEFAULT group default \    link/ether 1e:07:c8:d7:eb:28 brd ff:ff:ff:ff:ff:ff link-netns cni-707a56d6-e419-b0fa-d080-f767774fc70c
