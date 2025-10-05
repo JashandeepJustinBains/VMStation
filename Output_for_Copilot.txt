@@ -49,3 +49,1497 @@ If you want Option B, say so and I’ll patch the DaemonSet manifest and add an 
 Made changes.
 
 
+root@masternode:/srv/monitoring_data/VMStation# cd /srv/monitoring_data/VMStation
+git pull
+chmod +x scripts/fix-homelab-crashloop.sh
+./scripts/fix-homelab-crashloop.sh
+Already up to date.
+=========================================
+RHEL 10 CrashLoopBackOff Emergency Fix
+=========================================
+
+This script will:
+1. Apply network-fix role to homelab node
+2. Apply updated Flannel manifest with improved readiness probe
+3. Force Flannel pod recreation on homelab
+4. Validate all pods are running correctly
+
+Continue? (y/n) y
+
+Running playbook...
+
+PLAY [Fix RHEL 10 network configuration and restart pods] *********************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Display node information] ***********************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: Applying network fixes to homelab (RedHat 10.0)
+
+TASK [network-fix : Disable swap] *********************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Disable swap in fstab] ************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Load kernel modules (skip br_netfilter on RHEL 10+, module removed)] **************************************************************************************************************
+ok: [homelab] => (item=overlay)
+ok: [homelab] => (item=nf_conntrack)
+ok: [homelab] => (item=vxlan)
+
+TASK [network-fix : Persist kernel modules] ***********************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Set sysctl parameters] ************************************************************************************************************************************************************
+ok: [homelab] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [homelab] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
+
+TASK [network-fix : Persist sysctl settings] **********************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Ensure /opt/cni/bin directory exists] *********************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Apply SELinux context to /opt/cni/bin (RHEL)] *************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Ensure /etc/cni/net.d exists] *****************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Apply SELinux context to /etc/cni/net.d (RHEL)] ***********************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Ensure /run/flannel directory exists (for subnet.env)] ****************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Apply SELinux context to /run/flannel (RHEL)] *************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Ensure /run/xtables.lock exists (required for iptables concurrency)] **************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Install network packages (RHEL)] **************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Install network packages (Debian)] ************************************************************************************************************************************************
+skipping: [homelab]
+
+TASK [network-fix : Stop and disable firewalld (RHEL)] ************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Set iptables FORWARD policy to ACCEPT] ********************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Check if iptables-nft binary exists (RHEL 10+)] ***********************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Check if iptables alternatives entry exists (RHEL 10+)] ***************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Install iptables alternatives if missing (RHEL 10+)] ******************************************************************************************************************************
+skipping: [homelab]
+
+TASK [network-fix : Configure iptables to use nftables backend (RHEL 10+)] ****************************************************************************************************************************
+changed: [homelab]
+
+TASK [network-fix : Check if ip6tables alternatives entry exists (RHEL 10+)] **************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Install ip6tables alternatives if missing (RHEL 10+)] *****************************************************************************************************************************
+skipping: [homelab]
+
+TASK [network-fix : Configure ip6tables to use nftables backend (RHEL 10+)] ***************************************************************************************************************************
+changed: [homelab]
+
+TASK [network-fix : Pre-create iptables chains for kube-proxy (RHEL 10+)] *****************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Configure nftables permissive rules (RHEL 10+)] ***********************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Pre-create nftables tables for Flannel (RHEL 10+ - CRITICAL FIX)] *****************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Persist nftables rules (RHEL 10+)] ************************************************************************************************************************************************
+skipping: [homelab]
+
+TASK [network-fix : Enable and start nftables service (RHEL 10+)] *************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Set SELinux to permissive (RHEL)] *************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Persist SELinux permissive (RHEL)] ************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Ensure NetworkManager conf.d directory exists (RHEL)] *****************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Configure NetworkManager to ignore CNI interfaces (RHEL)] *************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Restart NetworkManager if config changed (RHEL)] **********************************************************************************************************************************
+skipping: [homelab]
+
+TASK [network-fix : Pre-create Flannel CNI config (RHEL 10+)] *****************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Apply SELinux context to CNI config (RHEL 10+)] ***********************************************************************************************************************************
+skipping: [homelab]
+
+TASK [network-fix : Ensure kubelet is enabled and started] ********************************************************************************************************************************************
+ok: [homelab]
+
+TASK [network-fix : Restart kubelet after network configuration (RHEL 10+)] ***************************************************************************************************************************
+changed: [homelab]
+
+TASK [Force restart kubelet after network configuration] **********************************************************************************************************************************************
+changed: [homelab]
+
+PLAY [Apply updated Flannel manifest and force pod recreation] ****************************************************************************************************************************************
+
+TASK [Apply updated Flannel manifest] *****************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Wait for DaemonSet to be updated] ***************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Force delete Flannel pod on homelab to trigger fresh start] *************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Wait for new Flannel pod to be created] *********************************************************************************************************************************************************
+changed: [masternode]
+
+TASK [Check Flannel pod status on homelab] ************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display Flannel pod status] *********************************************************************************************************************************************************************
+ok: [masternode] =>
+  msg:
+  - NAME                    READY   STATUS    RESTARTS   AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+  - kube-flannel-ds-scng2   1/1     Running   0          20s   192.168.4.62   homelab   <none>           <none>
+
+TASK [Check kube-proxy pod status on homelab] *********************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display kube-proxy pod status] ******************************************************************************************************************************************************************
+ok: [masternode] =>
+  msg:
+  - NAME               READY   STATUS    RESTARTS       AGE   IP             NODE      NOMINATED NODE   READINESS GATES
+  - kube-proxy-wwt2w   1/1     Running   26 (63s ago)   49m   192.168.4.62   homelab   <none>           <none>
+
+TASK [Get Flannel pod logs if not running] ************************************************************************************************************************************************************
+skipping: [masternode]
+
+TASK [Display Flannel logs if pod failed] *************************************************************************************************************************************************************
+skipping: [masternode]
+
+TASK [Check for CrashLoopBackOff pods] ****************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display all pods on homelab] ********************************************************************************************************************************************************************
+ok: [masternode] =>
+  msg:
+  - NAMESPACE      NAME                       READY   STATUS    RESTARTS       AGE
+  - kube-flannel   kube-flannel-ds-scng2      1/1     Running   0              21s
+  - kube-system    coredns-76f75df574-clxqk   1/1     Running   17 (77s ago)   49m
+  - kube-system    coredns-76f75df574-f5d6n   1/1     Running   20 (77s ago)   49m
+  - kube-system    kube-proxy-wwt2w           1/1     Running   26 (63s ago)   49m
+
+TASK [Final validation] *******************************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display node status] ****************************************************************************************************************************************************************************
+ok: [masternode] =>
+  msg:
+  - NAME      STATUS   ROLES    AGE   VERSION    INTERNAL-IP    EXTERNAL-IP   OS-IMAGE                                   KERNEL-VERSION                CONTAINER-RUNTIME
+  - homelab   Ready    <none>   49m   v1.29.15   192.168.4.62   <none>        Red Hat Enterprise Linux 10.0 (Coughlan)   6.12.0-55.9.1.el10_0.x86_64   containerd://1.7.28
+
+PLAY [Collect host-level diagnostics from homelab] ****************************************************************************************************************************************************
+
+TASK [Collect last 200 lines of kubelet journal] ******************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Show kubelet journal snippet] *******************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    --- kubelet journal (homelab) ---
+    Oct 05 14:35:02 homelab kubelet[1161723]: E1005 14:35:02.057375 1161723 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.084306 1161723 cpu_manager.go:214] "Starting CPU manager" policy="none"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.084328 1161723 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.084345 1161723 state_mem.go:36] "Initialized new in-memory state store"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.084511 1161723 state_mem.go:88] "Updated default CPUSet" cpuSet=""
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.084540 1161723 state_mem.go:96] "Updated CPUSet assignments" assignments={}
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.084550 1161723 policy_none.go:49] "None policy: Start"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.085220 1161723 memory_manager.go:170] "Starting memorymanager" policy="None"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.085242 1161723 state_mem.go:35] "Initializing new in-memory state store"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.085375 1161723 state_mem.go:75] "Updated machine memory state"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.089577 1161723 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.089974 1161723 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.146072 1161723 kubelet_node_status.go:73] "Attempting to register node" node="homelab"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.157662 1161723 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.157711 1161723 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.157725 1161723 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.157738 1161723 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.164400 1161723 kubelet_node_status.go:112] "Node was previously registered" node="homelab"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.164514 1161723 kubelet_node_status.go:76] "Successfully registered node" node="homelab"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.165744 1161723 kuberuntime_manager.go:1541] "Updating runtime config through cri with podcidr" CIDR="10.244.1.0/24"
+    Oct 05 14:35:02 homelab kubelet[1161723]: I1005 14:35:02.166665 1161723 kubelet_network.go:61] "Updating Pod CIDR" originalPodCIDR="" newPodCIDR="10.244.1.0/24"
+    Oct 05 14:35:02 homelab systemd[1]: Stopping kubelet.service - kubelet: The Kubernetes Node Agent...
+    Oct 05 14:35:02 homelab systemd[1]: kubelet.service: Deactivated successfully.
+    Oct 05 14:35:02 homelab systemd[1]: Stopped kubelet.service - kubelet: The Kubernetes Node Agent.
+    Oct 05 14:35:02 homelab systemd[1]: Started kubelet.service - kubelet: The Kubernetes Node Agent.
+    Oct 05 14:35:02 homelab (kubelet)[1161793]: kubelet.service: Referenced but unset environment variable evaluates to an empty string: KUBELET_EXTRA_ARGS
+    Oct 05 14:35:02 homelab kubelet[1161793]: Flag --container-runtime-endpoint has been deprecated, This parameter should be set via the config file specified by the Kubelet's --config flag. See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for more information.
+    Oct 05 14:35:02 homelab kubelet[1161793]: Flag --cgroup-driver has been deprecated, This parameter should be set via the config file specified by the Kubelet's --config flag. See https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/ for more information.
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.666016 1161793 server.go:492] "Kubelet version" kubeletVersion="v1.29.15"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.666092 1161793 server.go:494] "Golang settings" GOGC="" GOMAXPROCS="" GOTRACEBACK=""
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.666352 1161793 server.go:924] "Client rotation is on, will bootstrap in background"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.668321 1161793 certificate_store.go:130] Loading cert/key pair from "/var/lib/kubelet/pki/kubelet-client-current.pem".
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.670739 1161793 dynamic_cafile_content.go:157] "Starting controller" name="client-ca-bundle::/etc/kubernetes/pki/ca.crt"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.690242 1161793 server.go:750] "--cgroups-per-qos enabled, but --cgroup-root was not specified.  defaulting to /"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.690536 1161793 container_manager_linux.go:265] "Container manager verified user specified cgroup-root exists" cgroupRoot=[]
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.690794 1161793 container_manager_linux.go:270] "Creating Container Manager object based on Node Config" nodeConfig={"RuntimeCgroupsName":"","SystemCgroupsName":"","KubeletCgroupsName":"","KubeletOOMScoreAdj":-999,"ContainerRuntime":"","CgroupsPerQOS":true,"CgroupRoot":"/","CgroupDriver":"systemd","KubeletRootDir":"/var/lib/kubelet","ProtectKernelDefaults":false,"KubeReservedCgroupName":"","SystemReservedCgroupName":"","ReservedSystemCPUs":{},"EnforceNodeAllocatable":{"pods":{}},"KubeReserved":null,"SystemReserved":null,"HardEvictionThresholds":[{"Signal":"memory.available","Operator":"LessThan","Value":{"Quantity":"100Mi","Percentage":0},"GracePeriod":0,"MinReclaim":null},{"Signal":"nodefs.available","Operator":"LessThan","Value":{"Quantity":null,"Percentage":0.1},"GracePeriod":0,"MinReclaim":null},{"Signal":"nodefs.inodesFree","Operator":"LessThan","Value":{"Quantity":null,"Percentage":0.05},"GracePeriod":0,"MinReclaim":null},{"Signal":"imagefs.available","Operator":"LessThan","Value":{"Quantity":null,"Percentage":0.15},"GracePeriod":0,"MinReclaim":null}],"QOSReserved":{},"CPUManagerPolicy":"none","CPUManagerPolicyOptions":null,"TopologyManagerScope":"container","CPUManagerReconcilePeriod":10000000000,"ExperimentalMemoryManagerPolicy":"None","ExperimentalMemoryManagerReservedMemory":null,"PodPidsLimit":-1,"EnforceCPULimits":true,"CPUCFSQuotaPeriod":100000000,"TopologyManagerPolicy":"none","TopologyManagerPolicyOptions":null}
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.690841 1161793 topology_manager.go:138] "Creating topology manager with none policy"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.690856 1161793 container_manager_linux.go:301] "Creating device plugin manager"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.690899 1161793 state_mem.go:36] "Initialized new in-memory state store"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.691220 1161793 kubelet.go:396] "Attempting to sync node with API server"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.691239 1161793 kubelet.go:301] "Adding static pod path" path="/etc/kubernetes/manifests"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.691273 1161793 kubelet.go:312] "Adding apiserver pod source"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.691291 1161793 apiserver.go:42] "Waiting for node sync before watching apiserver pods"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.692166 1161793 kuberuntime_manager.go:260] "Container runtime initialized" containerRuntime="containerd" version="v1.7.28" apiVersion="v1"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.692522 1161793 kubelet.go:809] "Not starting ClusterTrustBundle informer because we are in static kubelet mode"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.693615 1161793 server.go:1261] "Started kubelet"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.694109 1161793 server.go:162] "Starting to listen" address="0.0.0.0" port=10250
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.694110 1161793 ratelimit.go:55] "Setting rate limiting for endpoint" service="podresources" qps=100 burstTokens=10
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.694561 1161793 server.go:233] "Starting to serve the podresources API" endpoint="unix:/var/lib/kubelet/pod-resources/kubelet.sock"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.695699 1161793 fs_resource_analyzer.go:67] "Starting FS ResourceAnalyzer"
+    Oct 05 14:35:02 homelab kubelet[1161793]: E1005 14:35:02.695776 1161793 kubelet_node_status.go:462] "Error getting the current node from lister" err="node \"homelab\" not found"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.695777 1161793 volume_manager.go:291] "Starting Kubelet Volume Manager"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.695811 1161793 desired_state_of_world_populator.go:151] "Desired state populator starts to run"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.695894 1161793 server.go:450] "Adding debug handlers to kubelet server"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.696436 1161793 reconciler_new.go:29] "Reconciler: start to sync state"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.697098 1161793 factory.go:221] Registration of the systemd container factory successfully
+    Oct 05 14:35:02 homelab kubelet[1161793]: E1005 14:35:02.697251 1161793 kubelet.go:1462] "Image garbage collection failed once. Stats initialization may not have completed yet" err="invalid capacity 0 on image filesystem"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.697257 1161793 factory.go:219] Registration of the crio container factory failed: Get "http://%2Fvar%2Frun%2Fcrio%2Fcrio.sock/info": dial unix /var/run/crio/crio.sock: connect: no such file or directory
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.698237 1161793 factory.go:221] Registration of the containerd container factory successfully
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.707957 1161793 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv4"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.709190 1161793 kubelet_network_linux.go:50] "Initialized iptables rules." protocol="IPv6"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.709225 1161793 status_manager.go:217] "Starting to sync pod status with apiserver"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.709249 1161793 kubelet.go:2347] "Starting kubelet main sync loop"
+    Oct 05 14:35:02 homelab kubelet[1161793]: E1005 14:35:02.709366 1161793 kubelet.go:2371] "Skipping pod synchronization" err="[container runtime status check may not have completed yet, PLEG is not healthy: pleg has yet to be successful]"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.748459 1161793 cpu_manager.go:214] "Starting CPU manager" policy="none"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.748494 1161793 cpu_manager.go:215] "Reconciling" reconcilePeriod="10s"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.748520 1161793 state_mem.go:36] "Initialized new in-memory state store"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.748780 1161793 state_mem.go:88] "Updated default CPUSet" cpuSet=""
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.748823 1161793 state_mem.go:96] "Updated CPUSet assignments" assignments={}
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.748838 1161793 policy_none.go:49] "None policy: Start"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.749412 1161793 memory_manager.go:170] "Starting memorymanager" policy="None"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.749440 1161793 state_mem.go:35] "Initializing new in-memory state store"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.749613 1161793 state_mem.go:75] "Updated machine memory state"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.754975 1161793 manager.go:479] "Failed to read data from checkpoint" checkpoint="kubelet_internal_checkpoint" err="checkpoint is not found"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.755251 1161793 plugin_manager.go:118] "Starting Kubelet Plugin Manager"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.798200 1161793 kubelet_node_status.go:73] "Attempting to register node" node="homelab"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.810081 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.810131 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.810145 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.810157 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.813584 1161793 kubelet_node_status.go:112] "Node was previously registered" node="homelab"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.813685 1161793 kubelet_node_status.go:76] "Successfully registered node" node="homelab"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.815038 1161793 kuberuntime_manager.go:1541] "Updating runtime config through cri with podcidr" CIDR="10.244.1.0/24"
+    Oct 05 14:35:02 homelab kubelet[1161793]: I1005 14:35:02.815535 1161793 kubelet_network.go:61] "Updating Pod CIDR" originalPodCIDR="" newPodCIDR="10.244.1.0/24"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.691376 1161793 apiserver.go:52] "Watching apiserver"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.694208 1161793 topology_manager.go:215] "Topology Admit Handler" podUID="efe2814e-8b20-458d-8a27-4ea87ac517f6" podNamespace="kube-system" podName="coredns-76f75df574-clxqk"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.694845 1161793 topology_manager.go:215] "Topology Admit Handler" podUID="7c755fd4-6c84-4c63-80c6-3d31b3d14f7a" podNamespace="kube-system" podName="coredns-76f75df574-f5d6n"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.695239 1161793 topology_manager.go:215] "Topology Admit Handler" podUID="f924feca-6fdc-4b12-8a6e-7258f5758cf7" podNamespace="kube-system" podName="kube-proxy-wwt2w"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.695513 1161793 topology_manager.go:215] "Topology Admit Handler" podUID="5cbb1757-9484-482f-ac2b-673d70119234" podNamespace="kube-flannel" podName="kube-flannel-ds-6dzrv"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.698145 1161793 desired_state_of_world_populator.go:159] "Finished populating initial desired state of world"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.717009 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"run\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-run\") pod \"kube-flannel-ds-6dzrv\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") " pod="kube-flannel/kube-flannel-ds-6dzrv"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.717045 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni-plugin\") pod \"kube-flannel-ds-6dzrv\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") " pod="kube-flannel/kube-flannel-ds-6dzrv"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.717066 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"lib-modules\" (UniqueName: \"kubernetes.io/host-path/f924feca-6fdc-4b12-8a6e-7258f5758cf7-lib-modules\") pod \"kube-proxy-wwt2w\" (UID: \"f924feca-6fdc-4b12-8a6e-7258f5758cf7\") " pod="kube-system/kube-proxy-wwt2w"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.717161 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni\") pod \"kube-flannel-ds-6dzrv\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") " pod="kube-flannel/kube-flannel-ds-6dzrv"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.717233 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/f924feca-6fdc-4b12-8a6e-7258f5758cf7-xtables-lock\") pod \"kube-proxy-wwt2w\" (UID: \"f924feca-6fdc-4b12-8a6e-7258f5758cf7\") " pod="kube-system/kube-proxy-wwt2w"
+    Oct 05 14:35:03 homelab kubelet[1161793]: I1005 14:35:03.717317 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-xtables-lock\") pod \"kube-flannel-ds-6dzrv\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") " pod="kube-flannel/kube-flannel-ds-6dzrv"
+    Oct 05 14:35:04 homelab kubelet[1161793]: I1005 14:35:04.006353 1161793 scope.go:117] "RemoveContainer" containerID="20daec27e78cac083cc517d7bd86d0fce82ac71d1dcb6e02cb45cd01d8f1fad1"
+    Oct 05 14:35:04 homelab kubelet[1161793]: I1005 14:35:04.727723 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add"
+    Oct 05 14:35:04 homelab kubelet[1161793]: I1005 14:35:04.727762 1161793 scope.go:117] "RemoveContainer" containerID="0da5edddd4bf836d06fa21b25c681b52fe833718e1c1d22191dd4d2e56ccd668"
+    Oct 05 14:35:05 homelab kubelet[1161793]: I1005 14:35:05.733236 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f"
+    Oct 05 14:35:05 homelab kubelet[1161793]: I1005 14:35:05.733289 1161793 scope.go:117] "RemoveContainer" containerID="20daec27e78cac083cc517d7bd86d0fce82ac71d1dcb6e02cb45cd01d8f1fad1"
+    Oct 05 14:35:05 homelab kubelet[1161793]: I1005 14:35:05.735117 1161793 scope.go:117] "RemoveContainer" containerID="62d2fe1381588679c7b7c128a14d83e292f55625f1e59f290a89fcf4c4eb2ada"
+    Oct 05 14:35:05 homelab kubelet[1161793]: I1005 14:35:05.753049 1161793 scope.go:117] "RemoveContainer" containerID="089a5be1488b5afd5c02f116c3f140550dc3b6b1c92c5e181a44a47cc275cb98"
+    Oct 05 14:35:06 homelab kubelet[1161793]: I1005 14:35:06.744235 1161793 scope.go:117] "RemoveContainer" containerID="8f09ccaa1c9b9224df6c1b28199ca6ad5dbeac28eec13b05d8e233bce9fc7073"
+    Oct 05 14:35:06 homelab kubelet[1161793]: I1005 14:35:06.744336 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d"
+    Oct 05 14:35:06 homelab kubelet[1161793]: E1005 14:35:06.887239 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-proxy\" with CrashLoopBackOff: \"back-off 10s restarting failed container=kube-proxy pod=kube-proxy-wwt2w_kube-system(f924feca-6fdc-4b12-8a6e-7258f5758cf7)\"" pod="kube-system/kube-proxy-wwt2w" podUID="f924feca-6fdc-4b12-8a6e-7258f5758cf7"
+    Oct 05 14:35:07 homelab kubelet[1161793]: I1005 14:35:07.749309 1161793 scope.go:117] "RemoveContainer" containerID="2e1aa45db42bee8937bb35cf8bcae514564fa0a93b0ec6a5b1cba685f6613d04"
+    Oct 05 14:35:07 homelab kubelet[1161793]: E1005 14:35:07.749752 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-proxy\" with CrashLoopBackOff: \"back-off 10s restarting failed container=kube-proxy pod=kube-proxy-wwt2w_kube-system(f924feca-6fdc-4b12-8a6e-7258f5758cf7)\"" pod="kube-system/kube-proxy-wwt2w" podUID="f924feca-6fdc-4b12-8a6e-7258f5758cf7"
+    Oct 05 14:35:07 homelab kubelet[1161793]: I1005 14:35:07.770755 1161793 scope.go:117] "RemoveContainer" containerID="bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65"
+    Oct 05 14:35:07 homelab kubelet[1161793]: E1005 14:35:07.771270 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-flannel\" with CrashLoopBackOff: \"back-off 10s restarting failed container=kube-flannel pod=kube-flannel-ds-6dzrv_kube-flannel(5cbb1757-9484-482f-ac2b-673d70119234)\"" pod="kube-flannel/kube-flannel-ds-6dzrv" podUID="5cbb1757-9484-482f-ac2b-673d70119234"
+    Oct 05 14:35:08 homelab kubelet[1161793]: I1005 14:35:08.755078 1161793 scope.go:117] "RemoveContainer" containerID="ae34a13d4ba8e0cdf8eab971d9c4c1169f096af3d7036ac6fded01e9c4a8ee55"
+    Oct 05 14:35:08 homelab kubelet[1161793]: I1005 14:35:08.758655 1161793 scope.go:117] "RemoveContainer" containerID="bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65"
+    Oct 05 14:35:08 homelab kubelet[1161793]: E1005 14:35:08.758961 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-flannel\" with CrashLoopBackOff: \"back-off 10s restarting failed container=kube-flannel pod=kube-flannel-ds-6dzrv_kube-flannel(5cbb1757-9484-482f-ac2b-673d70119234)\"" pod="kube-flannel/kube-flannel-ds-6dzrv" podUID="5cbb1757-9484-482f-ac2b-673d70119234"
+    Oct 05 14:35:08 homelab kubelet[1161793]: I1005 14:35:08.774346 1161793 scope.go:117] "RemoveContainer" containerID="c883cc9e9f9839c63e26ae975e83a6b1c6a77d5184461092245db39764941939"
+    Oct 05 14:35:09 homelab kubelet[1161793]: I1005 14:35:09.761257 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="5305d75c32fab2ddf143ebef15e16e904d3c9fbb342be239f10859c8ecfeed9c"
+    Oct 05 14:35:09 homelab kubelet[1161793]: I1005 14:35:09.763412 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="177576d65ffcc51d0f52cd2ecd2803c4457001e98f71334fbbc350efefe1de8b"
+    Oct 05 14:35:11 homelab kubelet[1161793]: I1005 14:35:11.774009 1161793 prober_manager.go:312] "Failed to trigger a manual run" probe="Readiness"
+    Oct 05 14:35:11 homelab kubelet[1161793]: I1005 14:35:11.774020 1161793 prober_manager.go:312] "Failed to trigger a manual run" probe="Readiness"
+    Oct 05 14:35:14 homelab kubelet[1161793]: I1005 14:35:14.064959 1161793 prober_manager.go:312] "Failed to trigger a manual run" probe="Readiness"
+    Oct 05 14:35:21 homelab kubelet[1161793]: I1005 14:35:21.729016 1161793 scope.go:117] "RemoveContainer" containerID="2e1aa45db42bee8937bb35cf8bcae514564fa0a93b0ec6a5b1cba685f6613d04"
+    Oct 05 14:35:22 homelab kubelet[1161793]: I1005 14:35:22.747578 1161793 scope.go:117] "RemoveContainer" containerID="bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65"
+    Oct 05 14:35:23 homelab kubelet[1161793]: I1005 14:35:23.805665 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="47ade14d5d5778705c7af11d160f06a96d3c5bf8ec916e445cc02801851ce6f2"
+    Oct 05 14:35:23 homelab kubelet[1161793]: I1005 14:35:23.805709 1161793 scope.go:117] "RemoveContainer" containerID="2e1aa45db42bee8937bb35cf8bcae514564fa0a93b0ec6a5b1cba685f6613d04"
+    Oct 05 14:35:23 homelab kubelet[1161793]: E1005 14:35:23.890357 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-proxy\" with CrashLoopBackOff: \"back-off 20s restarting failed container=kube-proxy pod=kube-proxy-wwt2w_kube-system(f924feca-6fdc-4b12-8a6e-7258f5758cf7)\"" pod="kube-system/kube-proxy-wwt2w" podUID="f924feca-6fdc-4b12-8a6e-7258f5758cf7"
+    Oct 05 14:35:24 homelab kubelet[1161793]: I1005 14:35:24.815036 1161793 pod_container_deletor.go:80] "Container not found in pod's containers" containerID="b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20"
+    Oct 05 14:35:24 homelab kubelet[1161793]: I1005 14:35:24.815075 1161793 scope.go:117] "RemoveContainer" containerID="bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65"
+    Oct 05 14:35:24 homelab kubelet[1161793]: I1005 14:35:24.817319 1161793 scope.go:117] "RemoveContainer" containerID="3ce57c0802c64c3ce94a21b6c4d031495b4fa5a1fda268920ab712003602cdf8"
+    Oct 05 14:35:24 homelab kubelet[1161793]: I1005 14:35:24.833757 1161793 scope.go:117] "RemoveContainer" containerID="a43307d9e33773dec227700c43fab60923f535d1e5181109b562a3f7890db292"
+    Oct 05 14:35:24 homelab kubelet[1161793]: I1005 14:35:24.847148 1161793 scope.go:117] "RemoveContainer" containerID="a6a0fd01702d64ac6bf3a8ab3c93f4cb8919d59b7d1e66181b73471989e967c0"
+    Oct 05 14:35:24 homelab kubelet[1161793]: E1005 14:35:24.847513 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-proxy\" with CrashLoopBackOff: \"back-off 20s restarting failed container=kube-proxy pod=kube-proxy-wwt2w_kube-system(f924feca-6fdc-4b12-8a6e-7258f5758cf7)\"" pod="kube-system/kube-proxy-wwt2w" podUID="f924feca-6fdc-4b12-8a6e-7258f5758cf7"
+    Oct 05 14:35:26 homelab kubelet[1161793]: I1005 14:35:26.829217 1161793 scope.go:117] "RemoveContainer" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:35:26 homelab kubelet[1161793]: E1005 14:35:26.829742 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-flannel\" with CrashLoopBackOff: \"back-off 20s restarting failed container=kube-flannel pod=kube-flannel-ds-6dzrv_kube-flannel(5cbb1757-9484-482f-ac2b-673d70119234)\"" pod="kube-flannel/kube-flannel-ds-6dzrv" podUID="5cbb1757-9484-482f-ac2b-673d70119234"
+    Oct 05 14:35:27 homelab kubelet[1161793]: I1005 14:35:27.830633 1161793 scope.go:117] "RemoveContainer" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:35:27 homelab kubelet[1161793]: E1005 14:35:27.831118 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-flannel\" with CrashLoopBackOff: \"back-off 20s restarting failed container=kube-flannel pod=kube-flannel-ds-6dzrv_kube-flannel(5cbb1757-9484-482f-ac2b-673d70119234)\"" pod="kube-flannel/kube-flannel-ds-6dzrv" podUID="5cbb1757-9484-482f-ac2b-673d70119234"
+    Oct 05 14:35:38 homelab kubelet[1161793]: I1005 14:35:38.710488 1161793 scope.go:117] "RemoveContainer" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:35:38 homelab kubelet[1161793]: E1005 14:35:38.711007 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-flannel\" with CrashLoopBackOff: \"back-off 20s restarting failed container=kube-flannel pod=kube-flannel-ds-6dzrv_kube-flannel(5cbb1757-9484-482f-ac2b-673d70119234)\"" pod="kube-flannel/kube-flannel-ds-6dzrv" podUID="5cbb1757-9484-482f-ac2b-673d70119234"
+    Oct 05 14:35:39 homelab kubelet[1161793]: I1005 14:35:39.732069 1161793 scope.go:117] "RemoveContainer" containerID="a6a0fd01702d64ac6bf3a8ab3c93f4cb8919d59b7d1e66181b73471989e967c0"
+    Oct 05 14:35:39 homelab kubelet[1161793]: E1005 14:35:39.732429 1161793 pod_workers.go:1298] "Error syncing pod, skipping" err="failed to \"StartContainer\" for \"kube-proxy\" with CrashLoopBackOff: \"back-off 20s restarting failed container=kube-proxy pod=kube-proxy-wwt2w_kube-system(f924feca-6fdc-4b12-8a6e-7258f5758cf7)\"" pod="kube-system/kube-proxy-wwt2w" podUID="f924feca-6fdc-4b12-8a6e-7258f5758cf7"
+    Oct 05 14:35:50 homelab kubelet[1161793]: I1005 14:35:50.709852 1161793 scope.go:117] "RemoveContainer" containerID="a6a0fd01702d64ac6bf3a8ab3c93f4cb8919d59b7d1e66181b73471989e967c0"
+    Oct 05 14:35:51 homelab kubelet[1161793]: I1005 14:35:51.727976 1161793 scope.go:117] "RemoveContainer" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.135996 1161793 remote_runtime.go:496] "ExecSync cmd from runtime service failed" err="rpc error: code = Unknown desc = failed to exec in container: failed to start exec \"116097a2d53fd8cf7f83e1a1afc9632df08da59e465e93dbbffcb4c6c197a5f9\": OCI runtime exec failed: exec failed: cannot exec in a stopped container: unknown" containerID="5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6" cmd=["/bin/sh","-c","test -s /run/flannel/subnet.env \u0026\u0026 ip link show flannel.1"]
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.136524 1161793 topology_manager.go:215] "Topology Admit Handler" podUID="cd3604ba-20eb-4d65-8b40-dd69ff363372" podNamespace="kube-flannel" podName="kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136569 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="install-cni"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136582 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="install-cni-plugin"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136591 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="install-cni"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136599 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="install-cni-plugin"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136608 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136618 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136626 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.136649 1161793 memory_manager.go:354] "RemoveStaleState removing state" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.136659 1161793 memory_manager.go:354] "RemoveStaleState removing state" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.136667 1161793 memory_manager.go:354] "RemoveStaleState removing state" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136685 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136694 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="install-cni"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.136703 1161793 cpu_manager.go:395] "RemoveStaleState: removing container" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="install-cni-plugin"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.136720 1161793 memory_manager.go:354] "RemoveStaleState removing state" podUID="5cbb1757-9484-482f-ac2b-673d70119234" containerName="kube-flannel"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.148727 1161793 remote_runtime.go:496] "ExecSync cmd from runtime service failed" err="rpc error: code = NotFound desc = failed to exec in container: failed to create exec \"f2bf2039bd282f7ad2bfc5a4e4addf27d7f40592a128e5dd9ca9f70014a33c04\": task 5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6 not found: not found" containerID="5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6" cmd=["/bin/sh","-c","test -s /run/flannel/subnet.env \u0026\u0026 ip link show flannel.1"]
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.150212 1161793 remote_runtime.go:496] "ExecSync cmd from runtime service failed" err="rpc error: code = NotFound desc = failed to exec in container: failed to load task: no running task found: task 5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6 not found: not found" containerID="5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6" cmd=["/bin/sh","-c","test -s /run/flannel/subnet.env \u0026\u0026 ip link show flannel.1"]
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.182801 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"run\" (UniqueName: \"kubernetes.io/host-path/cd3604ba-20eb-4d65-8b40-dd69ff363372-run\") pod \"kube-flannel-ds-scng2\" (UID: \"cd3604ba-20eb-4d65-8b40-dd69ff363372\") " pod="kube-flannel/kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.182841 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"kube-api-access-xc264\" (UniqueName: \"kubernetes.io/projected/cd3604ba-20eb-4d65-8b40-dd69ff363372-kube-api-access-xc264\") pod \"kube-flannel-ds-scng2\" (UID: \"cd3604ba-20eb-4d65-8b40-dd69ff363372\") " pod="kube-flannel/kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.182869 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/cd3604ba-20eb-4d65-8b40-dd69ff363372-xtables-lock\") pod \"kube-flannel-ds-scng2\" (UID: \"cd3604ba-20eb-4d65-8b40-dd69ff363372\") " pod="kube-flannel/kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.182906 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/cd3604ba-20eb-4d65-8b40-dd69ff363372-cni\") pod \"kube-flannel-ds-scng2\" (UID: \"cd3604ba-20eb-4d65-8b40-dd69ff363372\") " pod="kube-flannel/kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.182942 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"flannel-cfg\" (UniqueName: \"kubernetes.io/configmap/cd3604ba-20eb-4d65-8b40-dd69ff363372-flannel-cfg\") pod \"kube-flannel-ds-scng2\" (UID: \"cd3604ba-20eb-4d65-8b40-dd69ff363372\") " pod="kube-flannel/kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.182966 1161793 reconciler_common.go:258] "operationExecutor.VerifyControllerAttachedVolume started for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/cd3604ba-20eb-4d65-8b40-dd69ff363372-cni-plugin\") pod \"kube-flannel-ds-scng2\" (UID: \"cd3604ba-20eb-4d65-8b40-dd69ff363372\") " pod="kube-flannel/kube-flannel-ds-scng2"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283263 1161793 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"kube-api-access-pnrvz\" (UniqueName: \"kubernetes.io/projected/5cbb1757-9484-482f-ac2b-673d70119234-kube-api-access-pnrvz\") pod \"5cbb1757-9484-482f-ac2b-673d70119234\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") "
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283323 1161793 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"run\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-run\") pod \"5cbb1757-9484-482f-ac2b-673d70119234\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") "
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283354 1161793 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni\") pod \"5cbb1757-9484-482f-ac2b-673d70119234\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") "
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283391 1161793 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"flannel-cfg\" (UniqueName: \"kubernetes.io/configmap/5cbb1757-9484-482f-ac2b-673d70119234-flannel-cfg\") pod \"5cbb1757-9484-482f-ac2b-673d70119234\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") "
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283424 1161793 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni-plugin\") pod \"5cbb1757-9484-482f-ac2b-673d70119234\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") "
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283457 1161793 reconciler_common.go:172] "operationExecutor.UnmountVolume started for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-xtables-lock\") pod \"5cbb1757-9484-482f-ac2b-673d70119234\" (UID: \"5cbb1757-9484-482f-ac2b-673d70119234\") "
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283466 1161793 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni" (OuterVolumeSpecName: "cni") pod "5cbb1757-9484-482f-ac2b-673d70119234" (UID: "5cbb1757-9484-482f-ac2b-673d70119234"). InnerVolumeSpecName "cni". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283516 1161793 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-xtables-lock" (OuterVolumeSpecName: "xtables-lock") pod "5cbb1757-9484-482f-ac2b-673d70119234" (UID: "5cbb1757-9484-482f-ac2b-673d70119234"). InnerVolumeSpecName "xtables-lock". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283523 1161793 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni-plugin" (OuterVolumeSpecName: "cni-plugin") pod "5cbb1757-9484-482f-ac2b-673d70119234" (UID: "5cbb1757-9484-482f-ac2b-673d70119234"). InnerVolumeSpecName "cni-plugin". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283436 1161793 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-run" (OuterVolumeSpecName: "run") pod "5cbb1757-9484-482f-ac2b-673d70119234" (UID: "5cbb1757-9484-482f-ac2b-673d70119234"). InnerVolumeSpecName "run". PluginName "kubernetes.io/host-path", VolumeGidValue ""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283762 1161793 reconciler_common.go:305] "Volume detached for volume \"xtables-lock\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-xtables-lock\") on node \"homelab\" DevicePath \"\""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283800 1161793 reconciler_common.go:305] "Volume detached for volume \"run\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-run\") on node \"homelab\" DevicePath \"\""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283818 1161793 reconciler_common.go:305] "Volume detached for volume \"cni\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni\") on node \"homelab\" DevicePath \"\""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.283830 1161793 reconciler_common.go:305] "Volume detached for volume \"cni-plugin\" (UniqueName: \"kubernetes.io/host-path/5cbb1757-9484-482f-ac2b-673d70119234-cni-plugin\") on node \"homelab\" DevicePath \"\""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.284014 1161793 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/configmap/5cbb1757-9484-482f-ac2b-673d70119234-flannel-cfg" (OuterVolumeSpecName: "flannel-cfg") pod "5cbb1757-9484-482f-ac2b-673d70119234" (UID: "5cbb1757-9484-482f-ac2b-673d70119234"). InnerVolumeSpecName "flannel-cfg". PluginName "kubernetes.io/configmap", VolumeGidValue ""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.287376 1161793 operation_generator.go:887] UnmountVolume.TearDown succeeded for volume "kubernetes.io/projected/5cbb1757-9484-482f-ac2b-673d70119234-kube-api-access-pnrvz" (OuterVolumeSpecName: "kube-api-access-pnrvz") pod "5cbb1757-9484-482f-ac2b-673d70119234" (UID: "5cbb1757-9484-482f-ac2b-673d70119234"). InnerVolumeSpecName "kube-api-access-pnrvz". PluginName "kubernetes.io/projected", VolumeGidValue ""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.384793 1161793 reconciler_common.go:305] "Volume detached for volume \"flannel-cfg\" (UniqueName: \"kubernetes.io/configmap/5cbb1757-9484-482f-ac2b-673d70119234-flannel-cfg\") on node \"homelab\" DevicePath \"\""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.384847 1161793 reconciler_common.go:305] "Volume detached for volume \"kube-api-access-pnrvz\" (UniqueName: \"kubernetes.io/projected/5cbb1757-9484-482f-ac2b-673d70119234-kube-api-access-pnrvz\") on node \"homelab\" DevicePath \"\""
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.712598 1161793 kubelet_volumes.go:163] "Cleaned up orphaned pod volumes dir" podUID="5cbb1757-9484-482f-ac2b-673d70119234" path="/var/lib/kubelet/pods/5cbb1757-9484-482f-ac2b-673d70119234/volumes"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.914956 1161793 scope.go:117] "RemoveContainer" containerID="5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.926430 1161793 scope.go:117] "RemoveContainer" containerID="f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.940218 1161793 scope.go:117] "RemoveContainer" containerID="87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.953048 1161793 scope.go:117] "RemoveContainer" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.969677 1161793 scope.go:117] "RemoveContainer" containerID="5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.970172 1161793 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\": not found" containerID="5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.970253 1161793 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6"} err="failed to get container status \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\": rpc error: code = NotFound desc = an error occurred when try to find container \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\": not found"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.970276 1161793 scope.go:117] "RemoveContainer" containerID="f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.970691 1161793 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\": not found" containerID="f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.970740 1161793 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8"} err="failed to get container status \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\": rpc error: code = NotFound desc = an error occurred when try to find container \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\": not found"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.970763 1161793 scope.go:117] "RemoveContainer" containerID="87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.971205 1161793 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\": not found" containerID="87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.971251 1161793 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831"} err="failed to get container status \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\": rpc error: code = NotFound desc = an error occurred when try to find container \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\": not found"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.971280 1161793 scope.go:117] "RemoveContainer" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: E1005 14:36:04.971732 1161793 remote_runtime.go:432] "ContainerStatus from runtime service failed" err="rpc error: code = NotFound desc = an error occurred when try to find container \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\": not found" containerID="4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"
+    Oct 05 14:36:04 homelab kubelet[1161793]: I1005 14:36:04.971770 1161793 pod_container_deletor.go:53] "DeleteContainer returned error" containerID={"Type":"containerd","ID":"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8"} err="failed to get container status \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\": rpc error: code = NotFound desc = an error occurred when try to find container \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\": not found"
+    Oct 05 14:36:24 homelab kubelet[1161793]: I1005 14:36:24.518368 1161793 pod_startup_latency_tracker.go:102] "Observed pod startup duration" pod="kube-flannel/kube-flannel-ds-scng2" podStartSLOduration=20.518298107 podStartE2EDuration="20.518298107s" podCreationTimestamp="2025-10-05 14:36:04 -0400 EDT" firstStartedPulling="0001-01-01 00:00:00 +0000 UTC" lastFinishedPulling="0001-01-01 00:00:00 +0000 UTC" observedRunningTime="2025-10-05 14:36:06.952684816 -0400 EDT m=+64.333075968" watchObservedRunningTime="2025-10-05 14:36:24.518298107 -0400 EDT m=+81.898689268"
+
+TASK [Collect last 200 lines of containerd journal] ***************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Show containerd journal snippet] ****************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    --- containerd journal (homelab) ---
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.806338604-04:00" level=info msg="Container to stop \"a6a0fd01702d64ac6bf3a8ab3c93f4cb8919d59b7d1e66181b73471989e967c0\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.806492743-04:00" level=info msg="TearDown network for sandbox \"47ade14d5d5778705c7af11d160f06a96d3c5bf8ec916e445cc02801851ce6f2\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.806515275-04:00" level=info msg="StopPodSandbox for \"47ade14d5d5778705c7af11d160f06a96d3c5bf8ec916e445cc02801851ce6f2\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.806838412-04:00" level=info msg="StopPodSandbox for \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.806881912-04:00" level=info msg="Container to stop \"2e1aa45db42bee8937bb35cf8bcae514564fa0a93b0ec6a5b1cba685f6613d04\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.807048025-04:00" level=info msg="TearDown network for sandbox \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.807068164-04:00" level=info msg="StopPodSandbox for \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.807106566-04:00" level=info msg="RemoveContainer for \"2e1aa45db42bee8937bb35cf8bcae514564fa0a93b0ec6a5b1cba685f6613d04\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.807416097-04:00" level=info msg="StopPodSandbox for \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.807555758-04:00" level=info msg="TearDown network for sandbox \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.807583283-04:00" level=info msg="StopPodSandbox for \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.808011508-04:00" level=info msg="StopPodSandbox for \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.808130546-04:00" level=info msg="TearDown network for sandbox \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.808169968-04:00" level=info msg="StopPodSandbox for \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.808749662-04:00" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-proxy-wwt2w,Uid:f924feca-6fdc-4b12-8a6e-7258f5758cf7,Namespace:kube-system,Attempt:26,}"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.810345053-04:00" level=info msg="StopContainer for \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" with timeout 30 (s)"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.810866649-04:00" level=info msg="Stop container \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" with signal terminated"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.819640712-04:00" level=info msg="RemoveContainer for \"2e1aa45db42bee8937bb35cf8bcae514564fa0a93b0ec6a5b1cba685f6613d04\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.822580997-04:00" level=info msg="received exit event container_id:\"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\"  id:\"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\"  pid:1163269  exit_status:2  exited_at:{seconds:1759689323  nanos:822412358}"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.841421206-04:00" level=info msg="shim disconnected" id=4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8 namespace=k8s.io
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.841458717-04:00" level=warning msg="cleaning up after shim disconnected" id=4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8 namespace=k8s.io
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.841469992-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.853858168-04:00" level=info msg="StopContainer for \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.854327370-04:00" level=info msg="StopPodSandbox for \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.854361208-04:00" level=info msg="Container to stop \"a43307d9e33773dec227700c43fab60923f535d1e5181109b562a3f7890db292\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.854397041-04:00" level=info msg="Container to stop \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.854407353-04:00" level=info msg="Container to stop \"3ce57c0802c64c3ce94a21b6c4d031495b4fa5a1fda268920ab712003602cdf8\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.860367450-04:00" level=info msg="received exit event container_id:\"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\"  id:\"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\"  pid:1162309  exit_status:137  exited_at:{seconds:1759689323  nanos:860248940}"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.877088603-04:00" level=info msg="shim disconnected" id=b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20 namespace=k8s.io
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.877116156-04:00" level=warning msg="cleaning up after shim disconnected" id=b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20 namespace=k8s.io
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.877125903-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.888334481-04:00" level=info msg="TearDown network for sandbox \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.888372338-04:00" level=info msg="StopPodSandbox for \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.888686624-04:00" level=info msg="StopPodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.888732723-04:00" level=info msg="Container to stop \"bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.888854732-04:00" level=info msg="TearDown network for sandbox \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.888872901-04:00" level=info msg="StopPodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.889184349-04:00" level=info msg="StopPodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\""
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.889280427-04:00" level=info msg="TearDown network for sandbox \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.889298485-04:00" level=info msg="StopPodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" returns successfully"
+    Oct 05 14:35:23 homelab containerd[1138810]: time="2025-10-05T14:35:23.889745176-04:00" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-proxy-wwt2w,Uid:f924feca-6fdc-4b12-8a6e-7258f5758cf7,Namespace:kube-system,Attempt:26,} returns sandbox id \"2301b56680154de9216a7efd58727f9448ce04e1f1ad166bb50672e232b5f4fd\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.815510889-04:00" level=info msg="StopPodSandbox for \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.815572290-04:00" level=info msg="Container to stop \"3ce57c0802c64c3ce94a21b6c4d031495b4fa5a1fda268920ab712003602cdf8\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.815632079-04:00" level=info msg="Container to stop \"a43307d9e33773dec227700c43fab60923f535d1e5181109b562a3f7890db292\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.815652316-04:00" level=info msg="Container to stop \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.815747576-04:00" level=info msg="TearDown network for sandbox \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\" successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.815767813-04:00" level=info msg="StopPodSandbox for \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\" returns successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.816251749-04:00" level=info msg="StopPodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.816339490-04:00" level=info msg="Container to stop \"bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.816493668-04:00" level=info msg="RemoveContainer for \"bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.816534018-04:00" level=info msg="TearDown network for sandbox \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.816570564-04:00" level=info msg="StopPodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" returns successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.816986638-04:00" level=info msg="StopPodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.817121574-04:00" level=info msg="TearDown network for sandbox \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.817149236-04:00" level=info msg="StopPodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" returns successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.818693943-04:00" level=info msg="RemoveContainer for \"3ce57c0802c64c3ce94a21b6c4d031495b4fa5a1fda268920ab712003602cdf8\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.830077852-04:00" level=info msg="RemoveContainer for \"bac7609ff71fb9717aa8f099b718a3f631aed26631c5a3568879ecabb6a61c65\" returns successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.833584750-04:00" level=info msg="RemoveContainer for \"3ce57c0802c64c3ce94a21b6c4d031495b4fa5a1fda268920ab712003602cdf8\" returns successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.835125070-04:00" level=info msg="RemoveContainer for \"a43307d9e33773dec227700c43fab60923f535d1e5181109b562a3f7890db292\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.844919533-04:00" level=info msg="RemoveContainer for \"a43307d9e33773dec227700c43fab60923f535d1e5181109b562a3f7890db292\" returns successfully"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.845577424-04:00" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-flannel-ds-6dzrv,Uid:5cbb1757-9484-482f-ac2b-673d70119234,Namespace:kube-flannel,Attempt:7,}"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.924952639-04:00" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-flannel-ds-6dzrv,Uid:5cbb1757-9484-482f-ac2b-673d70119234,Namespace:kube-flannel,Attempt:7,} returns sandbox id \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.926893581-04:00" level=info msg="CreateContainer within sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" for container &ContainerMetadata{Name:install-cni-plugin,Attempt:3,}"
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.957662872-04:00" level=info msg="CreateContainer within sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" for &ContainerMetadata{Name:install-cni-plugin,Attempt:3,} returns container id \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\""
+    Oct 05 14:35:24 homelab containerd[1138810]: time="2025-10-05T14:35:24.958078212-04:00" level=info msg="StartContainer for \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\""
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.024737878-04:00" level=info msg="StartContainer for \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\" returns successfully"
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.025385345-04:00" level=info msg="received exit event container_id:\"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\"  id:\"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\"  pid:1163525  exited_at:{seconds:1759689325  nanos:25175886}"
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.058325960-04:00" level=info msg="shim disconnected" id=87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831 namespace=k8s.io
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.058354080-04:00" level=warning msg="cleaning up after shim disconnected" id=87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831 namespace=k8s.io
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.058364301-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.850414359-04:00" level=info msg="CreateContainer within sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" for container &ContainerMetadata{Name:install-cni,Attempt:0,}"
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.883915904-04:00" level=info msg="CreateContainer within sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" for &ContainerMetadata{Name:install-cni,Attempt:0,} returns container id \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\""
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.884423795-04:00" level=info msg="StartContainer for \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\""
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.933070623-04:00" level=info msg="StartContainer for \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\" returns successfully"
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.933089902-04:00" level=info msg="received exit event container_id:\"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\"  id:\"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\"  pid:1163586  exited_at:{seconds:1759689325  nanos:930437373}"
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.947255079-04:00" level=info msg="shim disconnected" id=f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8 namespace=k8s.io
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.947282039-04:00" level=warning msg="cleaning up after shim disconnected" id=f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8 namespace=k8s.io
+    Oct 05 14:35:25 homelab containerd[1138810]: time="2025-10-05T14:35:25.947292541-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:35:50 homelab containerd[1138810]: time="2025-10-05T14:35:50.712781143-04:00" level=info msg="CreateContainer within sandbox \"2301b56680154de9216a7efd58727f9448ce04e1f1ad166bb50672e232b5f4fd\" for container &ContainerMetadata{Name:kube-proxy,Attempt:26,}"
+    Oct 05 14:35:50 homelab containerd[1138810]: time="2025-10-05T14:35:50.748063214-04:00" level=info msg="CreateContainer within sandbox \"2301b56680154de9216a7efd58727f9448ce04e1f1ad166bb50672e232b5f4fd\" for &ContainerMetadata{Name:kube-proxy,Attempt:26,} returns container id \"a83c9f9ece9b51510ea04db00376e4ef44a18b0adb6d1014effdecda37ada308\""
+    Oct 05 14:35:50 homelab containerd[1138810]: time="2025-10-05T14:35:50.748553066-04:00" level=info msg="StartContainer for \"a83c9f9ece9b51510ea04db00376e4ef44a18b0adb6d1014effdecda37ada308\""
+    Oct 05 14:35:50 homelab containerd[1138810]: time="2025-10-05T14:35:50.832992567-04:00" level=info msg="StartContainer for \"a83c9f9ece9b51510ea04db00376e4ef44a18b0adb6d1014effdecda37ada308\" returns successfully"
+    Oct 05 14:35:51 homelab containerd[1138810]: time="2025-10-05T14:35:51.730959963-04:00" level=info msg="CreateContainer within sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" for container &ContainerMetadata{Name:kube-flannel,Attempt:7,}"
+    Oct 05 14:35:51 homelab containerd[1138810]: time="2025-10-05T14:35:51.764058459-04:00" level=info msg="CreateContainer within sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" for &ContainerMetadata{Name:kube-flannel,Attempt:7,} returns container id \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\""
+    Oct 05 14:35:51 homelab containerd[1138810]: time="2025-10-05T14:35:51.764545516-04:00" level=info msg="StartContainer for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\""
+    Oct 05 14:35:51 homelab containerd[1138810]: time="2025-10-05T14:35:51.862121926-04:00" level=info msg="StartContainer for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.698307153-04:00" level=info msg="StopPodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.698656273-04:00" level=info msg="TearDown network for sandbox \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.698683431-04:00" level=info msg="StopPodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.699305857-04:00" level=info msg="RemovePodSandbox for \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.699358521-04:00" level=info msg="Forcibly stopping sandbox \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.699493331-04:00" level=info msg="TearDown network for sandbox \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.708578166-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.708646051-04:00" level=info msg="RemovePodSandbox \"e499ce2ed0d301f9a8e4adb70819340dd172112d515552bf07c725461ff3120c\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.709043265-04:00" level=info msg="StopPodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.709126596-04:00" level=info msg="TearDown network for sandbox \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.709143011-04:00" level=info msg="StopPodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.709478764-04:00" level=info msg="RemovePodSandbox for \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.709524787-04:00" level=info msg="Forcibly stopping sandbox \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.709646428-04:00" level=info msg="TearDown network for sandbox \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.719979180-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720020405-04:00" level=info msg="RemovePodSandbox \"379549a07e20e840a7852647f7bc1592f7302548d2214d316c15a54c60d52f1f\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720341730-04:00" level=info msg="StopPodSandbox for \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720431112-04:00" level=info msg="TearDown network for sandbox \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720448274-04:00" level=info msg="StopPodSandbox for \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720757586-04:00" level=info msg="RemovePodSandbox for \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720810154-04:00" level=info msg="Forcibly stopping sandbox \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.720911498-04:00" level=info msg="TearDown network for sandbox \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.729666356-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.729707073-04:00" level=info msg="RemovePodSandbox \"bd0ece0f3a1b3b7e10f54a2ef63af87c522360afcd1dbd2854eb8180c0ae6591\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.729979310-04:00" level=info msg="StopPodSandbox for \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.730058766-04:00" level=info msg="TearDown network for sandbox \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.730075227-04:00" level=info msg="StopPodSandbox for \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.730363308-04:00" level=info msg="RemovePodSandbox for \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.730387752-04:00" level=info msg="Forcibly stopping sandbox \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.730448729-04:00" level=info msg="TearDown network for sandbox \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.739595697-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.739659291-04:00" level=info msg="RemovePodSandbox \"d44981935575e5c6c17ca74fd71e337c51d809ef6ebda5e9991b2f1c08b67add\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.740026809-04:00" level=info msg="StopPodSandbox for \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.740157494-04:00" level=info msg="TearDown network for sandbox \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.740184081-04:00" level=info msg="StopPodSandbox for \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.740527488-04:00" level=info msg="RemovePodSandbox for \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.740569867-04:00" level=info msg="Forcibly stopping sandbox \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.740662434-04:00" level=info msg="TearDown network for sandbox \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.748914943-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.748967289-04:00" level=info msg="RemovePodSandbox \"1e14cfbe3d7a733ed02b9f52b52b8f7a355d5f17481cadf97da3418f6d6d186d\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.749366770-04:00" level=info msg="StopPodSandbox for \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.761145346-04:00" level=info msg="TearDown network for sandbox \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.761173133-04:00" level=info msg="StopPodSandbox for \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.761478330-04:00" level=info msg="RemovePodSandbox for \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.761507103-04:00" level=info msg="Forcibly stopping sandbox \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.771197107-04:00" level=info msg="TearDown network for sandbox \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.780260740-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.780298504-04:00" level=info msg="RemovePodSandbox \"41e1b00e767d91a91327f177b7a83620d9a5ff85109560c098fa0510d4f0caa1\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.780563699-04:00" level=info msg="StopPodSandbox for \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.790479337-04:00" level=info msg="TearDown network for sandbox \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.790502102-04:00" level=info msg="StopPodSandbox for \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\" returns successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.790799871-04:00" level=info msg="RemovePodSandbox for \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.790836061-04:00" level=info msg="Forcibly stopping sandbox \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\""
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.800375201-04:00" level=info msg="TearDown network for sandbox \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\" successfully"
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.809294150-04:00" level=warning msg="Failed to get podSandbox status for container event for sandboxID \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\": an error occurred when try to find sandbox: not found. Sending the event with nil podSandboxStatus."
+    Oct 05 14:36:02 homelab containerd[1138810]: time="2025-10-05T14:36:02.809335305-04:00" level=info msg="RemovePodSandbox \"e7f35e12311a45679c5c901ba237b9be6f789d35905c92918be83f69f28111f8\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.111688932-04:00" level=info msg="StopContainer for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" with timeout 30 (s)"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.112136933-04:00" level=info msg="Stop container \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" with signal terminated"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.129335471-04:00" level=info msg="received exit event container_id:\"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\"  id:\"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\"  pid:1163787  exited_at:{seconds:1759689364  nanos:129127641}"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.135741861-04:00" level=error msg="ExecSync for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" failed" error="failed to exec in container: failed to start exec \"116097a2d53fd8cf7f83e1a1afc9632df08da59e465e93dbbffcb4c6c197a5f9\": OCI runtime exec failed: exec failed: cannot exec in a stopped container: unknown"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.148114763-04:00" level=info msg="shim disconnected" id=5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6 namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.148149964-04:00" level=warning msg="cleaning up after shim disconnected" id=5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6 namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.148160931-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.148557943-04:00" level=error msg="ExecSync for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" failed" error="rpc error: code = NotFound desc = failed to exec in container: failed to create exec \"f2bf2039bd282f7ad2bfc5a4e4addf27d7f40592a128e5dd9ca9f70014a33c04\": task 5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6 not found: not found"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.150054710-04:00" level=error msg="ExecSync for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" failed" error="rpc error: code = NotFound desc = failed to exec in container: failed to load task: no running task found: task 5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6 not found: not found"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.172227821-04:00" level=info msg="StopContainer for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.172576165-04:00" level=info msg="StopPodSandbox for \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.172608684-04:00" level=info msg="Container to stop \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.172645409-04:00" level=info msg="Container to stop \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.172657970-04:00" level=info msg="Container to stop \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.179460204-04:00" level=info msg="received exit event container_id:\"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\"  id:\"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\"  pid:1163494  exit_status:137  exited_at:{seconds:1759689364  nanos:179344942}"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.193294203-04:00" level=info msg="shim disconnected" id=e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214 namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.193322752-04:00" level=warning msg="cleaning up after shim disconnected" id=e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214 namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.193334969-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.204256470-04:00" level=info msg="TearDown network for sandbox \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.204283927-04:00" level=info msg="StopPodSandbox for \"e2c45218a1b20e48990c64ad5ec26b977516979271c665ed01d23aff6a0c5214\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.204643051-04:00" level=info msg="StopPodSandbox for \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.204673978-04:00" level=info msg="Container to stop \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" must be in running or unknown state, current state \"CONTAINER_EXITED\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.204748632-04:00" level=info msg="TearDown network for sandbox \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\" successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.204760371-04:00" level=info msg="StopPodSandbox for \"b9f9a330dc2e395df3972c91617bb3478b2fc60e7f2fd83a5929ffbe813abc20\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.451512883-04:00" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-flannel-ds-scng2,Uid:cd3604ba-20eb-4d65-8b40-dd69ff363372,Namespace:kube-flannel,Attempt:0,}"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.534247061-04:00" level=info msg="RunPodSandbox for &PodSandboxMetadata{Name:kube-flannel-ds-scng2,Uid:cd3604ba-20eb-4d65-8b40-dd69ff363372,Namespace:kube-flannel,Attempt:0,} returns sandbox id \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.536803204-04:00" level=info msg="CreateContainer within sandbox \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\" for container &ContainerMetadata{Name:install-cni-plugin,Attempt:0,}"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.568150799-04:00" level=info msg="CreateContainer within sandbox \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\" for &ContainerMetadata{Name:install-cni-plugin,Attempt:0,} returns container id \"eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.568457232-04:00" level=info msg="StartContainer for \"eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.628151537-04:00" level=info msg="StartContainer for \"eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.628369962-04:00" level=info msg="received exit event container_id:\"eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9\"  id:\"eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9\"  pid:1164064  exited_at:{seconds:1759689364  nanos:628165756}"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.661051071-04:00" level=info msg="shim disconnected" id=eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9 namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.661084233-04:00" level=warning msg="cleaning up after shim disconnected" id=eaee7efaf49f60ee5b4d1b9bf032c07448829b3d4d09ed4f8d5d8af9dcd9adc9 namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.661101235-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.916401370-04:00" level=info msg="RemoveContainer for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.926240568-04:00" level=info msg="RemoveContainer for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.927740211-04:00" level=info msg="RemoveContainer for \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.928058940-04:00" level=info msg="CreateContainer within sandbox \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\" for container &ContainerMetadata{Name:install-cni,Attempt:0,}"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.940025861-04:00" level=info msg="RemoveContainer for \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.941470788-04:00" level=info msg="RemoveContainer for \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.952844970-04:00" level=info msg="RemoveContainer for \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.954403889-04:00" level=info msg="RemoveContainer for \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.969511027-04:00" level=info msg="RemoveContainer for \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" returns successfully"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.969942663-04:00" level=error msg="ContainerStatus for \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\" failed" error="rpc error: code = NotFound desc = an error occurred when try to find container \"5588394509e44baa8257b80426a51e5cd6f8b2c4605d61db297f5f1a2dfebdf6\": not found"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.970519089-04:00" level=error msg="ContainerStatus for \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\" failed" error="rpc error: code = NotFound desc = an error occurred when try to find container \"f45926a42fac22d977cc5b4937887355b04e9b5dfa1a67651ded692ae5dc21b8\": not found"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.970988315-04:00" level=error msg="ContainerStatus for \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\" failed" error="rpc error: code = NotFound desc = an error occurred when try to find container \"87290792ec0f82681564ccca3f89b349418d370ff50a6a087091dcf316593831\": not found"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.971562282-04:00" level=error msg="ContainerStatus for \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\" failed" error="rpc error: code = NotFound desc = an error occurred when try to find container \"4bb1fe9f38e56cdfd9154b369bec9b1659ff317ab765b1f6b11139ae301d90b8\": not found"
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.978027562-04:00" level=info msg="CreateContainer within sandbox \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\" for &ContainerMetadata{Name:install-cni,Attempt:0,} returns container id \"eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7\""
+    Oct 05 14:36:04 homelab containerd[1138810]: time="2025-10-05T14:36:04.978504320-04:00" level=info msg="StartContainer for \"eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7\""
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.030394316-04:00" level=info msg="StartContainer for \"eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7\" returns successfully"
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.030408618-04:00" level=info msg="received exit event container_id:\"eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7\"  id:\"eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7\"  pid:1164123  exited_at:{seconds:1759689365  nanos:28246894}"
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.044193948-04:00" level=info msg="shim disconnected" id=eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7 namespace=k8s.io
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.044220922-04:00" level=warning msg="cleaning up after shim disconnected" id=eed4a4228f6a48e1ee023fd74535f8663110b73b158db9675a2f66e33382e6b7 namespace=k8s.io
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.044230440-04:00" level=info msg="cleaning up dead shim" namespace=k8s.io
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.924139757-04:00" level=info msg="CreateContainer within sandbox \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\" for container &ContainerMetadata{Name:kube-flannel,Attempt:0,}"
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.962343174-04:00" level=info msg="CreateContainer within sandbox \"16af09edebfbfc8121dba23de881bd89db3c04cb450455d96342719692b16fc0\" for &ContainerMetadata{Name:kube-flannel,Attempt:0,} returns container id \"41a3600d5753837ab07f2531d56a54b0a064ca5ba64ba1fa73b03b2046c7eefd\""
+    Oct 05 14:36:05 homelab containerd[1138810]: time="2025-10-05T14:36:05.962806445-04:00" level=info msg="StartContainer for \"41a3600d5753837ab07f2531d56a54b0a064ca5ba64ba1fa73b03b2046c7eefd\""
+    Oct 05 14:36:06 homelab containerd[1138810]: time="2025-10-05T14:36:06.047222267-04:00" level=info msg="StartContainer for \"41a3600d5753837ab07f2531d56a54b0a064ca5ba64ba1fa73b03b2046c7eefd\" returns successfully"
+
+TASK [Dump nftables ruleset] **************************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Show nftables ruleset] **************************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    --- nft ruleset (homelab) ---
+    table inet filter {
+            chain input {
+                    type filter hook input priority filter; policy accept;
+            }
+
+            chain forward {
+                    type filter hook forward priority filter; policy accept;
+            }
+
+            chain output {
+                    type filter hook output priority filter; policy accept;
+            }
+    }
+    table ip filter {
+            chain FORWARD {
+                    type filter hook forward priority filter; policy accept;
+                    ct state new  counter packets 425 bytes 32029 jump KUBE-PROXY-FIREWALL
+                    ct state new  counter packets 425 bytes 32029 jump KUBE-EXTERNAL-SERVICES
+                     counter packets 4919 bytes 1568209 jump KUBE-FORWARD
+                    ct state new  counter packets 425 bytes 32029 jump KUBE-SERVICES
+            }
+
+            chain KUBE-FORWARD {
+                    ct state invalid counter packets 0 bytes 0 drop
+                     meta mark & 0x00004000 == 0x00004000 counter packets 0 bytes 0 accept
+                     ct state related,established counter packets 21 bytes 5588 accept
+            }
+
+            chain KUBE-SERVICES {
+            }
+
+            chain KUBE-EXTERNAL-SERVICES {
+            }
+
+            chain KUBE-NODEPORTS {
+            }
+
+            chain KUBE-PROXY-FIREWALL {
+            }
+
+            chain INPUT {
+                    type filter hook input priority filter; policy accept;
+                    ct state new  counter packets 2073 bytes 327771 jump KUBE-PROXY-FIREWALL
+                     counter packets 22345 bytes 26403531 jump KUBE-NODEPORTS
+                    counter packets 22622 bytes 26596761 jump KUBE-FIREWALL
+                    ct state new  counter packets 2132 bytes 341112 jump KUBE-EXTERNAL-SERVICES
+            }
+
+            chain KUBE-FIREWALL {
+                    ip saddr != 127.0.0.0/8 ip daddr 127.0.0.0/8  ct status dnat counter packets 0 bytes 0 drop
+            }
+
+            chain OUTPUT {
+                    type filter hook output priority filter; policy accept;
+                    ct state new  counter packets 1071 bytes 168798 jump KUBE-PROXY-FIREWALL
+                    ct state new  counter packets 1071 bytes 168798 jump KUBE-SERVICES
+                    counter packets 23363 bytes 4334723 jump KUBE-FIREWALL
+            }
+
+            chain KUBE-KUBELET-CANARY {
+            }
+
+            chain KUBE-PROXY-CANARY {
+            }
+    }
+    table ip nat {
+            chain KUBE-SERVICES {
+                    meta l4proto tcp ip daddr 10.105.53.37  tcp dport 3000 counter packets 0 bytes 0 jump KUBE-SVC-XUJLWDDTZEWKLHU6
+                    meta l4proto tcp ip daddr 10.105.160.170  tcp dport 3100 counter packets 0 bytes 0 jump KUBE-SVC-XJNK4YJ26LXBTM52
+                    meta l4proto tcp ip daddr 10.109.208.10  tcp dport 9090 counter packets 0 bytes 0 jump KUBE-SVC-VVO7BBXOSCJQDQML
+                    meta l4proto tcp ip daddr 10.111.167.235  tcp dport 8096 counter packets 0 bytes 0 jump KUBE-SVC-KXUS3N7ECHBWRLJK
+                    meta l4proto tcp ip daddr 10.111.167.235  tcp dport 8920 counter packets 0 bytes 0 jump KUBE-SVC-ZRYGFW47QPW3QJWW
+                    meta l4proto udp ip daddr 10.96.0.10  udp dport 53 counter packets 0 bytes 0 jump KUBE-SVC-TCOU7JCQXEZGVUNU
+                    meta l4proto tcp ip daddr 10.96.0.10  tcp dport 9153 counter packets 0 bytes 0 jump KUBE-SVC-JD5MR3NA4I4DYORP
+                    meta l4proto tcp ip daddr 10.96.0.1  tcp dport 443 counter packets 2 bytes 120 jump KUBE-SVC-NPX46M4PTMTKRN6Y
+                    meta l4proto tcp ip daddr 10.96.0.10  tcp dport 53 counter packets 0 bytes 0 jump KUBE-SVC-ERIFXISQEP7F7OF4
+                    meta l4proto tcp ip daddr 10.98.46.105  tcp dport 8000 counter packets 0 bytes 0 jump KUBE-SVC-Z6GDYMWE5TV2NNJN
+                    meta l4proto tcp ip daddr 10.111.33.69  tcp dport 443 counter packets 0 bytes 0 jump KUBE-SVC-CEZPIJSAUFW5MYPQ
+                     fib daddr type local counter packets 5 bytes 588 jump KUBE-NODEPORTS
+            }
+
+            chain KUBE-POSTROUTING {
+                    meta mark & 0x00004000 != 0x00004000 counter packets 19 bytes 4208 return
+                    counter packets 2 bytes 120 meta mark set mark xor 0x4000
+                     counter packets 2 bytes 120 masquerade fully-random
+            }
+
+            chain KUBE-FIREWALL {
+            }
+
+            chain KUBE-MARK-MASQ {
+                    counter packets 2 bytes 120 meta mark set mark or 0x4000
+            }
+
+            chain KUBE-MARK-DROP {
+            }
+
+            chain KUBE-LOAD-BALANCER {
+            }
+
+            chain KUBE-NODE-PORT {
+            }
+
+            chain PREROUTING {
+                    type nat hook prerouting priority dstnat; policy accept;
+                     counter packets 1039 bytes 120147 jump KUBE-SERVICES
+            }
+
+            chain OUTPUT {
+                    type nat hook output priority dstnat; policy accept;
+                     counter packets 1009 bytes 160056 jump KUBE-SERVICES
+            }
+
+            chain POSTROUTING {
+                    type nat hook postrouting priority srcnat; policy accept;
+                     counter packets 1218 bytes 177128 jump KUBE-POSTROUTING
+            }
+
+            chain KUBE-KUBELET-CANARY {
+            }
+
+            chain KUBE-PROXY-CANARY {
+            }
+
+            chain KUBE-NODEPORTS {
+                    meta l4proto tcp  tcp dport 30300 counter packets 0 bytes 0 jump KUBE-EXT-XUJLWDDTZEWKLHU6
+                    meta l4proto tcp  tcp dport 31100 counter packets 0 bytes 0 jump KUBE-EXT-XJNK4YJ26LXBTM52
+                    meta l4proto tcp  tcp dport 30090 counter packets 0 bytes 0 jump KUBE-EXT-VVO7BBXOSCJQDQML
+                    meta l4proto tcp  tcp dport 30096 counter packets 0 bytes 0 jump KUBE-EXT-KXUS3N7ECHBWRLJK
+                    meta l4proto tcp  tcp dport 30920 counter packets 0 bytes 0 jump KUBE-EXT-ZRYGFW47QPW3QJWW
+            }
+
+            chain KUBE-SVC-NPX46M4PTMTKRN6Y {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.1  tcp dport 443 counter packets 2 bytes 120 jump KUBE-MARK-MASQ
+                     counter packets 2 bytes 120 jump KUBE-SEP-KSERYG5HKT6IOJHF
+            }
+
+            chain KUBE-SEP-KSERYG5HKT6IOJHF {
+                    ip saddr 192.168.4.63  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 2 bytes 120 dnat to 192.168.4.63:6443
+            }
+
+            chain KUBE-SVC-CEZPIJSAUFW5MYPQ {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.111.33.69  tcp dport 443 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-76B46VSNNSPYZ7E7
+            }
+
+            chain KUBE-SVC-Z6GDYMWE5TV2NNJN {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.98.46.105  tcp dport 8000 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-3APNOXLOXM7XEWLF
+            }
+
+            chain KUBE-SEP-76B46VSNNSPYZ7E7 {
+                    ip saddr 10.244.0.5  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.0.5:8443
+            }
+
+            chain KUBE-SEP-3APNOXLOXM7XEWLF {
+                    ip saddr 10.244.0.6  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.0.6:8000
+            }
+
+            chain KUBE-EXT-XUJLWDDTZEWKLHU6 {
+                     counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    counter packets 0 bytes 0 jump KUBE-SVC-XUJLWDDTZEWKLHU6
+            }
+
+            chain KUBE-SVC-XUJLWDDTZEWKLHU6 {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.105.53.37  tcp dport 3000 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-BYUNWLLX7X6XAV5G
+            }
+
+            chain KUBE-SEP-BYUNWLLX7X6XAV5G {
+                    ip saddr 10.244.0.3  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.0.3:3000
+            }
+
+            chain KUBE-EXT-VVO7BBXOSCJQDQML {
+                     counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    counter packets 0 bytes 0 jump KUBE-SVC-VVO7BBXOSCJQDQML
+            }
+
+            chain KUBE-SVC-VVO7BBXOSCJQDQML {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.109.208.10  tcp dport 9090 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-HTSUAAXMSDW3NBSA
+            }
+
+            chain KUBE-SEP-HTSUAAXMSDW3NBSA {
+                    ip saddr 10.244.0.2  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.0.2:9090
+            }
+
+            chain KUBE-EXT-XJNK4YJ26LXBTM52 {
+                     counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    counter packets 0 bytes 0 jump KUBE-SVC-XJNK4YJ26LXBTM52
+            }
+
+            chain KUBE-SVC-XJNK4YJ26LXBTM52 {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.105.160.170  tcp dport 3100 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-CTYBCIQNIWCLNOGY
+            }
+
+            chain KUBE-SEP-CTYBCIQNIWCLNOGY {
+                    ip saddr 10.244.0.4  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.0.4:3100
+            }
+
+            chain KUBE-EXT-ZRYGFW47QPW3QJWW {
+                     counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    counter packets 0 bytes 0 jump KUBE-SVC-ZRYGFW47QPW3QJWW
+            }
+
+            chain KUBE-SVC-ZRYGFW47QPW3QJWW {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.111.167.235  tcp dport 8920 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-3Z6PJ6QTFX5SCDMU
+            }
+
+            chain KUBE-SEP-3Z6PJ6QTFX5SCDMU {
+                    ip saddr 10.244.2.2  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.2.2:8920
+            }
+
+            chain KUBE-EXT-KXUS3N7ECHBWRLJK {
+                     counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    counter packets 0 bytes 0 jump KUBE-SVC-KXUS3N7ECHBWRLJK
+            }
+
+            chain KUBE-SVC-KXUS3N7ECHBWRLJK {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.111.167.235  tcp dport 8096 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     counter packets 0 bytes 0 jump KUBE-SEP-F7TGOSBQ534HQK75
+            }
+
+            chain KUBE-SEP-F7TGOSBQ534HQK75 {
+                    ip saddr 10.244.2.2  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.2.2:8096
+            }
+
+            chain KUBE-SVC-JD5MR3NA4I4DYORP {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.10  tcp dport 9153 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     meta random & 2147483647 < 1073741824 counter packets 0 bytes 0 jump KUBE-SEP-AFTH4LACNAJ53UXW
+                     counter packets 0 bytes 0 jump KUBE-SEP-CVJD3VCSLULKH5OP
+            }
+
+            chain KUBE-SVC-TCOU7JCQXEZGVUNU {
+                    meta l4proto udp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.10  udp dport 53 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     meta random & 2147483647 < 1073741824 counter packets 0 bytes 0 jump KUBE-SEP-O3TAQSIBBW2LQFSH
+                     counter packets 0 bytes 0 jump KUBE-SEP-P5V454WTW4PKTJQ4
+            }
+
+            chain KUBE-SVC-ERIFXISQEP7F7OF4 {
+                    meta l4proto tcp ip saddr != 10.244.0.0/16 ip daddr 10.96.0.10  tcp dport 53 counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                     meta random & 2147483647 < 1073741824 counter packets 0 bytes 0 jump KUBE-SEP-EYOYO5SXD5VZAQZ7
+                     counter packets 0 bytes 0 jump KUBE-SEP-RRVUDJMIBVGW5QXH
+            }
+
+            chain KUBE-SEP-EYOYO5SXD5VZAQZ7 {
+                    ip saddr 10.244.1.42  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.1.42:53
+            }
+
+            chain KUBE-SEP-RRVUDJMIBVGW5QXH {
+                    ip saddr 10.244.1.43  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.1.43:53
+            }
+
+            chain KUBE-SEP-AFTH4LACNAJ53UXW {
+                    ip saddr 10.244.1.42  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.1.42:9153
+            }
+
+            chain KUBE-SEP-CVJD3VCSLULKH5OP {
+                    ip saddr 10.244.1.43  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto tcp  meta l4proto tcp counter packets 0 bytes 0 dnat to 10.244.1.43:9153
+            }
+
+            chain KUBE-SEP-O3TAQSIBBW2LQFSH {
+                    ip saddr 10.244.1.42  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto udp  meta l4proto udp counter packets 0 bytes 0 dnat to 10.244.1.42:53
+            }
+
+            chain KUBE-SEP-P5V454WTW4PKTJQ4 {
+                    ip saddr 10.244.1.43  counter packets 0 bytes 0 jump KUBE-MARK-MASQ
+                    meta l4proto udp  meta l4proto udp counter packets 0 bytes 0 dnat to 10.244.1.43:53
+            }
+    }
+    table inet flannel-ipv4 {
+    }
+    table inet flannel-ipv6 {
+    }
+    table ip mangle {
+            chain KUBE-IPTABLES-HINT {
+            }
+
+            chain KUBE-KUBELET-CANARY {
+            }
+
+            chain KUBE-PROXY-CANARY {
+            }
+    }
+    table ip6 mangle {
+            chain KUBE-IPTABLES-HINT {
+            }
+
+            chain KUBE-KUBELET-CANARY {
+            }
+
+            chain KUBE-PROXY-CANARY {
+            }
+    }
+    table ip6 nat {
+            chain KUBE-KUBELET-CANARY {
+            }
+
+            chain KUBE-PROXY-CANARY {
+            }
+
+            chain KUBE-SERVICES {
+                    ip6 daddr != ::1  fib daddr type local counter packets 0 bytes 0 jump KUBE-NODEPORTS
+            }
+
+            chain OUTPUT {
+                    type nat hook output priority dstnat; policy accept;
+                     counter packets 44 bytes 8756 jump KUBE-SERVICES
+            }
+
+            chain PREROUTING {
+                    type nat hook prerouting priority dstnat; policy accept;
+                     counter packets 125 bytes 17323 jump KUBE-SERVICES
+            }
+
+            chain KUBE-POSTROUTING {
+                    meta mark & 0x00004000 != 0x00004000 counter packets 0 bytes 0 return
+                    counter packets 0 bytes 0 meta mark set mark xor 0x4000
+                     counter packets 0 bytes 0 xt target "MASQUERADE"
+            }
+
+            chain POSTROUTING {
+                    type nat hook postrouting priority srcnat; policy accept;
+                     counter packets 44 bytes 8756 jump KUBE-POSTROUTING
+            }
+
+            chain KUBE-NODEPORTS {
+            }
+
+            chain KUBE-MARK-MASQ {
+                    counter packets 0 bytes 0 meta mark set mark or 0x4000
+            }
+    }
+    table ip6 filter {
+            chain KUBE-KUBELET-CANARY {
+            }
+
+            chain KUBE-PROXY-CANARY {
+            }
+
+            chain KUBE-EXTERNAL-SERVICES {
+            }
+
+            chain INPUT {
+                    type filter hook input priority filter; policy accept;
+                    counter packets 1377 bytes 179672 jump KUBE-FIREWALL
+                    ct state new  counter packets 815 bytes 144736 jump KUBE-PROXY-FIREWALL
+                     counter packets 1377 bytes 179672 jump KUBE-NODEPORTS
+                    ct state new  counter packets 815 bytes 144736 jump KUBE-EXTERNAL-SERVICES
+            }
+
+            chain FORWARD {
+                    type filter hook forward priority filter; policy accept;
+                    ct state new  counter packets 0 bytes 0 jump KUBE-PROXY-FIREWALL
+                     counter packets 768 bytes 49848 jump KUBE-FORWARD
+                    ct state new  counter packets 0 bytes 0 jump KUBE-SERVICES
+                    ct state new  counter packets 0 bytes 0 jump KUBE-EXTERNAL-SERVICES
+            }
+
+            chain KUBE-NODEPORTS {
+            }
+
+            chain KUBE-SERVICES {
+            }
+
+            chain OUTPUT {
+                    type filter hook output priority filter; policy accept;
+                    counter packets 639 bytes 91904 jump KUBE-FIREWALL
+                    ct state new  counter packets 260 bytes 50204 jump KUBE-PROXY-FIREWALL
+                    ct state new  counter packets 260 bytes 50204 jump KUBE-SERVICES
+            }
+
+            chain KUBE-FORWARD {
+                    ct state invalid counter packets 0 bytes 0 drop
+                     meta mark & 0x00004000 == 0x00004000 counter packets 0 bytes 0 accept
+                     ct state related,established counter packets 0 bytes 0 accept
+            }
+
+            chain KUBE-PROXY-FIREWALL {
+            }
+
+            chain KUBE-FIREWALL {
+            }
+    }
+    table ip flannel-ipv4 {
+            comment "rules for flannel-ipv4"
+            chain postrtg {
+                    comment "chain to manage traffic masquerading by flannel"
+                    type nat hook postrouting priority srcnat; policy accept;
+                    meta mark 0x00004000 return
+                    ip saddr 10.244.1.0/24 ip daddr 10.244.0.0/16 return
+                    ip saddr 10.244.0.0/16 ip daddr 10.244.1.0/24 return
+                    ip saddr != 10.244.1.0/24 ip daddr 10.244.0.0/16 return
+                    ip saddr 10.244.0.0/16 ip daddr != 224.0.0.0/4 masquerade fully-random
+                    ip saddr != 10.244.0.0/16 ip daddr 10.244.0.0/16 masquerade fully-random
+            }
+
+            chain forward {
+                    comment "chain to accept flannel traffic"
+                    type filter hook forward priority filter; policy accept;
+                    ip saddr 10.244.0.0/16 accept
+                    ip daddr 10.244.0.0/16 accept
+            }
+    }
+    table ip6 flannel-ipv6 {
+            comment "rules for flannel-ipv6"
+    }
+
+TASK [Dump iptables-save (IPv4)] **********************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Show iptables-save] *****************************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    --- iptables-save (homelab) ---
+    # Generated by iptables-save v1.8.11 (nf_tables) on Sun Oct  5 14:36:27 2025
+    *mangle
+    :PREROUTING ACCEPT [0:0]
+    :INPUT ACCEPT [0:0]
+    :FORWARD ACCEPT [0:0]
+    :OUTPUT ACCEPT [0:0]
+    :POSTROUTING ACCEPT [0:0]
+    :KUBE-IPTABLES-HINT - [0:0]
+    :KUBE-KUBELET-CANARY - [0:0]
+    :KUBE-PROXY-CANARY - [0:0]
+    COMMIT
+    # Completed on Sun Oct  5 14:36:27 2025
+    # Generated by iptables-save v1.8.11 (nf_tables) on Sun Oct  5 14:36:27 2025
+    *filter
+    :INPUT ACCEPT [23744:29769823]
+    :FORWARD ACCEPT [19:1432]
+    :OUTPUT ACCEPT [23398:4342343]
+    :KUBE-EXTERNAL-SERVICES - [0:0]
+    :KUBE-FIREWALL - [0:0]
+    :KUBE-FORWARD - [0:0]
+    :KUBE-KUBELET-CANARY - [0:0]
+    :KUBE-NODEPORTS - [0:0]
+    :KUBE-PROXY-CANARY - [0:0]
+    :KUBE-PROXY-FIREWALL - [0:0]
+    :KUBE-SERVICES - [0:0]
+    [2077:328299] -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+    [22381:26501895] -A INPUT -m comment --comment "kubernetes health check service ports" -j KUBE-NODEPORTS
+    [22658:26695125] -A INPUT -j KUBE-FIREWALL
+    [2136:341640] -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+    [429:32357] -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+    [429:32357] -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+    [4927:1571557] -A FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD
+    [429:32357] -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    [1075:172018] -A OUTPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+    [1075:172018] -A OUTPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    [23398:4342343] -A OUTPUT -j KUBE-FIREWALL
+    [0:0] -A KUBE-FIREWALL ! -s 127.0.0.0/8 -d 127.0.0.0/8 -m comment --comment "block incoming localnet connections" -m conntrack ! --ctstate RELATED,ESTABLISHED,DNAT -j DROP
+    [0:0] -A KUBE-FORWARD -m conntrack --ctstate INVALID -j DROP
+    [0:0] -A KUBE-FORWARD -m comment --comment "kubernetes forwarding rules" -m mark --mark 0x4000/0x4000 -j ACCEPT
+    [25:8608] -A KUBE-FORWARD -m comment --comment "kubernetes forwarding conntrack rule" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+    COMMIT
+    # Completed on Sun Oct  5 14:36:27 2025
+    # Generated by iptables-save v1.8.11 (nf_tables) on Sun Oct  5 14:36:27 2025
+    *nat
+    :PREROUTING ACCEPT [929:113923]
+    :INPUT ACCEPT [0:0]
+    :OUTPUT ACCEPT [983:161476]
+    :POSTROUTING ACCEPT [1196:178876]
+    :KUBE-EXT-KXUS3N7ECHBWRLJK - [0:0]
+    :KUBE-EXT-VVO7BBXOSCJQDQML - [0:0]
+    :KUBE-EXT-XJNK4YJ26LXBTM52 - [0:0]
+    :KUBE-EXT-XUJLWDDTZEWKLHU6 - [0:0]
+    :KUBE-EXT-ZRYGFW47QPW3QJWW - [0:0]
+    :KUBE-FIREWALL - [0:0]
+    :KUBE-KUBELET-CANARY - [0:0]
+    :KUBE-LOAD-BALANCER - [0:0]
+    :KUBE-MARK-DROP - [0:0]
+    :KUBE-MARK-MASQ - [0:0]
+    :KUBE-NODE-PORT - [0:0]
+    :KUBE-NODEPORTS - [0:0]
+    :KUBE-POSTROUTING - [0:0]
+    :KUBE-PROXY-CANARY - [0:0]
+    :KUBE-SEP-3APNOXLOXM7XEWLF - [0:0]
+    :KUBE-SEP-3Z6PJ6QTFX5SCDMU - [0:0]
+    :KUBE-SEP-76B46VSNNSPYZ7E7 - [0:0]
+    :KUBE-SEP-AFTH4LACNAJ53UXW - [0:0]
+    :KUBE-SEP-BYUNWLLX7X6XAV5G - [0:0]
+    :KUBE-SEP-CTYBCIQNIWCLNOGY - [0:0]
+    :KUBE-SEP-CVJD3VCSLULKH5OP - [0:0]
+    :KUBE-SEP-EYOYO5SXD5VZAQZ7 - [0:0]
+    :KUBE-SEP-F7TGOSBQ534HQK75 - [0:0]
+    :KUBE-SEP-HTSUAAXMSDW3NBSA - [0:0]
+    :KUBE-SEP-KSERYG5HKT6IOJHF - [0:0]
+    :KUBE-SEP-O3TAQSIBBW2LQFSH - [0:0]
+    :KUBE-SEP-P5V454WTW4PKTJQ4 - [0:0]
+    :KUBE-SEP-RRVUDJMIBVGW5QXH - [0:0]
+    :KUBE-SERVICES - [0:0]
+    :KUBE-SVC-CEZPIJSAUFW5MYPQ - [0:0]
+    :KUBE-SVC-ERIFXISQEP7F7OF4 - [0:0]
+    :KUBE-SVC-JD5MR3NA4I4DYORP - [0:0]
+    :KUBE-SVC-KXUS3N7ECHBWRLJK - [0:0]
+    :KUBE-SVC-NPX46M4PTMTKRN6Y - [0:0]
+    :KUBE-SVC-TCOU7JCQXEZGVUNU - [0:0]
+    :KUBE-SVC-VVO7BBXOSCJQDQML - [0:0]
+    :KUBE-SVC-XJNK4YJ26LXBTM52 - [0:0]
+    :KUBE-SVC-XUJLWDDTZEWKLHU6 - [0:0]
+    :KUBE-SVC-Z6GDYMWE5TV2NNJN - [0:0]
+    :KUBE-SVC-ZRYGFW47QPW3QJWW - [0:0]
+    [1047:121003] -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    [1013:163276] -A OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    [1226:180676] -A POSTROUTING -m comment --comment "kubernetes postrouting rules" -j KUBE-POSTROUTING
+    [0:0] -A KUBE-EXT-KXUS3N7ECHBWRLJK -m comment --comment "masquerade traffic for jellyfin/jellyfin-service:http external destinations" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-EXT-KXUS3N7ECHBWRLJK -j KUBE-SVC-KXUS3N7ECHBWRLJK
+    [0:0] -A KUBE-EXT-VVO7BBXOSCJQDQML -m comment --comment "masquerade traffic for monitoring/prometheus external destinations" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-EXT-VVO7BBXOSCJQDQML -j KUBE-SVC-VVO7BBXOSCJQDQML
+    [0:0] -A KUBE-EXT-XJNK4YJ26LXBTM52 -m comment --comment "masquerade traffic for monitoring/loki external destinations" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-EXT-XJNK4YJ26LXBTM52 -j KUBE-SVC-XJNK4YJ26LXBTM52
+    [0:0] -A KUBE-EXT-XUJLWDDTZEWKLHU6 -m comment --comment "masquerade traffic for monitoring/grafana external destinations" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-EXT-XUJLWDDTZEWKLHU6 -j KUBE-SVC-XUJLWDDTZEWKLHU6
+    [0:0] -A KUBE-EXT-ZRYGFW47QPW3QJWW -m comment --comment "masquerade traffic for jellyfin/jellyfin-service:https external destinations" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-EXT-ZRYGFW47QPW3QJWW -j KUBE-SVC-ZRYGFW47QPW3QJWW
+    [2:120] -A KUBE-MARK-MASQ -j MARK --set-xmark 0x4000/0x4000
+    [0:0] -A KUBE-NODEPORTS -p tcp -m comment --comment "monitoring/grafana" -m tcp --dport 30300 -j KUBE-EXT-XUJLWDDTZEWKLHU6
+    [0:0] -A KUBE-NODEPORTS -p tcp -m comment --comment "monitoring/loki" -m tcp --dport 31100 -j KUBE-EXT-XJNK4YJ26LXBTM52
+    [0:0] -A KUBE-NODEPORTS -p tcp -m comment --comment "monitoring/prometheus" -m tcp --dport 30090 -j KUBE-EXT-VVO7BBXOSCJQDQML
+    [0:0] -A KUBE-NODEPORTS -p tcp -m comment --comment "jellyfin/jellyfin-service:http" -m tcp --dport 30096 -j KUBE-EXT-KXUS3N7ECHBWRLJK
+    [0:0] -A KUBE-NODEPORTS -p tcp -m comment --comment "jellyfin/jellyfin-service:https" -m tcp --dport 30920 -j KUBE-EXT-ZRYGFW47QPW3QJWW
+    [27:7756] -A KUBE-POSTROUTING -m mark ! --mark 0x4000/0x4000 -j RETURN
+    [2:120] -A KUBE-POSTROUTING -j MARK --set-xmark 0x4000/0x0
+    [2:120] -A KUBE-POSTROUTING -m comment --comment "kubernetes service traffic requiring SNAT" -j MASQUERADE --random-fully
+    [0:0] -A KUBE-SEP-3APNOXLOXM7XEWLF -s 10.244.0.6/32 -m comment --comment "kubernetes-dashboard/dashboard-metrics-scraper" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-3APNOXLOXM7XEWLF -p tcp -m comment --comment "kubernetes-dashboard/dashboard-metrics-scraper" -m tcp -j DNAT --to-destination 10.244.0.6:8000
+    [0:0] -A KUBE-SEP-3Z6PJ6QTFX5SCDMU -s 10.244.2.2/32 -m comment --comment "jellyfin/jellyfin-service:https" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-3Z6PJ6QTFX5SCDMU -p tcp -m comment --comment "jellyfin/jellyfin-service:https" -m tcp -j DNAT --to-destination 10.244.2.2:8920
+    [0:0] -A KUBE-SEP-76B46VSNNSPYZ7E7 -s 10.244.0.5/32 -m comment --comment "kubernetes-dashboard/kubernetes-dashboard" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-76B46VSNNSPYZ7E7 -p tcp -m comment --comment "kubernetes-dashboard/kubernetes-dashboard" -m tcp -j DNAT --to-destination 10.244.0.5:8443
+    [0:0] -A KUBE-SEP-AFTH4LACNAJ53UXW -s 10.244.1.42/32 -m comment --comment "kube-system/kube-dns:metrics" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-AFTH4LACNAJ53UXW -p tcp -m comment --comment "kube-system/kube-dns:metrics" -m tcp -j DNAT --to-destination 10.244.1.42:9153
+    [0:0] -A KUBE-SEP-BYUNWLLX7X6XAV5G -s 10.244.0.3/32 -m comment --comment "monitoring/grafana" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-BYUNWLLX7X6XAV5G -p tcp -m comment --comment "monitoring/grafana" -m tcp -j DNAT --to-destination 10.244.0.3:3000
+    [0:0] -A KUBE-SEP-CTYBCIQNIWCLNOGY -s 10.244.0.4/32 -m comment --comment "monitoring/loki" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-CTYBCIQNIWCLNOGY -p tcp -m comment --comment "monitoring/loki" -m tcp -j DNAT --to-destination 10.244.0.4:3100
+    [0:0] -A KUBE-SEP-CVJD3VCSLULKH5OP -s 10.244.1.43/32 -m comment --comment "kube-system/kube-dns:metrics" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-CVJD3VCSLULKH5OP -p tcp -m comment --comment "kube-system/kube-dns:metrics" -m tcp -j DNAT --to-destination 10.244.1.43:9153
+    [0:0] -A KUBE-SEP-EYOYO5SXD5VZAQZ7 -s 10.244.1.42/32 -m comment --comment "kube-system/kube-dns:dns-tcp" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-EYOYO5SXD5VZAQZ7 -p tcp -m comment --comment "kube-system/kube-dns:dns-tcp" -m tcp -j DNAT --to-destination 10.244.1.42:53
+    [0:0] -A KUBE-SEP-F7TGOSBQ534HQK75 -s 10.244.2.2/32 -m comment --comment "jellyfin/jellyfin-service:http" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-F7TGOSBQ534HQK75 -p tcp -m comment --comment "jellyfin/jellyfin-service:http" -m tcp -j DNAT --to-destination 10.244.2.2:8096
+    [0:0] -A KUBE-SEP-HTSUAAXMSDW3NBSA -s 10.244.0.2/32 -m comment --comment "monitoring/prometheus" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-HTSUAAXMSDW3NBSA -p tcp -m comment --comment "monitoring/prometheus" -m tcp -j DNAT --to-destination 10.244.0.2:9090
+    [0:0] -A KUBE-SEP-KSERYG5HKT6IOJHF -s 192.168.4.63/32 -m comment --comment "default/kubernetes:https" -j KUBE-MARK-MASQ
+    [2:120] -A KUBE-SEP-KSERYG5HKT6IOJHF -p tcp -m comment --comment "default/kubernetes:https" -m tcp -j DNAT --to-destination 192.168.4.63:6443
+    [0:0] -A KUBE-SEP-O3TAQSIBBW2LQFSH -s 10.244.1.42/32 -m comment --comment "kube-system/kube-dns:dns" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-O3TAQSIBBW2LQFSH -p udp -m comment --comment "kube-system/kube-dns:dns" -m udp -j DNAT --to-destination 10.244.1.42:53
+    [0:0] -A KUBE-SEP-P5V454WTW4PKTJQ4 -s 10.244.1.43/32 -m comment --comment "kube-system/kube-dns:dns" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-P5V454WTW4PKTJQ4 -p udp -m comment --comment "kube-system/kube-dns:dns" -m udp -j DNAT --to-destination 10.244.1.43:53
+    [0:0] -A KUBE-SEP-RRVUDJMIBVGW5QXH -s 10.244.1.43/32 -m comment --comment "kube-system/kube-dns:dns-tcp" -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SEP-RRVUDJMIBVGW5QXH -p tcp -m comment --comment "kube-system/kube-dns:dns-tcp" -m tcp -j DNAT --to-destination 10.244.1.43:53
+    [0:0] -A KUBE-SERVICES -d 10.105.53.37/32 -p tcp -m comment --comment "monitoring/grafana cluster IP" -m tcp --dport 3000 -j KUBE-SVC-XUJLWDDTZEWKLHU6
+    [0:0] -A KUBE-SERVICES -d 10.105.160.170/32 -p tcp -m comment --comment "monitoring/loki cluster IP" -m tcp --dport 3100 -j KUBE-SVC-XJNK4YJ26LXBTM52
+    [0:0] -A KUBE-SERVICES -d 10.109.208.10/32 -p tcp -m comment --comment "monitoring/prometheus cluster IP" -m tcp --dport 9090 -j KUBE-SVC-VVO7BBXOSCJQDQML
+    [0:0] -A KUBE-SERVICES -d 10.111.167.235/32 -p tcp -m comment --comment "jellyfin/jellyfin-service:http cluster IP" -m tcp --dport 8096 -j KUBE-SVC-KXUS3N7ECHBWRLJK
+    [0:0] -A KUBE-SERVICES -d 10.111.167.235/32 -p tcp -m comment --comment "jellyfin/jellyfin-service:https cluster IP" -m tcp --dport 8920 -j KUBE-SVC-ZRYGFW47QPW3QJWW
+    [0:0] -A KUBE-SERVICES -d 10.96.0.10/32 -p udp -m comment --comment "kube-system/kube-dns:dns cluster IP" -m udp --dport 53 -j KUBE-SVC-TCOU7JCQXEZGVUNU
+    [0:0] -A KUBE-SERVICES -d 10.96.0.10/32 -p tcp -m comment --comment "kube-system/kube-dns:metrics cluster IP" -m tcp --dport 9153 -j KUBE-SVC-JD5MR3NA4I4DYORP
+    [2:120] -A KUBE-SERVICES -d 10.96.0.1/32 -p tcp -m comment --comment "default/kubernetes:https cluster IP" -m tcp --dport 443 -j KUBE-SVC-NPX46M4PTMTKRN6Y
+    [0:0] -A KUBE-SERVICES -d 10.96.0.10/32 -p tcp -m comment --comment "kube-system/kube-dns:dns-tcp cluster IP" -m tcp --dport 53 -j KUBE-SVC-ERIFXISQEP7F7OF4
+    [0:0] -A KUBE-SERVICES -d 10.98.46.105/32 -p tcp -m comment --comment "kubernetes-dashboard/dashboard-metrics-scraper cluster IP" -m tcp --dport 8000 -j KUBE-SVC-Z6GDYMWE5TV2NNJN
+    [0:0] -A KUBE-SERVICES -d 10.111.33.69/32 -p tcp -m comment --comment "kubernetes-dashboard/kubernetes-dashboard cluster IP" -m tcp --dport 443 -j KUBE-SVC-CEZPIJSAUFW5MYPQ
+    [9:1116] -A KUBE-SERVICES -m comment --comment "kubernetes service nodeports; NOTE: this must be the last rule in this chain" -m addrtype --dst-type LOCAL -j KUBE-NODEPORTS
+    [0:0] -A KUBE-SVC-CEZPIJSAUFW5MYPQ ! -s 10.244.0.0/16 -d 10.111.33.69/32 -p tcp -m comment --comment "kubernetes-dashboard/kubernetes-dashboard cluster IP" -m tcp --dport 443 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-CEZPIJSAUFW5MYPQ -m comment --comment "kubernetes-dashboard/kubernetes-dashboard -> 10.244.0.5:8443" -j KUBE-SEP-76B46VSNNSPYZ7E7
+    [0:0] -A KUBE-SVC-ERIFXISQEP7F7OF4 ! -s 10.244.0.0/16 -d 10.96.0.10/32 -p tcp -m comment --comment "kube-system/kube-dns:dns-tcp cluster IP" -m tcp --dport 53 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-ERIFXISQEP7F7OF4 -m comment --comment "kube-system/kube-dns:dns-tcp -> 10.244.1.42:53" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-EYOYO5SXD5VZAQZ7
+    [0:0] -A KUBE-SVC-ERIFXISQEP7F7OF4 -m comment --comment "kube-system/kube-dns:dns-tcp -> 10.244.1.43:53" -j KUBE-SEP-RRVUDJMIBVGW5QXH
+    [0:0] -A KUBE-SVC-JD5MR3NA4I4DYORP ! -s 10.244.0.0/16 -d 10.96.0.10/32 -p tcp -m comment --comment "kube-system/kube-dns:metrics cluster IP" -m tcp --dport 9153 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-JD5MR3NA4I4DYORP -m comment --comment "kube-system/kube-dns:metrics -> 10.244.1.42:9153" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-AFTH4LACNAJ53UXW
+    [0:0] -A KUBE-SVC-JD5MR3NA4I4DYORP -m comment --comment "kube-system/kube-dns:metrics -> 10.244.1.43:9153" -j KUBE-SEP-CVJD3VCSLULKH5OP
+    [0:0] -A KUBE-SVC-KXUS3N7ECHBWRLJK ! -s 10.244.0.0/16 -d 10.111.167.235/32 -p tcp -m comment --comment "jellyfin/jellyfin-service:http cluster IP" -m tcp --dport 8096 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-KXUS3N7ECHBWRLJK -m comment --comment "jellyfin/jellyfin-service:http -> 10.244.2.2:8096" -j KUBE-SEP-F7TGOSBQ534HQK75
+    [2:120] -A KUBE-SVC-NPX46M4PTMTKRN6Y ! -s 10.244.0.0/16 -d 10.96.0.1/32 -p tcp -m comment --comment "default/kubernetes:https cluster IP" -m tcp --dport 443 -j KUBE-MARK-MASQ
+    [2:120] -A KUBE-SVC-NPX46M4PTMTKRN6Y -m comment --comment "default/kubernetes:https -> 192.168.4.63:6443" -j KUBE-SEP-KSERYG5HKT6IOJHF
+    [0:0] -A KUBE-SVC-TCOU7JCQXEZGVUNU ! -s 10.244.0.0/16 -d 10.96.0.10/32 -p udp -m comment --comment "kube-system/kube-dns:dns cluster IP" -m udp --dport 53 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-TCOU7JCQXEZGVUNU -m comment --comment "kube-system/kube-dns:dns -> 10.244.1.42:53" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-O3TAQSIBBW2LQFSH
+    [0:0] -A KUBE-SVC-TCOU7JCQXEZGVUNU -m comment --comment "kube-system/kube-dns:dns -> 10.244.1.43:53" -j KUBE-SEP-P5V454WTW4PKTJQ4
+    [0:0] -A KUBE-SVC-VVO7BBXOSCJQDQML ! -s 10.244.0.0/16 -d 10.109.208.10/32 -p tcp -m comment --comment "monitoring/prometheus cluster IP" -m tcp --dport 9090 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-VVO7BBXOSCJQDQML -m comment --comment "monitoring/prometheus -> 10.244.0.2:9090" -j KUBE-SEP-HTSUAAXMSDW3NBSA
+    [0:0] -A KUBE-SVC-XJNK4YJ26LXBTM52 ! -s 10.244.0.0/16 -d 10.105.160.170/32 -p tcp -m comment --comment "monitoring/loki cluster IP" -m tcp --dport 3100 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-XJNK4YJ26LXBTM52 -m comment --comment "monitoring/loki -> 10.244.0.4:3100" -j KUBE-SEP-CTYBCIQNIWCLNOGY
+    [0:0] -A KUBE-SVC-XUJLWDDTZEWKLHU6 ! -s 10.244.0.0/16 -d 10.105.53.37/32 -p tcp -m comment --comment "monitoring/grafana cluster IP" -m tcp --dport 3000 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-XUJLWDDTZEWKLHU6 -m comment --comment "monitoring/grafana -> 10.244.0.3:3000" -j KUBE-SEP-BYUNWLLX7X6XAV5G
+    [0:0] -A KUBE-SVC-Z6GDYMWE5TV2NNJN ! -s 10.244.0.0/16 -d 10.98.46.105/32 -p tcp -m comment --comment "kubernetes-dashboard/dashboard-metrics-scraper cluster IP" -m tcp --dport 8000 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-Z6GDYMWE5TV2NNJN -m comment --comment "kubernetes-dashboard/dashboard-metrics-scraper -> 10.244.0.6:8000" -j KUBE-SEP-3APNOXLOXM7XEWLF
+    [0:0] -A KUBE-SVC-ZRYGFW47QPW3QJWW ! -s 10.244.0.0/16 -d 10.111.167.235/32 -p tcp -m comment --comment "jellyfin/jellyfin-service:https cluster IP" -m tcp --dport 8920 -j KUBE-MARK-MASQ
+    [0:0] -A KUBE-SVC-ZRYGFW47QPW3QJWW -m comment --comment "jellyfin/jellyfin-service:https -> 10.244.2.2:8920" -j KUBE-SEP-3Z6PJ6QTFX5SCDMU
+    COMMIT
+    # Completed on Sun Oct  5 14:36:27 2025
+
+TASK [Show last dmesg lines] **************************************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Show dmesg tail] ********************************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    --- dmesg (homelab) ---
+    [Sun Oct  5 14:10:26 2025] cni0: port 1(vethe8656837) entered disabled state
+    [Sun Oct  5 14:10:26 2025] vethe8656837 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:10:26 2025] vethe8656837 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:10:26 2025] cni0: port 1(vethe8656837) entered disabled state
+    [Sun Oct  5 14:10:26 2025] cni0: port 1(vethca442999) entered blocking state
+    [Sun Oct  5 14:10:26 2025] cni0: port 1(vethca442999) entered disabled state
+    [Sun Oct  5 14:10:26 2025] vethca442999: entered allmulticast mode
+    [Sun Oct  5 14:10:26 2025] vethca442999: entered promiscuous mode
+    [Sun Oct  5 14:10:26 2025] cni0: port 1(vethca442999) entered blocking state
+    [Sun Oct  5 14:10:26 2025] cni0: port 1(vethca442999) entered forwarding state
+    [Sun Oct  5 14:10:46 2025] cni0: port 2(vethb2b44362) entered disabled state
+    [Sun Oct  5 14:10:46 2025] vethb2b44362 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:10:46 2025] vethb2b44362 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:10:46 2025] cni0: port 2(vethb2b44362) entered disabled state
+    [Sun Oct  5 14:10:46 2025] cni0: port 2(vethe38ff4da) entered blocking state
+    [Sun Oct  5 14:10:46 2025] cni0: port 2(vethe38ff4da) entered disabled state
+    [Sun Oct  5 14:10:46 2025] vethe38ff4da: entered allmulticast mode
+    [Sun Oct  5 14:10:46 2025] vethe38ff4da: entered promiscuous mode
+    [Sun Oct  5 14:10:46 2025] cni0: port 2(vethe38ff4da) entered blocking state
+    [Sun Oct  5 14:10:46 2025] cni0: port 2(vethe38ff4da) entered forwarding state
+    [Sun Oct  5 14:10:56 2025] cni0: port 1(vethca442999) entered disabled state
+    [Sun Oct  5 14:10:56 2025] vethca442999 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:10:56 2025] vethca442999 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:10:56 2025] cni0: port 1(vethca442999) entered disabled state
+    [Sun Oct  5 14:10:57 2025] cni0: port 1(veth115e4b37) entered blocking state
+    [Sun Oct  5 14:10:57 2025] cni0: port 1(veth115e4b37) entered disabled state
+    [Sun Oct  5 14:10:57 2025] veth115e4b37: entered allmulticast mode
+    [Sun Oct  5 14:10:57 2025] veth115e4b37: entered promiscuous mode
+    [Sun Oct  5 14:10:57 2025] cni0: port 1(veth115e4b37) entered blocking state
+    [Sun Oct  5 14:10:57 2025] cni0: port 1(veth115e4b37) entered forwarding state
+    [Sun Oct  5 14:12:29 2025] cni0: port 1(veth115e4b37) entered disabled state
+    [Sun Oct  5 14:12:29 2025] veth115e4b37 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:12:29 2025] veth115e4b37 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:12:29 2025] cni0: port 1(veth115e4b37) entered disabled state
+    [Sun Oct  5 14:12:30 2025] cni0: port 1(veth37d93f4f) entered blocking state
+    [Sun Oct  5 14:12:30 2025] cni0: port 1(veth37d93f4f) entered disabled state
+    [Sun Oct  5 14:12:30 2025] veth37d93f4f: entered allmulticast mode
+    [Sun Oct  5 14:12:30 2025] veth37d93f4f: entered promiscuous mode
+    [Sun Oct  5 14:12:30 2025] cni0: port 1(veth37d93f4f) entered blocking state
+    [Sun Oct  5 14:12:30 2025] cni0: port 1(veth37d93f4f) entered forwarding state
+    [Sun Oct  5 14:13:33 2025] cni0: port 2(vethe38ff4da) entered disabled state
+    [Sun Oct  5 14:13:33 2025] vethe38ff4da (unregistering): left allmulticast mode
+    [Sun Oct  5 14:13:33 2025] vethe38ff4da (unregistering): left promiscuous mode
+    [Sun Oct  5 14:13:33 2025] cni0: port 2(vethe38ff4da) entered disabled state
+    [Sun Oct  5 14:13:34 2025] cni0: port 2(vetha4d711e7) entered blocking state
+    [Sun Oct  5 14:13:34 2025] cni0: port 2(vetha4d711e7) entered disabled state
+    [Sun Oct  5 14:13:34 2025] vetha4d711e7: entered allmulticast mode
+    [Sun Oct  5 14:13:34 2025] vetha4d711e7: entered promiscuous mode
+    [Sun Oct  5 14:13:34 2025] cni0: port 2(vetha4d711e7) entered blocking state
+    [Sun Oct  5 14:13:34 2025] cni0: port 2(vetha4d711e7) entered forwarding state
+    [Sun Oct  5 14:15:55 2025] cni0: port 1(veth37d93f4f) entered disabled state
+    [Sun Oct  5 14:15:55 2025] veth37d93f4f (unregistering): left allmulticast mode
+    [Sun Oct  5 14:15:55 2025] veth37d93f4f (unregistering): left promiscuous mode
+    [Sun Oct  5 14:15:55 2025] cni0: port 1(veth37d93f4f) entered disabled state
+    [Sun Oct  5 14:15:55 2025] cni0: port 1(vethb71d8370) entered blocking state
+    [Sun Oct  5 14:15:55 2025] cni0: port 1(vethb71d8370) entered disabled state
+    [Sun Oct  5 14:15:55 2025] vethb71d8370: entered allmulticast mode
+    [Sun Oct  5 14:15:55 2025] vethb71d8370: entered promiscuous mode
+    [Sun Oct  5 14:15:55 2025] cni0: port 1(vethb71d8370) entered blocking state
+    [Sun Oct  5 14:15:55 2025] cni0: port 1(vethb71d8370) entered forwarding state
+    [Sun Oct  5 14:17:44 2025] cni0: port 2(vetha4d711e7) entered disabled state
+    [Sun Oct  5 14:17:44 2025] vetha4d711e7 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:17:44 2025] vetha4d711e7 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:17:44 2025] cni0: port 2(vetha4d711e7) entered disabled state
+    [Sun Oct  5 14:17:44 2025] cni0: port 2(veth3bcb1309) entered blocking state
+    [Sun Oct  5 14:17:44 2025] cni0: port 2(veth3bcb1309) entered disabled state
+    [Sun Oct  5 14:17:44 2025] veth3bcb1309: entered allmulticast mode
+    [Sun Oct  5 14:17:44 2025] veth3bcb1309: entered promiscuous mode
+    [Sun Oct  5 14:17:44 2025] cni0: port 2(veth3bcb1309) entered blocking state
+    [Sun Oct  5 14:17:44 2025] cni0: port 2(veth3bcb1309) entered forwarding state
+    [Sun Oct  5 14:19:45 2025] cni0: port 1(vethb71d8370) entered disabled state
+    [Sun Oct  5 14:19:45 2025] vethb71d8370 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:19:45 2025] vethb71d8370 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:19:45 2025] cni0: port 1(vethb71d8370) entered disabled state
+    [Sun Oct  5 14:19:45 2025] cni0: port 1(veth0972b6dc) entered blocking state
+    [Sun Oct  5 14:19:45 2025] cni0: port 1(veth0972b6dc) entered disabled state
+    [Sun Oct  5 14:19:45 2025] veth0972b6dc: entered allmulticast mode
+    [Sun Oct  5 14:19:45 2025] veth0972b6dc: entered promiscuous mode
+    [Sun Oct  5 14:19:45 2025] cni0: port 1(veth0972b6dc) entered blocking state
+    [Sun Oct  5 14:19:45 2025] cni0: port 1(veth0972b6dc) entered forwarding state
+    [Sun Oct  5 14:22:38 2025] cni0: port 1(veth0972b6dc) entered disabled state
+    [Sun Oct  5 14:22:38 2025] veth0972b6dc (unregistering): left allmulticast mode
+    [Sun Oct  5 14:22:38 2025] veth0972b6dc (unregistering): left promiscuous mode
+    [Sun Oct  5 14:22:38 2025] cni0: port 1(veth0972b6dc) entered disabled state
+    [Sun Oct  5 14:22:39 2025] cni0: port 1(veth8ea195a4) entered blocking state
+    [Sun Oct  5 14:22:39 2025] cni0: port 1(veth8ea195a4) entered disabled state
+    [Sun Oct  5 14:22:39 2025] veth8ea195a4: entered allmulticast mode
+    [Sun Oct  5 14:22:39 2025] veth8ea195a4: entered promiscuous mode
+    [Sun Oct  5 14:22:39 2025] cni0: port 1(veth8ea195a4) entered blocking state
+    [Sun Oct  5 14:22:39 2025] cni0: port 1(veth8ea195a4) entered forwarding state
+    [Sun Oct  5 14:22:53 2025] cni0: port 2(veth3bcb1309) entered disabled state
+    [Sun Oct  5 14:22:53 2025] veth3bcb1309 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:22:53 2025] veth3bcb1309 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:22:53 2025] cni0: port 2(veth3bcb1309) entered disabled state
+    [Sun Oct  5 14:22:54 2025] cni0: port 2(veth62aac638) entered blocking state
+    [Sun Oct  5 14:22:54 2025] cni0: port 2(veth62aac638) entered disabled state
+    [Sun Oct  5 14:22:54 2025] veth62aac638: entered allmulticast mode
+    [Sun Oct  5 14:22:54 2025] veth62aac638: entered promiscuous mode
+    [Sun Oct  5 14:22:54 2025] cni0: port 2(veth62aac638) entered blocking state
+    [Sun Oct  5 14:22:54 2025] cni0: port 2(veth62aac638) entered forwarding state
+    [Sun Oct  5 14:26:27 2025] cni0: port 3(veth2d82e1c5) entered blocking state
+    [Sun Oct  5 14:26:27 2025] cni0: port 3(veth2d82e1c5) entered disabled state
+    [Sun Oct  5 14:26:27 2025] veth2d82e1c5: entered allmulticast mode
+    [Sun Oct  5 14:26:27 2025] veth2d82e1c5: entered promiscuous mode
+    [Sun Oct  5 14:26:27 2025] cni0: port 3(veth2d82e1c5) entered blocking state
+    [Sun Oct  5 14:26:27 2025] cni0: port 3(veth2d82e1c5) entered forwarding state
+    [Sun Oct  5 14:26:45 2025] cni0: port 3(veth2d82e1c5) entered disabled state
+    [Sun Oct  5 14:26:45 2025] veth2d82e1c5 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:26:45 2025] veth2d82e1c5 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:26:45 2025] cni0: port 3(veth2d82e1c5) entered disabled state
+    [Sun Oct  5 14:27:27 2025] cni0: port 2(veth62aac638) entered disabled state
+    [Sun Oct  5 14:27:27 2025] veth62aac638 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:27:27 2025] veth62aac638 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:27:27 2025] cni0: port 2(veth62aac638) entered disabled state
+    [Sun Oct  5 14:27:28 2025] cni0: port 2(vethe222d70d) entered blocking state
+    [Sun Oct  5 14:27:28 2025] cni0: port 2(vethe222d70d) entered disabled state
+    [Sun Oct  5 14:27:28 2025] vethe222d70d: entered allmulticast mode
+    [Sun Oct  5 14:27:28 2025] vethe222d70d: entered promiscuous mode
+    [Sun Oct  5 14:27:28 2025] cni0: port 2(vethe222d70d) entered blocking state
+    [Sun Oct  5 14:27:28 2025] cni0: port 2(vethe222d70d) entered forwarding state
+    [Sun Oct  5 14:28:58 2025] cni0: port 2(vethe222d70d) entered disabled state
+    [Sun Oct  5 14:28:58 2025] vethe222d70d (unregistering): left allmulticast mode
+    [Sun Oct  5 14:28:58 2025] vethe222d70d (unregistering): left promiscuous mode
+    [Sun Oct  5 14:28:58 2025] cni0: port 2(vethe222d70d) entered disabled state
+    [Sun Oct  5 14:28:59 2025] cni0: port 2(veth1c57f537) entered blocking state
+    [Sun Oct  5 14:28:59 2025] cni0: port 2(veth1c57f537) entered disabled state
+    [Sun Oct  5 14:28:59 2025] veth1c57f537: entered allmulticast mode
+    [Sun Oct  5 14:28:59 2025] veth1c57f537: entered promiscuous mode
+    [Sun Oct  5 14:28:59 2025] cni0: port 2(veth1c57f537) entered blocking state
+    [Sun Oct  5 14:28:59 2025] cni0: port 2(veth1c57f537) entered forwarding state
+    [Sun Oct  5 14:29:57 2025] cni0: port 1(veth8ea195a4) entered disabled state
+    [Sun Oct  5 14:29:57 2025] veth8ea195a4 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:29:57 2025] veth8ea195a4 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:29:57 2025] cni0: port 1(veth8ea195a4) entered disabled state
+    [Sun Oct  5 14:29:58 2025] cni0: port 1(veth140c62f3) entered blocking state
+    [Sun Oct  5 14:29:58 2025] cni0: port 1(veth140c62f3) entered disabled state
+    [Sun Oct  5 14:29:58 2025] veth140c62f3: entered allmulticast mode
+    [Sun Oct  5 14:29:58 2025] veth140c62f3: entered promiscuous mode
+    [Sun Oct  5 14:29:58 2025] cni0: port 1(veth140c62f3) entered blocking state
+    [Sun Oct  5 14:29:58 2025] cni0: port 1(veth140c62f3) entered forwarding state
+    [Sun Oct  5 14:30:24 2025] cni0: port 1(veth140c62f3) entered disabled state
+    [Sun Oct  5 14:30:24 2025] veth140c62f3 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:30:24 2025] veth140c62f3 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:30:24 2025] cni0: port 1(veth140c62f3) entered disabled state
+    [Sun Oct  5 14:30:25 2025] cni0: port 1(vethdd1b9f29) entered blocking state
+    [Sun Oct  5 14:30:25 2025] cni0: port 1(vethdd1b9f29) entered disabled state
+    [Sun Oct  5 14:30:25 2025] vethdd1b9f29: entered allmulticast mode
+    [Sun Oct  5 14:30:25 2025] vethdd1b9f29: entered promiscuous mode
+    [Sun Oct  5 14:30:25 2025] cni0: port 1(vethdd1b9f29) entered blocking state
+    [Sun Oct  5 14:30:25 2025] cni0: port 1(vethdd1b9f29) entered forwarding state
+    [Sun Oct  5 14:30:59 2025] cni0: port 2(veth1c57f537) entered disabled state
+    [Sun Oct  5 14:30:59 2025] veth1c57f537 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:30:59 2025] veth1c57f537 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:30:59 2025] cni0: port 2(veth1c57f537) entered disabled state
+    [Sun Oct  5 14:31:00 2025] cni0: port 2(vethd7a2ead7) entered blocking state
+    [Sun Oct  5 14:31:00 2025] cni0: port 2(vethd7a2ead7) entered disabled state
+    [Sun Oct  5 14:31:00 2025] vethd7a2ead7: entered allmulticast mode
+    [Sun Oct  5 14:31:00 2025] vethd7a2ead7: entered promiscuous mode
+    [Sun Oct  5 14:31:00 2025] cni0: port 2(vethd7a2ead7) entered blocking state
+    [Sun Oct  5 14:31:00 2025] cni0: port 2(vethd7a2ead7) entered forwarding state
+    [Sun Oct  5 14:32:13 2025] cni0: port 1(vethdd1b9f29) entered disabled state
+    [Sun Oct  5 14:32:13 2025] vethdd1b9f29 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:32:13 2025] vethdd1b9f29 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:32:13 2025] cni0: port 1(vethdd1b9f29) entered disabled state
+    [Sun Oct  5 14:32:14 2025] cni0: port 1(veth72abf615) entered blocking state
+    [Sun Oct  5 14:32:14 2025] cni0: port 1(veth72abf615) entered disabled state
+    [Sun Oct  5 14:32:14 2025] veth72abf615: entered allmulticast mode
+    [Sun Oct  5 14:32:14 2025] veth72abf615: entered promiscuous mode
+    [Sun Oct  5 14:32:14 2025] cni0: port 1(veth72abf615) entered blocking state
+    [Sun Oct  5 14:32:14 2025] cni0: port 1(veth72abf615) entered forwarding state
+    [Sun Oct  5 14:33:04 2025] cni0: port 2(vethd7a2ead7) entered disabled state
+    [Sun Oct  5 14:33:04 2025] vethd7a2ead7 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:33:04 2025] vethd7a2ead7 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:33:04 2025] cni0: port 2(vethd7a2ead7) entered disabled state
+    [Sun Oct  5 14:33:05 2025] cni0: port 2(veth17df330c) entered blocking state
+    [Sun Oct  5 14:33:05 2025] cni0: port 2(veth17df330c) entered disabled state
+    [Sun Oct  5 14:33:05 2025] veth17df330c: entered allmulticast mode
+    [Sun Oct  5 14:33:05 2025] veth17df330c: entered promiscuous mode
+    [Sun Oct  5 14:33:05 2025] cni0: port 2(veth17df330c) entered blocking state
+    [Sun Oct  5 14:33:05 2025] cni0: port 2(veth17df330c) entered forwarding state
+    [Sun Oct  5 14:35:08 2025] cni0: port 1(veth72abf615) entered disabled state
+    [Sun Oct  5 14:35:08 2025] veth72abf615 (unregistering): left allmulticast mode
+    [Sun Oct  5 14:35:08 2025] veth72abf615 (unregistering): left promiscuous mode
+    [Sun Oct  5 14:35:08 2025] cni0: port 1(veth72abf615) entered disabled state
+    [Sun Oct  5 14:35:08 2025] cni0: port 2(veth17df330c) entered disabled state
+    [Sun Oct  5 14:35:08 2025] veth17df330c (unregistering): left allmulticast mode
+    [Sun Oct  5 14:35:08 2025] veth17df330c (unregistering): left promiscuous mode
+    [Sun Oct  5 14:35:08 2025] cni0: port 2(veth17df330c) entered disabled state
+    [Sun Oct  5 14:35:09 2025] cni0: port 1(veth76c53661) entered blocking state
+    [Sun Oct  5 14:35:09 2025] cni0: port 1(veth76c53661) entered disabled state
+    [Sun Oct  5 14:35:09 2025] veth76c53661: entered allmulticast mode
+    [Sun Oct  5 14:35:09 2025] veth76c53661: entered promiscuous mode
+    [Sun Oct  5 14:35:09 2025] cni0: port 1(veth76c53661) entered blocking state
+    [Sun Oct  5 14:35:09 2025] cni0: port 1(veth76c53661) entered forwarding state
+    [Sun Oct  5 14:35:09 2025] cni0: port 2(veth7b7a2a8e) entered blocking state
+    [Sun Oct  5 14:35:09 2025] cni0: port 2(veth7b7a2a8e) entered disabled state
+    [Sun Oct  5 14:35:09 2025] veth7b7a2a8e: entered allmulticast mode
+    [Sun Oct  5 14:35:09 2025] veth7b7a2a8e: entered promiscuous mode
+    [Sun Oct  5 14:35:09 2025] cni0: port 2(veth7b7a2a8e) entered blocking state
+    [Sun Oct  5 14:35:09 2025] cni0: port 2(veth7b7a2a8e) entered forwarding state
+
+TASK [Show /run/flannel/subnet.env if present] ********************************************************************************************************************************************************
+ok: [homelab]
+
+TASK [Display flannel subnet.env] *********************************************************************************************************************************************************************
+ok: [homelab] =>
+  msg: |-
+    --- /run/flannel/subnet.env (homelab) ---
+    FLANNEL_NETWORK=10.244.0.0/16
+    FLANNEL_SUBNET=10.244.1.1/24
+    FLANNEL_MTU=1450
+    FLANNEL_IPMASQ=true
+
+PLAY RECAP ********************************************************************************************************************************************************************************************
+homelab                    : ok=47   changed=4    unreachable=0    failed=0    skipped=6    rescued=0    ignored=0
+masternode                 : ok=12   changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0
+
+
+=========================================
+Fix complete!
+=========================================
+
+Next steps:
+1. Check pod status: kubectl get pods -A
+2. If still failing, check logs: kubectl logs -n kube-flannel <pod-name> -c kube-flannel
+3. Verify network: kubectl run test --image=busybox --rm -it -- ping 10.244.0.1
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -A
+NAMESPACE              NAME                                       READY   STATUS             RESTARTS         AGE
+jellyfin               jellyfin                                   1/1     Running            0                49m
+kube-flannel           kube-flannel-ds-n7nvr                      1/1     Running            0                12m
+kube-flannel           kube-flannel-ds-scng2                      0/1     Completed          1                112s
+kube-flannel           kube-flannel-ds-sv6fx                      1/1     Running            0                12m
+kube-system            coredns-76f75df574-clxqk                   0/1     CrashLoopBackOff   17 (2s ago)      51m
+kube-system            coredns-76f75df574-f5d6n                   1/1     Running            20 (2m48s ago)   51m
+kube-system            etcd-masternode                            1/1     Running            39               51m
+kube-system            kube-apiserver-masternode                  1/1     Running            60               51m
+kube-system            kube-controller-manager-masternode         1/1     Running            81               51m
+kube-system            kube-proxy-4wkj9                           1/1     Running            0                51m
+kube-system            kube-proxy-7vhx4                           1/1     Running            0                51m
+kube-system            kube-proxy-wwt2w                           0/1     CrashLoopBackOff   26 (48s ago)     51m
+kube-system            kube-scheduler-masternode                  1/1     Running            81               51m
+kubernetes-dashboard   dashboard-metrics-scraper-fbd9c767-ptp8r   1/1     Running            0                50m
+kubernetes-dashboard   kubernetes-dashboard-547749b7d9-bkr77      1/1     Running            0                50m
+monitoring             grafana-59b7bdb979-sc58z                   1/1     Running            0                50m
+monitoring             loki-85d467fb56-dwc6x                      1/1     Running            0                50m
+monitoring             prometheus-74887c8bb6-mdkms                1/1     Running            0                50m
