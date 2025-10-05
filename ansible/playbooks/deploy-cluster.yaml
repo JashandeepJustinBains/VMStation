@@ -282,5 +282,5 @@
 # -----------------------------------------------------------------------------
 # PHASE 7: Application Deployment
 # -----------------------------------------------------------------------------
-    - import_playbook: ../plays/deploy-apps.yaml
-    - import_playbook: ../plays/jellyfin.yml
+- import_playbook: ../plays/deploy-apps.yaml
+- import_playbook: ../plays/jellyfin.yml
