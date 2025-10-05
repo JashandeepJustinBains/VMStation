@@ -69,6 +69,13 @@
       register: cni_archive
       when: not cni_installed.stat.exists
 
+    - name: Ensure /opt/cni/bin directory exists
+      ansible.builtin.file:
+        path: /opt/cni/bin
+        state: directory
+        mode: '0755'
+      when: not cni_installed.stat.exists
+
     - name: Extract CNI plugins
       ansible.builtin.unarchive:
         src: /tmp/cni-plugins.tgz
