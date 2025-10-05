@@ -63,11 +63,14 @@
     state: directory
     mode: '0755'
 
-- name: Ensure /run/xtables.lock exists
-  ansible.builtin.file:
-    path: /run/xtables.lock
-    state: touch
+- name: Ensure /run/xtables.lock exists (required for iptables concurrency)
+  ansible.builtin.copy:
+    content: ""
+    dest: /run/xtables.lock
+    owner: root
+    group: root
     mode: '0644'
+    force: no
   ignore_errors: true
 
 # OS-specific package installation
@@ -113,8 +116,26 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: true
-  changed_when: false
+  register: iptables_alt_result
+  changed_when: "'update-alternatives' in iptables_alt_result.stdout or iptables_alt_result.rc == 0"
+  failed_when: false
+
+- name: Verify iptables points to nftables backend (RHEL 10+)
+  ansible.builtin.stat:
+    path: /usr/sbin/iptables
+  register: iptables_link
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Configure ip6tables to use nftables backend (RHEL 10+)
+  ansible.builtin.command: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  register: ip6tables_alt_result
+  changed_when: "'update-alternatives' in ip6tables_alt_result.stdout or ip6tables_alt_result.rc == 0"
+  failed_when: false
 
 - name: Configure nftables permissive rules (RHEL 10+)
   ansible.builtin.shell: |
@@ -123,15 +144,25 @@
       nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
       nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
       nft add chain inet filter output '{ type filter hook output priority 0; policy accept; }'
-      nft list ruleset > /etc/sysconfig/nftables.conf || true
     fi
   args:
     executable: /bin/bash
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
-  ignore_errors: true
-  changed_when: false
+  register: nftables_config
+  changed_when: "'add table' in nftables_config.stdout"
+  failed_when: false
+
+- name: Persist nftables rules (RHEL 10+)
+  ansible.builtin.shell: nft list ruleset > /etc/sysconfig/nftables.conf
+  args:
+    executable: /bin/bash
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - nftables_config is changed
+  failed_when: false
 
 # SELinux configuration (RHEL)
 - name: Set SELinux to permissive (RHEL)
@@ -148,3 +179,45 @@
     line: 'SELINUX=permissive'
   when: ansible_os_family == 'RedHat'
   ignore_errors: true
+
+# Pre-create Flannel CNI config on RHEL 10 to avoid init-container write failures
+- name: Pre-create Flannel CNI config (RHEL 10+)
+  ansible.builtin.copy:
+    content: |
+      {
+        "name": "cni0",
+        "cniVersion": "0.3.1",
+        "plugins": [
+          {
+            "type": "flannel",
+            "delegate": {
+              "hairpinMode": true,
+              "isDefaultGateway": true
+            }
+          },
+          {
+            "type": "portmap",
+            "capabilities": {
+              "portMappings": true
+            }
+          }
+        ]
+      }
+    dest: /etc/cni/net.d/10-flannel.conflist
+    owner: root
+    group: root
+    mode: '0644'
+    force: no
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  register: cni_config_created
+
+- name: Apply SELinux context to CNI config (RHEL 10+)
+  ansible.builtin.command: restorecon -v /etc/cni/net.d/10-flannel.conflist
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - cni_config_created is changed
+  changed_when: false
+  failed_when: false

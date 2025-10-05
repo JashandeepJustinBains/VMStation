@@ -135,6 +135,17 @@
       register: flannel_rollout
       until: flannel_rollout.rc == 0
 
+    - name: Verify CNI config exists on all nodes via SSH
+      ansible.builtin.stat:
+        path: /etc/cni/net.d/10-flannel.conflist
+      delegate_to: "{{ item }}"
+      loop:
+        - masternode
+        - storagenodet3500
+        - homelab
+      register: cni_file_check
+      failed_when: not cni_file_check.stat.exists
+
     - name: Wait for all nodes Ready
       ansible.builtin.shell: |
         total=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)

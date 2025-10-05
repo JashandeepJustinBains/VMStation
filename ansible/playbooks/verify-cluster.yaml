@@ -1,0 +1,149 @@
+---
+# =============================================================================
+# VMStation Kubernetes Cluster - Verification Playbook
+# Idempotent smoke tests for cluster health
+# =============================================================================
+
+- name: Verify Kubernetes Cluster Health
+  hosts: monitoring_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check kubectl connectivity
+      ansible.builtin.command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+
+    - name: Verify all nodes are Ready
+      ansible.builtin.shell: |
+        total=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
+        ready=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | grep ' Ready ' | wc -l)
+        echo "Ready: $ready/$total"
+        test $ready -eq $total
+      register: nodes_status
+      changed_when: false
+      failed_when: nodes_status.rc != 0
+
+    - name: Display node status
+      ansible.builtin.debug:
+        msg: "{{ nodes_status.stdout }}"
+
+    - name: Verify Flannel DaemonSet is ready
+      ansible.builtin.shell: |
+        desired=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get daemonset kube-flannel-ds -o jsonpath='{.status.desiredNumberScheduled}')
+        ready=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get daemonset kube-flannel-ds -o jsonpath='{.status.numberReady}')
+        echo "Flannel pods ready: $ready/$desired"
+        test $ready -eq $desired
+      register: flannel_status
+      changed_when: false
+      failed_when: flannel_status.rc != 0
+
+    - name: Display Flannel status
+      ansible.builtin.debug:
+        msg: "{{ flannel_status.stdout }}"
+
+    - name: Verify kube-proxy pods are Running
+      ansible.builtin.shell: |
+        total=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -l k8s-app=kube-proxy --no-headers | wc -l)
+        running=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -l k8s-app=kube-proxy --no-headers | grep Running | wc -l)
+        echo "kube-proxy pods running: $running/$total"
+        test $running -eq $total
+      register: kubeproxy_status
+      changed_when: false
+      failed_when: kubeproxy_status.rc != 0
+
+    - name: Display kube-proxy status
+      ansible.builtin.debug:
+        msg: "{{ kubeproxy_status.stdout }}"
+
+    - name: Verify CoreDNS pods are Ready
+      ansible.builtin.shell: |
+        total=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -l k8s-app=kube-dns --no-headers | wc -l)
+        running=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -l k8s-app=kube-dns --no-headers | grep Running | wc -l)
+        echo "CoreDNS pods running: $running/$total"
+        test $running -eq $total
+      register: coredns_status
+      changed_when: false
+      failed_when: coredns_status.rc != 0
+
+    - name: Display CoreDNS status
+      ansible.builtin.debug:
+        msg: "{{ coredns_status.stdout }}"
+
+    - name: Check for CrashLoopBackOff pods
+      ansible.builtin.shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A | grep -i crash || echo "No CrashLoopBackOff pods found"
+      register: crash_check
+      changed_when: false
+      failed_when: "'CrashLoop' in crash_check.stdout"
+
+    - name: Display crash check result
+      ansible.builtin.debug:
+        msg: "{{ crash_check.stdout }}"
+
+- name: Verify CNI config on all nodes
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check CNI config file exists
+      ansible.builtin.stat:
+        path: /etc/cni/net.d/10-flannel.conflist
+      register: cni_config
+
+    - name: Fail if CNI config missing
+      ansible.builtin.fail:
+        msg: "CNI config file /etc/cni/net.d/10-flannel.conflist not found on {{ inventory_hostname }}"
+      when: not cni_config.stat.exists
+
+    - name: Display CNI config status
+      ansible.builtin.debug:
+        msg: "CNI config present on {{ inventory_hostname }}: {{ cni_config.stat.path }}"
+      when: cni_config.stat.exists
+
+    - name: Check Flannel subnet file exists
+      ansible.builtin.stat:
+        path: /run/flannel/subnet.env
+      register: flannel_subnet
+
+    - name: Display Flannel subnet status
+      ansible.builtin.debug:
+        msg: "Flannel subnet file on {{ inventory_hostname }}: {{ 'present' if flannel_subnet.stat.exists else 'missing' }}"
+
+    - name: Check Flannel interface exists
+      ansible.builtin.shell: ip link show flannel.1
+      register: flannel_iface
+      changed_when: false
+      failed_when: false
+
+    - name: Display Flannel interface status
+      ansible.builtin.debug:
+        msg: "Flannel interface on {{ inventory_hostname }}: {{ 'present' if flannel_iface.rc == 0 else 'missing' }}"
+
+- name: Final verification summary
+  hosts: monitoring_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Display final cluster status
+      ansible.builtin.shell: |
+        echo "=== Cluster Status Summary ==="
+        echo ""
+        echo "Nodes:"
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
+        echo ""
+        echo "kube-system pods:"
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system get pods -o wide
+        echo ""
+        echo "Flannel pods:"
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -o wide
+        echo ""
+        echo "All namespaces:"
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A | grep -v Running || echo "All pods Running"
+      register: final_status
+      changed_when: false
+
+    - name: Show final status
+      ansible.builtin.debug:
+        var: final_status.stdout_lines
