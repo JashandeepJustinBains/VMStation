@@ -63,7 +63,7 @@
       retries: 3
       delay: 10
       until: flannel_wait.rc == 0
-      failed_when: false
+      failed_when: flannel_wait.rc != 0
 
     - name: Check Flannel pod status on homelab
       ansible.builtin.command: kubectl get pods -n kube-flannel -l app=flannel --field-selector spec.nodeName=homelab -o wide
@@ -83,24 +83,22 @@
       ansible.builtin.debug:
         msg: "{{ proxy_status.stdout_lines }}"
 
-    - name: Get Flannel pod logs if not running
+    - name: Get Flannel pod logs
       ansible.builtin.shell: |
         POD=$(kubectl get pods -n kube-flannel -l app=flannel --field-selector spec.nodeName=homelab -o name | head -1)
         if [ -n "$POD" ]; then
           echo "=== Current logs ==="
-          kubectl logs -n kube-flannel $POD -c kube-flannel --tail=50 || true
+          kubectl logs -n kube-flannel $POD -c kube-flannel --tail=100 || true
           echo ""
           echo "=== Previous logs (if crashed) ==="
-          kubectl logs -n kube-flannel $POD -c kube-flannel --previous --tail=50 2>/dev/null || echo "No previous logs"
+          kubectl logs -n kube-flannel $POD -c kube-flannel --previous --tail=100 2>/dev/null || echo "No previous logs"
         fi
       register: flannel_logs
       changed_when: false
-      when: "'Running' not in flannel_status.stdout"
 
-    - name: Display Flannel logs if pod failed
+    - name: Display Flannel logs
       ansible.builtin.debug:
         msg: "{{ flannel_logs.stdout_lines }}"
-      when: flannel_logs.stdout_lines is defined
 
     - name: Check for CrashLoopBackOff pods
       ansible.builtin.command: kubectl get pods -A --field-selector spec.nodeName=homelab
@@ -110,6 +108,71 @@
     - name: Display all pods on homelab
       ansible.builtin.debug:
         msg: "{{ all_pods.stdout_lines }}"
+
+    - name: Force restart kube-proxy on homelab
+      ansible.builtin.command: >
+        kubectl delete pod -n kube-system
+        -l k8s-app=kube-proxy
+        --field-selector spec.nodeName=homelab
+        --grace-period=0 --force
+      register: proxy_delete
+      changed_when: "'deleted' in proxy_delete.stdout"
+      failed_when: false
+
+    - name: Wait for new kube-proxy pod to be running
+      ansible.builtin.command: >
+        kubectl wait --for=condition=Ready pod
+        -n kube-system
+        -l k8s-app=kube-proxy
+        --field-selector spec.nodeName=homelab
+        --timeout=120s
+      register: proxy_wait
+      retries: 3
+      delay: 10
+      until: proxy_wait.rc == 0
+      failed_when: false
+
+    - name: Get kube-proxy pod logs
+      ansible.builtin.shell: |
+        POD=$(kubectl get pods -n kube-system -l k8s-app=kube-proxy --field-selector spec.nodeName=homelab -o name | head -1)
+        if [ -n "$POD" ]; then
+          echo "=== Current kube-proxy logs ==="
+          kubectl logs -n kube-system $POD --tail=100 || true
+          echo ""
+          echo "=== Previous kube-proxy logs (if crashed) ==="
+          kubectl logs -n kube-system $POD --previous --tail=100 2>/dev/null || echo "No previous logs"
+        fi
+      register: proxy_logs
+      changed_when: false
+
+    - name: Display kube-proxy logs
+      ansible.builtin.debug:
+        msg: "{{ proxy_logs.stdout_lines }}"
+
+    - name: Final check - all pods on homelab
+      ansible.builtin.command: kubectl get pods -A --field-selector spec.nodeName=homelab
+      register: final_pods
+      changed_when: false
+
+    - name: Display final pod status
+      ansible.builtin.debug:
+        msg: "{{ final_pods.stdout_lines }}"
+
+    - name: Check for any CrashLoopBackOff or Completed pods
+      ansible.builtin.shell: |
+        kubectl get pods -A --field-selector spec.nodeName=homelab | grep -E 'CrashLoopBackOff|Completed' || echo "All pods healthy"
+      register: crashloop_check
+      changed_when: false
+      failed_when: false
+
+    - name: Display crashloop check result
+      ansible.builtin.debug:
+        msg: "{{ crashloop_check.stdout_lines }}"
+
+    - name: Fail if pods are not healthy
+      ansible.builtin.fail:
+        msg: "Pods on homelab are still not healthy. Check logs above for details."
+      when: "'CrashLoopBackOff' in crashloop_check.stdout or 'Completed' in crashloop_check.stdout"
 
     - name: Final validation
       ansible.builtin.command: kubectl get nodes homelab -o wide
