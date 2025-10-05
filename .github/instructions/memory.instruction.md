@@ -15,7 +15,10 @@ applyTo: '**'
 
 ## Findings (current investigation)
 1. Initial problem: Flannel and kube-proxy CrashLoopBackOff on RHEL 10 node after deployment — caused by nftables/backend mismatch and probe issues.
-2. Changes made iteratively:
+2. 2025-10-05: Flannel pod on homelab in Completed state traced to DaemonSet entrypoint mismatch (used /opt/bin/flanneld, should be /flanneld or default entrypoint). Fix: Remove custom command, use default entrypoint for Flannel image. Kube-proxy restarts were a symptom of Flannel not running.
+3. Flannel DaemonSet manifest updated to use correct entrypoint. Next: re-apply manifest and verify Flannel pod stays Running; kube-proxy should stabilize.
+4. All CNI plugins and configs present, SELinux permissive, no audit denials.
+5. Changes made iteratively:
    - Enabled EnableNFTables in Flannel ConfigMap.
    - Added probes (readiness/liveness) then adjusted after observing failures.
    - Removed livenessProbe (it caused clean shutdowns) and simplified readinessProbe to check /run/flannel/subnet.env.
