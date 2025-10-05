@@ -8,6 +8,8 @@ This directory contains comprehensive documentation for deploying and troublesho
 
 | Document | Purpose | When to Read |
 |----------|---------|--------------|
+| **[🚨 EMERGENCY FIX](../IMMEDIATE_FIX.md)** | **5-minute fix for CrashLoopBackOff** | **START HERE if pods are failing** |
+| **[Emergency Fix Details](RHEL10_EMERGENCY_FIX.md)** | Detailed explanation of br_netfilter issue | Understanding the root cause |
 | **[Quick Start Guide](RHEL10_DEPLOYMENT_QUICKSTART.md)** | Fast deployment and validation | Start here for new deployments |
 | **[Complete Solution](RHEL10_NFTABLES_COMPLETE_SOLUTION.md)** | Full technical documentation | Deep dive into the solution |
 | **[Solution Architecture](RHEL10_SOLUTION_ARCHITECTURE.md)** | Visual architecture & flow diagrams | Understand how everything connects |
@@ -133,6 +135,27 @@ This directory contains comprehensive documentation for deploying and troublesho
 - References
 
 ## 🔍 Common Scenarios
+
+### Scenario 0: 🚨 EMERGENCY - Flannel/kube-proxy CrashLoopBackOff on RHEL 10
+
+**Error in Logs**:
+```
+nftables: couldn't initialise table flannel-ipv4: context canceled
+```
+
+**Path**:
+1. **IMMEDIATE**: Read [IMMEDIATE_FIX.md](../IMMEDIATE_FIX.md)
+2. Run Option 1 (Quick Manual Fix) - takes 5 minutes
+3. Verify pods are Running
+4. Later, read [RHEL10_EMERGENCY_FIX.md](RHEL10_EMERGENCY_FIX.md) for details
+
+**Root Cause**: RHEL 10 removed `br_netfilter` module - nftables tables must be pre-created
+
+**Expected Resolution**: 5 minutes with manual commands
+
+**This is THE fix for your current issue!**
+
+---
 
 ### Scenario 1: Fresh Deployment
 

@@ -12,26 +12,19 @@ applyTo: '**'
 - K8s server: v1.29.15; Flannel v0.27.4; Ansible core 2.14.18; containerd runtime
 
 ## Findings (current investigation)
-7. 2025-10-05: Updated deploy playbook to robustly check for subnet.env on all nodes, handle missing results gracefully, and provide debug output for any nodes missing the file. Added debug tasks to print Flannel pod status and subnet.env existence on each node after deployment. Upgraded Ansible collections in requirements.yml for compatibility with Ansible 2.14.x+ (kubernetes.core 5.5.0, community.general 12.5.0, ansible.posix 2.9.0).
-1. Initial problem: Flannel and kube-proxy CrashLoopBackOff on RHEL 10 node after deployment — caused by nftables/backend mismatch and probe issues.
-2. 2025-10-05: Flannel pod on homelab in Completed state traced to DaemonSet entrypoint mismatch (used /opt/bin/flanneld, should be /flanneld or default entrypoint). Fix: Remove custom command, use default entrypoint for Flannel image. Kube-proxy restarts were a symptom of Flannel not running.
-3. Flannel DaemonSet manifest updated to use correct entrypoint. Next: re-apply manifest and verify Flannel pod stays Running; kube-proxy should stabilize.
-4. All CNI plugins and configs present, SELinux permissive, no audit denials.
-5. Changes made iteratively:
-   - Enabled EnableNFTables in Flannel ConfigMap.
-   - Added probes (readiness/liveness) then adjusted after observing failures.
-   - Removed livenessProbe (it caused clean shutdowns) and simplified readinessProbe to check /run/flannel/subnet.env.
-   - Added nftables adjustments in `network-fix` role and pre-created CNI config on RHEL to avoid init-container write failures.
-   - Fixed ansible deploy step to verify CNI files on the host (ssh) instead of inside containers.
-6. **ROOT CAUSE FIX (2025-10-05)**: Flannel CrashLoopBackOff on homelab caused by incorrect `CONT_WHEN_CACHE_NOT_READY: "false"` environment variable.
-   - When set to "false", Flannel exits cleanly when Kubernetes API cache is not ready (common during initialization or API reconnection).
-   - Fix: Changed to `CONT_WHEN_CACHE_NOT_READY: "true"` to allow Flannel to continue running even when cache is temporarily unavailable.
-   - This prevents the "Exiting cleanly..." behavior that was causing CrashLoopBackOff despite exit code 0.
-3. **CRITICAL FIX (2025-10-04)**: Removed bad practice stabilization waits and weak validation:
-   - Fixed `kubectl uncordon --all` (invalid flag) → replaced with proper node-by-node loop.
-   - Replaced weak grep check with strict validation that fails fast and auto-collects pod describe + logs for CrashLoopBackOff pods.
-   - Removed stale Flannel template with `EnableNFTables: false` to prevent confusion.
-   - **Production pods MUST NOT be in restart cycles** — any CrashLoopBackOff indicates a real problem requiring root-cause diagnosis, not artificial sleeps.
+1. **ROOT CAUSE IDENTIFIED (2025-10-05)**: RHEL 10 removed `br_netfilter` kernel module entirely.
+   - Flannel error: `nftables: couldn't initialise table flannel-ipv4: context canceled`
+   - kube-proxy: CrashLoopBackOff due to network not ready
+   - The `br_netfilter` module is being loaded in network-fix role, but it doesn't exist on RHEL 10
+   - This causes module load failure and creates race condition where Flannel starts before network is ready
+   - **FIX**: Skip `br_netfilter` on RHEL 10+, pre-create nftables tables `flannel-ipv4` and `flannel-ipv6` BEFORE pods start
+2. GitHub Issue Reference: https://github.com/flannel-io/flannel/issues/2254 - RHEL removed br_netfilter in v10
+3. nftables tables MUST be created on the host before Flannel initializes, otherwise Flannel gets shutdown signal before it can create them
+4. Applied fixes:
+   - Skip br_netfilter module load on RHEL 10+ (conditional in network-fix role)
+   - Pre-create `inet flannel-ipv4` and `inet flannel-ipv6` nftables tables
+   - Enable and start nftables service to persist configuration
+   - This prevents the "context canceled" error that was causing CrashLoopBackOff
 
 ## Files Modified (key deltas)
 - `ansible/playbooks/deploy-cluster.yaml` — fixed subnet.env check to handle missing results, added debug output for missing nodes, added debug tasks for Flannel pod and subnet.env status after deployment

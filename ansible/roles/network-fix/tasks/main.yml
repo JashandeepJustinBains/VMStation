@@ -16,21 +16,20 @@
     replace: '# \1'
   ignore_errors: true
 
-- name: Load kernel modules
+- name: Load kernel modules (skip br_netfilter on RHEL 10+, module removed)
   ansible.builtin.modprobe:
     name: "{{ item }}"
     state: present
-  loop:
-    - br_netfilter
-    - overlay
-    - nf_conntrack
-    - vxlan
+  loop: "{{ ['overlay', 'nf_conntrack', 'vxlan'] + (['br_netfilter'] if not (ansible_os_family == 'RedHat' and ansible_distribution_major_version is version('10', '>=')) else []) }}"
+  ignore_errors: true
 
 - name: Persist kernel modules
   ansible.builtin.copy:
     dest: /etc/modules-load.d/kubernetes.conf
     content: |
+      {% if not (ansible_os_family == 'RedHat' and ansible_distribution_major_version is version('10', '>=')) %}
       br_netfilter
+      {% endif %}
       overlay
       nf_conntrack
       vxlan
@@ -278,6 +277,28 @@
   changed_when: "'add table' in nftables_config.stdout"
   failed_when: false
 
+- name: Pre-create nftables tables for Flannel (RHEL 10+ - CRITICAL FIX)
+  ansible.builtin.shell: |
+    set -e
+    # Pre-create Flannel nftables tables to prevent "context canceled" errors
+    # This must happen BEFORE Flannel pods start
+    if ! nft list table inet flannel-ipv4 &>/dev/null; then
+      nft add table inet flannel-ipv4
+      echo "Created flannel-ipv4 table"
+    fi
+    if ! nft list table inet flannel-ipv6 &>/dev/null; then
+      nft add table inet flannel-ipv6
+      echo "Created flannel-ipv6 table"
+    fi
+  args:
+    executable: /bin/bash
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  register: flannel_nft_tables
+  changed_when: "'Created' in flannel_nft_tables.stdout"
+  failed_when: false
+
 - name: Persist nftables rules (RHEL 10+)
   ansible.builtin.shell: nft list ruleset > /etc/sysconfig/nftables.conf
   args:
@@ -285,8 +306,18 @@
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
-    - nftables_config is changed
+    - (nftables_config is changed or flannel_nft_tables is changed)
   failed_when: false
+
+- name: Enable and start nftables service (RHEL 10+)
+  ansible.builtin.service:
+    name: nftables
+    enabled: yes
+    state: started
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
 
 # SELinux configuration (RHEL)
 - name: Set SELinux to permissive (RHEL)
