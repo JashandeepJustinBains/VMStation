@@ -113,6 +113,16 @@
   changed_when: false
 
 # RHEL 10 nftables backend configuration
+- name: Enable and start nftables service (RHEL 10+)
+  ansible.builtin.service:
+    name: nftables
+    state: started
+    enabled: yes
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  ignore_errors: true
+
 - name: Configure iptables to use nftables backend (RHEL 10+)
   ansible.builtin.command: update-alternatives --set iptables /usr/sbin/iptables-nft
   when:
@@ -137,33 +147,6 @@
     - ansible_distribution_major_version is version('10', '>=')
   register: ip6tables_alt_result
   changed_when: "'update-alternatives' in ip6tables_alt_result.stdout or ip6tables_alt_result.rc == 0"
-  failed_when: false
-
-- name: Configure nftables permissive rules (RHEL 10+)
-  ansible.builtin.shell: |
-    if ! nft list table inet filter &>/dev/null; then
-      nft add table inet filter
-      nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
-      nft add chain inet filter forward '{ type filter hook forward priority 0; policy accept; }'
-      nft add chain inet filter output '{ type filter hook output priority 0; policy accept; }'
-    fi
-  args:
-    executable: /bin/bash
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-  register: nftables_config
-  changed_when: "'add table' in nftables_config.stdout"
-  failed_when: false
-
-- name: Persist nftables rules (RHEL 10+)
-  ansible.builtin.shell: nft list ruleset > /etc/sysconfig/nftables.conf
-  args:
-    executable: /bin/bash
-  when:
-    - ansible_os_family == 'RedHat'
-    - ansible_distribution_major_version is version('10', '>=')
-    - nftables_config is changed
   failed_when: false
 
 # SELinux configuration (RHEL)
