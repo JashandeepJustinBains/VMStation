@@ -29,8 +29,10 @@ fi
 
 echo ""
 echo "Running playbook..."
-cd "$ANSIBLE_DIR"
-ansible-playbook -i inventory/hosts.yml playbooks/fix-homelab-crashloop.yml
+# Run the playbook from the repository root so Ansible can locate roles under ansible/roles
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/fix-homelab-crashloop.yml
 
 echo ""
 echo "========================================="
