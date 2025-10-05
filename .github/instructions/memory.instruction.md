@@ -2,8 +2,6 @@
 applyTo: '**'
 ---
 
-# User Memory (Simplified)
-
 ## User Preferences
 - Dev machine: Windows 11 (no local SSH/kubectl/ansible)
 - Operate on masternode (Debian) via SSH; homelab is RHEL 10 and requires passworded sudo as user `jashandeepjustinbains`
@@ -24,7 +22,7 @@ applyTo: '**'
    - Removed livenessProbe (it caused clean shutdowns) and simplified readinessProbe to check /run/flannel/subnet.env.
    - Added nftables adjustments in `network-fix` role and pre-created CNI config on RHEL to avoid init-container write failures.
    - Fixed ansible deploy step to verify CNI files on the host (ssh) instead of inside containers.
-3. **CRITICAL FIX (2025-10-04)**: Removed "copium" stabilization waits and weak validation:
+3. **CRITICAL FIX (2025-10-04)**: Removed bad practice stabilization waits and weak validation:
    - Fixed `kubectl uncordon --all` (invalid flag) → replaced with proper node-by-node loop.
    - Replaced weak grep check with strict validation that fails fast and auto-collects pod describe + logs for CrashLoopBackOff pods.
    - Removed stale Flannel template with `EnableNFTables: false` to prevent confusion.
