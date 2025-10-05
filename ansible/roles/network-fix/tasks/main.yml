@@ -57,11 +57,31 @@
       net.ipv4.ip_forward = 1
     mode: '0644'
 
+- name: Ensure /opt/cni/bin directory exists
+  ansible.builtin.file:
+    path: /opt/cni/bin
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Apply SELinux context to /opt/cni/bin (RHEL)
+  ansible.builtin.command: chcon -Rt container_file_t /opt/cni/bin
+  when: ansible_os_family == 'RedHat'
+  changed_when: false
+  failed_when: false
+
 - name: Ensure /etc/cni/net.d exists
   ansible.builtin.file:
     path: /etc/cni/net.d
     state: directory
     mode: '0755'
+
+- name: Apply SELinux context to /etc/cni/net.d (RHEL)
+  ansible.builtin.command: chcon -Rt container_file_t /etc/cni/net.d
+  when: ansible_os_family == 'RedHat'
+  changed_when: false
+  failed_when: false
 
 - name: Ensure /run/flannel directory exists (for subnet.env)
   ansible.builtin.file:
@@ -70,6 +90,12 @@
     mode: '0755'
     owner: root
     group: root
+
+- name: Apply SELinux context to /run/flannel (RHEL)
+  ansible.builtin.command: chcon -Rt container_file_t /run/flannel
+  when: ansible_os_family == 'RedHat'
+  changed_when: false
+  failed_when: false
 
 - name: Ensure /run/xtables.lock exists (required for iptables concurrency)
   ansible.builtin.copy:
@@ -348,3 +374,22 @@
     - cni_config_created is changed
   changed_when: false
   failed_when: false
+
+# Ensure kubelet is running after all network configuration
+- name: Ensure kubelet is enabled and started
+  ansible.builtin.service:
+    name: kubelet
+    state: started
+    enabled: yes
+  ignore_errors: true
+
+- name: Restart kubelet after network configuration (RHEL 10+)
+  ansible.builtin.service:
+    name: kubelet
+    state: restarted
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - kube_proxy_chains is defined
+  ignore_errors: true
+  throttle: 1
