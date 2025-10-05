@@ -169,7 +169,6 @@ spec:
       containers:
       - name: kube-flannel
         image: ghcr.io/flannel-io/flannel:v0.27.4
-        # Use the default entrypoint (/flanneld) for this image
         args:
         - --ip-masq
         - --kube-subnet-mgr
