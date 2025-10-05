@@ -190,12 +190,14 @@
         kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -l app=flannel -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | \
         while read node; do
           if [ "$node" = "homelab" ]; then
-            ssh jashandeepjustinbains@192.168.4.62 'sudo test -f /run/flannel/subnet.env' || { echo "subnet.env missing on $node"; exit 1; }
+            # Use ssh -tt for TTY, sudo -S for stdin password, echo password from Ansible var
+            ssh -tt jashandeepjustinbains@192.168.4.62 "echo '{{ ansible_become_pass }}' | sudo -S test -f /run/flannel/subnet.env" || { echo "subnet.env missing on $node"; exit 1; }
           else
             ssh root@$node 'test -f /run/flannel/subnet.env' || { echo "subnet.env missing on $node"; exit 1; }
           fi
           echo "✓ subnet.env exists on $node"
         done
+      # Note: Set 'homelab_sudo_pass' as an Ansible variable (vault or group_vars) for secure password handling.
       retries: 10
       delay: 5
       register: subnet_check
