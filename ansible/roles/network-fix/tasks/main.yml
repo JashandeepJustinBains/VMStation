@@ -63,6 +63,14 @@
     state: directory
     mode: '0755'
 
+- name: Ensure /run/flannel directory exists (for subnet.env)
+  ansible.builtin.file:
+    path: /run/flannel
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
 - name: Ensure /run/xtables.lock exists (required for iptables concurrency)
   ansible.builtin.copy:
     content: ""
@@ -112,7 +120,35 @@
   ignore_errors: true
   changed_when: false
 
-# RHEL 10 nftables backend configuration
+# RHEL 10 nftables backend configuration (idempotent)
+- name: Check if iptables-nft binary exists (RHEL 10+)
+  ansible.builtin.stat:
+    path: /usr/sbin/iptables-nft
+  register: iptables_nft_binary
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Check if iptables alternatives entry exists (RHEL 10+)
+  ansible.builtin.stat:
+    path: /var/lib/alternatives/iptables
+  register: iptables_alt_exists
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+
+- name: Install iptables alternatives if missing (RHEL 10+)
+  ansible.builtin.command:
+    cmd: update-alternatives --install /usr/sbin/iptables iptables /usr/sbin/iptables-nft 10
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - iptables_nft_binary.stat.exists | default(false)
+    - not (iptables_alt_exists.stat.exists | default(false))
+  register: iptables_install
+  changed_when: iptables_install.rc == 0
+  failed_when: false
+
 - name: Configure iptables to use nftables backend (RHEL 10+)
   ansible.builtin.command: update-alternatives --set iptables /usr/sbin/iptables-nft
   when:
@@ -122,13 +158,25 @@
   changed_when: "'update-alternatives' in iptables_alt_result.stdout or iptables_alt_result.rc == 0"
   failed_when: false
 
-- name: Verify iptables points to nftables backend (RHEL 10+)
+- name: Check if ip6tables alternatives entry exists (RHEL 10+)
   ansible.builtin.stat:
-    path: /usr/sbin/iptables
-  register: iptables_link
+    path: /var/lib/alternatives/ip6tables
+  register: ip6tables_alt_exists
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution_major_version is version('10', '>=')
+
+- name: Install ip6tables alternatives if missing (RHEL 10+)
+  ansible.builtin.command:
+    cmd: update-alternatives --install /usr/sbin/ip6tables ip6tables /usr/sbin/ip6tables-nft 10
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+    - iptables_nft_binary.stat.exists | default(false)
+    - not (ip6tables_alt_exists.stat.exists | default(false))
+  register: ip6tables_install
+  changed_when: ip6tables_install.rc == 0
+  failed_when: false
 
 - name: Configure ip6tables to use nftables backend (RHEL 10+)
   ansible.builtin.command: update-alternatives --set ip6tables /usr/sbin/ip6tables-nft
@@ -137,6 +185,54 @@
     - ansible_distribution_major_version is version('10', '>=')
   register: ip6tables_alt_result
   changed_when: "'update-alternatives' in ip6tables_alt_result.stdout or ip6tables_alt_result.rc == 0"
+  failed_when: false
+
+- name: Pre-create iptables chains for kube-proxy (RHEL 10+)
+  ansible.builtin.shell: |
+    set -e
+    # Pre-create kube-proxy NAT chains (idempotent)
+    iptables -t nat -N KUBE-SERVICES 2>/dev/null || true
+    iptables -t nat -N KUBE-POSTROUTING 2>/dev/null || true
+    iptables -t nat -N KUBE-FIREWALL 2>/dev/null || true
+    iptables -t nat -N KUBE-MARK-MASQ 2>/dev/null || true
+    iptables -t nat -N KUBE-MARK-DROP 2>/dev/null || true
+    iptables -t nat -N KUBE-LOAD-BALANCER 2>/dev/null || true
+    iptables -t nat -N KUBE-NODE-PORT 2>/dev/null || true
+    
+    # Pre-create kube-proxy filter chains (idempotent)
+    iptables -t filter -N KUBE-FORWARD 2>/dev/null || true
+    iptables -t filter -N KUBE-SERVICES 2>/dev/null || true
+    iptables -t filter -N KUBE-EXTERNAL-SERVICES 2>/dev/null || true
+    iptables -t filter -N KUBE-NODEPORTS 2>/dev/null || true
+    iptables -t filter -N KUBE-PROXY-FIREWALL 2>/dev/null || true
+    
+    # Hook chains into iptables (idempotent using -C check before -A append)
+    iptables -t nat -C PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES 2>/dev/null || \
+      iptables -t nat -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    
+    iptables -t nat -C OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES 2>/dev/null || \
+      iptables -t nat -A OUTPUT -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    
+    iptables -t nat -C POSTROUTING -m comment --comment "kubernetes postrouting rules" -j KUBE-POSTROUTING 2>/dev/null || \
+      iptables -t nat -A POSTROUTING -m comment --comment "kubernetes postrouting rules" -j KUBE-POSTROUTING
+    
+    iptables -t filter -C FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD 2>/dev/null || \
+      iptables -t filter -A FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD
+    
+    iptables -t filter -C FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES 2>/dev/null || \
+      iptables -t filter -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+    
+    iptables -t filter -C INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES 2>/dev/null || \
+      iptables -t filter -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+    
+    echo "kube-proxy iptables chains pre-created successfully"
+  args:
+    executable: /bin/bash
+  when:
+    - ansible_os_family == 'RedHat'
+    - ansible_distribution_major_version is version('10', '>=')
+  register: kube_proxy_chains
+  changed_when: false
   failed_when: false
 
 - name: Configure nftables permissive rules (RHEL 10+)
@@ -180,6 +276,35 @@
     regexp: '^SELINUX='
     line: 'SELINUX=permissive'
   when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
+# NetworkManager configuration (RHEL) - prevent it from managing CNI interfaces
+- name: Ensure NetworkManager conf.d directory exists (RHEL)
+  ansible.builtin.file:
+    path: /etc/NetworkManager/conf.d
+    state: directory
+    mode: '0755'
+  when: ansible_os_family == 'RedHat'
+  ignore_errors: true
+
+- name: Configure NetworkManager to ignore CNI interfaces (RHEL)
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/conf.d/99-kubernetes.conf
+    content: |
+      [keyfile]
+      unmanaged-devices=interface-name:cni*;interface-name:flannel*;interface-name:veth*
+    mode: '0644'
+  when: ansible_os_family == 'RedHat'
+  register: nm_config
+  ignore_errors: true
+
+- name: Restart NetworkManager if config changed (RHEL)
+  ansible.builtin.service:
+    name: NetworkManager
+    state: restarted
+  when:
+    - ansible_os_family == 'RedHat'
+    - nm_config is changed
   ignore_errors: true
 
 # Pre-create Flannel CNI config on RHEL 10 to avoid init-container write failures
