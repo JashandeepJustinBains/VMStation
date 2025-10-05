@@ -44,19 +44,56 @@
         path: /opt/cni/bin/loopback
       register: cni_installed
 
-    - name: Download CNI plugins
+    - name: Set CNI architecture fact
+      ansible.builtin.set_fact:
+        cni_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture == 'aarch64' else ansible_architecture) }}"
+      when: not cni_installed.stat.exists
+
+    - name: Download CNI plugins (primary attempt)
       ansible.builtin.get_url:
-        url: https://github.com/containernetworking/plugins/releases/download/v1.6.1/cni-plugins-linux-amd64-v1.6.1.tgz
+        url: "https://github.com/containernetworking/plugins/releases/download/v1.8.0/cni-plugins-linux-{{ cni_arch }}-v1.8.0.tgz"
         dest: /tmp/cni-plugins.tgz
         mode: '0644'
         timeout: 60
+        validate_certs: false
       when: not cni_installed.stat.exists
+      register: cni_download
+      ignore_errors: true
+
+    - name: Download CNI plugins (curl fallback)
+      ansible.builtin.shell: |
+        curl -fsSL -o /tmp/cni-plugins.tgz \
+          "https://github.com/containernetworking/plugins/releases/download/v1.8.0/cni-plugins-linux-{{ cni_arch }}-v1.8.0.tgz"
+      args:
+        creates: /tmp/cni-plugins.tgz
+      when: 
+        - not cni_installed.stat.exists
+        - cni_download is failed or 'cert_file' in (cni_download.msg | default('')) or 'urllib3' in (cni_download.msg | default(''))
+
+    - name: Verify CNI archive downloaded
+      ansible.builtin.stat:
+        path: /tmp/cni-plugins.tgz
+      register: cni_archive
+      when: not cni_installed.stat.exists
+
+    - name: Fail if CNI download failed
+      ansible.builtin.fail:
+        msg: "Failed to download CNI plugins. Check network connectivity and GitHub availability."
+      when: 
+        - not cni_installed.stat.exists
+        - not cni_archive.stat.exists
 
     - name: Extract CNI plugins
       ansible.builtin.unarchive:
         src: /tmp/cni-plugins.tgz
         dest: /opt/cni/bin/
         remote_src: yes
+      when: not cni_installed.stat.exists
+
+    - name: Clean up CNI archive
+      ansible.builtin.file:
+        path: /tmp/cni-plugins.tgz
+        state: absent
       when: not cni_installed.stat.exists
 
 # -----------------------------------------------------------------------------
