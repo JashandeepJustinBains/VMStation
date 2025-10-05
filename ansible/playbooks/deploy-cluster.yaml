@@ -195,7 +195,8 @@
 
     - name: Uncordon all nodes
       ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon --all
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o name | \
+          xargs -n1 -r kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon
       changed_when: false
       ignore_errors: true
 
@@ -211,12 +212,31 @@
   hosts: monitoring_nodes
   become: true
   tasks:
-    - name: Check for CrashLoopBackOff pods
+    - name: Validate kube-system pods are healthy (no CrashLoopBackOff)
       ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A | grep -i crash || echo "No CrashLoopBackOff pods"
+        set -e
+        # Get all kube-system pods with status
+        CRASH=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n kube-system --no-headers | grep -i crash || true)
+        if [ -n "$CRASH" ]; then
+          echo "ERROR: Found CrashLoopBackOff pods:"
+          echo "$CRASH"
+          echo ""
+          echo "=== Collecting diagnostic logs ==="
+          for pod in $(echo "$CRASH" | awk '{print $1}'); do
+            echo "--- Pod: $pod ---"
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system describe pod "$pod" || true
+            echo "--- Current logs ---"
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs "$pod" --tail=50 || true
+            echo "--- Previous logs ---"
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs "$pod" --previous --tail=50 || true
+            echo ""
+          done
+          exit 1
+        fi
+        echo "All kube-system pods healthy (no CrashLoopBackOff)"
       register: crash_check
       changed_when: false
-      failed_when: "'CrashLoop' in crash_check.stdout"
+      failed_when: crash_check.rc != 0
 
     - name: Display cluster status
       ansible.builtin.shell: |
