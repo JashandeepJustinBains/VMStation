@@ -222,8 +222,8 @@
       register: subnet_check
       retries: 10
       delay: 5
-      until: subnet_check is defined and subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3)
-      failed_when: subnet_check is not defined or subnet_check.results is not defined or (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length != 3)
+      until: subnet_check is defined and (subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3))
+      failed_when: subnet_check is not defined or (subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length != 3)) or (subnet_check.results is not defined)
 
     - name: Debug missing subnet.env nodes
       ansible.builtin.debug:
