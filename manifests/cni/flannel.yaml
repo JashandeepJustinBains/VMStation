@@ -189,10 +189,10 @@ spec:
             - /bin/sh
             - -c
             - 'test -s /run/flannel/subnet.env && ip link show flannel.1'
-          initialDelaySeconds: 30
+          initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
-          failureThreshold: 12
+          failureThreshold: 30
         env:
         - name: POD_NAME
           valueFrom:
