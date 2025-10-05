@@ -12,6 +12,7 @@ applyTo: '**'
 - K8s server: v1.29.15; Flannel v0.27.4; Ansible core 2.14.18; containerd runtime
 
 ## Findings (current investigation)
+7. 2025-10-05: Updated deploy playbook to robustly check for subnet.env on all nodes, handle missing results gracefully, and provide debug output for any nodes missing the file. Added debug tasks to print Flannel pod status and subnet.env existence on each node after deployment. Upgraded Ansible collections in requirements.yml for compatibility with Ansible 2.14.x+ (kubernetes.core 5.5.0, community.general 12.5.0, ansible.posix 2.9.0).
 1. Initial problem: Flannel and kube-proxy CrashLoopBackOff on RHEL 10 node after deployment — caused by nftables/backend mismatch and probe issues.
 2. 2025-10-05: Flannel pod on homelab in Completed state traced to DaemonSet entrypoint mismatch (used /opt/bin/flanneld, should be /flanneld or default entrypoint). Fix: Remove custom command, use default entrypoint for Flannel image. Kube-proxy restarts were a symptom of Flannel not running.
 3. Flannel DaemonSet manifest updated to use correct entrypoint. Next: re-apply manifest and verify Flannel pod stays Running; kube-proxy should stabilize.
@@ -33,6 +34,8 @@ applyTo: '**'
    - **Production pods MUST NOT be in restart cycles** — any CrashLoopBackOff indicates a real problem requiring root-cause diagnosis, not artificial sleeps.
 
 ## Files Modified (key deltas)
+- `ansible/playbooks/deploy-cluster.yaml` — fixed subnet.env check to handle missing results, added debug output for missing nodes, added debug tasks for Flannel pod and subnet.env status after deployment
+- `ansible/requirements.yml` — upgraded Ansible collections for compatibility with Ansible 2.14.x+
 - `manifests/cni/flannel.yaml` — enabled nftables support, adjusted probes, removed liveness probe, simplified readiness probe
 - `ansible/roles/network-fix/tasks/main.yml` — pre-create `/etc/cni/net.d/10-flannel.conflist` on RHEL to avoid init-container write issues
 - `ansible/playbooks/deploy-cluster.yaml` — verify CNI config via SSH (host filesystem); fixed uncordon command; strict CrashLoopBackOff validation with auto-diagnostics

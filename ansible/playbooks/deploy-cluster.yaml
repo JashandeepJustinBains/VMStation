@@ -1,3 +1,29 @@
+    - name: Debug Flannel pod status on all nodes
+      ansible.builtin.shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n kube-flannel -o wide
+      register: flannel_pod_status
+      changed_when: false
+      delegate_to: masternode
+
+    - name: Show Flannel pod status
+      ansible.builtin.debug:
+        var: flannel_pod_status.stdout_lines
+      delegate_to: masternode
+
+    - name: Debug subnet.env existence on all nodes
+      ansible.builtin.shell: |
+        if [ -f /run/flannel/subnet.env ]; then echo "subnet.env exists on $(hostname)"; else echo "subnet.env MISSING on $(hostname)"; fi
+      register: subnet_env_status
+      delegate_to: "{{ item }}"
+      loop:
+        - masternode
+        - storagenodet3500
+        - homelab
+
+    - name: Show subnet.env status on all nodes
+      ansible.builtin.debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ subnet_env_status.results }}"
 ---
 # =============================================================================
 # VMStation Kubernetes Cluster - Deploy Playbook
@@ -196,8 +222,14 @@
       register: subnet_check
       retries: 10
       delay: 5
-      until: subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3
-      failed_when: not (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3)
+      until: subnet_check is defined and subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3)
+      failed_when: subnet_check is not defined or subnet_check.results is not defined or (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length != 3)
+
+    - name: Debug missing subnet.env nodes
+      ansible.builtin.debug:
+        msg: "subnet.env missing on: {{ item.item }}"
+      loop: "{{ subnet_check.results | rejectattr('stat.exists', 'equalto', true) | list }}"
+      when: subnet_check is defined and subnet_check.results is defined and (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length != 3)
 
     - name: Verify CNI config exists on all nodes via SSH
       ansible.builtin.stat:
