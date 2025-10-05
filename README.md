@@ -718,6 +718,30 @@ If CoreDNS pods show "Unknown" status with no IP after running `deploy.sh full`:
 # - CoreDNS pods stuck in "Unknown" status
 # - Missing IP addresses on CoreDNS pods
 # - DNS resolution failures preventing other pods from starting
+```
+
+#### Flannel CNI Timing Issues ⚡ **NEW!**
+If you encounter errors during deployment like:
+- `failed to find plugin "flannel" in path [/opt/cni/bin]`
+- `failed to load flannel 'subnet.env' file`
+- Flannel pods in CrashLoopBackOff
+- CoreDNS/kube-proxy failing to create pod sandbox
+
+```bash
+# Check flannel pod status
+kubectl -n kube-flannel get pods -o wide
+
+# Check for subnet.env file on each node
+ssh root@masternode 'ls -l /run/flannel/subnet.env'
+ssh jashandeepjustinbains@192.168.4.62 'sudo ls -l /run/flannel/subnet.env'
+
+# Emergency fix for RHEL node
+./scripts/fix-flannel-homelab.sh
+```
+
+**Root Cause:** Pods were being scheduled before flannel daemon fully initialized.
+
+**Automated Fix:** The deployment playbook now includes proper readiness checks to ensure flannel is fully ready (subnet.env created) before proceeding. See [docs/FLANNEL_TIMING_ISSUE_FIX.md](docs/FLANNEL_TIMING_ISSUE_FIX.md) for details.
 # - Control-plane taint issues preventing CoreDNS scheduling
 ```
 

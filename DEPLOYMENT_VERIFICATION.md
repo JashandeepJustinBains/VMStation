@@ -222,6 +222,19 @@ Address 1: 10.96.0.1 kubernetes.default.svc.cluster.local
 
 ## Troubleshooting
 
+### Flannel Timing Issues
+
+If you encounter errors like:
+- `failed to find plugin "flannel" in path [/opt/cni/bin]`
+- `failed to load flannel 'subnet.env' file`
+- Flannel pods in CrashLoopBackOff
+- CoreDNS or kube-proxy pods failing to create pod sandbox
+
+See the comprehensive fix documentation:
+- **[docs/FLANNEL_TIMING_ISSUE_FIX.md](docs/FLANNEL_TIMING_ISSUE_FIX.md)** - Detailed explanation and automated fix
+
+The deployment playbook now includes automatic checks to ensure flannel is fully ready before other pods are scheduled. If issues persist, check the flannel pod logs and subnet.env file status.
+
 ### CrashLoopBackOff on RHEL Node
 
 ```bash
