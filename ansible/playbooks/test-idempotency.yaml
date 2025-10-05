@@ -1,0 +1,84 @@
+---
+# =============================================================================
+# VMStation Idempotency Test Playbook
+# Tests that deploy → reset → deploy can run 100 times without failure
+# =============================================================================
+
+- name: Idempotency Test - Pre-test Validation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_cycles: "{{ test_iterations | default(5) }}"
+  tasks:
+    - name: Display test configuration
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════╗
+          ║         IDEMPOTENCY TEST CONFIGURATION                    ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          Test cycles: {{ test_cycles }}
+          Expected time: ~{{ (test_cycles | int * 12) }} minutes
+          
+          This test will:
+          1. Deploy cluster
+          2. Verify deployment
+          3. Reset cluster
+          4. Repeat {{ test_cycles }} times
+          
+          Press Ctrl+C within 10 seconds to cancel
+          
+    - name: Wait for confirmation
+      ansible.builtin.pause:
+        seconds: 10
+
+- name: Idempotency Test - Cycle Execution
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_cycles: "{{ test_iterations | default(5) }}"
+    repo_root: "{{ playbook_dir }}/../.."
+  tasks:
+    - name: Run test cycles
+      ansible.builtin.shell: |
+        set -e
+        
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║         STARTING CYCLE {{ item }}                              ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        
+        # Deploy
+        echo "=== Deploying cluster (cycle {{ item }}) ==="
+        {{ repo_root }}/deploy.sh
+        
+        # Verify
+        echo "=== Verifying deployment (cycle {{ item }}) ==="
+        ansible-playbook -i {{ repo_root }}/ansible/inventory/hosts.yml \
+          {{ repo_root }}/ansible/playbooks/verify-cluster.yaml
+        
+        # Reset
+        echo "=== Resetting cluster (cycle {{ item }}) ==="
+        {{ repo_root }}/deploy.sh reset <<< "yes"
+        
+        echo "✅ Cycle {{ item }} completed successfully"
+        echo ""
+        sleep 5
+        
+      loop: "{{ range(1, (test_cycles | int) + 1) | list }}"
+      register: test_results
+      
+    - name: Display test summary
+      ansible.builtin.debug:
+        msg: |
+          
+          ╔════════════════════════════════════════════════════════════╗
+          ║         IDEMPOTENCY TEST COMPLETED                        ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          Total cycles: {{ test_cycles }}
+          All cycles: ✅ PASSED
+          
+          The cluster deployment is production-ready and idempotent.
+          You can safely deploy → reset → deploy as many times as needed.

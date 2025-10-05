@@ -126,7 +126,7 @@
       ansible.builtin.wait_for:
         host: 127.0.0.1
         port: 6443
-        timeout: 60
+        timeout: 120
 
 # -----------------------------------------------------------------------------
 # PHASE 4: Worker Node Join
@@ -166,9 +166,9 @@
 
     - name: Wait for Flannel DaemonSet rollout
       ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=180s
-      retries: 2
-      delay: 5
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=90s
+      retries: 3
+      delay: 10
       register: flannel_rollout
       until: flannel_rollout.rc == 0
 
@@ -180,28 +180,24 @@
           jq '[.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True"))] | length')
         echo "Flannel pods ready: $ready_flannel / $total_nodes"
         test "$ready_flannel" -eq "$total_nodes"
-      retries: 30
-      delay: 5
+      retries: 20
+      delay: 10
       register: flannel_ready
       until: flannel_ready.rc == 0
 
     - name: Verify subnet.env exists on all nodes
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -l app=flannel -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | \
-        while read node; do
-          if [ "$node" = "homelab" ]; then
-            # Use ssh -tt for TTY, sudo -S for stdin password, echo password from Ansible var
-            ssh -tt jashandeepjustinbains@192.168.4.62 "echo '{{ ansible_become_pass }}' | sudo -S test -f /run/flannel/subnet.env" || { echo "subnet.env missing on $node"; exit 1; }
-          else
-            ssh root@$node 'test -f /run/flannel/subnet.env' || { echo "subnet.env missing on $node"; exit 1; }
-          fi
-          echo "✓ subnet.env exists on $node"
-        done
-      # Note: Set 'homelab_sudo_pass' as an Ansible variable (vault or group_vars) for secure password handling.
+      ansible.builtin.stat:
+        path: /run/flannel/subnet.env
+      delegate_to: "{{ item }}"
+      loop:
+        - masternode
+        - storagenodet3500
+        - homelab
+      register: subnet_check
       retries: 10
       delay: 5
-      register: subnet_check
-      until: subnet_check.rc == 0
+      until: subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3
+      failed_when: not (subnet_check.results | selectattr('stat.exists', 'equalto', true) | list | length == 3)
 
     - name: Verify CNI config exists on all nodes via SSH
       ansible.builtin.stat:
@@ -230,8 +226,8 @@
         total=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
         ready=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | grep ' Ready ' | wc -l)
         test $ready -eq $total
-      retries: 30
-      delay: 5
+      retries: 20
+      delay: 10
       register: nodes_ready
       until: nodes_ready.rc == 0
 
