@@ -334,3 +334,18 @@ ansible-playbook -i ansible/inventory/hosts ansible/playbooks/verify-cluster.yam
 - Deterministic checks replace polling/sleep patterns
 
 ---
+
+## Robust Download Improvements (2025-10-04)
+- **Fixed CNI Plugin Downloads**: Upgraded from v1.6.1 (404 errors) to v1.8.0 with verified asset availability
+- **Architecture Auto-Detection**: CNI downloads now auto-select correct architecture (amd64/arm64) based on `ansible_architecture` fact
+- **RHEL 10 urllib3 Compatibility**: Added automatic curl fallback when `get_url` fails with cert_file/urllib3 errors
+- **Idempotent Downloads**: All download tasks use `creates` and proper stat checks to prevent re-downloads
+- **Helm Download Hardening**: Applied same robust download pattern to Helm installer script
+- **Verification Playbook**: New `verify-cni-downloads.yaml` to validate CNI installation and architecture detection
+- **Changes Made**:
+  - `ansible/playbooks/deploy-cluster.yaml`: CNI download with arch detection + curl fallback (lines 42-95)
+  - `ansible/plays/kubernetes/setup_helm.yaml`: Helm download with curl fallback (lines 25-51)
+  - `ansible/playbooks/verify-cni-downloads.yaml`: New verification playbook
+- **Approach**: Controller attempts get_url first, falls back to robust curl on remote side when needed (no tokens embedded)
+
+---

@@ -22,11 +22,34 @@
       become: true
       when: ansible_facts['pkg_mgr'] is not defined or ansible_facts['pkg_mgr'] != 'apt'
 
-    - name: Download Helm installer script
+    - name: Download Helm installer script (primary attempt)
       get_url:
         url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
         dest: /tmp/get_helm.sh
         mode: '0755'
+        validate_certs: false
+        timeout: 30
+      register: helm_download
+      ignore_errors: true
+
+    - name: Download Helm installer script (curl fallback)
+      ansible.builtin.shell: |
+        curl -fsSL -o /tmp/get_helm.sh \
+          https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 0755 /tmp/get_helm.sh
+      args:
+        creates: /tmp/get_helm.sh
+      when: helm_download is failed or 'cert_file' in (helm_download.msg | default('')) or 'urllib3' in (helm_download.msg | default(''))
+
+    - name: Verify Helm script downloaded
+      ansible.builtin.stat:
+        path: /tmp/get_helm.sh
+      register: helm_script
+
+    - name: Fail if Helm download failed
+      ansible.builtin.fail:
+        msg: "Failed to download Helm installer script. Check network connectivity."
+      when: not helm_script.stat.exists
 
     - name: Install Helm
       shell: /tmp/get_helm.sh

@@ -83,6 +83,7 @@
       - conntrack-tools
       - socat
       - iproute-tc
+      - curl
     state: present
   when: ansible_os_family == 'RedHat'
 
@@ -93,6 +94,7 @@
       - conntrack
       - socat
       - iproute2
+      - curl
     state: present
   when: ansible_os_family == 'Debian'
 
