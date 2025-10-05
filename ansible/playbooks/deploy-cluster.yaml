@@ -229,6 +229,24 @@
   hosts: monitoring_nodes
   become: true
   tasks:
+    - name: Wait for kube-system pods to stabilize
+      ansible.builtin.shell: |
+        set -e
+        # Check if any kube-system pods are in CrashLoopBackOff
+        CRASH=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n kube-system --no-headers | grep -i 'CrashLoopBackOff' || true)
+        if [ -z "$CRASH" ]; then
+          echo "All kube-system pods stable (no CrashLoopBackOff)"
+          exit 0
+        else
+          echo "Waiting for pods to stabilize: $(echo "$CRASH" | wc -l) pods in CrashLoopBackOff"
+          exit 1
+        fi
+      retries: 30
+      delay: 10
+      register: pods_stable
+      until: pods_stable.rc == 0
+      changed_when: false
+
     - name: Validate kube-system pods are healthy (no CrashLoopBackOff)
       ansible.builtin.shell: |
         set -e
