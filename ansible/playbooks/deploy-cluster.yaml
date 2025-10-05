@@ -108,12 +108,24 @@
         path: /etc/kubernetes/admin.conf
       register: admin_conf
 
+    - name: Create kubeadm config file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../manifests/kubeadm-config.yaml.j2"
+        dest: /tmp/kubeadm-config.yaml
+        mode: '0644'
+      when: not admin_conf.stat.exists
+
     - name: Initialize control plane
       ansible.builtin.shell: |
         kubeadm init \
-          --pod-network-cidr=10.244.0.0/16 \
-          --service-cidr=10.96.0.0/12 \
+          --config /tmp/kubeadm-config.yaml \
           --upload-certs
+      when: not admin_conf.stat.exists
+
+    - name: Remove temporary kubeadm config
+      ansible.builtin.file:
+        path: /tmp/kubeadm-config.yaml
+        state: absent
       when: not admin_conf.stat.exists
 
     - name: Set KUBECONFIG
@@ -213,6 +225,24 @@
   hosts: monitoring_nodes
   become: true
   tasks:
+    - name: Wait for all pods to stabilize
+      ansible.builtin.shell: |
+        # Wait for pods to be Running or Completed (not Pending, CrashLoopBackOff, etc.)
+        for i in {1..30}; do
+          pending=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A --no-headers 2>/dev/null | grep -E 'Pending|ContainerCreating|CrashLoopBackOff|Error' | wc -l)
+          if [ "$pending" -eq 0 ]; then
+            echo "All pods stable"
+            exit 0
+          fi
+          echo "Waiting for $pending pods to stabilize (attempt $i/30)..."
+          sleep 5
+        done
+        echo "Warning: Some pods still not stable after 150s"
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A
+        exit 0
+      register: pod_stabilize
+      changed_when: false
+
     - name: Check for CrashLoopBackOff pods
       ansible.builtin.shell: |
         kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A | grep -i crash || echo "No CrashLoopBackOff pods"

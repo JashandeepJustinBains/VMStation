@@ -37,3 +37,5 @@ containerRuntimeEndpoint: "unix:///var/run/containerd/containerd.sock"
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
 kind: KubeProxyConfiguration
 mode: "iptables"
+# Explicit iptables mode works with both iptables-legacy (Debian) and iptables-nft (RHEL 10)
+# The network-fix role ensures proper iptables backend is configured on each node
