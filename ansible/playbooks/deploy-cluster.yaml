@@ -20,11 +20,10 @@
         - storagenodet3500
         - homelab
 
-    - name: Show subnet.env status on all nodes
-      ansible.builtin.debug:
-        msg: "{{ item.stdout }}"
-      loop: "{{ subnet_env_status.results }}"
----
+#    - name: Show subnet.env status on all nodes
+#      ansible.builtin.debug:
+#        msg: "{{ item.stdout }}"
+#      loop: "{{ subnet_env_status.results }}"
 # =============================================================================
 # VMStation Kubernetes Cluster - Deploy Playbook
 # Idempotent deployment for mixed OS cluster (Debian + RHEL 10)
