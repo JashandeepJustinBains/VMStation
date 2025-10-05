@@ -195,7 +195,9 @@
 
     - name: Uncordon all nodes
       ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon --all
+        for node in $(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o name); do
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon $node || true
+        done
       changed_when: false
       ignore_errors: true
 
