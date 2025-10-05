@@ -21,12 +21,17 @@ applyTo: '**'
    - Removed livenessProbe (it caused clean shutdowns) and simplified readinessProbe to check /run/flannel/subnet.env.
    - Added nftables adjustments in `network-fix` role and pre-created CNI config on RHEL to avoid init-container write failures.
    - Fixed ansible deploy step to verify CNI files on the host (ssh) instead of inside containers.
-3. Current state: Flannel pods are Running on all nodes, but homelab showed missing CNI file initially; kube-proxy and one CoreDNS pod have been observed in CrashLoopBackOff intermittently during iterations.
+3. **CRITICAL FIX (2025-10-04)**: Removed "copium" stabilization waits and weak validation:
+   - Fixed `kubectl uncordon --all` (invalid flag) → replaced with proper node-by-node loop.
+   - Replaced weak grep check with strict validation that fails fast and auto-collects pod describe + logs for CrashLoopBackOff pods.
+   - Removed stale Flannel template with `EnableNFTables: false` to prevent confusion.
+   - **Production pods MUST NOT be in restart cycles** — any CrashLoopBackOff indicates a real problem requiring root-cause diagnosis, not artificial sleeps.
 
 ## Files Modified (key deltas)
 - `manifests/cni/flannel.yaml` — enabled nftables support, adjusted probes, removed liveness probe, simplified readiness probe
 - `ansible/roles/network-fix/tasks/main.yml` — pre-create `/etc/cni/net.d/10-flannel.conflist` on RHEL to avoid init-container write issues
-- `ansible/playbooks/deploy-cluster.yaml` — verify CNI config via SSH (host filesystem) with StrictHostKeyChecking=no
+- `ansible/playbooks/deploy-cluster.yaml` — verify CNI config via SSH (host filesystem); fixed uncordon command; strict CrashLoopBackOff validation with auto-diagnostics
+- Removed: `ansible/plays/kubernetes/templates/kube-flannel-allnodes.yml` (stale template with EnableNFTables:false)
 
 ## Root Causes Identified
 - RHEL 10 uses nftables by default; Flannel must run in nftables mode and host nftables policies must permit VXLAN/pod traffic.
