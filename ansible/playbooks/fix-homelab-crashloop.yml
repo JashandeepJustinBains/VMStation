@@ -130,7 +130,7 @@
       retries: 3
       delay: 10
       until: proxy_wait.rc == 0
-      failed_when: false
+      failed_when: proxy_wait.rc != 0
 
     - name: Get kube-proxy pod logs
       ansible.builtin.shell: |
@@ -158,21 +158,46 @@
       ansible.builtin.debug:
         msg: "{{ final_pods.stdout_lines }}"
 
-    - name: Check for any CrashLoopBackOff or Completed pods
+    - name: Final validation - check for unhealthy pods
       ansible.builtin.shell: |
-        kubectl get pods -A --field-selector spec.nodeName=homelab | grep -E 'CrashLoopBackOff|Completed' || echo "All pods healthy"
-      register: crashloop_check
+        if kubectl get pods -A --field-selector spec.nodeName=homelab | grep -E 'CrashLoopBackOff|Error|Completed'; then
+          echo "FAILURE: Unhealthy pods detected"
+          exit 1
+        else
+          echo "SUCCESS: All pods on homelab are healthy"
+          exit 0
+        fi
+      register: health_check
       changed_when: false
       failed_when: false
 
-    - name: Display crashloop check result
+    - name: Display health check result
       ansible.builtin.debug:
-        msg: "{{ crashloop_check.stdout_lines }}"
+        msg: "{{ health_check.stdout }}"
 
-    - name: Fail if pods are not healthy
+    - name: Fail playbook if pods are unhealthy
       ansible.builtin.fail:
-        msg: "Pods on homelab are still not healthy. Check logs above for details."
-      when: "'CrashLoopBackOff' in crashloop_check.stdout or 'Completed' in crashloop_check.stdout"
+        msg: |
+          ❌ FAILED: Pods on homelab are still not healthy after applying fixes.
+          
+          The fix script completed all tasks but pods are still showing:
+          - CrashLoopBackOff (pod is repeatedly crashing)
+          - Completed (DaemonSet pod exited when it should run continuously)
+          - Error (pod failed to start)
+          
+          Please review the pod logs above for specific error messages.
+          
+          Common root causes:
+          - kube-proxy: Missing iptables chains, conntrack issues, or iptables mode mismatch
+          - Flannel: Network interface issues, API watch stream problems, or configuration errors
+          
+          Next debugging steps:
+          1. Review kube-proxy logs above for "exit code 2" errors
+          2. Review Flannel logs to see why it's exiting (if Completed status)
+          3. Check iptables backend: Run 'update-alternatives --display iptables' on homelab
+          4. Verify conntrack is working: Run 'conntrack -L' on homelab
+          5. Check if Flannel interface exists: Run 'ip link show flannel.1' on homelab
+      when: health_check.rc != 0
 
     - name: Final validation
       ansible.builtin.command: kubectl get nodes homelab -o wide
