@@ -22,6 +22,10 @@ applyTo: '**'
    - Removed livenessProbe (it caused clean shutdowns) and simplified readinessProbe to check /run/flannel/subnet.env.
    - Added nftables adjustments in `network-fix` role and pre-created CNI config on RHEL to avoid init-container write failures.
    - Fixed ansible deploy step to verify CNI files on the host (ssh) instead of inside containers.
+6. **ROOT CAUSE FIX (2025-10-05)**: Flannel CrashLoopBackOff on homelab caused by incorrect `CONT_WHEN_CACHE_NOT_READY: "false"` environment variable.
+   - When set to "false", Flannel exits cleanly when Kubernetes API cache is not ready (common during initialization or API reconnection).
+   - Fix: Changed to `CONT_WHEN_CACHE_NOT_READY: "true"` to allow Flannel to continue running even when cache is temporarily unavailable.
+   - This prevents the "Exiting cleanly..." behavior that was causing CrashLoopBackOff despite exit code 0.
 3. **CRITICAL FIX (2025-10-04)**: Removed bad practice stabilization waits and weak validation:
    - Fixed `kubectl uncordon --all` (invalid flag) → replaced with proper node-by-node loop.
    - Replaced weak grep check with strict validation that fails fast and auto-collects pod describe + logs for CrashLoopBackOff pods.

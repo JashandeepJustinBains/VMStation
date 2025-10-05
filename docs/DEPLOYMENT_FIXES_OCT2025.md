@@ -42,13 +42,13 @@ ghcr.io/flannel-io/flannel:v0.27.4
 "EnableNFTables": false  # Use iptables-legacy for mixed-distro compatibility
 
 # Added environment variable
-CONT_WHEN_CACHE_NOT_READY: "false"  # Prevent premature exits on API watch cancellation
+CONT_WHEN_CACHE_NOT_READY: "true"  # Allow Flannel to continue when cache is not ready, prevents premature exits
 ```
 
 **Rationale**:
 - Flannel v0.27.4 properly handles nftables/iptables coexistence
 - `EnableNFTables: false` forces iptables-legacy mode for consistency across Debian Bookworm and RHEL 10
-- `CONT_WHEN_CACHE_NOT_READY` prevents clean exits when kube-apiserver temporarily closes watch streams
+- `CONT_WHEN_CACHE_NOT_READY` set to "true" allows Flannel to continue running when kube-apiserver temporarily closes watch streams, preventing clean exits
 
 ### 2. Network-Fix Role Enhancement (`ansible/roles/network-fix/`)
 
