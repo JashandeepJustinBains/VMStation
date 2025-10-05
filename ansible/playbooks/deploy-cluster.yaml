@@ -32,58 +32,32 @@
 # -----------------------------------------------------------------------------
 # PHASE 1: System Preparation
 # -----------------------------------------------------------------------------
-- name: Phase 1 - System preparation
-  hosts: all
-  become: true
-  gather_facts: true
-  tasks:
-    - name: Ensure /etc/hosts has cluster nodes
-      ansible.builtin.blockinfile:
-        path: /etc/hosts
-        block: |
-          192.168.4.63 masternode
-          192.168.4.61 storagenodet3500
-          192.168.4.62 homelab
-        marker: "# {mark} VMStation Cluster"
-        create: yes
+    - name: Phase 1 - System preparation
+      hosts: all
+      become: true
+      gather_facts: true
+      tasks:
+        - name: Ensure /etc/hosts has cluster nodes
+          ansible.builtin.blockinfile:
+            path: /etc/hosts
+            block: |
+              192.168.4.63 masternode
+              192.168.4.61 storagenodet3500
+              192.168.4.62 homelab
+            marker: "# {mark} VMStation Cluster"
+            create: yes
 
-  roles:
-    - preflight
-    - network-fix
+      roles:
+        - preflight
+        - network-fix
 
 # -----------------------------------------------------------------------------
 # PHASE 2: CNI Plugins Installation
 # -----------------------------------------------------------------------------
-- name: Phase 2 - Install CNI plugins
-  hosts: all
-  become: true
-  tasks:
-    - name: Ensure /opt/cni/bin directory exists
-      ansible.builtin.file:
-        path: /opt/cni/bin
-        state: directory
-        mode: '0755'
-
-    - name: Check if CNI plugins installed
-      ansible.builtin.stat:
-        path: /opt/cni/bin/loopback
-      register: cni_installed
-
-    - name: Set CNI architecture fact
-      ansible.builtin.set_fact:
-        cni_arch: "{{ 'amd64' if ansible_architecture == 'x86_64' else ('arm64' if ansible_architecture == 'aarch64' else ansible_architecture) }}"
-      when: not cni_installed.stat.exists
-
-    - name: Download CNI plugins (primary attempt)
-      ansible.builtin.get_url:
-        url: "https://github.com/containernetworking/plugins/releases/download/v1.8.0/cni-plugins-linux-{{ cni_arch }}-v1.8.0.tgz"
-        dest: /tmp/cni-plugins.tgz
-        mode: '0644'
-        timeout: 60
-        validate_certs: false
+# ...existing code...
+      validate_certs: false
       when: not cni_installed.stat.exists
       register: cni_download
-      ignore_errors: true
 
     - name: Download CNI plugins (curl fallback)
       ansible.builtin.shell: |
@@ -124,70 +98,70 @@
 # -----------------------------------------------------------------------------
 # PHASE 3: Control Plane Initialization
 # -----------------------------------------------------------------------------
-- name: Phase 3 - Initialize control plane
-  hosts: monitoring_nodes
-  become: true
-  tasks:
-    - name: Check if control plane initialized
-      ansible.builtin.stat:
-        path: /etc/kubernetes/admin.conf
-      register: admin_conf
+    - name: Phase 3 - Initialize control plane
+      hosts: monitoring_nodes
+      become: true
+      tasks:
+        - name: Check if control plane initialized
+          ansible.builtin.stat:
+            path: /etc/kubernetes/admin.conf
+          register: admin_conf
 
-    - name: Initialize control plane
-      ansible.builtin.shell: |
-        kubeadm init \
-          --pod-network-cidr=10.244.0.0/16 \
-          --service-cidr=10.96.0.0/12 \
-          --upload-certs
-      when: not admin_conf.stat.exists
+        - name: Initialize control plane
+          ansible.builtin.shell: |
+            kubeadm init \
+              --pod-network-cidr=10.244.0.0/16 \
+              --service-cidr=10.96.0.0/12 \
+              --upload-certs
+          when: not admin_conf.stat.exists
 
-    - name: Set KUBECONFIG
-      ansible.builtin.lineinfile:
-        path: /root/.bashrc
-        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
-        create: yes
+        - name: Set KUBECONFIG
+          ansible.builtin.lineinfile:
+            path: /root/.bashrc
+            line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+            create: yes
 
-    - name: Wait for API server
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: 6443
-        timeout: 120
+        - name: Wait for API server
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: 6443
+            timeout: 120
 
 # -----------------------------------------------------------------------------
 # PHASE 4: Worker Node Join
 # -----------------------------------------------------------------------------
-- name: Phase 4 - Join worker nodes
-  hosts: storage_nodes:compute_nodes
-  become: true
-  tasks:
-    - name: Check if node already joined
-      ansible.builtin.stat:
-        path: /etc/kubernetes/kubelet.conf
-      register: kubelet_conf
+    - name: Phase 4 - Join worker nodes
+      hosts: storage_nodes:compute_nodes
+      become: true
+      tasks:
+        - name: Check if node already joined
+          ansible.builtin.stat:
+            path: /etc/kubernetes/kubelet.conf
+          register: kubelet_conf
 
-    - name: Generate join command
-      ansible.builtin.shell: kubeadm token create --print-join-command
-      delegate_to: "{{ groups['monitoring_nodes'][0] }}"
-      register: join_command
-      when: not kubelet_conf.stat.exists
-      run_once: true
+        - name: Generate join command
+          ansible.builtin.shell: kubeadm token create --print-join-command
+          delegate_to: "{{ groups['monitoring_nodes'][0] }}"
+          register: join_command
+          when: not kubelet_conf.stat.exists
+          run_once: true
 
-    - name: Join worker to cluster
-      ansible.builtin.shell: "{{ join_command.stdout }}"
-      when: not kubelet_conf.stat.exists
+        - name: Join worker to cluster
+          ansible.builtin.shell: "{{ join_command.stdout }}"
+          when: not kubelet_conf.stat.exists
 
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
 # -----------------------------------------------------------------------------
-- name: Phase 5 - Deploy Flannel CNI
-  hosts: monitoring_nodes
-  become: true
-  tasks:
-    - name: Apply Flannel manifest
-      ansible.builtin.shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
-      register: flannel_apply
-      changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
+    - name: Phase 5 - Deploy Flannel CNI
+      hosts: monitoring_nodes
+      become: true
+      tasks:
+        - name: Apply Flannel manifest
+          ansible.builtin.shell: |
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
+          register: flannel_apply
+          changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
 
     - name: Wait for Flannel DaemonSet rollout
       ansible.builtin.shell: |
@@ -277,35 +251,35 @@
 # -----------------------------------------------------------------------------
 # PHASE 6: Validation
 # -----------------------------------------------------------------------------
-- name: Phase 6 - Validate deployment
-  hosts: monitoring_nodes
-  become: true
-  tasks:
-    - name: Validate kube-system pods are healthy (no CrashLoopBackOff)
-      ansible.builtin.shell: |
-        set -e
-        # Get all kube-system pods with status
-        CRASH=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n kube-system --no-headers | grep -i crash || true)
-        if [ -n "$CRASH" ]; then
-          echo "ERROR: Found CrashLoopBackOff pods:"
-          echo "$CRASH"
-          echo ""
-          echo "=== Collecting diagnostic logs ==="
-          for pod in $(echo "$CRASH" | awk '{print $1}'); do
-            echo "--- Pod: $pod ---"
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system describe pod "$pod" || true
-            echo "--- Current logs ---"
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs "$pod" --tail=50 || true
-            echo "--- Previous logs ---"
-            kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs "$pod" --previous --tail=50 || true
-            echo ""
-          done
-          exit 1
-        fi
-        echo "All kube-system pods healthy (no CrashLoopBackOff)"
-      register: crash_check
-      changed_when: false
-      failed_when: crash_check.rc != 0
+    - name: Phase 6 - Validate deployment
+      hosts: monitoring_nodes
+      become: true
+      tasks:
+        - name: Validate kube-system pods are healthy (no CrashLoopBackOff)
+          ansible.builtin.shell: |
+            set -e
+            # Get all kube-system pods with status
+            CRASH=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n kube-system --no-headers | grep -i crash || true)
+            if [ -n "$CRASH" ]; then
+              echo "ERROR: Found CrashLoopBackOff pods:"
+              echo "$CRASH"
+              echo ""
+              echo "=== Collecting diagnostic logs ==="
+              for pod in $(echo "$CRASH" | awk '{print $1}'); do
+                echo "--- Pod: $pod ---"
+                kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system describe pod "$pod" || true
+                echo "--- Current logs ---"
+                kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs "$pod" --tail=50 || true
+                echo "--- Previous logs ---"
+                kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs "$pod" --previous --tail=50 || true
+                echo ""
+              done
+              exit 1
+            fi
+            echo "All kube-system pods healthy (no CrashLoopBackOff)"
+          register: crash_check
+          changed_when: false
+          failed_when: crash_check.rc != 0
 
     - name: Display cluster status
       ansible.builtin.shell: |
@@ -327,5 +301,5 @@
 # -----------------------------------------------------------------------------
 # PHASE 7: Application Deployment
 # -----------------------------------------------------------------------------
-- import_playbook: ../plays/deploy-apps.yaml
-- import_playbook: ../plays/jellyfin.yml
+    - import_playbook: ../plays/deploy-apps.yaml
+    - import_playbook: ../plays/jellyfin.yml
