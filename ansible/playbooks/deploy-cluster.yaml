@@ -172,6 +172,35 @@
       register: flannel_rollout
       until: flannel_rollout.rc == 0
 
+    - name: Wait for all Flannel pods to be Ready (not just Running)
+      ansible.builtin.shell: |
+        set -e
+        total_nodes=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | wc -l)
+        ready_flannel=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -l app=flannel --field-selector=status.phase=Running -o json | \
+          jq '[.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True"))] | length')
+        echo "Flannel pods ready: $ready_flannel / $total_nodes"
+        test "$ready_flannel" -eq "$total_nodes"
+      retries: 30
+      delay: 5
+      register: flannel_ready
+      until: flannel_ready.rc == 0
+
+    - name: Verify subnet.env exists on all nodes
+      ansible.builtin.shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-flannel get pods -l app=flannel -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | \
+        while read node; do
+          if [ "$node" = "homelab" ]; then
+            ssh jashandeepjustinbains@192.168.4.62 'sudo test -f /run/flannel/subnet.env' || { echo "subnet.env missing on $node"; exit 1; }
+          else
+            ssh root@$node 'test -f /run/flannel/subnet.env' || { echo "subnet.env missing on $node"; exit 1; }
+          fi
+          echo "✓ subnet.env exists on $node"
+        done
+      retries: 10
+      delay: 5
+      register: subnet_check
+      until: subnet_check.rc == 0
+
     - name: Verify CNI config exists on all nodes via SSH
       ansible.builtin.stat:
         path: /etc/cni/net.d/10-flannel.conflist
@@ -182,6 +211,17 @@
         - homelab
       register: cni_file_check
       failed_when: not cni_file_check.stat.exists
+
+    - name: Verify CNI flannel binary exists on all nodes
+      ansible.builtin.stat:
+        path: /opt/cni/bin/flannel
+      delegate_to: "{{ item }}"
+      loop:
+        - masternode
+        - storagenodet3500
+        - homelab
+      register: cni_binary_check
+      failed_when: not cni_binary_check.stat.exists
 
     - name: Wait for all nodes Ready
       ansible.builtin.shell: |
