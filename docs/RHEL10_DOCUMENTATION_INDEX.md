@@ -1,8 +1,37 @@
 # RHEL 10 Kubernetes Documentation Index
 
-## 📚 Complete Documentation Set
+## ⚡ IMPORTANT UPDATE (October 2025)
 
-This directory contains comprehensive documentation for deploying and troubleshooting Kubernetes on RHEL 10 with native nftables support.
+**Deployment Strategy Change:** The homelab node (RHEL 10, 192.168.4.62) now runs as a **separate single-node RKE2 cluster** instead of joining the Debian control-plane cluster.
+
+### Current Deployment (RKE2 - Recommended)
+
+| Document | Purpose | When to Read |
+|----------|---------|--------------|
+| **[🚀 RKE2 Quick Start](RHEL10_DEPLOYMENT_QUICKSTART.md)** | **Fast RKE2 deployment** | **START HERE for new deployments** |
+| **[📘 RKE2 Deployment Guide](RKE2_DEPLOYMENT_GUIDE.md)** | Complete deployment instructions | Deep dive into RKE2 setup |
+| **[📊 Prometheus Federation](RKE2_PROMETHEUS_FEDERATION.md)** | Unified monitoring setup | Configure central Prometheus |
+| **[📋 RKE2 Runbook](../ansible/playbooks/RKE2_DEPLOYMENT_RUNBOOK.md)** | Step-by-step deployment runbook | Follow detailed instructions |
+| **[🔧 Ansible Role README](../ansible/roles/rke2/README.md)** | Role documentation | Customize deployment |
+
+**Quick Start:**
+```bash
+# 1. Cleanup
+ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/cleanup-homelab.yml
+
+# 2. Install RKE2
+ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/install-rke2-homelab.yml
+
+# 3. Verify
+export KUBECONFIG=/srv/monitoring_data/VMStation/ansible/artifacts/homelab-rke2-kubeconfig.yaml
+kubectl get nodes
+```
+
+---
+
+## 📚 Historical Documentation (Worker Node Approach)
+
+The following documentation describes the previous approach where homelab joined as a worker node to the Debian cluster. **This is no longer the recommended approach.**
 
 ### Quick Navigation
 
@@ -16,9 +45,35 @@ This directory contains comprehensive documentation for deploying and troublesho
 | **[kube-proxy Fix](RHEL10_KUBE_PROXY_FIX.md)** | Detailed kube-proxy troubleshooting | When kube-proxy fails |
 | **[General Troubleshooting](HOMELAB_RHEL10_TROUBLESHOOTING.md)** | Homelab-specific issues | Node-specific problems |
 
-## 🚀 Getting Started
+## 🚀 Getting Started (RKE2 Deployment)
 
-### For First-Time Deployment
+### For First-Time RKE2 Deployment
+
+1. **Read**: [RKE2 Quick Start Guide](RHEL10_DEPLOYMENT_QUICKSTART.md)
+2. **Run**: Cleanup playbook → Install playbook
+3. **Validate**: Check nodes, pods, and monitoring endpoints
+4. **Configure**: Set up Prometheus federation
+
+### For Troubleshooting RKE2
+
+1. **Check service**: `ssh 192.168.4.62 'sudo systemctl status rke2-server'`
+2. **Check logs**: `ssh 192.168.4.62 'sudo journalctl -u rke2-server -n 100'`
+3. **Refer to**: [RKE2 Deployment Guide - Troubleshooting](RKE2_DEPLOYMENT_GUIDE.md#troubleshooting)
+4. **For federation issues**: [Prometheus Federation - Troubleshooting](RKE2_PROMETHEUS_FEDERATION.md#troubleshooting)
+
+### For Understanding RKE2 Architecture
+
+1. **Read**: [RKE2 Deployment Guide - Architecture](RKE2_DEPLOYMENT_GUIDE.md#architecture)
+2. **Deep dive**: [Prometheus Federation Guide](RKE2_PROMETHEUS_FEDERATION.md)
+3. **Review**: Ansible role in `ansible/roles/rke2/`
+
+---
+
+## 🚀 Getting Started (Historical - Worker Node Approach)
+
+**Note**: The following describes the previous deployment method. Use RKE2 approach above for new deployments.
+
+### For First-Time Deployment (Legacy)
 
 1. **Read**: [Quick Start Guide](RHEL10_DEPLOYMENT_QUICKSTART.md)
 2. **Deploy**: Run `./deploy.sh`

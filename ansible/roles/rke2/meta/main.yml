@@ -1,0 +1,27 @@
+---
+# ansible/roles/rke2/meta/main.yml
+# Metadata for RKE2 role
+
+galaxy_info:
+  author: Jashandeep Justin Bains
+  description: RKE2 (Rancher Kubernetes Engine 2) server installation for RHEL-based systems
+  company: VMStation
+  license: MIT
+  min_ansible_version: "2.9"
+  
+  platforms:
+    - name: EL
+      versions:
+        - 8
+        - 9
+        - 10
+  
+  galaxy_tags:
+    - kubernetes
+    - rke2
+    - rancher
+    - container
+    - orchestration
+    - rhel
+
+dependencies: []

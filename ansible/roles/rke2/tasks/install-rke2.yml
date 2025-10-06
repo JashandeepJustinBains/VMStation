@@ -1,0 +1,80 @@
+---
+# ansible/roles/rke2/tasks/install-rke2.yml
+# RKE2 installation tasks
+
+- name: Check if RKE2 binary already exists
+  stat:
+    path: "{{ rke2_bin_dir }}/rke2"
+  register: rke2_installed
+
+- name: Display RKE2 installation status
+  debug:
+    msg: "RKE2 binary exists: {{ rke2_installed.stat.exists }}"
+
+- name: Download RKE2 installation script
+  get_url:
+    url: "{{ rke2_install_script_url }}"
+    dest: /tmp/install-rke2.sh
+    mode: '0755'
+  become: true
+  when: not rke2_installed.stat.exists
+
+- name: Install RKE2 using installation script
+  shell: |
+    INSTALL_RKE2_VERSION="{{ rke2_version }}" \
+    INSTALL_RKE2_TYPE="{{ rke2_type }}" \
+    /tmp/install-rke2.sh
+  args:
+    creates: "{{ rke2_bin_dir }}/rke2"
+  become: true
+  environment:
+    INSTALL_RKE2_VERSION: "{{ rke2_version }}"
+    INSTALL_RKE2_TYPE: "{{ rke2_type }}"
+  register: rke2_install_result
+
+- name: Display installation result
+  debug:
+    var: rke2_install_result
+  when: rke2_install_result.changed
+
+- name: Verify RKE2 binary installation
+  stat:
+    path: "{{ rke2_bin_dir }}/rke2"
+  register: rke2_binary_check
+
+- name: Fail if RKE2 binary not found
+  fail:
+    msg: "RKE2 binary not found at {{ rke2_bin_dir }}/rke2 after installation"
+  when: not rke2_binary_check.stat.exists
+
+- name: Create symlinks for RKE2 tools
+  file:
+    src: "{{ rke2_bin_dir }}/rke2"
+    dest: "{{ rke2_bin_dir }}/{{ item }}"
+    state: link
+    force: yes
+  loop:
+    - kubectl
+    - crictl
+  become: true
+  ignore_errors: true  # These may already exist or be created by RKE2
+
+- name: Add RKE2 bin directory to PATH
+  copy:
+    dest: /etc/profile.d/rke2.sh
+    content: |
+      # Add RKE2 binaries to PATH
+      export PATH=$PATH:/var/lib/rancher/rke2/bin
+      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+    mode: '0644'
+  become: true
+
+- name: Display RKE2 version
+  command: "{{ rke2_bin_dir }}/rke2 --version"
+  register: rke2_version_output
+  changed_when: false
+  become: true
+
+- name: Show RKE2 version
+  debug:
+    var: rke2_version_output.stdout_lines

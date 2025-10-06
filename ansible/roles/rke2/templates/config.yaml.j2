@@ -1,0 +1,53 @@
+---
+# ansible/roles/rke2/templates/config.yaml.j2
+# RKE2 Server Configuration Template
+
+# Node configuration
+node-name: {{ rke2_node_name }}
+node-ip: {{ rke2_node_ip }}
+
+# Network configuration
+cluster-cidr: {{ rke2_cluster_cidr }}
+service-cidr: {{ rke2_service_cidr }}
+cluster-dns: {{ rke2_cluster_dns }}
+
+# TLS SANs for API server certificate
+tls-san:
+{% for san in rke2_tls_san %}
+  - {{ san }}
+{% endfor %}
+
+# CNI configuration
+cni: {{ rke2_cni }}
+
+# Disable cloud controller manager
+{% if rke2_disable_cloud_controller %}
+disable-cloud-controller: true
+{% endif %}
+
+# Disable components
+{% if rke2_disable is defined and rke2_disable | length > 0 %}
+disable:
+{% for component in rke2_disable %}
+  - {{ component }}
+{% endfor %}
+{% endif %}
+
+# Enable write of kubeconfig with localhost
+write-kubeconfig-mode: "0644"
+
+# SELinux support
+{% if rke2_selinux_enabled %}
+selinux: true
+{% endif %}
+
+# Data directory
+data-dir: {{ rke2_data_dir }}
+
+# Kubelet arguments for compatibility
+kubelet-arg:
+  - "max-pods=110"
+  - "resolv-conf=/etc/resolv.conf"
+
+# Enable metrics server
+# The metrics-server is included by default in RKE2

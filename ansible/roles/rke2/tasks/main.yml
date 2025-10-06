@@ -1,0 +1,30 @@
+---
+# ansible/roles/rke2/tasks/main.yml
+# Main tasks for RKE2 server installation
+
+- name: Display RKE2 installation info
+  debug:
+    msg: "Installing RKE2 {{ rke2_version }} on {{ ansible_hostname }} ({{ ansible_host }})"
+
+- name: Include pre-installation checks
+  include_tasks: preflight.yml
+
+- name: Include system preparation tasks
+  include_tasks: system-prep.yml
+
+- name: Include RKE2 installation tasks
+  include_tasks: install-rke2.yml
+
+- name: Include RKE2 configuration tasks
+  include_tasks: configure-rke2.yml
+
+- name: Include RKE2 service tasks
+  include_tasks: service.yml
+
+- name: Include verification tasks
+  include_tasks: verify.yml
+  when: rke2_wait_for_ready
+
+- name: Include artifact collection tasks
+  include_tasks: artifacts.yml
+  when: rke2_fetch_kubeconfig

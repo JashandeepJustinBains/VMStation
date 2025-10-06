@@ -1,0 +1,9 @@
+---
+# Monitoring namespace for RKE2 cluster
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring-rke2
+  labels:
+    name: monitoring-rke2
+    cluster: rke2-homelab
