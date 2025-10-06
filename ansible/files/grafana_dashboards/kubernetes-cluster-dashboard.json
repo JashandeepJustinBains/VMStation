@@ -22,6 +22,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           },
@@ -51,11 +55,11 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "count(up{job=\"prometheus\"})",
+          "expr": "count(kube_node_info)",
           "refId": "A"
         }
       ],
-      "title": "Prometheus Instances",
+      "title": "Total Nodes",
       "type": "stat"
     },
     {
@@ -70,8 +74,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           },
@@ -101,11 +109,11 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "count(up == 1)",
+          "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\"})",
           "refId": "A"
         }
       ],
-      "title": "Targets Up",
+      "title": "Nodes Ready",
       "type": "stat"
     },
     {
@@ -120,12 +128,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 0
+                "value": null
               }
             ]
           },
@@ -155,11 +159,11 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "count(up == 0)",
+          "expr": "count(kube_pod_info)",
           "refId": "A"
         }
       ],
-      "title": "Targets Down",
+      "title": "Total Pods",
       "type": "stat"
     },
     {
@@ -205,11 +209,11 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "prometheus_tsdb_head_series",
+          "expr": "sum(kube_pod_status_phase{phase=\"Running\"})",
           "refId": "A"
         }
       ],
-      "title": "Time Series",
+      "title": "Pods Running",
       "type": "stat"
     },
     {
@@ -257,7 +261,7 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -281,12 +285,12 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "rate(prometheus_http_requests_total[5m])",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[5m])) by (node)",
           "refId": "A",
-          "legendFormat": "{{handler}}"
+          "legendFormat": "{{node}}"
         }
       ],
-      "title": "HTTP Request Rate",
+      "title": "Node CPU Usage",
       "type": "timeseries"
     },
     {
@@ -334,7 +338,7 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "bytes"
         },
         "overrides": []
       },
@@ -358,28 +362,177 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, rate(prometheus_http_request_duration_seconds_bucket[5m]))",
+          "expr": "sum(container_memory_working_set_bytes{container!=\"\"}) by (node)",
           "refId": "A",
-          "legendFormat": "p99"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(prometheus_http_request_duration_seconds_bucket[5m]))",
-          "refId": "B",
-          "legendFormat": "p95"
-        },
-        {
-          "expr": "histogram_quantile(0.50, rate(prometheus_http_request_duration_seconds_bucket[5m]))",
-          "refId": "C",
-          "legendFormat": "p50"
+          "legendFormat": "{{node}}"
         }
       ],
-      "title": "Query Duration",
+      "title": "Node Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "expr": "sum(kube_pod_status_phase) by (phase)",
+          "refId": "A",
+          "legendFormat": "{{phase}}"
+        }
+      ],
+      "title": "Pod Status Distribution",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_receive_bytes_total[5m])) by (node)",
+          "refId": "A",
+          "legendFormat": "{{node}} (rx)"
+        },
+        {
+          "expr": "sum(rate(container_network_transmit_bytes_total[5m])) by (node)",
+          "refId": "B",
+          "legendFormat": "{{node}} (tx)"
+        }
+      ],
+      "title": "Network Traffic",
       "type": "timeseries"
     }
   ],
   "schemaVersion": 27,
   "style": "dark",
-  "tags": ["vmstation", "prometheus"],
+  "tags": ["vmstation", "kubernetes", "cluster"],
   "templating": {
     "list": []
   },
@@ -389,7 +542,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "VMStation Prometheus Metrics",
-  "uid": "prom-dash",
+  "title": "VMStation Kubernetes Cluster Overview",
+  "uid": "k8s-cluster-dash",
   "version": 1
 }

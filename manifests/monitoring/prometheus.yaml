@@ -62,8 +62,20 @@ data:
     global:
       scrape_interval: 15s
       scrape_timeout: 10s
+      evaluation_interval: 15s
+      
+    # Alerting configuration
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets: []
+    
+    # Load alerting rules
+    rule_files:
+    - /etc/prometheus/rules/*.yml
       
     scrape_configs:
+    # Scrape Kubernetes API server metrics
     - job_name: 'kubernetes-apiservers'
       kubernetes_sd_configs:
       - role: endpoints
@@ -76,6 +88,7 @@ data:
         action: keep
         regex: default;kubernetes;https
         
+    # Scrape node metrics via kubelet
     - job_name: 'kubernetes-nodes'
       kubernetes_sd_configs:
       - role: node
@@ -88,6 +101,7 @@ data:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
         
+    # Scrape cAdvisor metrics (container metrics)
     - job_name: 'kubernetes-cadvisor'
       kubernetes_sd_configs:
       - role: node
@@ -100,6 +114,172 @@ data:
       relabel_configs:
       - action: labelmap
         regex: __meta_kubernetes_node_label_(.+)
+    
+    # Scrape node-exporter metrics (detailed system metrics)
+    - job_name: 'node-exporter'
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_endpoints_name]
+        action: keep
+        regex: node-exporter
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        action: replace
+        target_label: node
+    
+    # Scrape kube-state-metrics (Kubernetes object state)
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['kube-state-metrics.monitoring.svc.cluster.local:8080']
+    
+    # Scrape pods with prometheus.io/scrape annotation
+    - job_name: 'kubernetes-pods'
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+    
+    # Scrape service endpoints
+    - job_name: 'kubernetes-service-endpoints'
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+        action: replace
+        target_label: __scheme__
+        regex: (https?)
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+  
+  # Alerting rules
+  alert_rules.yml: |
+    groups:
+    - name: kubernetes-apps
+      interval: 30s
+      rules:
+      - alert: KubePodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping
+          description: Pod {{ $labels.namespace }}/{{ $labels.pod }} is restarting {{ $value }} times / 10 min.
+      
+      - alert: KubePodNotReady
+        expr: sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pod {{ $labels.namespace }}/{{ $labels.pod }} not ready
+          description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for more than 5 minutes.
+      
+      - alert: KubeDeploymentReplicasMismatch
+        expr: kube_deployment_spec_replicas != kube_deployment_status_replicas_available
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has mismatched replicas
+          description: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} replicas available, expected {{ $labels.spec_replicas }}.
+    
+    - name: kubernetes-nodes
+      interval: 30s
+      rules:
+      - alert: KubeNodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Node {{ $labels.node }} is not ready
+          description: Node {{ $labels.node }} has been unready for more than 5 minutes.
+      
+      - alert: KubeNodeMemoryPressure
+        expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Node {{ $labels.node }} has memory pressure
+          description: Node {{ $labels.node }} is experiencing memory pressure.
+      
+      - alert: KubeNodeDiskPressure
+        expr: kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Node {{ $labels.node }} has disk pressure
+          description: Node {{ $labels.node }} is experiencing disk pressure.
+    
+    - name: node-exporter
+      interval: 30s
+      rules:
+      - alert: NodeHighCPUUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Node {{ $labels.instance }} high CPU usage
+          description: CPU usage on {{ $labels.instance }} is above 80% (current value {{ $value }}).
+      
+      - alert: NodeHighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Node {{ $labels.instance }} high memory usage
+          description: Memory usage on {{ $labels.instance }} is above 80% (current value {{ $value }}).
+      
+      - alert: NodeDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Node {{ $labels.instance }} disk space low
+          description: Disk space on {{ $labels.instance }} is below 10% (current {{ $value }}%).
 ---
 # Prometheus Deployment
 apiVersion: apps/v1
@@ -141,6 +321,8 @@ spec:
         volumeMounts:
         - name: prometheus-config
           mountPath: /etc/prometheus
+        - name: prometheus-rules
+          mountPath: /etc/prometheus/rules
         - name: prometheus-storage
           mountPath: /prometheus
         resources:
@@ -154,6 +336,15 @@ spec:
       - name: prometheus-config
         configMap:
           name: prometheus-config
+          items:
+          - key: prometheus.yml
+            path: prometheus.yml
+      - name: prometheus-rules
+        configMap:
+          name: prometheus-config
+          items:
+          - key: alert_rules.yml
+            path: alert_rules.yml
       - name: prometheus-storage
         emptyDir: {}
 ---

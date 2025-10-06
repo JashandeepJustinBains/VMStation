@@ -15,6 +15,15 @@ data:
       url: http://prometheus:9090
       isDefault: true
       editable: true
+      jsonData:
+        timeInterval: 15s
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+      editable: true
+      jsonData:
+        maxLines: 1000
 ---
 # Grafana ConfigMap for dashboard providers
 apiVersion: v1
@@ -36,135 +45,9 @@ data:
       options:
         path: /var/lib/grafana/dashboards
 ---
-# Grafana Dashboard ConfigMap - Kubernetes Cluster Overview
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard-kubernetes
-  namespace: monitoring
-data:
-  kubernetes-overview.json: |
-    {
-      "dashboard": {
-        "id": null,
-        "title": "VMStation Kubernetes Cluster Overview",
-        "tags": ["kubernetes", "vmstation"],
-        "style": "dark",
-        "timezone": "browser",
-        "panels": [
-          {
-            "id": 1,
-            "title": "Cluster Nodes",
-            "type": "stat",
-            "targets": [
-              {
-                "expr": "kube_node_info",
-                "refId": "A"
-              }
-            ],
-            "fieldConfig": {
-              "defaults": {
-                "color": {
-                  "mode": "palette-classic"
-                },
-                "custom": {
-                  "displayMode": "list",
-                  "orientation": "horizontal"
-                },
-                "mappings": [],
-                "thresholds": {
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    }
-                  ]
-                }
-              }
-            },
-            "gridPos": {
-              "h": 8,
-              "w": 12,
-              "x": 0,
-              "y": 0
-            }
-          },
-          {
-            "id": 2,
-            "title": "CPU Usage",
-            "type": "timeseries",
-            "targets": [
-              {
-                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-                "refId": "A"
-              }
-            ],
-            "fieldConfig": {
-              "defaults": {
-                "color": {
-                  "mode": "palette-classic"
-                },
-                "custom": {
-                  "axisLabel": "",
-                  "axisPlacement": "auto",
-                  "barAlignment": 0,
-                  "drawStyle": "line",
-                  "fillOpacity": 10,
-                  "gradientMode": "none",
-                  "hideFrom": {
-                    "legend": false,
-                    "tooltip": false,
-                    "vis": false
-                  },
-                  "lineInterpolation": "linear",
-                  "lineWidth": 1,
-                  "pointSize": 5,
-                  "scaleDistribution": {
-                    "type": "linear"
-                  },
-                  "showPoints": "never",
-                  "spanNulls": false,
-                  "stacking": {
-                    "group": "A",
-                    "mode": "none"
-                  },
-                  "thresholdsStyle": {
-                    "mode": "off"
-                  }
-                },
-                "mappings": [],
-                "thresholds": {
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 80
-                    }
-                  ]
-                },
-                "unit": "percent"
-              }
-            },
-            "gridPos": {
-              "h": 8,
-              "w": 12,
-              "x": 12,
-              "y": 0
-            }
-          }
-        ],
-        "time": {
-          "from": "now-1h",
-          "to": "now"
-        },
-        "timepicker": {},
-        "timezone": "",
-        "version": 0
-      }
-    }
+# Note: Dashboard JSON files are managed in ansible/files/grafana_dashboards/
+# and deployed via the deploy-apps.yaml playbook using kubernetes.core.k8s module
+# This ensures dashboards are version-controlled and can be easily updated
 ---
 # Grafana Deployment
 apiVersion: apps/v1
@@ -211,9 +94,6 @@ spec:
         - name: grafana-dashboard-providers
           mountPath: /etc/grafana/provisioning/dashboards
           readOnly: true
-        - name: grafana-dashboard-kubernetes
-          mountPath: /var/lib/grafana/dashboards
-          readOnly: true
         resources:
           requests:
             cpu: 100m
@@ -230,9 +110,6 @@ spec:
       - name: grafana-dashboard-providers
         configMap:
           name: grafana-dashboard-providers
-      - name: grafana-dashboard-kubernetes
-        configMap:
-          name: grafana-dashboard-kubernetes
 ---
 # Grafana Service
 apiVersion: v1
