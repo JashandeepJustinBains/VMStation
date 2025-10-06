@@ -1,0 +1,205 @@
+---
+# Install Kubernetes binaries (kubeadm, kubelet, kubectl) and containerd
+# This role ensures Kubernetes components are installed before cluster initialization
+# Idempotent: skips installation if binaries already exist
+
+- name: Check if kubelet binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/kubelet
+  register: kubelet_check
+
+- name: Check if kubeadm binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/kubeadm
+  register: kubeadm_check
+
+- name: Check if kubectl binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/kubectl
+  register: kubectl_check
+
+- name: Set installation needed fact
+  ansible.builtin.set_fact:
+    k8s_installation_needed: "{{ not (kubelet_check.stat.exists and kubeadm_check.stat.exists and kubectl_check.stat.exists) }}"
+
+- name: Display installation status
+  ansible.builtin.debug:
+    msg: "Kubernetes binaries {{ 'already installed' if not k8s_installation_needed else 'will be installed' }}"
+
+# Debian/Ubuntu installation
+- name: Install Kubernetes on Debian/Ubuntu
+  when:
+    - ansible_os_family == "Debian"
+    - k8s_installation_needed
+  block:
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - software-properties-common
+        state: present
+        update_cache: yes
+
+    - name: Create keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Kubernetes GPG key
+      ansible.builtin.shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Add Kubernetes apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
+        state: present
+        filename: kubernetes
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install containerd
+      ansible.builtin.apt:
+        name: containerd
+        state: present
+      register: containerd_installed
+
+    - name: Create containerd config directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Generate default containerd configuration
+      ansible.builtin.shell: |
+        containerd config default > /etc/containerd/config.toml
+      args:
+        creates: /etc/containerd/config.toml
+
+    - name: Enable SystemdCgroup in containerd config
+      ansible.builtin.lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '^\s*SystemdCgroup\s*='
+        line: '            SystemdCgroup = true'
+        insertafter: '^\s*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
+
+    - name: Enable and start containerd
+      ansible.builtin.systemd:
+        name: containerd
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Install kubeadm, kubelet, and kubectl
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+
+    - name: Hold Kubernetes packages at current version
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Enable kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+        daemon_reload: yes
+
+# RHEL/CentOS installation (for future compatibility)
+- name: Install Kubernetes on RHEL/CentOS
+  when:
+    - ansible_os_family == "RedHat"
+    - k8s_installation_needed
+  block:
+    - name: Add Kubernetes yum repository
+      ansible.builtin.yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        baseurl: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+        enabled: yes
+        gpgcheck: yes
+        gpgkey: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+
+    - name: Install containerd
+      ansible.builtin.yum:
+        name: containerd
+        state: present
+
+    - name: Create containerd config directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Generate default containerd configuration
+      ansible.builtin.shell: |
+        containerd config default > /etc/containerd/config.toml
+      args:
+        creates: /etc/containerd/config.toml
+
+    - name: Enable SystemdCgroup in containerd config
+      ansible.builtin.lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '^\s*SystemdCgroup\s*='
+        line: '            SystemdCgroup = true'
+        insertafter: '^\s*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
+
+    - name: Enable and start containerd
+      ansible.builtin.systemd:
+        name: containerd
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Install kubeadm, kubelet, and kubectl
+      ansible.builtin.yum:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        disable_excludes: kubernetes
+
+    - name: Enable kubelet service
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+        daemon_reload: yes
+
+- name: Verify installation
+  ansible.builtin.command: "{{ item }} --version"
+  loop:
+    - kubeadm
+    - kubelet
+    - kubectl
+  register: version_check
+  changed_when: false
+  when: k8s_installation_needed
+
+- name: Display installed versions
+  ansible.builtin.debug:
+    msg: "{{ item.stdout }}"
+  loop: "{{ version_check.results }}"
+  when: 
+    - k8s_installation_needed
+    - version_check is defined
+    - version_check.results is defined
+
+- name: Installation complete
+  ansible.builtin.debug:
+    msg: "Kubernetes binaries are installed and ready for cluster deployment"
