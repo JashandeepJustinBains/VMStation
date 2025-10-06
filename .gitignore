@@ -157,6 +157,7 @@ demo_*.sh
 
 # Allow essential documentation
 !IMPLEMENTATION_SUMMARY.md
+!DEPLOYMENT_FIX_SUMMARY.md
 !docs/POST_RESET_DEPLOYMENT_FIX.md
 
 # Allow essential infrastructure scripts but block temporary testing scripts
