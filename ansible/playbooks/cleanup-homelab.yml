@@ -43,22 +43,46 @@
 
         - name: Kill containerd-shim and leftover container processes (best-effort)
           ansible.builtin.shell: |
-            # Kill containerd shim and any lingering container processes that hold mounts
-            pkill -9 containerd-shim || true
-            pkill -9 containerd-shim-runc-v2 || true
+            # Use -f to match full command line for long process names
+            pkill -9 -f containerd-shim || true
+            pkill -9 -f containerd-shim-runc-v2 || true
             pkill -9 -f containerd || true
             pkill -9 -f kubelet || true
           args:
             executable: /bin/bash
           ignore_errors: true
 
-        - name: Kill any processes using /var/lib/kubelet and /run/containerd (best-effort)
+        - name: Kill any processes using /var/lib/kubelet and /run/containerd (best-effort, protect SSH)
           ansible.builtin.shell: |
-            # Use fuser to kill any processes holding files/mounts under those paths
-            if command -v fuser >/dev/null 2>&1; then
-              fuser -km /var/lib/kubelet || true
-              fuser -km /run/containerd || true
+            # Protect the remote SSH user's processes and sshd from accidental kill.
+            REM_USER="{{ ansible_user | default(ansible_env.USER | default('root')) }}"
+
+            # Build a list of PIDs to protect: sshd PIDs and any processes owned by the remote user
+            PROTECT_PIDS=""
+            if command -v pgrep >/dev/null 2>&1; then
+              # sshd PIDs
+              SSHD_PIDS=$(pgrep -x sshd || true)
+              USER_PIDS=$(pgrep -u "$REM_USER" || true)
+              PROTECT_PIDS="$SSHD_PIDS $USER_PIDS"
             fi
+
+            kill_list() {
+              local path="$1"
+              if command -v fuser >/dev/null 2>&1; then
+                PIDS=$(fuser -m "$path" 2>/dev/null || true)
+                for p in $PIDS; do
+                  # skip empty and protect pids
+                  [ -z "$p" ] && continue
+                  if echo "$PROTECT_PIDS" | tr ' ' '\n' | grep -xq "$p"; then
+                    continue
+                  fi
+                  kill -9 "$p" 2>/dev/null || true
+                done
+              fi
+            }
+
+            kill_list /var/lib/kubelet || true
+            kill_list /run/containerd || true
           args:
             executable: /bin/bash
           ignore_errors: true
