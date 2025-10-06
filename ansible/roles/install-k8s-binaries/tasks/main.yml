@@ -41,6 +41,58 @@
   ansible.builtin.set_fact:
     systemd_available: "{{ (pid1_comm.stdout is defined and (pid1_comm.stdout | trim) == 'systemd') or (systemd_check.stat.exists and systemd_check.stat.isdir) }}"
 
+# Ensure containerd is installed and running when systemd is available
+- name: Ensure containerd installed and running (Debian + systemd)
+  when:
+    - ansible_os_family == 'Debian'
+    - systemd_available
+  block:
+    - name: Check if containerd socket exists
+      ansible.builtin.stat:
+        path: /var/run/containerd/containerd.sock
+      register: containerd_sock
+
+    - name: Ensure containerd package is installed
+      ansible.builtin.apt:
+        name: containerd
+        state: present
+        update_cache: yes
+      register: ensure_containerd_pkg
+
+    - name: Ensure containerd config exists
+      ansible.builtin.shell: |
+        if [ ! -f /etc/containerd/config.toml ]; then
+          containerd config default > /etc/containerd/config.toml || true
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: containerd_config_gen
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      ignore_errors: yes
+
+    - name: Enable and start containerd service
+      ansible.builtin.service:
+        name: containerd
+        state: started
+        enabled: yes
+      register: containerd_service_result
+      ignore_errors: yes
+
+    - name: Debug containerd status
+      ansible.builtin.debug:
+        msg: |
+          containerd_sock.exists={{ containerd_sock.stat.exists | default(false) }};
+          ensure_containerd_pkg.changed={{ ensure_containerd_pkg.changed | default(false) }};
+          containerd_service_result={{ containerd_service_result }}
+  rescue:
+    - name: Warn if containerd start/install failed
+      ansible.builtin.debug:
+        msg: "WARNING: Could not ensure containerd is running. kubeadm may fail without a running CRI."
+
 - name: Check if kubelet binary exists
   ansible.builtin.stat:
     path: /usr/bin/kubelet
