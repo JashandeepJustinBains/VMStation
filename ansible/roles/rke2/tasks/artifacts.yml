@@ -1,0 +1,78 @@
+---
+# ansible/roles/rke2/tasks/artifacts.yml
+# Collect RKE2 artifacts (kubeconfig, logs)
+
+- name: Ensure artifacts directory exists on control node
+  file:
+    path: "{{ rke2_kubeconfig_artifact_path | dirname }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fetch RKE2 kubeconfig from server
+  fetch:
+    src: "{{ rke2_kubeconfig_path }}"
+    dest: "{{ rke2_kubeconfig_artifact_path }}"
+    flat: yes
+  become: true
+
+- name: Read kubeconfig content
+  slurp:
+    src: "{{ rke2_kubeconfig_artifact_path }}"
+  delegate_to: localhost
+  become: false
+  register: kubeconfig_content
+
+- name: Update kubeconfig server URL
+  copy:
+    content: "{{ kubeconfig_content.content | b64decode | regex_replace('https://127.0.0.1:6443', 'https://' + rke2_node_ip + ':6443') }}"
+    dest: "{{ rke2_kubeconfig_artifact_path }}"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+
+- name: Set kubeconfig file permissions
+  file:
+    path: "{{ rke2_kubeconfig_artifact_path }}"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+
+- name: Display kubeconfig location
+  debug:
+    msg: |
+      ✓ Kubeconfig saved to: {{ rke2_kubeconfig_artifact_path }}
+      
+      To use this kubeconfig:
+        export KUBECONFIG={{ rke2_kubeconfig_artifact_path }}
+        kubectl get nodes
+      
+      Or:
+        kubectl --kubeconfig={{ rke2_kubeconfig_artifact_path }} get nodes
+      
+      IMPORTANT: This file contains credentials. Store securely!
+      Consider encrypting with ansible-vault:
+        ansible-vault encrypt {{ rke2_kubeconfig_artifact_path }}
+
+- name: Collect RKE2 service logs
+  shell: journalctl -u rke2-server -n 500 --no-pager
+  register: rke2_logs
+  become: true
+  changed_when: false
+
+- name: Save RKE2 logs to artifact
+  copy:
+    content: "{{ rke2_logs.stdout }}"
+    dest: "{{ rke2_kubeconfig_artifact_path | dirname }}/install-rke2-homelab.log"
+    mode: '0644'
+  delegate_to: localhost
+  become: false
+
+- name: Display artifact summary
+  debug:
+    msg: |
+      Artifacts collected:
+        - Kubeconfig: {{ rke2_kubeconfig_artifact_path }}
+        - Installation logs: {{ rke2_kubeconfig_artifact_path | dirname }}/install-rke2-homelab.log

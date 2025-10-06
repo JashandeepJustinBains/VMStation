@@ -1,0 +1,200 @@
+---
+# ansible/playbooks/uninstall-rke2-homelab.yml
+# Uninstall RKE2 from homelab node (rollback)
+
+- name: Uninstall RKE2 from homelab node
+  hosts: homelab
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Display uninstall warning
+      debug:
+        msg: |
+          ⚠️  WARNING: This will completely remove RKE2 from homelab node
+          
+          This will:
+            - Stop rke2-server service
+            - Remove RKE2 binaries and data
+            - Remove all Kubernetes workloads and data
+            - Clean up configuration files
+          
+          This action cannot be undone!
+    
+    - name: Pause for confirmation
+      pause:
+        prompt: "Type 'yes' to continue with RKE2 uninstallation, or Ctrl+C to abort"
+      register: confirmation
+    
+    - name: Verify confirmation
+      assert:
+        that:
+          - confirmation.user_input == "yes"
+        fail_msg: "Uninstallation aborted - user did not confirm"
+        success_msg: "Proceeding with RKE2 uninstallation"
+    
+    - name: Check if RKE2 is installed
+      stat:
+        path: /usr/local/bin/rke2
+      register: rke2_binary
+    
+    - name: Display RKE2 status
+      debug:
+        msg: "RKE2 installed: {{ rke2_binary.stat.exists }}"
+    
+    - name: Stop rke2-server service
+      systemd:
+        name: rke2-server
+        state: stopped
+      when: rke2_binary.stat.exists
+      ignore_errors: true
+    
+    - name: Disable rke2-server service
+      systemd:
+        name: rke2-server
+        enabled: no
+      when: rke2_binary.stat.exists
+      ignore_errors: true
+    
+    - name: Check for RKE2 uninstall script
+      stat:
+        path: /usr/local/bin/rke2-uninstall.sh
+      register: uninstall_script
+    
+    - name: Run RKE2 uninstall script
+      command: /usr/local/bin/rke2-uninstall.sh
+      when: uninstall_script.stat.exists
+      register: uninstall_result
+    
+    - name: Display uninstall script output
+      debug:
+        var: uninstall_result.stdout_lines
+      when: uninstall_result is defined and uninstall_result.changed
+    
+    - name: Manually remove RKE2 if uninstall script not found
+      block:
+        - name: Remove RKE2 binaries
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /usr/local/bin/rke2
+            - /usr/local/bin/kubectl
+            - /usr/local/bin/crictl
+        
+        - name: Remove RKE2 systemd services
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/systemd/system/rke2-server.service
+            - /etc/systemd/system/rke2-agent.service
+            - /usr/lib/systemd/system/rke2-server.service
+            - /usr/lib/systemd/system/rke2-agent.service
+        
+        - name: Remove RKE2 configuration
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/rancher/rke2
+            - /etc/rancher/node
+        
+        - name: Remove RKE2 data
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /var/lib/rancher/rke2
+            - /var/lib/kubelet
+            - /var/lib/cni
+        
+        - name: Remove RKE2 CNI
+          file:
+            path: /opt/cni
+            state: absent
+        
+        - name: Reload systemd
+          systemd:
+            daemon_reload: yes
+      
+      when: not uninstall_script.stat.exists and rke2_binary.stat.exists
+    
+    - name: Remove NetworkManager CNI config
+      file:
+        path: /etc/NetworkManager/conf.d/rke2-canal.conf
+        state: absent
+    
+    - name: Remove sysctl config
+      file:
+        path: /etc/sysctl.d/90-rke2.conf
+        state: absent
+    
+    - name: Remove modules config
+      file:
+        path: /etc/modules-load.d/rke2.conf
+        state: absent
+    
+    - name: Remove RKE2 PATH config
+      file:
+        path: /etc/profile.d/rke2.sh
+        state: absent
+    
+    - name: Restart NetworkManager
+      systemd:
+        name: NetworkManager
+        state: restarted
+      when: ansible_os_family == "RedHat"
+    
+    - name: Verify RKE2 removal
+      stat:
+        path: /usr/local/bin/rke2
+      register: rke2_check
+    
+    - name: Display uninstall result
+      debug:
+        msg: "{{ 'RKE2 successfully uninstalled' if not rke2_check.stat.exists else 'RKE2 may still have remnants' }}"
+    
+    - name: Display summary
+      debug:
+        msg: |
+          ✓ RKE2 Uninstallation Complete!
+          
+          Summary:
+            ✓ RKE2 server stopped
+            ✓ RKE2 binaries removed
+            ✓ RKE2 configuration removed
+            ✓ RKE2 data directories removed
+            ✓ System configuration cleaned
+          
+          Note: 
+            - Kubeconfig artifact remains in ansible/artifacts/ for backup
+            - To fully clean the system, you may want to reboot:
+              ansible homelab -i ansible/inventory/hosts.yml -m reboot -b
+
+- name: Remove local artifacts
+  hosts: localhost
+  gather_facts: false
+  
+  tasks:
+    - name: Check if kubeconfig artifact exists
+      stat:
+        path: /srv/monitoring_data/VMStation/ansible/artifacts/homelab-rke2-kubeconfig.yaml
+      register: kubeconfig_artifact
+    
+    - name: Backup kubeconfig artifact
+      copy:
+        src: /srv/monitoring_data/VMStation/ansible/artifacts/homelab-rke2-kubeconfig.yaml
+        dest: /srv/monitoring_data/VMStation/ansible/artifacts/homelab-rke2-kubeconfig.yaml.backup
+        mode: '0600'
+      when: kubeconfig_artifact.stat.exists
+    
+    - name: Display artifact status
+      debug:
+        msg: |
+          Artifact handling:
+            {{ 'Kubeconfig backed up to: ansible/artifacts/homelab-rke2-kubeconfig.yaml.backup' if kubeconfig_artifact.stat.exists else 'No kubeconfig artifact found' }}
+          
+          To remove artifacts completely:
+            rm -f ansible/artifacts/homelab-rke2-kubeconfig.yaml*
+            rm -f ansible/artifacts/install-rke2-homelab.log

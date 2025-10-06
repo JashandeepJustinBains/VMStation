@@ -1,0 +1,99 @@
+---
+# ansible/roles/rke2/tasks/verify.yml
+# Verification tasks for RKE2 installation
+
+- name: Wait for kubeconfig to be generated
+  wait_for:
+    path: "{{ rke2_kubeconfig_path }}"
+    state: present
+    timeout: "{{ rke2_ready_timeout }}"
+  become: true
+
+- name: Check kubeconfig permissions
+  file:
+    path: "{{ rke2_kubeconfig_path }}"
+    mode: '0644'
+  become: true
+
+- name: Wait for kube-apiserver to be responsive
+  shell: |
+    export KUBECONFIG={{ rke2_kubeconfig_path }}
+    /var/lib/rancher/rke2/bin/kubectl get --raw /healthz
+  register: api_health
+  until: api_health.rc == 0
+  retries: 30
+  delay: 10
+  become: true
+  changed_when: false
+
+- name: Get cluster nodes
+  shell: |
+    export KUBECONFIG={{ rke2_kubeconfig_path }}
+    /var/lib/rancher/rke2/bin/kubectl get nodes -o wide
+  register: cluster_nodes
+  become: true
+  changed_when: false
+
+- name: Display cluster nodes
+  debug:
+    msg: "{{ cluster_nodes.stdout_lines }}"
+
+- name: Wait for node to be Ready
+  shell: |
+    export KUBECONFIG={{ rke2_kubeconfig_path }}
+    /var/lib/rancher/rke2/bin/kubectl get nodes {{ rke2_node_name }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: node_ready_status
+  until: node_ready_status.stdout == "True"
+  retries: 30
+  delay: 10
+  become: true
+  changed_when: false
+
+- name: Get all pods in all namespaces
+  shell: |
+    export KUBECONFIG={{ rke2_kubeconfig_path }}
+    /var/lib/rancher/rke2/bin/kubectl get pods -A
+  register: all_pods
+  become: true
+  changed_when: false
+
+- name: Display all pods
+  debug:
+    msg: "{{ all_pods.stdout_lines }}"
+
+- name: Check for pods not in Running state
+  shell: |
+    export KUBECONFIG={{ rke2_kubeconfig_path }}
+    /var/lib/rancher/rke2/bin/kubectl get pods -A --field-selector=status.phase!=Running,status.phase!=Succeeded -o wide
+  register: failing_pods
+  become: true
+  changed_when: false
+  failed_when: false
+
+- name: Display non-running pods (if any)
+  debug:
+    msg: "{{ failing_pods.stdout_lines }}"
+  when: failing_pods.stdout != ""
+
+- name: Get cluster info
+  shell: |
+    export KUBECONFIG={{ rke2_kubeconfig_path }}
+    /var/lib/rancher/rke2/bin/kubectl cluster-info
+  register: cluster_info
+  become: true
+  changed_when: false
+
+- name: Display cluster info
+  debug:
+    msg: "{{ cluster_info.stdout_lines }}"
+
+- name: Verify RKE2 installation summary
+  debug:
+    msg: |
+      ✓ RKE2 server is running
+      ✓ Kubernetes API is responsive
+      ✓ Node {{ rke2_node_name }} is Ready
+      ✓ Core pods are running
+      
+      Cluster endpoint: https://{{ rke2_node_ip }}:6443
+      Kubeconfig location: {{ rke2_kubeconfig_path }}

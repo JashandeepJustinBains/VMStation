@@ -1,0 +1,92 @@
+---
+# ansible/roles/rke2/defaults/main.yml
+# Default variables for RKE2 role
+
+# RKE2 version and channel
+rke2_version: "v1.29.10+rke2r1"  # Match existing cluster k8s v1.29.x
+rke2_channel: "v1.29"  # Stable channel for v1.29.x
+rke2_type: "server"  # server for control-plane, agent for worker
+
+# RKE2 installation method
+rke2_install_method: "tar"  # tar or script
+rke2_install_script_url: "https://get.rke2.io"
+rke2_binary_url_base: "https://github.com/rancher/rke2/releases/download"
+
+# RKE2 paths
+rke2_config_dir: "/etc/rancher/rke2"
+rke2_config_file: "{{ rke2_config_dir }}/config.yaml"
+rke2_data_dir: "/var/lib/rancher/rke2"
+rke2_bin_dir: "/usr/local/bin"
+rke2_kubeconfig_path: "/etc/rancher/rke2/rke2.yaml"
+rke2_service_name: "rke2-server"
+
+# RKE2 configuration
+rke2_node_name: "{{ ansible_hostname }}"
+rke2_node_ip: "{{ ansible_host }}"
+rke2_cluster_cidr: "10.42.0.0/16"  # Different from existing cluster to avoid conflicts
+rke2_service_cidr: "10.43.0.0/16"  # Different from existing cluster
+rke2_cluster_dns: "10.43.0.10"
+
+# TLS SANs (additional names/IPs for API server certificate)
+rke2_tls_san:
+  - "{{ ansible_host }}"
+  - "{{ ansible_hostname }}"
+  - "127.0.0.1"
+  - "localhost"
+
+# Disable cloud provider
+rke2_disable_cloud_controller: true
+
+# CNI selection (canal includes Flannel + Calico)
+rke2_cni: "canal"  # canal, calico, cilium, or none
+
+# Components to disable
+rke2_disable:
+  - rke2-ingress-nginx  # Disable ingress controller for now
+
+# SELinux mode
+rke2_selinux_enabled: true  # RHEL 10 has SELinux
+
+# Firewall ports to open (if managing firewall)
+rke2_server_ports:
+  - "6443/tcp"   # Kubernetes API
+  - "9345/tcp"   # RKE2 supervisor API
+  - "10250/tcp"  # Kubelet
+  - "2379/tcp"   # etcd client
+  - "2380/tcp"   # etcd peer
+  - "8472/udp"   # Flannel VXLAN
+  - "4789/udp"   # Flannel VXLAN (alternative)
+  - "9099/tcp"   # Health check
+  - "6783/tcp"   # Weave (if used)
+  - "6783/udp"   # Weave UDP
+  - "6784/udp"   # Weave
+
+# System requirements
+rke2_required_packages:
+  - curl
+  - tar
+  - iptables
+  - container-selinux
+  - libselinux-utils
+
+# Kernel modules to load
+rke2_kernel_modules:
+  - br_netfilter
+  - overlay
+  - iptable_nat
+  - iptable_filter
+
+# Sysctl settings
+rke2_sysctl_config:
+  net.bridge.bridge-nf-call-iptables: 1
+  net.bridge.bridge-nf-call-ip6tables: 1
+  net.ipv4.ip_forward: 1
+  net.ipv6.conf.all.forwarding: 1
+
+# Wait for RKE2 to be ready
+rke2_wait_for_ready: true
+rke2_ready_timeout: 300  # 5 minutes
+
+# Artifact collection
+rke2_fetch_kubeconfig: true
+rke2_kubeconfig_artifact_path: "{{ playbook_dir }}/../artifacts/homelab-rke2-kubeconfig.yaml"
