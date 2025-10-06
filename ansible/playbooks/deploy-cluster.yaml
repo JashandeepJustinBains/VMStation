@@ -5,6 +5,16 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
+# PHASE 0: Install Kubernetes Binaries (Debian nodes only)
+# -----------------------------------------------------------------------------
+- name: Phase 0 - Install Kubernetes binaries
+  hosts: monitoring_nodes:storage_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - install-k8s-binaries
+
+# -----------------------------------------------------------------------------
 # PHASE 1: System Preparation
 # -----------------------------------------------------------------------------
 - name: Phase 1 - System preparation

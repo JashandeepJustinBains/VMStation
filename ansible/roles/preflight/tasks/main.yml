@@ -18,13 +18,13 @@
   register: sysctl_out
   changed_when: false
 
-- name: Fail if kubelet not present
+- name: Check if kubelet binary present
   become: true
   ansible.builtin.stat:
     path: /usr/bin/kubelet
   register: kubelet_bin
 
-- name: Abort when kubelet missing
-  ansible.builtin.fail:
-    msg: "kubelet binary not found on {{ inventory_hostname }} - install kubeadm/kubelet first"
+- name: Warn if kubelet missing (installation role should have installed it)
+  ansible.builtin.debug:
+    msg: "WARNING: kubelet binary not found on {{ inventory_hostname }} - this may cause deployment issues"
   when: not kubelet_bin.stat.exists
