@@ -92,16 +92,17 @@ verify_debian_cluster_health(){
   if [[ -f "$kubeconfig" ]]; then
     # We're on the masternode
     if kubectl --kubeconfig="$kubeconfig" get nodes >/dev/null 2>&1; then
-      local nodes_ready=$(kubectl --kubeconfig="$kubeconfig" get nodes --no-headers 2>/dev/null | grep -c " Ready" || echo "0")
+      # Only count Debian nodes (monitoring_nodes + storage_nodes)
+      local nodes_ready=$(kubectl --kubeconfig="$kubeconfig" get nodes --no-headers 2>/dev/null | grep -E "(masternode|storagenodet3500)" | grep -c " Ready" || echo "0")
       if [[ "$nodes_ready" -ge 1 ]]; then
-        info "✓ Debian cluster is healthy ($nodes_ready nodes Ready)"
+        info "✓ Debian cluster is healthy ($nodes_ready Debian nodes Ready)"
         return 0
       fi
     fi
   else
-    # Try via ansible to masternode
+    # Try via ansible to masternode (only check Debian nodes)
     if ansible monitoring_nodes -i "$INVENTORY_FILE" -m shell \
-       -a "kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers" \
+       -a "kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | grep -E '(masternode|storagenodet3500)'" \
        >/dev/null 2>&1; then
       info "✓ Debian cluster appears healthy"
       return 0
@@ -219,17 +220,26 @@ cmd_debian(){
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
-    echo "  ansible-playbook -i $INVENTORY_FILE $DEPLOY_PLAYBOOK \\"
-    echo "    --limit monitoring_nodes,storage_nodes \\"
-    echo "    | tee $LOG_DIR/deploy-debian.log"
+    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $DEPLOY_PLAYBOOK --limit monitoring_nodes,storage_nodes"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
+    fi
+    echo "  $dry_run_cmd | tee $LOG_DIR/deploy-debian.log"
     return 0
   fi
   
   # Run deployment with --limit to exclude homelab (compute_nodes)
   info "Starting Debian deployment (this may take 10-15 minutes)..."
-  if ansible-playbook -i "$INVENTORY_FILE" "$DEPLOY_PLAYBOOK" \
-     --limit monitoring_nodes,storage_nodes \
-     2>&1 | tee "$LOG_DIR/deploy-debian.log"; then
+  
+  # Build ansible-playbook command with proper flags
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $DEPLOY_PLAYBOOK --limit monitoring_nodes,storage_nodes"
+  
+  # Add skip_ansible_confirm when FLAG_YES is true
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+  
+  if eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-debian.log"; then
     info ""
     info "✓ Debian deployment completed successfully"
     info ""
@@ -276,8 +286,11 @@ cmd_rke2(){
     echo "    - Check if homelab needs cleanup"
     echo "    - Verify Debian cluster health"
     echo ""
-    echo "  ansible-playbook -i $INVENTORY_FILE $INSTALL_RKE2_PLAYBOOK \\"
-    echo "    | tee $LOG_DIR/install-rke2-homelab.log"
+    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $INSTALL_RKE2_PLAYBOOK"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
+    fi
+    echo "  $dry_run_cmd | tee $LOG_DIR/install-rke2-homelab.log"
     return 0
   fi
   
@@ -317,8 +330,16 @@ cmd_rke2(){
   
   # Run RKE2 installation
   info "Starting RKE2 installation (this may take 15-20 minutes)..."
-  if ansible-playbook -i "$INVENTORY_FILE" "$INSTALL_RKE2_PLAYBOOK" \
-     2>&1 | tee "$LOG_DIR/install-rke2-homelab.log"; then
+  
+  # Build ansible-playbook command with proper flags
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $INSTALL_RKE2_PLAYBOOK"
+  
+  # Add skip_ansible_confirm when FLAG_YES is true
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+  
+  if eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/install-rke2-homelab.log"; then
     info ""
     info "✓ RKE2 installation completed successfully"
     info ""
@@ -434,8 +455,14 @@ cmd_reset(){
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
-    echo "  1. ansible-playbook $RESET_PLAYBOOK (Debian nodes)"
-    echo "  2. ansible-playbook $UNINSTALL_RKE2_PLAYBOOK (homelab)"
+    local dry_run_reset="ansible-playbook $RESET_PLAYBOOK (Debian nodes)"
+    local dry_run_uninstall="ansible-playbook $UNINSTALL_RKE2_PLAYBOOK (homelab)"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      dry_run_reset="$dry_run_reset with -e skip_ansible_confirm=true"
+      dry_run_uninstall="$dry_run_uninstall with -e skip_ansible_confirm=true"
+    fi
+    echo "  1. $dry_run_reset"
+    echo "  2. $dry_run_uninstall"
     return 0
   fi
   
@@ -448,8 +475,15 @@ cmd_reset(){
   info "  PHASE 1: Resetting Debian Nodes"
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
-  if ansible-playbook -i "$INVENTORY_FILE" "$RESET_PLAYBOOK" \
-     2>&1 | tee "$LOG_DIR/reset-debian.log"; then
+  # Build ansible-playbook command with proper flags
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $RESET_PLAYBOOK"
+  
+  # Add skip_ansible_confirm when FLAG_YES is true
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+  
+  if eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-debian.log"; then
     info "✓ Debian cluster reset completed"
   else
     warn "Debian reset had errors (see log)"
@@ -465,8 +499,16 @@ cmd_reset(){
   if ansible homelab -i "$INVENTORY_FILE" -m shell \
      -a "test -d /var/lib/rancher/rke2" 2>/dev/null | grep -q SUCCESS; then
     info "RKE2 detected on homelab, uninstalling..."
-    if ansible-playbook -i "$INVENTORY_FILE" "$UNINSTALL_RKE2_PLAYBOOK" \
-       2>&1 | tee "$LOG_DIR/uninstall-rke2.log"; then
+    
+    # Build ansible-playbook command with proper flags
+    local ansible_rke2_cmd="ansible-playbook -i $INVENTORY_FILE $UNINSTALL_RKE2_PLAYBOOK"
+    
+    # Add skip_ansible_confirm when FLAG_YES is true
+    if [[ "$FLAG_YES" == "true" ]]; then
+      ansible_rke2_cmd="$ansible_rke2_cmd -e skip_ansible_confirm=true"
+    fi
+    
+    if eval "$ansible_rke2_cmd" 2>&1 | tee "$LOG_DIR/uninstall-rke2.log"; then
       info "✓ RKE2 uninstalled from homelab"
     else
       warn "RKE2 uninstall had errors (see log)"
@@ -497,7 +539,15 @@ cmd_setup_autosleep(){
   require_bin ansible-playbook
   info "Setting up auto-sleep monitoring..."
   
-  if ansible-playbook -i "$INVENTORY_FILE" "$AUTOSLEEP_SETUP_PLAYBOOK"; then
+  # Build ansible-playbook command with proper flags
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $AUTOSLEEP_SETUP_PLAYBOOK"
+  
+  # Add skip_ansible_confirm when FLAG_YES is true
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+  
+  if eval "$ansible_cmd"; then
     info "Auto-sleep monitoring setup complete"
     info "Cluster will automatically sleep after 2 hours of inactivity"
   else
