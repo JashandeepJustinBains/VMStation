@@ -30,9 +30,16 @@
     path: /run/systemd/system
   register: systemd_check
 
+- name: Read PID 1 command (used to detect systemd)
+  ansible.builtin.command: cat /proc/1/comm
+  register: pid1_comm
+  changed_when: false
+  failed_when: false
+  ignore_errors: yes
+
 - name: Set systemd availability fact
   ansible.builtin.set_fact:
-    systemd_available: "{{ systemd_check.stat.exists and systemd_check.stat.isdir }}"
+    systemd_available: "{{ (pid1_comm.stdout is defined and (pid1_comm.stdout | trim) == 'systemd') or (systemd_check.stat.exists and systemd_check.stat.isdir) }}"
 
 - name: Check if kubelet binary exists
   ansible.builtin.stat:
