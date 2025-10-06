@@ -239,7 +239,11 @@ cmd_debian(){
     ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
   fi
   
-  if eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-debian.log"; then
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-debian.log"
+  local deploy_result=${PIPESTATUS[0]}
+  
+  if [[ $deploy_result -eq 0 ]]; then
     info ""
     info "✓ Debian deployment completed successfully"
     info ""
@@ -339,7 +343,11 @@ cmd_rke2(){
     ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
   fi
   
-  if eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/install-rke2-homelab.log"; then
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/install-rke2-homelab.log"
+  local install_result=${PIPESTATUS[0]}
+  
+  if [[ $install_result -eq 0 ]]; then
     info ""
     info "✓ RKE2 installation completed successfully"
     info ""
@@ -483,7 +491,11 @@ cmd_reset(){
     ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
   fi
   
-  if eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-debian.log"; then
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-debian.log"
+  local reset_result=${PIPESTATUS[0]}
+  
+  if [[ $reset_result -eq 0 ]]; then
     info "✓ Debian cluster reset completed"
   else
     warn "Debian reset had errors (see log)"
@@ -508,7 +520,11 @@ cmd_reset(){
       ansible_rke2_cmd="$ansible_rke2_cmd -e skip_ansible_confirm=true"
     fi
     
-    if eval "$ansible_rke2_cmd" 2>&1 | tee "$LOG_DIR/uninstall-rke2.log"; then
+    # Force color output for better readability
+    ANSIBLE_FORCE_COLOR=true eval "$ansible_rke2_cmd" 2>&1 | tee "$LOG_DIR/uninstall-rke2.log"
+    local uninstall_result=${PIPESTATUS[0]}
+    
+    if [[ $uninstall_result -eq 0 ]]; then
       info "✓ RKE2 uninstalled from homelab"
     else
       warn "RKE2 uninstall had errors (see log)"
@@ -547,7 +563,11 @@ cmd_setup_autosleep(){
     ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
   fi
   
-  if eval "$ansible_cmd"; then
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd"
+  local setup_result=$?
+  
+  if [[ $setup_result -eq 0 ]]; then
     info "Auto-sleep monitoring setup complete"
     info "Cluster will automatically sleep after 2 hours of inactivity"
   else
@@ -560,7 +580,8 @@ cmd_spindown(){
   local tmpvars
   tmpvars=$(generate_spin_targets)
   info "Running spin-down playbook (no power-off)"
-  ansible-playbook "$SPIN_PLAYBOOK" -e "@${tmpvars}" -e 'allow_power_down=false' -e 'spin_confirm=true'
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true ansible-playbook "$SPIN_PLAYBOOK" -e "@${tmpvars}" -e 'allow_power_down=false' -e 'spin_confirm=true'
   # generate hosts CSV
   hosts_csv=$(hosts_csv_from_yaml "$tmpvars")
   if [[ -z "$hosts_csv" ]]; then
