@@ -2,6 +2,27 @@
 
 Quick diagnostic checks for VMStation clusters.
 
+## Common Issues
+
+### Worker Node Join Hangs
+
+**Symptom**: Deployment hangs at "Wait for kubelet config to appear (join completion)"
+
+**Causes**:
+1. Missing kubeadm binary on master node
+2. Network connectivity issues between worker and master
+3. Join command failed silently
+
+**Solution**: See [Worker Join Fix Documentation](docs/WORKER_JOIN_FIX.md) for detailed explanation.
+
+**Quick Fix**:
+```bash
+# On master node, verify kubeadm is installed
+which kubeadm
+# If missing, install it
+./scripts/install-k8s-binaries-manual.sh
+```
+
 ## 1. Check Cluster Nodes
 
 ### Debian Cluster
