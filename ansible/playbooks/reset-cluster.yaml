@@ -28,11 +28,20 @@
           
           Type 'yes' to proceed with reset
       register: reset_confirmation
+      when: skip_ansible_confirm is not defined or not skip_ansible_confirm
+      
+    - name: Set confirmation for automation mode
+      ansible.builtin.set_fact:
+        reset_confirmation:
+          user_input: 'yes'
+      when: skip_ansible_confirm is defined and skip_ansible_confirm
       
     - name: Abort if not confirmed
       ansible.builtin.fail:
         msg: "Reset operation cancelled by user"
-      when: reset_confirmation.user_input | lower != 'yes'
+      when: 
+        - reset_confirmation is defined
+        - reset_confirmation.user_input | lower != 'yes'
       
     - name: Generate spin targets from cluster
       ansible.builtin.shell: |

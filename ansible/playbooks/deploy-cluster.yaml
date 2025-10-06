@@ -192,7 +192,6 @@
       loop:
         - masternode
         - storagenodet3500
-        - homelab
       register: cni_file_check
       failed_when: not cni_file_check.stat.exists
 
@@ -203,7 +202,6 @@
       loop:
         - masternode
         - storagenodet3500
-        - homelab
       register: cni_binary_check
       failed_when: not cni_binary_check.stat.exists
 
