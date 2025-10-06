@@ -110,7 +110,7 @@
 
     - name: Debug - Show apt update result
       ansible.builtin.debug:
-        msg: \"Apt cache updated: {{ apt_update.changed if apt_update is defined else 'skipped' }}\"
+        msg: "Apt cache updated: {{ (apt_update.changed if (apt_update is defined) else 'skipped') }}"
 
     - name: Install containerd
       ansible.builtin.apt:
