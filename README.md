@@ -1,153 +1,263 @@
 
 # VMStation Kubernetes Cloud Overview
 
-Welcome to VMStation! A home cloud infrastructure built on Kubernetes for scalable, reliable self-hosted services.
+Welcome to VMStation! A home cloud infrastructure with a **two-phase deployment model**: Debian nodes run kubeadm/Kubernetes, and RHEL10 runs a separate RKE2 cluster for isolation and monitoring federation.
 
-## 🎉 Latest Updates (October 4, 2025)
+## 🚀 Two-Phase Deployment Architecture
 
-**CRITICAL FIX: RHEL 10 CrashLoopBackOff Resolved!** Flannel and kube-proxy now stable on RHEL 10 nodes.
+VMStation now uses a **simplified two-phase deployment**:
 
-### What's Fixed:
-- ✅ **nftables Compatibility**: Flannel now uses `EnableNFTables: true` for RHEL 10
-- ✅ **Health Probes**: Added readiness/liveness probes to prevent premature pod kills
-- ✅ **Privileged Mode**: Full security context for nftables manipulation
-- ✅ **Network Stability**: Pre-checks and CNI cleanup prevent sandbox recreation
-- ✅ **Gold-Standard Reset**: nftables cleanup in reset playbook for idempotency
+1. **Phase 1: Debian Cluster (kubeadm)** - Control plane and storage nodes
+2. **Phase 2: RKE2 on RHEL10** - Separate cluster on homelab node with monitoring federation
 
-**SEE**: [`DEPLOYMENT_FIX_SUMMARY.md`](DEPLOYMENT_FIX_SUMMARY.md) for testing instructions and validation.
+This architecture provides:
+- ✅ **Clean separation**: No more RHEL10 worker-node integration issues
+- ✅ **Simplified deployment**: Each phase is independent and testable
+- ✅ **Better monitoring**: RKE2 cluster runs Prometheus federation
+- ✅ **Easy maintenance**: No complex network-fix roles for RHEL10
 
-### Quick Start (October 2025):
+---
+
+## Quick Start
+
+### Option 1: Deploy Everything (Recommended)
 
 ```bash
-# On masternode (192.168.4.63):
 cd /srv/monitoring_data/VMStation
-git pull
-./deploy.sh reset  # Clean slate
-./deploy.sh        # Deploy with fixes
 
-# Validation (expected: all pods Running, NO CrashLoopBackOff):
-kubectl get pods -A -o wide
+# Deploy both Debian and RKE2 clusters
+./deploy.sh all --with-rke2
+
+# Or interactively (will prompt before RKE2)
+./deploy.sh all
 ```
 
-See [`DEPLOYMENT_FIX_SUMMARY.md`](DEPLOYMENT_FIX_SUMMARY.md) for complete fix details or [`docs/FLANNEL_CRASHLOOP_FIX.md`](docs/FLANNEL_CRASHLOOP_FIX.md) for troubleshooting.
+### Option 2: Deploy Phase by Phase
+
+```bash
+# Phase 1: Deploy Debian cluster (monitoring + storage nodes)
+./deploy.sh debian
+
+# Verify Debian cluster
+kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes
+kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A
+
+# Phase 2: Deploy RKE2 to homelab
+./deploy.sh rke2
+
+# Verify RKE2 cluster
+export KUBECONFIG=ansible/artifacts/homelab-rke2-kubeconfig.yaml
+kubectl get nodes
+kubectl get pods -A
+```
+
+### Reset Everything
+
+```bash
+# Reset both clusters (Debian + RKE2)
+./deploy.sh reset
+```
+
+---
+
+## Deployment Commands
+
+### Main Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `debian` | Deploy kubeadm to Debian nodes only | `./deploy.sh debian` |
+| `rke2` | Deploy RKE2 to homelab with pre-checks | `./deploy.sh rke2` |
+| `all` | Deploy both phases (requires `--with-rke2`) | `./deploy.sh all --with-rke2` |
+| `reset` | Reset both clusters completely | `./deploy.sh reset` |
+| `setup` | Setup auto-sleep monitoring | `./deploy.sh setup` |
+| `spindown` | Graceful shutdown (no power-off) | `./deploy.sh spindown` |
+
+### Flags
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--yes` | Skip confirmations (for automation) | `./deploy.sh rke2 --yes` |
+| `--check` | Dry-run mode (show planned actions) | `./deploy.sh debian --check` |
+| `--with-rke2` | Auto-proceed with RKE2 in `all` | `./deploy.sh all --with-rke2` |
+| `--log-dir` | Custom log directory | `./deploy.sh debian --log-dir=/tmp/logs` |
+
+---
+
+## Architecture Overview
+
+### Debian Cluster (kubeadm)
+- **Control Plane**: masternode (192.168.4.63)
+- **Worker**: storagenodet3500 (192.168.4.61)
+- **Kubernetes Version**: 1.29
+- **CNI**: Flannel
+- **Purpose**: Main workloads, Jellyfin, storage
+
+### RKE2 Cluster (homelab)
+- **Single Node**: homelab (192.168.4.62)
+- **Kubernetes Version**: 1.29.x (RKE2)
+- **CNI**: Canal (Flannel + Calico)
+- **Purpose**: Monitoring, federation, RHEL10 workloads
+- **Monitoring Stack**:
+  - Node Exporter (port 9100)
+  - Prometheus (port 30090)
+  - Federation endpoint for central Prometheus
+
+---
+
+## Artifacts and Logs
+
+All deployment artifacts are stored in `ansible/artifacts/`:
+
+```
+ansible/artifacts/
+├── deploy-debian.log              # Debian deployment log
+├── install-rke2-homelab.log       # RKE2 installation log
+├── homelab-rke2-kubeconfig.yaml   # RKE2 cluster kubeconfig
+├── reset-debian.log               # Reset logs
+└── uninstall-rke2.log             # RKE2 uninstall logs
+```
+
+**Access RKE2 cluster:**
+```bash
+export KUBECONFIG=ansible/artifacts/homelab-rke2-kubeconfig.yaml
+kubectl get nodes
+kubectl get pods -A
+```
+
+---
+
+## Monitoring & Federation
+
+### Prometheus Federation Setup
+
+The RKE2 cluster exposes a Prometheus federation endpoint that the Debian cluster's Prometheus can scrape:
+
+**Federation URL**: `http://192.168.4.62:30090/federate`
+
+**Test federation:**
+```bash
+curl -s 'http://192.168.4.62:30090/federate?match[]={job=~".+"}' | head -20
+```
+
+**Add to central Prometheus** (`prometheus-config.yaml`):
+```yaml
+scrape_configs:
+  - job_name: 'federate-rke2'
+    scrape_interval: 30s
+    honor_labels: true
+    metrics_path: '/federate'
+    params:
+      'match[]':
+        - '{job=~".+"}'
+    static_configs:
+      - targets:
+        - '192.168.4.62:30090'
+```
+
+### Monitoring Endpoints
+
+- **Node Exporter**: http://192.168.4.62:9100/metrics
+- **Prometheus UI**: http://192.168.4.62:30090
+- **Federation**: http://192.168.4.62:30090/federate
 
 ---
 
 ## Testing and Validation
 
-VMStation provides comprehensive test infrastructure for validating the mixed OS environment (Debian + RHEL 10) with different authentication methods.
+VMStation includes comprehensive tests to verify the deployment:
 
-### Pre-Deployment Environment Test
-
-Validate your environment before deployment:
+### Pre-Deployment Tests
 
 ```bash
-# On masternode (192.168.4.63):
-cd /srv/monitoring_data/VMStation
+# Test deployment script behavior
+./tests/test-deploy-limits.sh
+
+# Validate environment
 ansible-playbook -i ansible/inventory/hosts.yml \
   ansible/playbooks/test-environment.yaml \
   --ask-vault-pass
 ```
 
-This validates:
-- ✅ Connectivity to all nodes
-- ✅ Authentication (root on Debian, sudo on RHEL)
-- ✅ Required packages and binaries
-- ✅ OS-specific configuration (nftables, SELinux)
-- ✅ Network prerequisites
-
-### Idempotency Testing
-
-Test that deploy → reset → deploy works reliably:
+### Post-Deployment Validation
 
 ```bash
-# Run 5 cycles (recommended for validation)
-ansible-playbook -i ansible/inventory/hosts.yml \
-  ansible/playbooks/test-idempotency.yaml \
-  --ask-vault-pass \
-  -e "test_iterations=5"
+# Verify Debian cluster
+kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes
+kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A
 
-# Run 100 cycles (production validation)
-ansible-playbook -i ansible/inventory/hosts.yml \
-  ansible/playbooks/test-idempotency.yaml \
-  --ask-vault-pass \
-  -e "test_iterations=100"
+# Verify RKE2 cluster
+export KUBECONFIG=ansible/artifacts/homelab-rke2-kubeconfig.yaml
+kubectl get nodes
+kubectl get pods -n monitoring-rke2
+
+# Test federation
+curl -s 'http://192.168.4.62:30090/federate?match[]={job=~".+"}' | head
 ```
-
-### Complete Testing Guide
-
-For comprehensive testing instructions including:
-- Test environment setup
-- Authentication configuration (Ansible Vault)
-- Troubleshooting common issues
-- Performance benchmarks
-- Success criteria
-
-See: [`TEST_ENVIRONMENT_GUIDE.md`](TEST_ENVIRONMENT_GUIDE.md)
 
 ---
 
-## Simplified Deployment System
+## Troubleshooting
 
-VMStation uses a **simplified deployment system** that reduces complexity by 85% while maintaining all functionality. The new system replaces the previous complex modular approach with clean, reliable deployment options.
+### Common Issues
 
-### Quick Start
-
-The new simplified deployment system provides clear, easy-to-use options:
-
+**Issue**: Debian deployment fails
 ```bash
-# Deploy complete VMStation stack
-./deploy.sh
+# Check logs
+cat ansible/artifacts/deploy-debian.log
 
-# Reset cluster completely
+# Reset and retry
 ./deploy.sh reset
-
-# Deploy only Kubernetes cluster
-./deploy.sh cluster
-
-# Deploy only applications (requires existing cluster)
-./deploy.sh apps
+./deploy.sh debian
 ```
 
-# Deploy only Jellyfin media server
-./deploy.sh jellyfin
+**Issue**: RKE2 pre-checks fail (old kubeadm artifacts)
+```bash
+# Run cleanup manually
+ansible-playbook -i ansible/inventory/hosts.yml \
+  ansible/playbooks/cleanup-homelab.yml
 
-# Validate deployment without making changes
-./deploy.sh check
-
-# Remove all infrastructure (destructive)
-./deploy.sh spindown
+# Then deploy RKE2
+./deploy.sh rke2
 ```
 
-### Key Benefits
+**Issue**: Cannot reach homelab via SSH
+```bash
+# Test connectivity
+ansible homelab -i ansible/inventory/hosts.yml -m ping
 
-- **85% code reduction**: From 4300+ lines to 620 lines
-- **Improved reliability**: Standard Kubernetes setup without excessive fallbacks
-- **Enhanced join process**: Eliminates worker node "standalone mode" issues
-- **Easier maintenance**: Simple, readable code structure
-- **Faster deployment**: Direct deployment without complex validation overhead
-- **Better testing**: Simple components that are easy to validate (20/20 tests passing)
-- **RHEL 10 Compatible**: Full support for mixed Debian/RHEL clusters (NEW)
-
-### Enhanced Worker Node Join Process
-
-VMStation now includes an enhanced kubeadm join process that ensures worker nodes properly connect to the control-plane instead of running in "standalone mode":
-
-- **Comprehensive validation**: Pre-join system and network checks
-- **Robust execution**: Intelligent retry logic with proper cleanup
-- **Real-time monitoring**: TLS Bootstrap progress tracking  
-- **Post-join validation**: Verification that nodes successfully joined cluster
-- **95%+ success rate**: Dramatically improved reliability vs previous approaches
-
-For detailed information, see: [Enhanced Join Process Documentation](docs/ENHANCED_JOIN_PROCESS.md)
-
-# Check what would be generated
-ansible-playbook -i ansible/inventory.txt ansible/subsites/02-certs.yaml --check
+# Check SSH keys
+ls ~/.ssh/id_k3s
 ```
 
-**What it does**:
-- Creates local certificate directory (`./ansible/certs/`)
-- Generates CA certificate and private key
+---
+
+## Documentation
+
+- **[RKE2 Implementation](RKE2_COMPLETE_IMPLEMENTATION.md)** - Complete RKE2 setup details
+- **[Test Environment Guide](TEST_ENVIRONMENT_GUIDE.md)** - Testing and validation
+- **[Deployment Runbook](ansible/playbooks/RKE2_DEPLOYMENT_RUNBOOK.md)** - Step-by-step deployment
+- **[Inventory Configuration](ansible/inventory/hosts.yml)** - Host definitions
+
+---
+
+## Migration from Old Worker-Node Approach
+
+If you previously had homelab as a kubeadm worker node, you must:
+
+1. **Reset the old setup**:
+   ```bash
+   ./deploy.sh reset
+   ```
+
+2. **Deploy the new two-phase model**:
+   ```bash
+   ./deploy.sh all --with-rke2
+   ```
+
+All old RHEL10 worker-node documentation and scripts have been removed. The new RKE2 approach is simpler and more reliable.
+
+---
 - Creates cert-manager ClusterIssuer and Certificate templates
 - Provides manual distribution commands via scp/ssh
 
