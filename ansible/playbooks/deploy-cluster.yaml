@@ -128,144 +128,225 @@
 # -----------------------------------------------------------------------------
 # PHASE 4: Worker Node Join
 # -----------------------------------------------------------------------------
+# PHASE 4: Worker Node Join (Robust & Idempotent)
+# -----------------------------------------------------------------------------
 - name: Phase 4 - Join worker nodes
   hosts: storage_nodes:compute_nodes
   become: true
+  vars:
+    join_timeout: 600
+    join_retries: 3
   tasks:
     - name: Check if node already joined
       ansible.builtin.stat:
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: Generate join command
+    - name: Skip join if already joined
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} already joined to cluster (kubelet.conf exists)"
+      when: kubelet_conf.stat.exists
+
+    # Pre-join cleanup and validation
+    - name: Pre-join cleanup and validation
+      when: not kubelet_conf.stat.exists
+      block:
+        - name: Stop kubelet service before cleanup
+          ansible.builtin.systemd:
+            name: kubelet
+            state: stopped
+          ignore_errors: true
+
+        - name: Kill any existing kubeadm join processes
+          ansible.builtin.shell: |
+            pkill -f "kubeadm join" || true
+            sleep 2
+            pkill -9 -f "kubeadm join" || true
+          ignore_errors: true
+
+        - name: Clean up partial join artifacts
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /var/lib/kubelet/config.yaml
+            - /var/lib/kubelet/kubeadm-flags.env
+            - /etc/kubernetes/bootstrap-kubelet.conf
+            - /etc/kubernetes/kubelet.conf
+            - /etc/kubernetes/pki/ca.crt
+          ignore_errors: true
+
+        - name: Ensure directories exist with correct permissions
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0755'
+            owner: root
+            group: root
+          loop:
+            - /var/lib/kubelet
+            - /etc/kubernetes
+            - /etc/kubernetes/pki
+            - /var/log/containers
+            - /var/log/pods
+
+        - name: Wait for containerd socket (required for join)
+          ansible.builtin.wait_for:
+            path: /var/run/containerd/containerd.sock
+            state: present
+            timeout: 300
+          register: containerd_wait
+
+        - name: Verify containerd is active
+          ansible.builtin.systemd:
+            name: containerd
+            state: started
+          register: containerd_status
+
+        - name: Check kubeadm binary availability
+          ansible.builtin.command: which kubeadm
+          register: which_kubeadm
+          changed_when: false
+          failed_when: false
+
+        - name: Install kubeadm if missing
+          when: which_kubeadm.rc != 0
+          block:
+            - name: Run install-k8s-binaries role for missing kubeadm
+              include_role:
+                name: install-k8s-binaries
+
+            - name: Verify kubeadm after installation
+              ansible.builtin.command: which kubeadm
+              register: kubeadm_verify
+              failed_when: kubeadm_verify.rc != 0
+
+        - name: Test connectivity to control plane
+          ansible.builtin.wait_for:
+            host: "{{ groups['monitoring_nodes'][0] }}"
+            port: 6443
+            timeout: 30
+          register: api_connectivity
+
+    # Generate fresh join command
+    - name: Generate fresh join command
       ansible.builtin.shell: kubeadm token create --print-join-command
       delegate_to: "{{ groups['monitoring_nodes'][0] }}"
       register: join_command
       when: not kubelet_conf.stat.exists
       run_once: true
+      retries: 3
+      delay: 5
+      until: join_command.rc == 0
 
-    - name: Wait for containerd socket on worker (required for kubeadm join)
-      ansible.builtin.wait_for:
-        path: /var/run/containerd/containerd.sock
-        state: present
-        timeout: 300
-      when: not kubelet_conf.stat.exists
-
-    - name: Check if kubeadm exists in PATH on worker
-      ansible.builtin.command: which kubeadm
-      register: which_kubeadm
-      changed_when: false
-      failed_when: false
-      when: not kubelet_conf.stat.exists
-
-    - name: Stat /usr/local/bin/kubeadm
-      ansible.builtin.stat:
-        path: /usr/local/bin/kubeadm
-      register: kubeadm_local
-      when: not kubelet_conf.stat.exists
-
-    - name: Stat /usr/bin/kubeadm
-      ansible.builtin.stat:
-        path: /usr/bin/kubeadm
-      register: kubeadm_bin
-      when: not kubelet_conf.stat.exists
-
-    - name: Ensure kubeadm is installed (run installer role if missing)
-      when:
-        - not kubelet_conf.stat.exists
-        - which_kubeadm.rc != 0
-        - not (kubeadm_local.stat.exists or kubeadm_bin.stat.exists)
-      block:
-        - name: Notify that kubeadm is missing and installing
-          ansible.builtin.debug:
-            msg: "kubeadm missing on {{ inventory_hostname }}; running install-k8s-binaries role"
-
-        - name: Include install-k8s-binaries role to install kubeadm on this worker
-          include_role:
-            name: install-k8s-binaries
-
-    - name: Join worker to cluster (run async to avoid blocking long joins)
-      ansible.builtin.shell: "{{ join_command.stdout }}"
-      when: not kubelet_conf.stat.exists
-      async: 1200
-      poll: 0
-      register: join_async
-
-    - name: Monitor join process and wait for completion
+    # Robust join with retries and logging
+    - name: Join worker to cluster with retries
       when: not kubelet_conf.stat.exists
       block:
-        - name: Wait for kubelet config to appear (indicates join completion)
-          ansible.builtin.stat:
+        - name: Attempt kubeadm join (with retries)
+          ansible.builtin.shell: |
+            set -o pipefail
+            echo "[$(date)] Starting kubeadm join on {{ inventory_hostname }}" | tee -a /var/log/kubeadm-join.log
+            {{ join_command.stdout }} --v=5 2>&1 | tee -a /var/log/kubeadm-join.log
+            exit_code=${PIPESTATUS[0]}
+            echo "[$(date)] kubeadm join exit code: $exit_code" | tee -a /var/log/kubeadm-join.log
+            exit $exit_code
+          args:
+            executable: /bin/bash
+          register: join_result
+          retries: "{{ join_retries }}"
+          delay: 30
+          until: join_result.rc == 0
+
+        - name: Wait for kubelet config to appear
+          ansible.builtin.wait_for:
             path: /etc/kubernetes/kubelet.conf
-          register: kubelet_conf_check
-          until: kubelet_conf_check.stat.exists
-          retries: 90
+            state: present
+            timeout: 120
+          register: kubelet_config_wait
+
+        - name: Verify kubelet service starts successfully
+          ansible.builtin.systemd:
+            name: kubelet
+            state: started
+            enabled: true
+          register: kubelet_start
+
+        - name: Wait for kubelet to be ready
+          ansible.builtin.shell: |
+            timeout=60
+            while [ $timeout -gt 0 ]; do
+              if systemctl is-active --quiet kubelet && ! journalctl -u kubelet -n 10 --no-pager | grep -i "failed to load kubelet config"; then
+                echo "kubelet is running and healthy"
+                exit 0
+              fi
+              sleep 2
+              timeout=$((timeout - 2))
+            done
+            echo "kubelet failed to become healthy"
+            exit 1
+          register: kubelet_health
+          retries: 3
           delay: 10
-          ignore_errors: yes
+          until: kubelet_health.rc == 0
 
-        - name: Get final async job result
-          ansible.builtin.async_status:
-            jid: "{{ join_async.ansible_job_id }}"
-          register: join_job_result
-          ignore_errors: yes
+      rescue:
+        - name: Capture failure diagnostics
+          ansible.builtin.shell: |
+            echo "=== Join Failure Diagnostics ===" >> /var/log/kubeadm-join-failure.log
+            echo "Date: $(date)" >> /var/log/kubeadm-join-failure.log
+            echo "Host: {{ inventory_hostname }}" >> /var/log/kubeadm-join-failure.log
+            echo "" >> /var/log/kubeadm-join-failure.log
+            echo "=== kubelet status ===" >> /var/log/kubeadm-join-failure.log
+            systemctl status kubelet --no-pager -l >> /var/log/kubeadm-join-failure.log 2>&1 || true
+            echo "" >> /var/log/kubeadm-join-failure.log
+            echo "=== kubelet journal (last 50 lines) ===" >> /var/log/kubeadm-join-failure.log
+            journalctl -u kubelet -n 50 --no-pager >> /var/log/kubeadm-join-failure.log 2>&1 || true
+            echo "" >> /var/log/kubeadm-join-failure.log
+            echo "=== containerd status ===" >> /var/log/kubeadm-join-failure.log
+            systemctl status containerd --no-pager -l >> /var/log/kubeadm-join-failure.log 2>&1 || true
+            echo "" >> /var/log/kubeadm-join-failure.log
+            echo "=== File system state ===" >> /var/log/kubeadm-join-failure.log
+            ls -la /var/lib/kubelet/ >> /var/log/kubeadm-join-failure.log 2>&1 || true
+            ls -la /etc/kubernetes/ >> /var/log/kubeadm-join-failure.log 2>&1 || true
+            echo "" >> /var/log/kubeadm-join-failure.log
+            echo "=== Network connectivity ===" >> /var/log/kubeadm-join-failure.log
+            ss -tlnp | grep -E '6443|10250' >> /var/log/kubeadm-join-failure.log 2>&1 || true
+          ignore_errors: true
 
-        - name: Check if kubelet config file exists (final check)
+        - name: Display failure information and exit
+          ansible.builtin.fail:
+            msg: |
+              Worker join failed after {{ join_retries }} attempts.
+              Diagnostic logs written to /var/log/kubeadm-join-failure.log
+              Last join attempt output: {{ join_result.stdout | default('No output') }}
+              Last join attempt error: {{ join_result.stderr | default('No error') }}
+
+    # Final validation
+    - name: Validate successful join
+      when: not kubelet_conf.stat.exists
+      block:
+        - name: Verify kubelet config exists
           ansible.builtin.stat:
             path: /etc/kubernetes/kubelet.conf
-          register: kubelet_conf_final
+          register: final_kubelet_conf
+          failed_when: not final_kubelet_conf.stat.exists
 
-        - name: Display join job result if it failed
-          ansible.builtin.debug:
-            msg: |
-              Join job status:
+        - name: Verify kubelet is running
+          ansible.builtin.systemd:
+            name: kubelet
+          register: final_kubelet_status
+          failed_when: final_kubelet_status.status.ActiveState != 'active'
+
+        - name: Log successful join
+          ansible.builtin.shell: |
+            echo "[$(date)] Successfully joined {{ inventory_hostname }} to cluster" | tee -a /var/log/kubeadm-join.log
+            echo "kubelet status: $(systemctl is-active kubelet)" | tee -a /var/log/kubeadm-join.log
+
+    - name: Display join completion status
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} join status: {{ 'ALREADY_JOINED' if kubelet_conf.stat.exists else 'NEWLY_JOINED' }}"
               Finished: {{ join_job_result.finished | default('unknown') }}
-              Failed: {{ join_job_result.failed | default('unknown') }}
-              RC: {{ join_job_result.rc | default('N/A') }}
-              Stdout: {{ join_job_result.stdout | default('N/A') }}
-              Stderr: {{ join_job_result.stderr | default('N/A') }}
-          when: join_job_result.failed | default(false)
-
-        - name: Fail if join failed
-          ansible.builtin.fail:
-            msg: |
-              Worker node join command failed!
-              Exit code: {{ join_job_result.rc | default('unknown') }}
-              Error: {{ join_job_result.stderr | default(join_job_result.msg | default('Unknown error')) }}
-              
-              Check the kubelet logs for more details:
-              journalctl -u kubelet -n 100
-              
-              And check the kubeadm join logs:
-              journalctl -u kubelet --since "10 minutes ago" | grep -i error
-          when: join_job_result.failed | default(false)
-
-        - name: Fail if timed out waiting for kubelet config
-          ansible.builtin.fail:
-            msg: |
-              Timed out waiting for /etc/kubernetes/kubelet.conf to appear after 15 minutes.
-              
-              The kubeadm join command status:
-              - Finished: {{ join_job_result.finished | default('unknown') }}
-              - Failed: {{ join_job_result.failed | default('unknown') }}
-              - RC: {{ join_job_result.rc | default('N/A') }}
-              
-              This usually indicates one of the following issues:
-              1. The join command is still running and needs more time
-              2. The join command failed but didn't report an error
-              3. Network connectivity issues between worker and control plane
-              4. The control plane is not ready to accept new nodes
-              
-              Troubleshooting steps:
-              1. Check kubelet logs: journalctl -u kubelet -n 100
-              2. Check if kubelet is running: systemctl status kubelet
-              3. Check control plane connectivity: curl -k https://{{ groups['monitoring_nodes'][0] }}:6443/healthz
-              4. Check if join command is still running: ps aux | grep kubeadm
-              
-              If the join command is still running, you may need to wait longer or increase the timeout.
-          when: 
-            - kubelet_conf_check.failed | default(false)
-            - not kubelet_conf_final.stat.exists
-
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
 # -----------------------------------------------------------------------------
