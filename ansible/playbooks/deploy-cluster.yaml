@@ -158,13 +158,52 @@
       poll: 0
       register: join_async
 
-    - name: Wait for kubelet config to appear (join completion)
-      ansible.builtin.wait_for:
-        path: /etc/kubernetes/kubelet.conf
-        state: present
-        timeout: 900
+    - name: Monitor join process and wait for completion
       when: not kubelet_conf.stat.exists
-      register: join_wait_result
+      block:
+        - name: Poll async join job status until finished or kubelet config appears
+          ansible.builtin.async_status:
+            jid: "{{ join_async.ansible_job_id }}"
+          register: join_job_result
+          until: join_job_result.finished
+          retries: 90
+          delay: 10
+          ignore_errors: yes
+
+        - name: Check if kubelet config file exists
+          ansible.builtin.stat:
+            path: /etc/kubernetes/kubelet.conf
+          register: kubelet_conf_final
+
+        - name: Display join job result if it failed
+          ansible.builtin.debug:
+            msg: |
+              Join job finished with:
+              RC: {{ join_job_result.rc | default('N/A') }}
+              Stdout: {{ join_job_result.stdout | default('N/A') }}
+              Stderr: {{ join_job_result.stderr | default('N/A') }}
+          when: join_job_result.failed | default(false)
+
+        - name: Fail if join failed
+          ansible.builtin.fail:
+            msg: |
+              Worker node join command failed!
+              Exit code: {{ join_job_result.rc | default('unknown') }}
+              Error: {{ join_job_result.stderr | default(join_job_result.msg | default('Unknown error')) }}
+              
+              Check the kubelet logs for more details:
+              journalctl -u kubelet -n 100
+          when: join_job_result.failed | default(false)
+
+        - name: Fail if join completed but kubelet config missing
+          ansible.builtin.fail:
+            msg: |
+              Worker node join process completed, but /etc/kubernetes/kubelet.conf was not created.
+              This indicates the join may have failed silently. Check the kubelet logs:
+              journalctl -u kubelet -n 100
+          when: 
+            - join_job_result.finished | default(false)
+            - not kubelet_conf_final.stat.exists
 
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
