@@ -56,7 +56,12 @@ kubectl get pods -A
 ```bash
 # Reset both clusters (Debian + RKE2)
 ./deploy.sh reset
+
+# After reset, you can redeploy immediately - binaries will be auto-installed
+./deploy.sh all --with-rke2 --yes
 ```
+
+> **Note**: After reset, Kubernetes binaries (kubeadm/kubelet/kubectl) are automatically installed if missing during the next deployment. No manual installation required! See [Post-Reset Deployment Fix](docs/POST_RESET_DEPLOYMENT_FIX.md) for details.
 
 ---
 

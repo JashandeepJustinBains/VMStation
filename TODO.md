@@ -6,6 +6,7 @@ This repository uses **kubeadm-based Kubernetes** for production deployments.
 - ✅ Kubernetes cluster setup with kubeadm
 - ✅ Monitoring stack (Prometheus, Grafana, Loki, Alertmanager) 
 - ✅ Modular deployment architecture
+- ✅ Self-contained deployment with automatic binary installation
 - 🔄 Worker node join issues being resolved
 
 ## Priority Issues to Address
@@ -36,10 +37,14 @@ This repository uses **kubeadm-based Kubernetes** for production deployments.
 - Update monitoring access instructions
 
 ## Completed Recently
-- Fixed kubelet systemd configuration conflicts
-- Implemented CNI network stability improvements  
-- Added cert-manager taint fixes
-- Enhanced timeout handling for cluster operations
+- ✅ Fixed kubelet systemd configuration conflicts
+- ✅ Implemented CNI network stability improvements  
+- ✅ Added cert-manager taint fixes
+- ✅ Enhanced timeout handling for cluster operations
+- ✅ **Fixed post-reset deployment** - automatic kubeadm/kubelet installation
+  - Deployment now self-contained and idempotent
+  - No manual binary installation required after reset
+  - See [Post-Reset Deployment Fix](docs/POST_RESET_DEPLOYMENT_FIX.md)
 
 ## Deployment Commands
 
