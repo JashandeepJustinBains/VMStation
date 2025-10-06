@@ -66,6 +66,10 @@ kubeconfig
 *.bak
 *.backup
 
+# Ansible artifacts directory - keep structure but allow log files as documentation
+# (logs show example output for users)
+!ansible/artifacts/.gitkeep
+
 # Ansible generated files
 *.retry
 .ansible/
