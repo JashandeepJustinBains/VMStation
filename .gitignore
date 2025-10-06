@@ -66,6 +66,10 @@ kubeconfig
 *.bak
 *.backup
 
+# Ansible artifacts directory - keep structure but allow log files as documentation
+# (logs show example output for users)
+!ansible/artifacts/.gitkeep
+
 # Ansible generated files
 *.retry
 .ansible/
@@ -141,7 +145,7 @@ tempfilesreadoutput.yml
 # Prevent bloat accumulation - block fix-specific and redundant files
 *_FIX.md
 *_ANALYSIS.md
-*_SUMMARY.md
+# *_SUMMARY.md  # Disabled - we want IMPLEMENTATION_SUMMARY.md
 *_RECEIPT.md
 *_VALIDATION.md
 *_COMPARISON.md
@@ -150,6 +154,9 @@ tempfilesreadoutput.yml
 test_*.sh
 demo_*.sh
 *_output.txt
+
+# Allow essential documentation
+!IMPLEMENTATION_SUMMARY.md
 
 # Allow essential infrastructure scripts but block temporary testing scripts
 !/scripts/manual_containerd_filesystem_fix.sh
