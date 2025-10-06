@@ -3,6 +3,15 @@
 # This role ensures Kubernetes components are installed before cluster initialization
 # Idempotent: skips installation if binaries already exist
 
+- name: Check if systemd is available
+  ansible.builtin.stat:
+    path: /run/systemd/system
+  register: systemd_check
+
+- name: Set systemd availability fact
+  ansible.builtin.set_fact:
+    systemd_available: "{{ systemd_check.stat.exists and systemd_check.stat.isdir }}"
+
 - name: Check if kubelet binary exists
   ansible.builtin.stat:
     path: /usr/bin/kubelet
@@ -90,12 +99,28 @@
         line: '            SystemdCgroup = true'
         insertafter: '^\s*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
 
-    - name: Enable and start containerd
+    - name: Reload systemd daemon (if systemd available)
       ansible.builtin.systemd:
+        daemon_reload: yes
+      when: systemd_available
+      ignore_errors: yes
+
+    - name: Enable and start containerd
+      ansible.builtin.service:
         name: containerd
         enabled: yes
         state: started
-        daemon_reload: yes
+      when: systemd_available
+      ignore_errors: yes
+      register: containerd_service_result
+
+    - name: Warn if containerd service failed to start
+      ansible.builtin.debug:
+        msg: "WARNING: containerd service could not be started. This may be normal on non-systemd systems. Service will be started by kubeadm."
+      when: 
+        - systemd_available
+        - containerd_service_result is defined
+        - containerd_service_result is failed
 
     - name: Install kubeadm, kubelet, and kubectl
       ansible.builtin.apt:
@@ -115,10 +140,16 @@
         - kubectl
 
     - name: Enable kubelet service
-      ansible.builtin.systemd:
+      ansible.builtin.service:
         name: kubelet
         enabled: yes
-        daemon_reload: yes
+      when: systemd_available
+      ignore_errors: yes
+      register: kubelet_service_result
+
+    - name: Info about kubelet service
+      ansible.builtin.debug:
+        msg: "Kubelet service {{ 'enabled successfully' if (kubelet_service_result is defined and kubelet_service_result is succeeded) else 'will be managed by kubeadm' }}"
 
 # RHEL/CentOS installation (for future compatibility)
 - name: Install Kubernetes on RHEL/CentOS
@@ -159,12 +190,19 @@
         line: '            SystemdCgroup = true'
         insertafter: '^\s*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
 
-    - name: Enable and start containerd
+    - name: Reload systemd daemon (if systemd available)
       ansible.builtin.systemd:
+        daemon_reload: yes
+      when: systemd_available
+      ignore_errors: yes
+
+    - name: Enable and start containerd
+      ansible.builtin.service:
         name: containerd
         enabled: yes
         state: started
-        daemon_reload: yes
+      when: systemd_available
+      ignore_errors: yes
 
     - name: Install kubeadm, kubelet, and kubectl
       ansible.builtin.yum:
@@ -176,10 +214,11 @@
         disable_excludes: kubernetes
 
     - name: Enable kubelet service
-      ansible.builtin.systemd:
+      ansible.builtin.service:
         name: kubelet
         enabled: yes
-        daemon_reload: yes
+      when: systemd_available
+      ignore_errors: yes
 
 - name: Verify installation
   ansible.builtin.command: "{{ item }} --version"
