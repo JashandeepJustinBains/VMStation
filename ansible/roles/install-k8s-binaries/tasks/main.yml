@@ -456,6 +456,121 @@
     - version_check.results is defined
     - not (verification_failed | default(false))
 
+- name: Ensure admin kubeconfig has cluster-admin access (CN=kubernetes-admin, O=system:masters)
+  block:
+    - name: Check for admin kubeconfig
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: adminconf_stat
+
+    - name: Extract admin client certificate to temp file
+      ansible.builtin.shell: |
+        set -o pipefail
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf config view --raw -o jsonpath='{.users[?(@.name=="kubernetes-admin")].user.client-certificate-data}' | base64 -d > /tmp/new-admin-client.crt || true
+      args:
+        executable: /bin/bash
+      register: extract_cert
+      changed_when: false
+      when: adminconf_stat.stat.exists
+
+    - name: Get subject from client cert
+      ansible.builtin.shell: |
+        if [ -f /tmp/new-admin-client.crt ]; then
+          openssl x509 -in /tmp/new-admin-client.crt -noout -subject || true
+        else
+          echo ""
+        fi
+      args:
+        executable: /bin/bash
+      register: admin_cert_subject
+      changed_when: false
+      when: adminconf_stat.stat.exists
+
+    - name: Debug - show admin cert subject
+      ansible.builtin.debug:
+        msg: "{{ admin_cert_subject.stdout | default('') }}"
+      when: adminconf_stat.stat.exists
+
+    - name: Check if admin cert has system:masters
+      ansible.builtin.set_fact:
+        admin_has_system_masters: "{{ 'O = system:masters' in (admin_cert_subject.stdout | default('')) }}"
+      when: adminconf_stat.stat.exists
+
+    - name: Stat CA key
+      ansible.builtin.stat:
+        path: /etc/kubernetes/pki/ca.key
+      register: ca_key
+
+    - name: Regenerate admin client cert and update kubeconfig using CA (backup first)
+      when:
+        - adminconf_stat.stat.exists
+        - not admin_has_system_masters
+        - ca_key.stat.exists
+      block:
+        - name: Backup admin.conf and admin cert/key
+          ansible.builtin.command: bash -lc "TS=$(date +%s); cp -v /etc/kubernetes/admin.conf /etc/kubernetes/admin.conf.bak-$TS; cp -v /etc/kubernetes/pki/admin.crt /etc/kubernetes/pki/admin.crt.bak-$TS || true; cp -v /etc/kubernetes/pki/admin.key /etc/kubernetes/pki/admin.key.bak-$TS || true"
+          args:
+            executable: /bin/bash
+
+        - name: Create minimal openssl config for clientAuth
+          ansible.builtin.copy:
+            dest: /tmp/admin-openssl.cnf
+            content: |
+              [req]
+              distinguished_name = req_distinguished_name
+              [req_distinguished_name]
+              [v3_ext]
+              extendedKeyUsage = clientAuth
+            mode: '0644'
+
+        - name: Generate new admin key
+          ansible.builtin.command: openssl genrsa -out /tmp/kubernetes-admin.key 2048
+          args:
+            creates: /tmp/kubernetes-admin.key
+
+        - name: Generate CSR
+          ansible.builtin.command: openssl req -new -key /tmp/kubernetes-admin.key -subj "/CN=kubernetes-admin/O=system:masters" -out /tmp/kubernetes-admin.csr
+          args:
+            creates: /tmp/kubernetes-admin.csr
+
+        - name: Sign CSR with CA
+          ansible.builtin.command: >-
+            openssl x509 -req -in /tmp/kubernetes-admin.csr -CA /etc/kubernetes/pki/ca.crt -CAkey /etc/kubernetes/pki/ca.key -CAcreateserial -out /tmp/kubernetes-admin.crt -days 3650 -extfile /tmp/admin-openssl.cnf -extensions v3_ext
+          args:
+            creates: /tmp/kubernetes-admin.crt
+
+        - name: Move new cert and key into place
+          ansible.builtin.command: >-
+            mv -v /tmp/kubernetes-admin.key /etc/kubernetes/pki/admin.key || true; mv -v /tmp/kubernetes-admin.crt /etc/kubernetes/pki/admin.crt || true; chmod 600 /etc/kubernetes/pki/admin.key
+          args:
+            executable: /bin/bash
+
+        - name: Update admin.conf credentials to embed new cert/key
+          ansible.builtin.command: >-
+            KUBECONFIG=/etc/kubernetes/admin.conf kubectl config set-credentials kubernetes-admin --client-certificate=/etc/kubernetes/pki/admin.crt --client-key=/etc/kubernetes/pki/admin.key --embed-certs=true
+          args:
+            executable: /bin/bash
+
+        - name: Debug - show new client cert subject
+          ansible.builtin.shell: KUBECONFIG=/etc/kubernetes/admin.conf kubectl config view --raw -o jsonpath='{.users[?(@.name=="kubernetes-admin")].user.client-certificate-data}' | base64 -d > /tmp/new-admin-client.crt && openssl x509 -in /tmp/new-admin-client.crt -noout -subject -issuer -dates
+          register: new_admin_cert_subject
+          changed_when: false
+          args:
+            executable: /bin/bash
+
+        - name: Debug - show new_admin_cert_subject
+          ansible.builtin.debug:
+            msg: "{{ new_admin_cert_subject.stdout }}"
+
+    - name: Warn if admin cert not fixed due to missing CA key
+      ansible.builtin.debug:
+        msg: "Admin kubeconfig is missing system:masters group and /etc/kubernetes/pki/ca.key is not present. Manual intervention required."
+      when:
+        - adminconf_stat.stat.exists
+        - not admin_has_system_masters
+        - not ca_key.stat.exists
+
+
 - name: Installation complete
   ansible.builtin.debug:
     msg: "Kubernetes binaries are installed and ready for cluster deployment"
