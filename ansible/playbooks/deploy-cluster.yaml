@@ -144,9 +144,27 @@
       when: not kubelet_conf.stat.exists
       run_once: true
 
-    - name: Join worker to cluster
+    - name: Wait for containerd socket on worker (required for kubeadm join)
+      ansible.builtin.wait_for:
+        path: /var/run/containerd/containerd.sock
+        state: present
+        timeout: 300
+      when: not kubelet_conf.stat.exists
+
+    - name: Join worker to cluster (run async to avoid blocking long joins)
       ansible.builtin.shell: "{{ join_command.stdout }}"
       when: not kubelet_conf.stat.exists
+      async: 1200
+      poll: 0
+      register: join_async
+
+    - name: Wait for kubelet config to appear (join completion)
+      ansible.builtin.wait_for:
+        path: /etc/kubernetes/kubelet.conf
+        state: present
+        timeout: 900
+      when: not kubelet_conf.stat.exists
+      register: join_wait_result
 
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
