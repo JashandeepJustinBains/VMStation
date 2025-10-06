@@ -53,7 +53,49 @@ Do not put oveerly long timeouts it just leads to longer wait times for errors t
 - K8s server: v1.29.15; Flannel v0.27.4; Ansible core 2.14.18; containerd runtime
 
 ## Findings (current investigation)
-1. **SYSTEMD DETECTION FIX COMPLETED (2025-10-06)**: Fixed deployment failure after install-k8s-binaries PR.
+1. **BINARY INSTALLATION FAILURE IDENTIFIED (2025-10-06)**: Masternode in container environment can't install binaries.
+   
+   **Problem**:
+   - Systemd fix applied successfully
+   - But binary installation still fails on masternode
+   - apt install says "ok" but binaries don't exist
+   - Verification fails: "kubeadm: not found", "kubelet: not found", "kubectl: not found"
+   
+   **Root Cause**:
+   - masternode uses `ansible_connection: local` (Ansible runs ON masternode)
+   - masternode is likely running in a container or restricted environment
+   - Package manager succeeds but binaries aren't accessible/persistent
+   - Common in Docker containers where /usr/bin doesn't persist between runs
+   
+   **Solution Applied**:
+   - Enhanced diagnostics: container detection, binary search, detailed error messages
+   - Created manual installation script: `scripts/install-k8s-binaries-manual.sh`
+   - Created comprehensive guide: `docs/CONTAINER_BINARY_INSTALLATION_FIX.md`
+   - Updated `READ_ME_FIRST.md` with immediate fix instructions
+   
+   **Required Action**:
+   - User must run manual installation script on masternode
+   - OR change ansible_connection from 'local' to 'ssh'
+   - OR pre-install binaries in container image if intentional
+   
+   **Files Modified/Created**:
+   - `ansible/roles/install-k8s-binaries/tasks/main.yml` - Added container detection, debugging, verification
+   - `scripts/install-k8s-binaries-manual.sh` - Automated manual installation script (NEW)
+   - `docs/CONTAINER_BINARY_INSTALLATION_FIX.md` - Detailed fix guide (NEW)
+   - `COMPLETE_FIX_SUMMARY.md` - Comprehensive summary of both issues (NEW)
+   - `READ_ME_FIRST.md` - Updated with manual installation steps
+   
+   **Next Steps for User**:
+   ```bash
+   ssh root@192.168.4.63
+   cd /srv/monitoring_data/VMStation
+   git pull
+   chmod +x scripts/install-k8s-binaries-manual.sh
+   ./scripts/install-k8s-binaries-manual.sh
+   ./deploy.sh all --with-rke2 --yes
+   ```
+
+2. **SYSTEMD DETECTION FIX COMPLETED (2025-10-06)**: Fixed deployment failure after install-k8s-binaries PR.
    
    **Problem**:
    - Deployment failing with "System has not been booted with systemd as init system (PID 1)"

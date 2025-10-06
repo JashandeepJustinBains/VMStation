@@ -3,6 +3,28 @@
 # This role ensures Kubernetes components are installed before cluster initialization
 # Idempotent: skips installation if binaries already exist
 
+- name: Check if running in a container
+  ansible.builtin.stat:
+    path: /.dockerenv
+  register: dockerenv_check
+
+- name: Check if running in systemd-nspawn container
+  ansible.builtin.stat:
+    path: /run/systemd/container
+  register: container_check
+
+- name: Set container environment fact
+  ansible.builtin.set_fact:
+    is_container: \"{{ dockerenv_check.stat.exists or container_check.stat.exists }}\"
+
+- name: Display environment warning if container detected
+  ansible.builtin.debug:
+    msg: |
+      WARNING: Container environment detected!
+      This may cause issues with package installation and service management.
+      If binaries are missing, they must be pre-installed in the container image.
+  when: is_container
+
 - name: Check if systemd is available
   ansible.builtin.stat:
     path: /run/systemd/system
@@ -34,6 +56,15 @@
 - name: Display installation status
   ansible.builtin.debug:
     msg: "Kubernetes binaries {{ 'already installed' if not k8s_installation_needed else 'will be installed' }}"
+
+- name: Debug - Show environment info
+  ansible.builtin.debug:
+    msg:
+      - "OS Family: {{ ansible_os_family }}"
+      - "Distribution: {{ ansible_distribution }}"
+      - "Systemd available: {{ systemd_available }}"
+      - "Installation needed: {{ k8s_installation_needed }}"
+  when: k8s_installation_needed
 
 # Debian/Ubuntu installation
 - name: Install Kubernetes on Debian/Ubuntu
@@ -69,10 +100,17 @@
         repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /"
         state: present
         filename: kubernetes
+      register: repo_added
 
-    - name: Update apt cache
+    - name: Update apt cache after adding repository
       ansible.builtin.apt:
         update_cache: yes
+      when: repo_added is changed
+      register: apt_update
+
+    - name: Debug - Show apt update result
+      ansible.builtin.debug:
+        msg: \"Apt cache updated: {{ apt_update.changed if apt_update is defined else 'skipped' }}\"
 
     - name: Install containerd
       ansible.builtin.apt:
@@ -129,6 +167,48 @@
           - kubeadm
           - kubectl
         state: present
+      register: apt_install_result
+
+    - name: Debug - Show apt install result
+      ansible.builtin.debug:
+        msg:
+          - "Apt install changed: {{ apt_install_result.changed }}"
+          - "Apt install stdout: {{ apt_install_result.stdout_lines | default([]) }}"
+      when: apt_install_result is defined
+
+    - name: Check if binaries exist after installation
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/bin/kubeadm
+        - /usr/bin/kubelet
+        - /usr/bin/kubectl
+      register: post_install_check
+
+    - name: Debug - Show binary locations after install
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ 'EXISTS' if item.stat.exists else 'MISSING' }}"
+      loop: "{{ post_install_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Search for binaries in alternate locations
+      ansible.builtin.shell: "which {{ item }} || find /usr -name {{ item }} 2>/dev/null || echo 'NOT FOUND'"
+      loop:
+        - kubeadm
+        - kubelet
+        - kubectl
+      register: binary_search
+      when: post_install_check.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+      changed_when: false
+
+    - name: Debug - Show binary search results
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout }}"
+      loop: "{{ binary_search.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: binary_search is defined and binary_search.results is defined
 
     - name: Hold Kubernetes packages at current version
       ansible.builtin.dpkg_selections:
@@ -229,15 +309,56 @@
   register: version_check
   changed_when: false
   when: k8s_installation_needed
+  ignore_errors: yes
+
+- name: Check if verification failed
+  ansible.builtin.set_fact:
+    verification_failed: \"{{ version_check.results | selectattr('failed', 'defined') | selectattr('failed', 'equalto', true) | list | length > 0 }}\"
+  when:
+    - k8s_installation_needed
+    - version_check is defined
+    - version_check.results is defined
+
+- name: CRITICAL - Installation verification failed
+  ansible.builtin.fail:
+    msg: |
+      ====================================================================
+      CRITICAL: Kubernetes binaries installation FAILED!
+      ====================================================================
+      
+      The apt/yum installation appeared to succeed, but the binaries
+      are not accessible. This usually means:
+      
+      1. Running in a container without proper apt/yum
+      2. PATH issues preventing binary access
+      3. Package installation failed silently
+      
+      Environment details:
+      - OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+      - Systemd available: {{ systemd_available }}
+      - Connection type: {{ ansible_connection }}
+      
+      REQUIRED ACTION:
+      Check if masternode is running in a container or restricted environment.
+      Binaries must be manually installed or environment must be fixed.
+      
+      For container environments, binaries should be pre-installed in the
+      container image, not via Ansible.
+      ====================================================================
+  when:
+    - k8s_installation_needed
+    - verification_failed is defined
+    - verification_failed
 
 - name: Display installed versions
   ansible.builtin.debug:
-    msg: "{{ item.stdout }}"
-  loop: "{{ version_check.results }}"
+    msg: \"{{ item.stdout }}\"
+  loop: \"{{ version_check.results }}\"
   when: 
     - k8s_installation_needed
     - version_check is defined
     - version_check.results is defined
+    - not (verification_failed | default(false))
 
 - name: Installation complete
   ansible.builtin.debug:

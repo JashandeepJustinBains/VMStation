@@ -1,6 +1,69 @@
 # DEPLOYMENT FIX COMPLETE - Ready to Deploy
 
-## ✅ Problem Solved
+## ⚠️ CRITICAL: Manual Binary Installation Required
+
+**If you see this error during deployment:**
+```
+TASK [install-k8s-binaries : Verify installation] ******************************
+failed: [masternode] (item=kubeadm) => changed=false
+  msg: '[Errno 2] No such file or directory: b''kubeadm'''
+```
+
+**This means masternode is running in a container or restricted environment where automatic installation doesn't work.**
+
+### 🔧 IMMEDIATE FIX (Run this first):
+
+```bash
+# SSH to masternode
+ssh root@192.168.4.63
+
+# Run the manual installation script
+cd /srv/monitoring_data/VMStation
+chmod +x scripts/install-k8s-binaries-manual.sh
+./scripts/install-k8s-binaries-manual.sh
+
+# Verify binaries are installed
+which kubeadm kubelet kubectl
+```
+
+### 📋 Alternative: Manual Installation Steps
+
+If the script fails, install manually:
+
+```bash
+ssh root@192.168.4.63
+
+# Add Kubernetes repository
+apt-get update
+apt-get install -y apt-transport-https ca-certificates curl gnupg
+
+mkdir -p /etc/apt/keyrings
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | \
+  gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" | \
+  tee /etc/apt/sources.list.d/kubernetes.list
+
+# Install binaries
+apt-get update
+apt-get install -y kubelet kubeadm kubectl containerd
+apt-mark hold kubelet kubeadm kubectl
+
+# Verify
+which kubeadm kubelet kubectl
+```
+
+### ✅ After Installing Binaries
+
+```bash
+# From masternode, run deployment
+cd /srv/monitoring_data/VMStation
+./deploy.sh all --with-rke2 --yes
+```
+
+---
+
+## ✅ Problem Solved (Original Systemd Issue)
 
 Your deployment was failing because the `install-k8s-binaries` role couldn't handle non-systemd environments (like containers or certain WSL setups). The role has been fixed to:
 
