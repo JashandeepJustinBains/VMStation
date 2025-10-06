@@ -52,9 +52,11 @@
         path: /var/run/containerd/containerd.sock
       register: containerd_sock
 
-    - name: Ensure containerd package is installed
+    - name: Ensure containerd package(s) are installed (try common package names)
       ansible.builtin.apt:
-        name: containerd
+        name:
+          - containerd
+          - containerd.io
         state: present
         update_cache: yes
       register: ensure_containerd_pkg
@@ -74,13 +76,55 @@
         daemon_reload: yes
       ignore_errors: yes
 
-    - name: Enable and start containerd service
-      ansible.builtin.service:
+    - name: Check for systemd unit file for containerd
+      ansible.builtin.stat:
+        path: /lib/systemd/system/containerd.service
+      register: containerd_unit_lib
+
+    - name: Check for alternate systemd unit file for containerd
+      ansible.builtin.stat:
+        path: /etc/systemd/system/containerd.service
+      register: containerd_unit_etc
+
+    - name: Enable and start containerd service via systemd
+      ansible.builtin.systemd:
         name: containerd
         state: started
         enabled: yes
       register: containerd_service_result
       ignore_errors: yes
+
+    - name: If containerd unit was not found attempt reinstall of containerd package to ensure unit is present
+      when:
+        - containerd_service_result is defined
+        - containerd_service_result is failed
+        - not (containerd_unit_lib.stat.exists or containerd_unit_etc.stat.exists)
+      block:
+        - name: Debug - unit missing, will try reinstalling containerd package
+          ansible.builtin.debug:
+            msg: "containerd systemd unit not found; retrying installation of containerd packages"
+
+        - name: Reinstall containerd packages (attempt to restore unit file)
+          ansible.builtin.apt:
+            name:
+              - containerd
+              - containerd.io
+            state: latest
+            update_cache: yes
+          register: containerd_reinstall
+
+        - name: Reload systemd and retry enabling containerd
+          ansible.builtin.systemd:
+            daemon_reload: yes
+          ignore_errors: yes
+
+        - name: Retry start/enable containerd
+          ansible.builtin.systemd:
+            name: containerd
+            state: started
+            enabled: yes
+          register: containerd_service_result_retry
+          ignore_errors: yes
 
     - name: Debug containerd status
       ansible.builtin.debug:
@@ -290,74 +334,6 @@
       ansible.builtin.debug:
         msg: "Kubelet service {{ 'enabled successfully' if (kubelet_service_result is defined and kubelet_service_result is succeeded) else 'will be managed by kubeadm' }}"
 
-# RHEL/CentOS installation (for future compatibility)
-- name: Install Kubernetes on RHEL/CentOS
-  when:
-    - ansible_os_family == "RedHat"
-    - k8s_installation_needed
-  block:
-    - name: Add Kubernetes yum repository
-      ansible.builtin.yum_repository:
-        name: kubernetes
-        description: Kubernetes
-        baseurl: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
-        enabled: yes
-        gpgcheck: yes
-        gpgkey: https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
-
-    - name: Install containerd
-      ansible.builtin.yum:
-        name: containerd
-        state: present
-
-    - name: Create containerd config directory
-      ansible.builtin.file:
-        path: /etc/containerd
-        state: directory
-        mode: '0755'
-
-    - name: Generate default containerd configuration
-      ansible.builtin.shell: |
-        containerd config default > /etc/containerd/config.toml
-      args:
-        creates: /etc/containerd/config.toml
-
-    - name: Enable SystemdCgroup in containerd config
-      ansible.builtin.lineinfile:
-        path: /etc/containerd/config.toml
-        regexp: '^\s*SystemdCgroup\s*='
-        line: '            SystemdCgroup = true'
-        insertafter: '^\s*\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options\]'
-
-    - name: Reload systemd daemon (if systemd available)
-      ansible.builtin.systemd:
-        daemon_reload: yes
-      when: systemd_available
-      ignore_errors: yes
-
-    - name: Enable and start containerd
-      ansible.builtin.service:
-        name: containerd
-        enabled: yes
-        state: started
-      when: systemd_available
-      ignore_errors: yes
-
-    - name: Install kubeadm, kubelet, and kubectl
-      ansible.builtin.yum:
-        name:
-          - kubelet
-          - kubeadm
-          - kubectl
-        state: present
-        disable_excludes: kubernetes
-
-    - name: Enable kubelet service
-      ansible.builtin.service:
-        name: kubelet
-        enabled: yes
-      when: systemd_available
-      ignore_errors: yes
 
 - name: Verify installation
   ansible.builtin.command: "{{ item }} --version"
