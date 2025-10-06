@@ -57,41 +57,51 @@
             rem_user: "{{ ansible_user | default(ansible_env.USER | default('root')) }}"
           run_once: false
 
-        - name: Kill any processes using /var/lib/kubelet and /run/containerd (best-effort, protect SSH)
-          ansible.builtin.shell: |
-            # Protect the remote SSH user's processes and sshd from accidental kill.
-            REM_USER="${REM_USER}"
+        - name: Create temporary script to kill processes using Kubernetes directories
+          ansible.builtin.copy:
+            dest: /tmp/kill_k8s_processes.sh
+            mode: '0755'
+            content: |
+              #!/bin/bash
+              set +e
+              # Protect the remote SSH user's processes and sshd from accidental kill.
+              REM_USER="${1:-root}"
 
-            # Build a list of PIDs to protect: sshd PIDs and any processes owned by the remote user
-            PROTECT_PIDS=""
-            if command -v pgrep >/dev/null 2>&1; then
-              # sshd PIDs
-              SSHD_PIDS=$(pgrep -x sshd || true)
-              USER_PIDS=$(pgrep -u "$REM_USER" || true)
-              PROTECT_PIDS="$SSHD_PIDS $USER_PIDS"
-            fi
-
-            kill_list() {
-              local path="$1"
-              if command -v fuser >/dev/null 2>&1; then
-                PIDS=$(fuser -m "$path" 2>/dev/null || true)
-                for p in $PIDS; do
-                  # skip empty and protect pids
-                  [ -z "$p" ] && continue
-                  if echo "$PROTECT_PIDS" | tr ' ' '\n' | grep -xq "$p"; then
-                    continue
-                  fi
-                  kill -9 "$p" 2>/dev/null || true
-                done
+              # Build a list of PIDs to protect: sshd PIDs and any processes owned by the remote user
+              PROTECT_PIDS=""
+              if command -v pgrep >/dev/null 2>&1; then
+                # sshd PIDs
+                SSHD_PIDS=$(pgrep -x sshd || true)
+                USER_PIDS=$(pgrep -u "$REM_USER" || true)
+                PROTECT_PIDS="$SSHD_PIDS $USER_PIDS"
               fi
-            }
 
-            kill_list /var/lib/kubelet || true
-            kill_list /run/containerd || true
-          args:
-            executable: /bin/bash
-            env:
-              REM_USER: "{{ rem_user }}"
+              kill_list() {
+                local path="$1"
+                if command -v fuser >/dev/null 2>&1; then
+                  PIDS=$(fuser -m "$path" 2>/dev/null || true)
+                  for p in $PIDS; do
+                    # skip empty and protect pids
+                    [ -z "$p" ] && continue
+                    if echo "$PROTECT_PIDS" | tr ' ' '\n' | grep -xq "$p"; then
+                      continue
+                    fi
+                    kill -9 "$p" 2>/dev/null || true
+                  done
+                fi
+              }
+
+              kill_list /var/lib/kubelet || true
+              kill_list /run/containerd || true
+
+        - name: Kill any processes using /var/lib/kubelet and /run/containerd (best-effort, protect SSH)
+          ansible.builtin.command: /tmp/kill_k8s_processes.sh {{ rem_user }}
+          ignore_errors: true
+
+        - name: Remove temporary script
+          ansible.builtin.file:
+            path: /tmp/kill_k8s_processes.sh
+            state: absent
           ignore_errors: true
 
         - name: Lazy-unmount mounts under /var/lib/kubelet and /run/containerd (best-effort)
