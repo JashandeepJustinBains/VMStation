@@ -1,639 +1,71 @@
 ---
 applyTo: '**'
 ---
-## goals 
-All code is run on the masternode 192.168.4.63 is running debian bookworm, it has SSH keys on all machines so it can communicate with them. This is the monitoring node that also runs the dashboards and ingests logs and metrics from the other nodes and pods.
-The masternode is the control-plane node.
-the storagenodet3500 192.168.4.61 is running debian bookworm the SAMBA server and runs the jellyfin node. Currently this node is only used to stream jellyfin to my families devices. We should avoid any unnecesary pods on this device to ensure optimum bandwidth and computation for streaming.
-the homelab 192.168.4.62 is the compute node that is running RHEL10 and currently has the least pods on it. I will eventually add pods that I will use for my homelab. In fact you can come up with some ideas. It will also eventually be my lab for testing VM interconnectivity for praciticng with job interviews.
-Then names in the inventory filee have been updated to inventory/group_vars/hosts.yml
+## VMStation - Clean Deployment Architecture
 
+**Current Approach (Post-Revamp)**:
+- Debian nodes (masternode, storagenodet3500): Use kubeadm for Kubernetes v1.29.x
+- RHEL 10 node (homelab): Uses RKE2 as a separate cluster (not joined to kubeadm cluster)
+- No mixing of kubeadm + RHEL - clean separation of concerns
 
+Previous RHEL Kubernetes integration issues have been archived. See `archive/legacy-docs/` for historical context.
 
-I eventually want the coredns node to service all physically connected links while my IPS's modem and router can service wireless connections. but currently the ansible deployment is very unstable due to bad practices and incorrect playbooks.
+## Infrastructure
 
-The kube-proxy and kube-flannel and all other necessary backbone pods should be operating correctly upon deployment and not needing stupid scripts post deployment to attempt to fix it.
+**masternode (192.168.4.63)**:
+- OS: Debian Bookworm
+- Role: Kubernetes control-plane (kubeadm)
+- Services: Monitoring dashboards, log/metrics ingestion
+- Always-on for network services
 
-I need this to be a clean setup so that i can learn best practices and spin up and spin down whenever I need to maintain cost effectivness. For example there should be a hourly batch process that happens on the masternode that checks to see if the resources are being utilized currently (such as users logged into jellyfin or not) and if they are not it should begin the process of spinning down and sleeping all nodes while ensureing they can be awoken on LAN using magic packets. The masternode is a minipc and uses the least amount of energy so I am fine ensuring 100% uptime on that machine, especially since it contians the coredns node that will be neecessary for wireless devices. I can eventually add in enterprise grade security systems and frameworks to play with as well. 
-I also plan to implement other strong netwwork security such as rotating TLS certificates, network wide password managment, 
+**storagenodet3500 (192.168.4.61)**:
+- OS: Debian Bookworm  
+- Role: Kubernetes worker (kubeadm)
+- Services: Jellyfin streaming, SAMBA storage
+- Minimal pod scheduling for bandwidth optimization
 
-This is my ansible version. If you think I should upgrade go ahead and do it wherever you see it necessary.
-ansible [core 2.14.18]
-  config file = None
-  configured module search path = ['/root/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
-  ansible python module location = /usr/lib/python3/dist-packages/ansible
-  ansible collection location = /root/.ansible/collections:/usr/share/ansible/collections
-  executable location = /usr/bin/ansible
-  python version = 3.11.2 (main, Apr 28 2025, 14:11:48) [GCC 12.2.0] (/usr/bin/python3)
-  jinja version = 3.1.2
-  libyaml = True
+**homelab (192.168.4.62)**:
+- OS: RHEL 10
+- Role: RKE2 single-node cluster
+- Services: Compute workloads, VM testing, monitoring federation
+- Uses RKE2 (not kubeadm)
 
-This is my kubectl version, again upgrade anything wherever you see fit as long as it maintains oeprational
-Client Version: v1.34.0
-Kustomize Version: v5.7.1
-Server Version: v1.29.15
-Warning: version difference between client (1.34) and server (1.29) exceeds the supported minor version skew of +/-1
+## Deployment Requirements
 
+- **Idempotency**: `deploy.sh` → `deploy.sh reset` → `deploy.sh` must work 100 times in a row with zero failures
+- **OS Awareness**: Debian Bookworm (iptables) vs RHEL 10 (nftables) handled correctly
+- **No Post-Deployment Fixes**: All pods (kube-proxy, flannel, coredns) must work on first deployment
+- **Clean Playbooks**: Short, concise, no unnecessary timeouts
+- **Auto-Sleep**: Hourly resource monitoring with Wake-on-LAN support
 
-The ansible playbooks must be gold-standard 100% robustness with never-fail idempotent setup. That is 
-I should be able to do 'deploy.sh' -> 'deploy.sh reset' -> 'deploy.sh' 100 times in a row with no failures. Do not begin until u understand the nuances between RHEL 10 (NFTABLES BACKEND) and Debian Bookworm (IPTABLES BACKEND)
-Thee playbooks should bee short and concise with no errors on any run/deployment.
-All the Main and deploy-cluster playbooks are corrupted or wrong. Ensure they are short concise but do exactly what is neded of them
-Do not put oveerly long timeouts it just leads to longer wait times for errors to appear, however I am certain you can accomplish this task the first time without errors.
+## Software Versions
 
+- Ansible: core 2.14.18+ (Python 3.11+)
+- Kubernetes: v1.29.15 (server), v1.34.0 (client)
+- Flannel: v0.27.4
+- RKE2: v1.29.x (latest stable)
 
+## Key Technical Points
 
-## User Preferences
-- Dev machine: Windows 11 (no local SSH/kubectl/ansible)
-- Operate on masternode (Debian) via SSH; homelab is RHEL 10 and requires passworded sudo as user `jashandeepjustinbains`
-- Style: concise, idempotent Ansible playbooks; no long timeouts; production-like best practices
+- **Binary Installation**: masternode uses `ansible_connection: local` - may run in container. Binaries auto-installed if missing.
+- **Authentication**: Debian nodes use root SSH, RHEL node uses sudo with vault-encrypted password
+- **Firewalls**: Debian uses iptables, RHEL 10 uses nftables backend
+- **CNI**: Flannel with nftables support enabled for both OS types
+- **Systemd**: Detection logic ensures compatibility with non-systemd environments
 
-## Project Snapshot
-- 3-node cluster: masternode (Debian, control-plane), storagenodet3500 (Debian), homelab (RHEL 10)
-- K8s server: v1.29.15; Flannel v0.27.4; Ansible core 2.14.18; containerd runtime
+## Deployment Flow
 
-## Findings (current investigation)
-1. **BINARY INSTALLATION FAILURE IDENTIFIED (2025-10-06)**: Masternode in container environment can't install binaries.
-   
-   **Problem**:
-   - Systemd fix applied successfully
-   - But binary installation still fails on masternode
-   - apt install says "ok" but binaries don't exist
-   - Verification fails: "kubeadm: not found", "kubelet: not found", "kubectl: not found"
-   
-   **Root Cause**:
-   - masternode uses `ansible_connection: local` (Ansible runs ON masternode)
-   - masternode is likely running in a container or restricted environment
-   - Package manager succeeds but binaries aren't accessible/persistent
-   - Common in Docker containers where /usr/bin doesn't persist between runs
-   
-   **Solution Applied**:
-   - Enhanced diagnostics: container detection, binary search, detailed error messages
-   - Created manual installation script: `scripts/install-k8s-binaries-manual.sh`
-   - Created comprehensive guide: `docs/CONTAINER_BINARY_INSTALLATION_FIX.md`
-   - Updated `READ_ME_FIRST.md` with immediate fix instructions
-   
-   **Required Action**:
-   - User must run manual installation script on masternode
-   - OR change ansible_connection from 'local' to 'ssh'
-   - OR pre-install binaries in container image if intentional
-   
-   **Files Modified/Created**:
-   - `ansible/roles/install-k8s-binaries/tasks/main.yml` - Added container detection, debugging, verification
-   - `scripts/install-k8s-binaries-manual.sh` - Automated manual installation script (NEW)
-   - `docs/CONTAINER_BINARY_INSTALLATION_FIX.md` - Detailed fix guide (NEW)
-   - `COMPLETE_FIX_SUMMARY.md` - Comprehensive summary of both issues (NEW)
-   - `READ_ME_FIRST.md` - Updated with manual installation steps
-   
-   **Next Steps for User**:
-   ```bash
-   ssh root@192.168.4.63
-   cd /srv/monitoring_data/VMStation
-   git pull
-   chmod +x scripts/install-k8s-binaries-manual.sh
-   ./scripts/install-k8s-binaries-manual.sh
-   ./deploy.sh all --with-rke2 --yes
-   ```
+1. **Debian Cluster**: install-binaries → preflight → containerd → kubeadm-init → worker-join → CNI → apps
+2. **RKE2 Cluster**: system-prep → rke2-install → configure → verify → monitoring
+3. **Federation**: RKE2 Prometheus federates metrics from Debian cluster
 
-2. **SYSTEMD DETECTION FIX COMPLETED (2025-10-06)**: Fixed deployment failure after install-k8s-binaries PR.
-   
-   **Problem**:
-   - Deployment failing with "System has not been booted with systemd as init system (PID 1)"
-   - masternode installation failing during daemon-reload
-   - Join command generation failing with "kubeadm: not found"
-   
-   **Root Cause**:
-   - install-k8s-binaries role used `ansible.builtin.systemd` module without checking availability
-   - When ansible_connection: local on masternode, may run in container/WSL without systemd
-   - Failed systemd operations blocked binary installation
-   - No kubeadm on masternode = join command fails in Phase 4
-   
-   **Solution Applied**:
-   - Added systemd detection: checks `/run/systemd/system` directory
-   - Replaced `systemd` module with `service` module (cross-platform)
-   - Added conditional `when: systemd_available` to all service tasks
-   - Added `ignore_errors: yes` for graceful degradation
-   - Added warning messages for service failures
-   
-   **Files Modified**:
-   - `ansible/roles/install-k8s-binaries/tasks/main.yml` - Systemd detection and cross-platform fixes
-   - `docs/SYSTEMD_DETECTION_FIX.md` - Comprehensive technical documentation (NEW)
-   - `SYSTEMD_FIX_SUMMARY.md` - Quick reference summary (NEW)
-   
-   **Benefits**:
-   - ✅ Works on systemd and non-systemd systems
-   - ✅ Container-compatible (Ansible in containers)
-   - ✅ WSL-compatible (with or without systemd)
-   - ✅ Graceful error handling prevents deployment failure
-   - ✅ 100% backward compatible
-   - ✅ YAML syntax validated
+## Files Reference
 
-2. **ROOT CAUSE IDENTIFIED (2025-10-05)**: RHEL 10 CrashLoopBackOff issues comprehensively analyzed and fixed.
-   
-   **Flannel CrashLoopBackOff**:
-   - Pod successfully initialized (created flannel.1 interface, nftables rules, subnet.env)
-   - Exited cleanly after ~37 seconds with "context canceled" signal
-   - NOT a crash - deliberate shutdown triggered by kubelet due to readiness probe failure
-   - Readiness probe started at t=30s, pod exited at t=37s (first probe likely failed)
-   - Root cause: Readiness probe too aggressive (failureThreshold: 12 = 120s total tolerance)
-   - Fix: Increased failureThreshold from 12 → 30 (300s tolerance), reduced initialDelaySeconds 30s → 10s
-   
-   **kube-proxy CrashLoopBackOff**:
-   - Exit code 2 due to missing iptables chains on RHEL 10 nftables backend
-   - kube-proxy expects pre-existing NAT/filter chains (KUBE-SERVICES, KUBE-POSTROUTING, etc.)
-   - Root cause: Chains not created before kube-proxy starts
-   - Fix: Pre-create iptables chains in network-fix role (already implemented, lines 217-265)
-   
-   **Environmental Issues**:
-   - Swap enabled: kubelet refuses to run with swap enabled
-   - SELinux blocking: CNI init containers cannot write to /opt/cni/bin, /etc/cni/net.d
-   - NetworkManager managing CNI interfaces (flannel.1, cni0, veth*)
-   - Missing /run/flannel directory with proper permissions
-   - All fixes already in network-fix role, may not have been applied to homelab node
-   
-2. **Diagnostics Confirmed**:
-   - containerd: HEALTHY (active, running, no runtime errors)
-   - Disk: HEALTHY (16% used, 57G free, 99% inodes free)
-   - Memory: HEALTHY (61GB free of 63GB, no OOM events)
-   - dmesg: No kernel errors, normal veth interface operations
-   - Problem is NOT containerd instability (contrary to previous AI's diagnosis)
-   
-3. **Files Modified**:
-   - `manifests/cni/flannel.yaml` - Updated readiness probe timing
-   - `ansible/playbooks/fix-homelab-crashloop.yml` - Created emergency fix playbook
-   - `scripts/fix-homelab-crashloop.sh` - Created helper script
-   - `docs/HOMELAB_CRASHLOOP_ROOT_CAUSE_ANALYSIS.md` - Comprehensive root cause analysis
-   - `CRASHLOOP_FIX_README.md` - Quick fix guide for user
-   
-4. **Next Steps for User**:
-   ```bash
-   cd /srv/monitoring_data/VMStation
-   git pull
-   chmod +x scripts/fix-homelab-crashloop.sh
-   ./scripts/fix-homelab-crashloop.sh
-   ```
-
-## Files Modified (key deltas)
-- `ansible/playbooks/deploy-cluster.yaml` — fixed subnet.env check to handle missing results, added debug output for missing nodes, added debug tasks for Flannel pod and subnet.env status after deployment
-- `ansible/requirements.yml` — upgraded Ansible collections for compatibility with Ansible 2.14.x+
-- `manifests/cni/flannel.yaml` — enabled nftables support, adjusted probes, removed liveness probe, simplified readiness probe
-- `ansible/roles/network-fix/tasks/main.yml` — pre-create `/etc/cni/net.d/10-flannel.conflist` on RHEL to avoid init-container write issues
-- `ansible/playbooks/deploy-cluster.yaml` — verify CNI config via SSH (host filesystem); fixed uncordon command; strict CrashLoopBackOff validation with auto-diagnostics
-- Removed: `ansible/plays/kubernetes/templates/kube-flannel-allnodes.yml` (stale template with EnableNFTables:false)
-
-## Root Causes Identified
-- RHEL 10 uses nftables by default; Flannel must run in nftables mode and host nftables policies must permit VXLAN/pod traffic.
-- Flannel init container sometimes cannot write to host `/etc/cni/net.d` on RHEL due to SELinux/permission differences; copying pre-deployment as root prevents this.
-- Liveness probe that used `pgrep` produced false positives because flanneld enters event watcher state; the probe was killing the pod.
-
-## Immediate Next Steps (what to run on masternode)
-Run these exact verification commands (copy/paste) and paste results back to me.
-
-1) Verify CNI config exists on ALL nodes
-```bash
-for node in masternode storagenodet3500; do
-  echo "=== $node ==="
-  ssh -o StrictHostKeyChecking=no root@$node "cat /etc/cni/net.d/10-flannel.conflist"
-done
-
-# For homelab (requires password)
-echo "=== homelab ==="
-ssh jashandeepjustinbains@192.168.4.62 "sudo cat /etc/cni/net.d/10-flannel.conflist"
-```
-
-2) Verify no crashes
-```bash
-kubectl get pods -A | grep -i crash
-# Should return empty
-```
-
-3) Verify kube-proxy working on ALL nodes
-```bash
-kubectl get pods -n kube-system -l k8s-app=kube-proxy -o wide
-# All should be Running
-```
-
-4) Verify CoreDNS working
-```bash
-kubectl get pods -n kube-system -l k8s-app=kube-dns -o wide
-# Both should be Running
-```
-
-## If homelab still missing CNI
-- Collect these logs/outputs and paste back:
-  - `kubectl describe pod -n kube-flannel <pod-on-homelab>` (last 30 lines of events)
-  - `kubectl logs -n kube-flannel <pod-on-homelab> --previous` (if any) and `kubectl logs -n kube-flannel <pod-on-homelab>`
-  - `ssh jashandeepjustinbains@192.168.4.62 'sudo ls -la /etc/cni/net.d/ && sudo cat /etc/cni/net.d/10-flannel.conflist'`
-
-## Notes / Assumptions
-- We are using root SSH from masternode to Debian hosts; homelab requires the `jashandeepjustinbains` user + sudo.
-- All changes are safe to run repeatedly (idempotent) — pre-creation of CNI file is guarded by `when: os_family == RedHat` and will be overwritten if needed.
-- Avoid long timeouts; checks use short retries to fail fast and provide diagnostics.
-
-## Follow-ups
-- If verification commands show CNI present and pods still CrashLoopBackOff, collect kube-proxy and CoreDNS logs so I can diagnose further.
-- If SELinux on homelab blocks operations, we should set it to permissive in `network-fix` (already attempted but may need persistent enforcement).
+- Inventory: `ansible/inventory/hosts.yml`
+- Deploy: `./deploy.sh all --with-rke2`
+- Reset: `./deploy.sh reset`  
+- Tests: `tests/test-*.sh`
 
 ---
 
-Updated: 2025-10-04 — simplified, focused memory file for current debugging loop.
-
-- ❌ Starting kubelet before sysctl is configured
-- ❌ Deploying apps before all nodes are Ready
-- ❌ Using legacy iptables on RHEL 10
-- ❌ Not pre-creating iptables chains for kube-proxy on RHEL 10
-- ❌ Assuming Flannel CNI config will appear instantly
-- ❌ Not waiting for Flannel DaemonSet to be healthy
-- ❌ Scheduling CoreDNS before nodes are Ready
-
-## Memory Updates
-- **2025-10-03**: GOLD-STANDARD REFACTOR COMPLETE
-  - Rebuilt network-fix role from scratch: clean, streamlined, 9-phase never-fail logic
-  - Rebuilt deploy-cluster.yaml from scratch: 10-phase deployment with strict ordering
-  - Removed all duplicate tasks, redundant checks, and dead code
-  - Enforced gold-standard execution order (system prep → Flannel → nodes Ready → apps)
-  - Added comprehensive RHEL 10 support (nftables, iptables chains, systemd-oomd, cgroup drivers)
-  - All code is now idempotent, OS-aware, production-ready, and sustainable
-  - USER EXPECTATION MET: Zero CrashLoopBackOff, zero CoreDNS failures, all nodes Ready
-  6. Container runtime incompatibility
-- 2025-10-03: Plan: Add post-deployment remediation step to Ansible that, if /etc/cni/net.d/10-flannel.conflist is missing and Flannel DaemonSet is not ready, will:
-  - Collect Flannel pod/init logs
-  - Attempt to manually re-run init logic (copy config)
-  - Clean up conflicting CNI configs
-  - Restart Flannel DaemonSet and kubelet if needed
-  - Provide diagnostics if still failing
-
-- Fixed deploy.sh logging so it does not contaminate Ansible extra-vars (send info to stderr).
-- Resolved ansible_become_pass issues by renaming inventory from hosts.yml to hosts for proper group_vars loading.
-- Created reset-cluster.yaml orchestration playbook with user confirmation, graceful drain, serial reset, and validation.
-- Enhanced deploy.sh with reset command (./deploy.sh reset).
-- Created complete documentation suite: 15 files (~6,000+ lines) including quick start, comprehensive guides, testing protocols, and project summaries.
-- All files validated error-free (0% error rate, 100% safety coverage, 100% documentation coverage).
-- **PROJECT STATUS**: 100% COMPLETE (Oct 2, 2025) - All 16 development steps finished. Ready for user validation on masternode (192.168.4.63).
-- **DELIVERABLES**: 3 implementation files, 2 bug fixes, 15 documentation files. Total 17+ files created/modified, ~3,500+ lines of code/docs added.
-- **NEXT STEPS**: User to pull changes, read QUICKSTART_RESET.md, run VALIDATION_CHECKLIST.md (30 min testing).
-- **OCT 2, 2025 - DEPLOYMENT HARDENING COMPLETE**: 
-  - Upgraded Flannel v0.24.2→v0.27.4 (ghcr.io, nftables-aware)
-  - Removed ad-hoc flannel SSH restart logic from deploy-apps.yaml
-  - Added soft CoreDNS validation with auto-deployment
-- Fix targets common causes of "no route to host" from pod to host IPs (sysctl and br_netfilter missing or ip_forward/iptables blocking).
-- All playbooks run from bastion/masternode (192.168.4.63) which has SSH keys for all cluster nodes.
-- Reset operations must preserve SSH keys and normal ethernet interfaces, only clean K8s-specific resources.
-
-## Current Session (2025-10-03) - COMPLETE PLAYBOOK REBUILD ✅ COMPLETED
-- **Task**: Gold-standard rebuild of all Ansible playbooks for 100% idempotent deployment
-- **User Requirement**: Must run `deploy.sh` → `deploy.sh reset` → `deploy.sh` 100x with ZERO failures
-- **Status**: ✅ **COMPLETE** - All playbooks rebuilt from scratch
-
-### What Was Rebuilt
-1. ✅ **site.yml**: Simplified to single import of deploy-cluster.yaml
-2. ✅ **deploy-cluster.yaml**: Complete rebuild with 9 phases:
-   - Phase 1: System prep (all nodes)
-   - Phase 2: CNI plugins installation
-   - Phase 3: RHEL 10 iptables chain pre-creation
-   - Phase 4: Control plane initialization (idempotent)
-   - Phase 5: Worker node join (idempotent)
-   - Phase 6: Flannel CNI deployment
-   - Phase 7: Wait for all nodes Ready
-   - Phase 8: Node scheduling configuration
-   - Phase 9: Post-deployment validation
-3. ✅ **monitor-resources.yaml**: Hourly resource monitoring for auto-sleep
-4. ✅ **trigger-sleep.sh**: Graceful sleep with Wake-on-LAN
-5. ✅ **wake-cluster.sh**: Wake nodes via magic packets
-6. ✅ **setup-autosleep.yaml**: One-time cron job setup
-7. ✅ **deploy.sh**: Enhanced with setup command and error handling
-8. ✅ **DEPLOYMENT_GUIDE.md**: Comprehensive deployment documentation
-9. ✅ **QUICK_COMMAND_REFERENCE.md**: Quick reference for common operations
-
-### Key Improvements
-- **100% Idempotent**: All operations are safe to run multiple times
-- **Zero Manual Intervention**: No post-deployment fix scripts needed
-- **OS-Aware**: Handles Debian (iptables) vs RHEL 10 (nftables) correctly
-- **RHEL 10 kube-proxy**: Pre-creates iptables chains to prevent CrashLoopBackOff
-- **Auto-Sleep**: Monitors resources hourly, sleeps after 2 hours idle
-- **Wake-on-LAN**: Remote wake-up from masternode
-- **Clean Code**: Short, concise, well-commented playbooks
-- **No Long Timeouts**: Reasonable timeouts (180s max for rollout)
-
-### Files Modified/Created
-- `ansible/site.yml` - Simplified orchestration
-- `ansible/playbooks/deploy-cluster.yaml` - **Completely rebuilt**
-- `ansible/playbooks/monitor-resources.yaml` - **New**
-- `ansible/playbooks/trigger-sleep.sh` - **New**
-- `ansible/playbooks/wake-cluster.sh` - **New**
-- `ansible/playbooks/setup-autosleep.yaml` - **New**
-- `deploy.sh` - Enhanced with setup command
-- `DEPLOYMENT_GUIDE.md` - **New**
-- `QUICK_COMMAND_REFERENCE.md` - **New**
-
-### Next Steps for User
-1. **Push to masternode**: `git add . && git commit -m "Gold-standard playbook rebuild" && git push`
-2. **SSH to masternode**: `ssh root@192.168.4.63`
-3. **Pull changes**: `cd /root/VMStation && git pull`
-4. **Validate syntax**: `cd ansible && ansible-playbook playbooks/deploy-cluster.yaml --syntax-check`
-5. **Test deployment**: `cd /root/VMStation && ./deploy.sh reset && ./deploy.sh`
-6. **Setup auto-sleep**: `./deploy.sh setup`
-7. **Verify**: `kubectl get nodes -o wide && kubectl get pods -A`
-
-### Expected Behavior
-- All 3 nodes should be `Ready` within 5-10 minutes
-- No CrashLoopBackOff pods
-- Flannel CNI config present on all nodes: `/etc/cni/net.d/10-flannel.conflist`
-- kube-proxy running on all nodes (including RHEL 10)
-- CoreDNS pods Running and Ready
-- Auto-sleep cron job active (hourly)
-
-### Architecture Details
-- **masternode (192.168.4.63)**: Debian 12, control-plane, always-on for CoreDNS and WoL
-- **storagenodet3500 (192.168.4.61)**: Debian 12, Jellyfin streaming, minimal pods
-- **homelab (192.168.4.62)**: RHEL 10, compute workloads, VM testing
-
-### Firewall Backend Handling
-- **Debian nodes**: Use iptables-legacy (default on Bookworm)
-- **RHEL 10 node**: 
-  - Uses nftables backend via iptables-nft
-  - network-fix role runs `update-alternatives --set iptables /usr/sbin/iptables-nft`
-  - Pre-creates all kube-proxy iptables chains in Phase 3
-  - Prevents kube-proxy CrashLoopBackOff
-
-### Cost Optimization Features
-- **Auto-sleep monitoring**: Hourly checks via cron
-- **Intelligent sleep**: Only when Jellyfin idle, CPU low, no user activity, no jobs
-- **Wake-on-LAN**: Magic packets from masternode to wake workers
-- **Power savings**: ~70% reduction (2/3 nodes sleep 12+ hrs/day typically)
-
-### Quality Guarantees
-- ✅ 100% idempotent deployment
-- ✅ Works on first deployment (no fix scripts needed)
-- ✅ Can run deploy → reset → deploy 100x with zero failures
-- ✅ Handles mixed OS (Debian + RHEL 10) correctly
-- ✅ Short, concise playbooks (no bloat)
-- ✅ No overly long timeouts
-- ✅ Comprehensive error handling
-- ✅ Full documentation provided
-
-## Previous Issue (2025-10-03) - RESOLVED
-- **Root Cause**: YAML syntax error in manifests/cni/flannel.yaml (line 82 - incorrect JSON indentation inside YAML string)
-- **Secondary Issue**: Premature CNI config check in network-fix role before Flannel was deployed
-- **Fix Applied**:
-  1. Fixed JSON indentation in manifests/cni/flannel.yaml (cni0 name field)
-  2. Removed premature CNI config check from network-fix role
-  3. Added proper CNI config validation AFTER Flannel DaemonSet is ready in deploy-cluster.yaml
-  4. Added /etc/kubernetes/manifests directory recreation in cluster-reset role (prevents kubelet errors)
-  5. Standardized CNI interface name to cni0 (removed cbr0 references)
-  6. Added nftables support for RHEL 10 nodes
-  7. Removed iptables-legacy logic for RHEL 10
-  8. Added post-Flannel node readiness wait with proper error handling
-  9. Enhanced cluster-reset to remove all cni*/cbr* interfaces and CNI configs
-- **Status**: Ready for testing with ./deploy.sh
-
-
-## Architectural Improvement (2025-10-03)
-- Added idempotent kubeadm init logic to deploy-cluster.yaml (masternode block)
-- Now, deploy playbook will automatically initialize control plane if not already set up (checks /etc/kubernetes/admin.conf)
-- Enables true one-command cluster bootstrap and automation, no manual kubeadm init required
-- Next: Validate on clean system, tune for custom kubeadm configs if needed
-
-## Next Steps (2025-10-03)
-- Test full deployment cycle: ./deploy.sh reset && ./deploy.sh
-- Validate all nodes become Ready and Flannel CNI config is created on all nodes
-- If successful, deployment is robust and production-ready for homelab cluster
-- No post-deployment fix scripts needed - everything works on first deployment
-
----
-
-## Idempotency Hardening (2025-10-04)
-
-### Changes Made
-Based on user requirements in Output_for_Copilot.txt, implemented full idempotency for mixed Debian Bookworm (iptables) + RHEL 10 (nftables) environment.
-
-**Root causes identified:**
-1. RHEL 10 uses nftables backend; requires explicit alternatives configuration and permissive nftables ruleset
-2. Flannel init container sometimes fails to write CNI config on RHEL 10 due to SELinux contexts
-3. /run/xtables.lock must exist before iptables operations (idempotent creation required)
-4. Readiness probe was too fast (3s initial delay) causing premature Ready status before flannel.1 interface exists
-5. Missing host-level CNI config verification between Flannel deploy and node readiness wait
-
-**Files modified:**
-1. `ansible/roles/network-fix/tasks/main.yml`:
-   - Changed /run/xtables.lock creation from `touch` to `copy` with `force: no` for true idempotency
-   - Added ip6tables alternative configuration for RHEL 10 (nftables backend)
-   - Made nftables rule configuration idempotent with changed_when/failed_when logic
-   - Added pre-creation of /etc/cni/net.d/10-flannel.conflist on RHEL 10 with proper owner/mode (root:root, 0644)
-   - Applied restorecon for correct SELinux context (etc_t) on CNI config file
-   - Made update-alternatives calls idempotent with proper changed_when detection
-
-2. `manifests/cni/flannel.yaml`:
-   - Adjusted readiness probe: initialDelaySeconds 3→5, periodSeconds 5→10, timeoutSeconds 2→3
-   - Added flannel.1 interface existence check to readiness probe (alongside subnet.env check)
-   - Liveness probe already removed (correct; flanneld process check was killing healthy pods)
-   - EnableNFTables: true already set in ConfigMap (correct for both Debian and RHEL 10)
-
-3. `ansible/playbooks/deploy-cluster.yaml`:
-   - Added SSH-based CNI config verification after Flannel rollout (checks /etc/cni/net.d/10-flannel.conflist on all nodes)
-   - Uses delegate_to for each node (masternode, storagenodet3500, homelab)
-   - Verification happens before "all nodes Ready" wait to catch missing CNI files early
-
-4. `ansible/playbooks/verify-cluster.yaml` (NEW):
-   - Comprehensive smoke test playbook for post-deployment validation
-   - Checks: kubectl connectivity, all nodes Ready, Flannel DaemonSet ready (desired==ready)
-   - Checks: kube-proxy pods Running on all nodes, CoreDNS pods Ready
-   - Checks: no CrashLoopBackOff pods anywhere
-   - Host-level checks: /etc/cni/net.d/10-flannel.conflist, /run/flannel/subnet.env, flannel.1 interface
-   - Final summary with detailed pod/node status
-
-**Verification commands (run on masternode 192.168.4.63):**
-
-```bash
-# 1. Syntax check
-ansible-playbook --syntax-check ansible/playbooks/deploy-cluster.yaml
-ansible-playbook --syntax-check ansible/playbooks/verify-cluster.yaml
-
-# 2. Dry-run (check mode)
-ansible-playbook -i ansible/inventory/hosts ansible/playbooks/deploy-cluster.yaml --check
-
-# 3. Full deployment
-./deploy.sh
-
-# 4. Run verification
-ansible-playbook -i ansible/inventory/hosts ansible/playbooks/verify-cluster.yaml
-
-# 5. Two-cycle idempotency test
-./deploy.sh reset
-./deploy.sh
-ansible-playbook -i ansible/inventory/hosts ansible/playbooks/verify-cluster.yaml
-
-# 6. Repeat to ensure 100% idempotency
-./deploy.sh reset && ./deploy.sh
-```
-
-**Expected outputs:**
-- No CrashLoopBackOff pods in any namespace
-- All 3 nodes show Ready status
-- Flannel DaemonSet: 3/3 pods Running
-- kube-proxy: 3/3 pods Running
-- CoreDNS: 2/2 pods Running
-- /etc/cni/net.d/10-flannel.conflist present on all nodes with correct owner/mode/SELinux context
-- flannel.1 interface exists on all nodes
-- /run/flannel/subnet.env exists on all nodes
-
-**Technical details:**
-- RHEL 10 now uses iptables-nft (nftables backend) via update-alternatives
-- Flannel CNI config pre-created on RHEL 10 to avoid init-container SELinux write failures
-- SELinux remains in permissive mode (targeted policy) on RHEL nodes
-- nftables permissive ruleset (accept all) configured on RHEL 10 for inet filter table
-- All tasks are idempotent (can run deploy → reset → deploy 100x without failures)
-- No overly long timeouts (180s max for Flannel rollout, 150s max for nodes Ready check)
-- Deterministic checks replace polling/sleep patterns
-
----
-
-## Robust Download Improvements (2025-10-04)
-- **Fixed CNI Plugin Downloads**: Upgraded from v1.6.1 (404 errors) to v1.8.0 with verified asset availability
-- **Architecture Auto-Detection**: CNI downloads now auto-select correct architecture (amd64/arm64) based on `ansible_architecture` fact
-- **RHEL 10 urllib3 Compatibility**: Added automatic curl fallback when `get_url` fails with cert_file/urllib3 errors
-- **Idempotent Downloads**: All download tasks use `creates` and proper stat checks to prevent re-downloads
-- **Helm Download Hardening**: Applied same robust download pattern to Helm installer script
-- **Verification Playbook**: New `verify-cni-downloads.yaml` to validate CNI installation and architecture detection
-- **Changes Made**:
-  - `ansible/playbooks/deploy-cluster.yaml`: CNI download with arch detection + curl fallback (lines 42-95)
-  - `ansible/plays/kubernetes/setup_helm.yaml`: Helm download with curl fallback (lines 25-51)
-  - `ansible/playbooks/verify-cni-downloads.yaml`: New verification playbook
-- **Approach**: Controller attempts get_url first, falls back to robust curl on remote side when needed (no tokens embedded)
-
----
-
-## Authentication and Testing Infrastructure Improvements (2025-10-05)
-
-**PROBLEM**: Playbooks had hardcoded SSH commands that bypassed Ansible's native connection mechanisms and exposed passwords in command lines. Testing infrastructure was minimal.
-
-**SOLUTION**: Comprehensive authentication fix and production-grade test infrastructure.
-
-### Authentication Fixes (2025-10-05)
-
-**Files Modified**:
-1. `ansible/inventory/hosts.yml`:
-   - Added `ansible_become: true` for homelab (RHEL 10) node
-   - Added `ansible_become_method: sudo` for homelab node
-   - Added comments explaining RHEL sudo password requirement via Ansible Vault
-
-2. `ansible/playbooks/deploy-cluster.yaml`:
-   - **REMOVED** hardcoded SSH command at line 188-204: `ssh -tt jashandeepjustinbains@192.168.4.62 "echo '{{ ansible_become_pass }}' | sudo -S test -f /run/flannel/subnet.env"`
-   - **REPLACED** with proper Ansible delegation using `ansible.builtin.stat` with `delegate_to` loop
-   - Now uses Ansible's native become mechanism with vault-encrypted password
-   - **Security improvement**: Password no longer exposed in command line
-
-3. `ansible/inventory/group_vars/secrets.yml.example`:
-   - Added `vault_homelab_sudo_password` variable for RHEL node sudo password
-   - Maintained backward compatibility with `vault_r430_sudo_password`
-
-4. `ansible/inventory/group_vars/all.yml.template`:
-   - Updated to reference `vault_homelab_sudo_password` instead of deprecated variable
-   - Added clear comments about Ansible Vault usage
-
-### Timeout Optimizations (2025-10-05)
-
-**Rationale**: User requirement "Do not put overly long timeouts it just leads to longer wait times for errors to appear"
-
-**Changes in `ansible/playbooks/deploy-cluster.yaml`**:
-- Flannel rollout: Reduced from 180s timeout × 2 retries → 90s timeout × 3 retries
-  - Same total possible wait time but faster failure detection
-- Flannel ready check: Changed from 30 retries × 5s → 20 retries × 10s
-  - Better progress feedback with longer delay intervals
-- Node ready check: Changed from 30 retries × 5s → 20 retries × 10s
-  - Consistent with Flannel check pattern
-- API server wait: Increased from 60s → 120s (more realistic for init)
-
-**Changes in `manifests/cni/flannel.yaml`**:
-- Readiness probe initialDelaySeconds: 40s → 30s (faster readiness detection)
-- Readiness probe failureThreshold: 18 → 12 (still allows 2 minutes total: 30s initial + 12×10s)
-
-### Test Infrastructure (2025-10-05)
-
-**NEW FILES CREATED**:
-
-1. `ansible/playbooks/test-environment.yaml` (173 lines):
-   - Pre-deployment environment validation playbook
-   - Tests connectivity on all nodes
-   - Validates authentication (root on Debian, sudo on RHEL)
-   - Checks required packages and binaries
-   - Verifies OS-specific configuration (firewall, SELinux, nftables backend)
-   - Validates network configuration (kernel modules, sysctl parameters)
-   - Provides clear success/failure feedback
-
-2. `ansible/playbooks/test-idempotency.yaml` (92 lines):
-   - Automated deploy → verify → reset cycle testing
-   - Configurable iteration count (default 5, supports 100+)
-   - Implements user requirement: "I should be able to do 'deploy.sh' -> 'deploy.sh reset' -> 'deploy.sh' 100 times in a row with no failures"
-   - Provides progress feedback and summary
-   - Expected time: ~12 minutes per cycle
-
-3. `TEST_ENVIRONMENT_GUIDE.md` (461 lines):
-   - Comprehensive guide for test environment setup
-   - Step-by-step instructions for all test scenarios
-   - Authentication configuration with Ansible Vault
-   - Troubleshooting common issues
-   - Performance benchmarks (5-10 min deploy, 2-3 min reset)
-   - Success criteria checklist
-   - Vault password management for CI/CD
-
-4. `README.md` updates:
-   - Added "Testing and Validation" section after Quick Start
-   - Links to test-environment.yaml and test-idempotency.yaml
-   - Quick reference for pre-deployment validation
-   - Links to TEST_ENVIRONMENT_GUIDE.md
-
-### Technical Implementation Details
-
-**Authentication Pattern**:
-- Debian nodes (masternode, storagenodet3500): Direct root access, no become needed
-- RHEL node (homelab): Non-root user + `ansible_become: true` + vault password
-- All become passwords stored in `ansible/inventory/group_vars/secrets.yml` (encrypted with ansible-vault)
-- Playbooks run with `--ask-vault-pass` or `--vault-password-file`
-
-**Idempotency Guarantees**:
-- All tasks use proper Ansible modules (no direct SSH commands)
-- Tasks properly report `changed_when` status
-- File operations use `force: no` where appropriate
-- Network operations check for existing state before applying
-
-**Testing Workflow**:
-```bash
-# 1. Pre-deployment validation
-ansible-playbook -i ansible/inventory/hosts.yml \
-  ansible/playbooks/test-environment.yaml --ask-vault-pass
-
-# 2. Deploy cluster
-./deploy.sh
-
-# 3. Verify deployment
-ansible-playbook -i ansible/inventory/hosts.yml \
-  ansible/playbooks/verify-cluster.yaml --ask-vault-pass
-
-# 4. Test idempotency (5 cycles)
-ansible-playbook -i ansible/inventory/hosts.yml \
-  ansible/playbooks/test-idempotency.yaml --ask-vault-pass \
-  -e "test_iterations=5"
-```
-
-### Expected Outcomes
-
-After these changes:
-- ✅ **No hardcoded SSH commands** - All connection/authentication handled by Ansible
-- ✅ **Secure password handling** - Passwords encrypted with Ansible Vault, never in command line
-- ✅ **Faster failure detection** - Optimized timeouts fail fast on errors
-- ✅ **Comprehensive testing** - Can validate environment before deployment
-- ✅ **Automated idempotency testing** - Can run 100 cycles unattended
-- ✅ **Better documentation** - Complete testing guide with troubleshooting
-- ✅ **Production-ready** - Meets gold-standard robustness requirements
-
-### User Requirements Met
-
-From `Output_for_Copilot.txt`:
-- ✅ "I should be able to do 'deploy.sh' -> 'deploy.sh reset' -> 'deploy.sh' 100 times in a row with no failures" → test-idempotency.yaml
-- ✅ "Do not put overly long timeouts" → All timeouts optimized
-- ✅ "Thee playbooks should bee short and concise" → Removed hardcoded SSH, proper delegation
-- ✅ "ensure they can be awoken on LAN using magic packets" → WOL MAC addresses in inventory
-- ✅ "The ansible playbooks must be gold-standard 100% robustness" → Comprehensive testing infrastructure
-
----
+See `archive/legacy-docs/` for historical troubleshooting notes and prior implementation details.
