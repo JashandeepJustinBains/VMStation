@@ -313,11 +313,72 @@
 
 - name: Check if verification failed
   ansible.builtin.set_fact:
-    verification_failed: \"{{ version_check.results | selectattr('failed', 'defined') | selectattr('failed', 'equalto', true) | list | length > 0 }}\"
+    verification_failed: "{{ (version_check.results | default([]) | selectattr('failed', 'defined') | selectattr('failed', 'equalto', true) | list | length) > 0 }}"
   when:
     - k8s_installation_needed
     - version_check is defined
     - version_check.results is defined
+
+# Fallback: if apt reported success but binaries are not executable/available
+# try downloading static upstream binaries into /usr/local/bin (best-effort)
+- name: Attempt fallback - download static Kubernetes binaries (Debian/local)
+  block:
+    - name: Set Kubernetes download version and architecture
+      ansible.builtin.set_fact:
+        k8s_version: "v1.29.0"
+        k8s_arch: "{{ 'amd64' if ansible_architecture in ['x86_64','amd64'] else 'arm64' if ansible_architecture in ['aarch64','arm64'] else 'amd64' }}"
+
+    - name: Ensure /usr/local/bin exists
+      ansible.builtin.file:
+        path: /usr/local/bin
+        state: directory
+        mode: '0755'
+
+    - name: Download kubeadm static binary
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubeadm"
+        dest: /usr/local/bin/kubeadm
+        mode: '0755'
+        validate_certs: yes
+      register: dl_kubeadm
+      ignore_errors: yes
+
+    - name: Download kubelet static binary
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubelet"
+        dest: /usr/local/bin/kubelet
+        mode: '0755'
+        validate_certs: yes
+      register: dl_kubelet
+      ignore_errors: yes
+
+    - name: Download kubectl static binary
+      ansible.builtin.get_url:
+        url: "https://dl.k8s.io/release/{{ k8s_version }}/bin/linux/{{ k8s_arch }}/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+        validate_certs: yes
+      register: dl_kubectl
+      ignore_errors: yes
+
+    - name: Verify binaries after fallback download
+      ansible.builtin.command: "{{ item }} --version"
+      loop:
+        - /usr/local/bin/kubeadm
+        - /usr/local/bin/kubelet
+        - /usr/local/bin/kubectl
+      register: version_check_fallback
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Update verification_failed fact based on fallback
+      ansible.builtin.set_fact:
+        verification_failed: "{{ (version_check_fallback.results | default([]) | selectattr('rc','ne',0) | list | length) > 0 }}"
+  when:
+    - k8s_installation_needed
+    - verification_failed | default(false)
+    - ansible_os_family == "Debian"
+    - ansible_connection == 'local'
 
 - name: CRITICAL - Installation verification failed
   ansible.builtin.fail:
@@ -353,7 +414,7 @@
 - name: Display installed versions
   ansible.builtin.debug:
     msg: \"{{ item.stdout }}\"
-  loop: \"{{ version_check.results }}\"
+  loop: "{{ (version_check.results | default([])) | list }}"
   when: 
     - k8s_installation_needed
     - version_check is defined
