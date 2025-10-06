@@ -41,21 +41,41 @@
             state: stopped
           ignore_errors: true
 
-        - name: Kill containerd/kubelet related processes (best-effort)
-          shell: |
+        - name: Kill containerd-shim and leftover container processes (best-effort)
+          ansible.builtin.shell: |
+            # Kill containerd shim and any lingering container processes that hold mounts
+            pkill -9 containerd-shim || true
+            pkill -9 containerd-shim-runc-v2 || true
             pkill -9 -f containerd || true
             pkill -9 -f kubelet || true
           args:
-            warn: false
+            executable: /bin/bash
+          ignore_errors: true
+
+        - name: Kill any processes using /var/lib/kubelet and /run/containerd (best-effort)
+          ansible.builtin.shell: |
+            # Use fuser to kill any processes holding files/mounts under those paths
+            if command -v fuser >/dev/null 2>&1; then
+              fuser -km /var/lib/kubelet || true
+              fuser -km /run/containerd || true
+            fi
+          args:
+            executable: /bin/bash
           ignore_errors: true
 
         - name: Lazy-unmount mounts under /var/lib/kubelet and /run/containerd (best-effort)
-          shell: |
-            # list and unmount mounts beneath the paths in reverse depth order
-            findmnt -rno TARGET -S /var/lib/kubelet | sort -r | xargs -r -n1 umount -l || true
-            findmnt -rno TARGET -S /run/containerd  | sort -r | xargs -r -n1 umount -l || true
+          ansible.builtin.shell: |
+            # Find mount targets for the directories and unmount in reverse order
+            if command -v findmnt >/dev/null 2>&1; then
+              findmnt -rno TARGET -T /var/lib/kubelet | sort -r | xargs -r -n1 umount -l || true
+              findmnt -rno TARGET -T /run/containerd   | sort -r | xargs -r -n1 umount -l || true
+            else
+              # Fallback: attempt to lazy unmount common subpaths
+              umount -l /var/lib/kubelet/pods/* || true
+              umount -l /run/containerd/io.containerd.grpc.v1.cri/sandboxes/* || true
+            fi
           args:
-            warn: false
+            executable: /bin/bash
           ignore_errors: true
 
     
