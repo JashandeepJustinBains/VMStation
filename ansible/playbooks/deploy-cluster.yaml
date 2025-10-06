@@ -161,16 +161,22 @@
     - name: Monitor join process and wait for completion
       when: not kubelet_conf.stat.exists
       block:
-        - name: Poll async join job status until finished or kubelet config appears
-          ansible.builtin.async_status:
-            jid: "{{ join_async.ansible_job_id }}"
-          register: join_job_result
-          until: join_job_result.finished
+        - name: Wait for kubelet config to appear (indicates join completion)
+          ansible.builtin.stat:
+            path: /etc/kubernetes/kubelet.conf
+          register: kubelet_conf_check
+          until: kubelet_conf_check.stat.exists
           retries: 90
           delay: 10
           ignore_errors: yes
 
-        - name: Check if kubelet config file exists
+        - name: Get final async job result
+          ansible.builtin.async_status:
+            jid: "{{ join_async.ansible_job_id }}"
+          register: join_job_result
+          ignore_errors: yes
+
+        - name: Check if kubelet config file exists (final check)
           ansible.builtin.stat:
             path: /etc/kubernetes/kubelet.conf
           register: kubelet_conf_final
@@ -178,7 +184,9 @@
         - name: Display join job result if it failed
           ansible.builtin.debug:
             msg: |
-              Join job finished with:
+              Join job status:
+              Finished: {{ join_job_result.finished | default('unknown') }}
+              Failed: {{ join_job_result.failed | default('unknown') }}
               RC: {{ join_job_result.rc | default('N/A') }}
               Stdout: {{ join_job_result.stdout | default('N/A') }}
               Stderr: {{ join_job_result.stderr | default('N/A') }}
@@ -193,16 +201,36 @@
               
               Check the kubelet logs for more details:
               journalctl -u kubelet -n 100
+              
+              And check the kubeadm join logs:
+              journalctl -u kubelet --since "10 minutes ago" | grep -i error
           when: join_job_result.failed | default(false)
 
-        - name: Fail if join completed but kubelet config missing
+        - name: Fail if timed out waiting for kubelet config
           ansible.builtin.fail:
             msg: |
-              Worker node join process completed, but /etc/kubernetes/kubelet.conf was not created.
-              This indicates the join may have failed silently. Check the kubelet logs:
-              journalctl -u kubelet -n 100
+              Timed out waiting for /etc/kubernetes/kubelet.conf to appear after 15 minutes.
+              
+              The kubeadm join command status:
+              - Finished: {{ join_job_result.finished | default('unknown') }}
+              - Failed: {{ join_job_result.failed | default('unknown') }}
+              - RC: {{ join_job_result.rc | default('N/A') }}
+              
+              This usually indicates one of the following issues:
+              1. The join command is still running and needs more time
+              2. The join command failed but didn't report an error
+              3. Network connectivity issues between worker and control plane
+              4. The control plane is not ready to accept new nodes
+              
+              Troubleshooting steps:
+              1. Check kubelet logs: journalctl -u kubelet -n 100
+              2. Check if kubelet is running: systemctl status kubelet
+              3. Check control plane connectivity: curl -k https://{{ groups['monitoring_nodes'][0] }}:6443/healthz
+              4. Check if join command is still running: ps aux | grep kubeadm
+              
+              If the join command is still running, you may need to wait longer or increase the timeout.
           when: 
-            - join_job_result.finished | default(false)
+            - kubelet_conf_check.failed | default(false)
             - not kubelet_conf_final.stat.exists
 
 # -----------------------------------------------------------------------------
