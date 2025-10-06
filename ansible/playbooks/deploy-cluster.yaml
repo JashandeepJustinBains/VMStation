@@ -346,7 +346,6 @@
     - name: Display join completion status
       ansible.builtin.debug:
         msg: "{{ inventory_hostname }} join status: {{ 'ALREADY_JOINED' if kubelet_conf.stat.exists else 'NEWLY_JOINED' }}"
-              Finished: {{ join_job_result.finished | default('unknown') }}
 # -----------------------------------------------------------------------------
 # PHASE 5: Flannel CNI Deployment
 # -----------------------------------------------------------------------------
