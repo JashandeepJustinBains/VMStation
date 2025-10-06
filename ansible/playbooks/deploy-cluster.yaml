@@ -151,6 +151,39 @@
         timeout: 300
       when: not kubelet_conf.stat.exists
 
+    - name: Check if kubeadm exists in PATH on worker
+      ansible.builtin.command: which kubeadm
+      register: which_kubeadm
+      changed_when: false
+      failed_when: false
+      when: not kubelet_conf.stat.exists
+
+    - name: Stat /usr/local/bin/kubeadm
+      ansible.builtin.stat:
+        path: /usr/local/bin/kubeadm
+      register: kubeadm_local
+      when: not kubelet_conf.stat.exists
+
+    - name: Stat /usr/bin/kubeadm
+      ansible.builtin.stat:
+        path: /usr/bin/kubeadm
+      register: kubeadm_bin
+      when: not kubelet_conf.stat.exists
+
+    - name: Ensure kubeadm is installed (run installer role if missing)
+      when:
+        - not kubelet_conf.stat.exists
+        - which_kubeadm.rc != 0
+        - not (kubeadm_local.stat.exists or kubeadm_bin.stat.exists)
+      block:
+        - name: Notify that kubeadm is missing and installing
+          ansible.builtin.debug:
+            msg: "kubeadm missing on {{ inventory_hostname }}; running install-k8s-binaries role"
+
+        - name: Include install-k8s-binaries role to install kubeadm on this worker
+          include_role:
+            name: install-k8s-binaries
+
     - name: Join worker to cluster (run async to avoid blocking long joins)
       ansible.builtin.shell: "{{ join_command.stdout }}"
       when: not kubelet_conf.stat.exists
