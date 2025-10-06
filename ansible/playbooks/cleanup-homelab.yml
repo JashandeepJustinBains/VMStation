@@ -52,10 +52,15 @@
             executable: /bin/bash
           ignore_errors: true
 
+        - name: Set remote connection user fact
+          ansible.builtin.set_fact:
+            rem_user: "{{ ansible_user | default(ansible_env.USER | default('root')) }}"
+          run_once: false
+
         - name: Kill any processes using /var/lib/kubelet and /run/containerd (best-effort, protect SSH)
           ansible.builtin.shell: |
             # Protect the remote SSH user's processes and sshd from accidental kill.
-            REM_USER="{{ ansible_user | default(ansible_env.USER | default('root')) }}"
+            REM_USER="${REM_USER}"
 
             # Build a list of PIDs to protect: sshd PIDs and any processes owned by the remote user
             PROTECT_PIDS=""
@@ -85,6 +90,8 @@
             kill_list /run/containerd || true
           args:
             executable: /bin/bash
+            env:
+              REM_USER: "{{ rem_user }}"
           ignore_errors: true
 
         - name: Lazy-unmount mounts under /var/lib/kubelet and /run/containerd (best-effort)
