@@ -1,0 +1,39 @@
+---
+# =============================================================================
+# VMStation Homelab Cleanup
+# Cleanup homelab node before RKE2 reset
+# =============================================================================
+
+- name: "Homelab Cleanup"
+  hosts: compute_nodes
+  gather_facts: false
+  become: true
+  tasks:
+    - name: "Display cleanup banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Homelab Node Cleanup
+          Target: {{ inventory_hostname }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Stop RKE2 server"
+      systemd:
+        name: rke2-server
+        state: stopped
+      failed_when: false
+
+    - name: "Kill RKE2 processes"
+      shell: |
+        pkill -9 -f rke2 || true
+      failed_when: false
+
+    - name: "Remove RKE2 network interfaces"
+      shell: |
+        ip link delete cni0 2>/dev/null || true
+        ip link delete flannel.1 2>/dev/null || true
+      failed_when: false
+
+    - name: "Display cleanup complete message"
+      debug:
+        msg: "{{ inventory_hostname }} cleanup complete"

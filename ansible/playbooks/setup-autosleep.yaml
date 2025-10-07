@@ -1,0 +1,151 @@
+---
+# =============================================================================
+# VMStation Auto-Sleep Setup
+# Configure automatic cluster sleep after inactivity
+# =============================================================================
+
+- name: "Setup Auto-Sleep Monitoring"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: true
+  vars:
+    skip_ansible_confirm: false
+  tasks:
+    - name: "Display auto-sleep setup banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Auto-Sleep Monitoring Setup
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Confirm setup"
+      pause:
+        prompt: |
+          This will configure auto-sleep monitoring.
+          Cluster will sleep after 2 hours of inactivity.
+          Continue? (yes/no)
+      register: confirm_setup
+      when: not skip_ansible_confirm
+
+    - name: "Check confirmation"
+      fail:
+        msg: "Setup cancelled by user"
+      when:
+        - not skip_ansible_confirm
+        - confirm_setup.user_input | default('no') != 'yes'
+
+    - name: "Create auto-sleep monitor script"
+      copy:
+        dest: /usr/local/bin/vmstation-autosleep-monitor.sh
+        content: |
+          #!/bin/bash
+          # VMStation Auto-Sleep Monitor
+          # Monitors cluster activity and triggers sleep after 2 hours of inactivity
+          
+          INACTIVITY_THRESHOLD=7200  # 2 hours in seconds
+          LAST_ACTIVITY_FILE="/var/lib/vmstation/last-activity"
+          
+          mkdir -p /var/lib/vmstation
+          
+          # Check for active pods (excluding system pods)
+          ACTIVE_PODS=$(kubectl get pods -A --field-selector=status.phase=Running | grep -v "kube-system\|kube-flannel\|monitoring" | wc -l)
+          
+          if [ "$ACTIVE_PODS" -gt 0 ]; then
+            # Activity detected, update timestamp
+            date +%s > "$LAST_ACTIVITY_FILE"
+          else
+            # No activity, check inactivity duration
+            if [ -f "$LAST_ACTIVITY_FILE" ]; then
+              LAST_ACTIVITY=$(cat "$LAST_ACTIVITY_FILE")
+              CURRENT_TIME=$(date +%s)
+              INACTIVE_DURATION=$((CURRENT_TIME - LAST_ACTIVITY))
+              
+              if [ "$INACTIVE_DURATION" -gt "$INACTIVITY_THRESHOLD" ]; then
+                echo "Inactivity threshold reached, triggering cluster sleep"
+                /usr/local/bin/vmstation-sleep.sh
+              fi
+            else
+              # No activity file, create one
+              date +%s > "$LAST_ACTIVITY_FILE"
+            fi
+          fi
+        mode: '0755'
+
+    - name: "Create cluster sleep script"
+      copy:
+        dest: /usr/local/bin/vmstation-sleep.sh
+        content: |
+          #!/bin/bash
+          # VMStation Cluster Sleep Script
+          
+          echo "Initiating cluster sleep..."
+          
+          # Cordon and drain all nodes
+          for node in $(kubectl get nodes -o name); do
+            kubectl cordon "$node"
+            kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --force
+          done
+          
+          # Scale down deployments
+          kubectl scale deployment --all --replicas=0 -n default
+          
+          echo "Cluster sleep complete"
+        mode: '0755'
+
+    - name: "Create systemd service for auto-sleep monitor"
+      copy:
+        dest: /etc/systemd/system/vmstation-autosleep.service
+        content: |
+          [Unit]
+          Description=VMStation Auto-Sleep Monitor
+          After=kubelet.service
+          
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/vmstation-autosleep-monitor.sh
+          Environment=KUBECONFIG=/etc/kubernetes/admin.conf
+          
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+
+    - name: "Create systemd timer for auto-sleep monitor"
+      copy:
+        dest: /etc/systemd/system/vmstation-autosleep.timer
+        content: |
+          [Unit]
+          Description=VMStation Auto-Sleep Monitor Timer
+          
+          [Timer]
+          OnBootSec=5min
+          OnUnitActiveSec=15min
+          
+          [Install]
+          WantedBy=timers.target
+        mode: '0644'
+
+    - name: "Reload systemd"
+      systemd:
+        daemon_reload: true
+
+    - name: "Enable and start auto-sleep timer"
+      systemd:
+        name: vmstation-autosleep.timer
+        enabled: true
+        state: started
+
+    - name: "Display setup complete message"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          ✅ Auto-Sleep Monitoring Setup Complete
+          
+          Cluster will automatically sleep after 2 hours of inactivity
+          
+          Monitor status:
+          systemctl status vmstation-autosleep.timer
+          
+          Disable auto-sleep:
+          systemctl stop vmstation-autosleep.timer
+          systemctl disable vmstation-autosleep.timer
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
