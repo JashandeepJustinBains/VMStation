@@ -210,12 +210,12 @@ spec:
         - name: GF_AUTH_ANONYMOUS_ENABLED
           value: "true"
         - name: GF_AUTH_ANONYMOUS_ORG_ROLE
-          value: "Viewer"
+          value: "Admin"
         - name: GF_AUTH_BASIC_ENABLED
-          value: "true"
+          value: "false"
         # Disable login form to force anonymous access as default
         - name: GF_AUTH_DISABLE_LOGIN_FORM
-          value: "false"
+          value: "true"
         # Security: Disable signups and org creation
         - name: GF_USERS_ALLOW_ORG_CREATE
           value: "false"
