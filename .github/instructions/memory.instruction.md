@@ -119,4 +119,14 @@ Previous RHEL Kubernetes integration issues have been archived. See `archive/leg
 
 ---
 
-See `archive/legacy-docs/` for historical troubleshooting notes and prior implementation details.
+## Monitoring Enhancement Requirement
+
+- Prometheus must ingest IPMI sensor readings from enterprise server 192.168.4.60.
+- IPMI exporter configuration should target 192.168.4.60.
+- Authentication credentials for IPMI access must be referenced from secrets.yml (do not hardcode).
+- Prometheus scrape_configs must include a job for IPMI exporter on 192.168.4.60.
+- Validate metrics ingestion and visibility in Prometheus after deployment.
+
+### AI Agent Prompt (IPMI Ingestion)
+
+Enhance the Prometheus monitoring stack to ingest IPMI sensor readings from the enterprise server at 192.168.4.60. The IPMI exporter should be configured to scrape metrics from this host, and all authentication credentials required for IPMI access must be securely referenced from secrets.yml. Ensure the Prometheus configuration includes a job for the IPMI exporter targeting 192.168.4.60, and document any changes to the scrape_configs section. Do not hardcode credentials; use secrets.yml for login details. Validate that metrics are ingested and visible in Prometheus after deployment.
