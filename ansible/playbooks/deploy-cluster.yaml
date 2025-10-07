@@ -456,6 +456,19 @@
     - name: "Create monitoring namespace"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
+    - name: "Create IPMI credentials secret"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret generic ipmi-credentials \
+          --from-literal=username='{{ ipmi_username | default("") }}' \
+          --from-literal=password='{{ ipmi_password | default("") }}' \
+          --namespace=monitoring \
+          --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+      when: ipmi_username is defined and ipmi_password is defined
+      no_log: true  # Don't log credentials
+
+    - name: "Deploy IPMI Exporter"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/ipmi-exporter.yaml
+
     - name: "Deploy Prometheus"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
 
