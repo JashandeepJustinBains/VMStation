@@ -1,4 +1,0 @@
----
-# List of MAC addresses to wake via WOL when idle (example placeholders)
-vmstation_wol_macs: []
-vmstation_wol_interface: eth0
