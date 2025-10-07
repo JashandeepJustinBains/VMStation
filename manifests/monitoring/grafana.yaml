@@ -46,6 +46,94 @@ data:
         path: /var/lib/grafana/dashboards
 ---
 # Grafana Dashboard ConfigMap - Kubernetes Cluster Overview
+---
+# Grafana Dashboard ConfigMap - Node Metrics
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-node
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  node-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Node Metrics - Detailed System Monitoring",
+      "uid": "node-metrics-detailed",
+      "tags": ["nodes", "system", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [ ...existing code... ]
+    }
+---
+# Grafana Dashboard ConfigMap - Prometheus Metrics & Health
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-prometheus
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  prometheus-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Prometheus Metrics & Health",
+      "uid": "prometheus-health",
+      "tags": ["prometheus", "metrics", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [ ...existing code... ]
+    }
+---
+# Grafana Dashboard ConfigMap - Loki Logs & Aggregation
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-loki
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  loki-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Loki Logs & Aggregation",
+      "uid": "loki-logs",
+      "tags": ["loki", "logs", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [ ...existing code... ]
+    }
+---
+# Grafana Dashboard ConfigMap - IPMI Hardware Monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-ipmi
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  ipmi-hardware-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "IPMI Hardware Monitoring - RHEL 10 Enterprise Server",
+      "uid": "ipmi-hardware",
+      "tags": ["ipmi", "hardware", "rhel10", "enterprise", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "1m",
+      "time": {"from": "now-6h", "to": "now"},
+      "panels": [ ...existing code... ]
+    }
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -56,125 +144,123 @@ metadata:
 data:
   kubernetes-overview.json: |-
     {
-      "dashboard": {
-        "id": null,
-        "title": "VMStation Kubernetes Cluster Overview",
-        "tags": ["kubernetes", "vmstation"],
-        "style": "dark",
-        "timezone": "browser",
-        "panels": [
-          {
-            "id": 1,
-            "title": "Cluster Nodes",
-            "type": "stat",
-            "targets": [
-              {
-                "expr": "kube_node_info",
-                "refId": "A"
+      "id": null,
+      "title": "VMStation Kubernetes Cluster Overview",
+      "tags": ["kubernetes", "vmstation"],
+      "style": "dark",
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Cluster Nodes",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "kube_node_info",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "displayMode": "list",
+                "orientation": "horizontal"
+              },
+              "mappings": [],
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
               }
-            ],
-            "fieldConfig": {
-              "defaults": {
-                "color": {
-                  "mode": "palette-classic"
-                },
-                "custom": {
-                  "displayMode": "list",
-                  "orientation": "horizontal"
-                },
-                "mappings": [],
-                "thresholds": {
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    }
-                  ]
-                }
-              }
-            },
-            "gridPos": {
-              "h": 8,
-              "w": 12,
-              "x": 0,
-              "y": 0
             }
           },
-          {
-            "id": 2,
-            "title": "CPU Usage",
-            "type": "timeseries",
-            "targets": [
-              {
-                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
-                "refId": "A"
-              }
-            ],
-            "fieldConfig": {
-              "defaults": {
-                "color": {
-                  "mode": "palette-classic"
-                },
-                "custom": {
-                  "axisLabel": "",
-                  "axisPlacement": "auto",
-                  "barAlignment": 0,
-                  "drawStyle": "line",
-                  "fillOpacity": 10,
-                  "gradientMode": "none",
-                  "hideFrom": {
-                    "legend": false,
-                    "tooltip": false,
-                    "vis": false
-                  },
-                  "lineInterpolation": "linear",
-                  "lineWidth": 1,
-                  "pointSize": 5,
-                  "scaleDistribution": {
-                    "type": "linear"
-                  },
-                  "showPoints": "never",
-                  "spanNulls": false,
-                  "stacking": {
-                    "group": "A",
-                    "mode": "none"
-                  },
-                  "thresholdsStyle": {
-                    "mode": "off"
-                  }
-                },
-                "mappings": [],
-                "thresholds": {
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 80
-                    }
-                  ]
-                },
-                "unit": "percent"
-              }
-            },
-            "gridPos": {
-              "h": 8,
-              "w": 12,
-              "x": 12,
-              "y": 0
-            }
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 0
           }
-        ],
-        "time": {
-          "from": "now-1h",
-          "to": "now"
         },
-        "timepicker": {},
-        "timezone": "",
-        "version": 0
-      }
+        {
+          "id": 2,
+          "title": "CPU Usage",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "vis": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          }
+        }
+      ],
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "",
+      "version": 0
     }
 ---
 # Grafana Deployment
@@ -245,6 +331,18 @@ spec:
         - name: grafana-dashboard-kubernetes
           mountPath: /var/lib/grafana/dashboards
           readOnly: true
+          - name: grafana-dashboard-node
+            mountPath: /var/lib/grafana/dashboards
+            readOnly: true
+          - name: grafana-dashboard-prometheus
+            mountPath: /var/lib/grafana/dashboards
+            readOnly: true
+          - name: grafana-dashboard-loki
+            mountPath: /var/lib/grafana/dashboards
+            readOnly: true
+          - name: grafana-dashboard-ipmi
+            mountPath: /var/lib/grafana/dashboards
+            readOnly: true
         resources:
           requests:
             cpu: 100m
@@ -263,7 +361,19 @@ spec:
           name: grafana-dashboard-providers
       - name: grafana-dashboard-kubernetes
         configMap:
-          name: grafana-dashboard-kubernetes
+        name: grafana-dashboard-kubernetes
+      - name: grafana-dashboard-node
+        configMap:
+          name: grafana-dashboard-node
+      - name: grafana-dashboard-prometheus
+        configMap:
+          name: grafana-dashboard-prometheus
+      - name: grafana-dashboard-loki
+        configMap:
+          name: grafana-dashboard-loki
+      - name: grafana-dashboard-ipmi
+        configMap:
+          name: grafana-dashboard-ipmi
 ---
 # Grafana Service
 apiVersion: v1
