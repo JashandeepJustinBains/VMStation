@@ -491,6 +491,39 @@
     - name: "Display monitoring deployment result"
       debug:
         msg: "{{ monitoring_status.stdout_lines }}"
+    
+    - name: "Verify Grafana endpoint is accessible"
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}:30300/api/health"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: grafana_health
+      retries: 3
+      delay: 5
+      until: grafana_health is succeeded
+      failed_when: false
+    
+    - name: "Verify Prometheus endpoint is accessible"
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}:30090/-/healthy"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: prometheus_health
+      retries: 3
+      delay: 5
+      until: prometheus_health is succeeded
+      failed_when: false
+    
+    - name: "Display endpoint health status"
+      debug:
+        msg: |
+          Monitoring Endpoints Health:
+          - Grafana:    {{ 'OK' if grafana_health is succeeded else 'NOT ACCESSIBLE' }}
+          - Prometheus: {{ 'OK' if prometheus_health is succeeded else 'NOT ACCESSIBLE' }}
+          
+          {{ 'NOTE: If endpoints are not accessible, wait 30-60 seconds for pods to fully start' if (grafana_health is not succeeded or prometheus_health is not succeeded) else '' }}
 
     - name: "Display deployment complete message"
       debug:
@@ -504,8 +537,12 @@
           - CNI: Flannel
           - Monitoring: Prometheus, Grafana
           
+          Monitoring Access (No Login Required):
+          - Grafana:    http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30300
+          - Prometheus: http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30090
+          
           Next Steps:
-          - Access Grafana at http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30000
           - Check cluster: kubectl get nodes
           - View pods: kubectl get pods -A
+          - Test monitoring: curl http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30300
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

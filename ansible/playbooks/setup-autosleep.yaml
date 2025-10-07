@@ -40,35 +40,80 @@
         content: |
           #!/bin/bash
           # VMStation Auto-Sleep Monitor
-          # Monitors cluster activity and triggers sleep after 2 hours of inactivity
+          # Monitors cluster activity and triggers sleep after configurable inactivity period
+          # All operations are logged for audit and troubleshooting
           
-          INACTIVITY_THRESHOLD=7200  # 2 hours in seconds
+          set -euo pipefail
+          
+          # Configuration
+          INACTIVITY_THRESHOLD="${VMSTATION_INACTIVITY_THRESHOLD:-7200}"  # Default: 2 hours
           LAST_ACTIVITY_FILE="/var/lib/vmstation/last-activity"
+          LOG_FILE="/var/log/vmstation-autosleep.log"
+          KUBECONFIG="${KUBECONFIG:-/etc/kubernetes/admin.conf}"
           
-          mkdir -p /var/lib/vmstation
+          # Logging function
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+          }
+          
+          # Create required directories
+          mkdir -p /var/lib/vmstation /var/log
+          
+          # Validate kubectl is available
+          if ! command -v kubectl >/dev/null 2>&1; then
+            log "ERROR: kubectl not found"
+            exit 1
+          fi
+          
+          # Validate kubeconfig exists
+          if [[ ! -f "$KUBECONFIG" ]]; then
+            log "ERROR: kubeconfig not found at $KUBECONFIG"
+            exit 1
+          fi
+          
+          # Export kubeconfig for kubectl
+          export KUBECONFIG
           
           # Check for active pods (excluding system pods)
-          ACTIVE_PODS=$(kubectl get pods -A --field-selector=status.phase=Running | grep -v "kube-system\|kube-flannel\|monitoring" | wc -l)
+          log "Checking cluster activity..."
           
-          if [ "$ACTIVE_PODS" -gt 0 ]; then
+          # Count running pods excluding system namespaces
+          ACTIVE_PODS=$(kubectl get pods -A \
+            --field-selector=status.phase=Running \
+            --no-headers 2>/dev/null | \
+            grep -v "kube-system\|kube-flannel\|monitoring" | \
+            wc -l || echo "0")
+          
+          log "Active non-system pods: $ACTIVE_PODS"
+          
+          if [[ "$ACTIVE_PODS" -gt 0 ]]; then
             # Activity detected, update timestamp
             date +%s > "$LAST_ACTIVITY_FILE"
+            log "Activity detected - updated last activity timestamp"
           else
             # No activity, check inactivity duration
-            if [ -f "$LAST_ACTIVITY_FILE" ]; then
+            if [[ -f "$LAST_ACTIVITY_FILE" ]]; then
               LAST_ACTIVITY=$(cat "$LAST_ACTIVITY_FILE")
               CURRENT_TIME=$(date +%s)
-              INACTIVE_DURATION=`expr $CURRENT_TIME - $LAST_ACTIVITY`
+              INACTIVE_DURATION=$((CURRENT_TIME - LAST_ACTIVITY))
               
-              if [ "$INACTIVE_DURATION" -gt "$INACTIVITY_THRESHOLD" ]; then
-                echo "Inactivity threshold reached, triggering cluster sleep"
-                /usr/local/bin/vmstation-sleep.sh
+              log "Inactive duration: ${INACTIVE_DURATION}s (threshold: ${INACTIVITY_THRESHOLD}s)"
+              
+              if [[ "$INACTIVE_DURATION" -gt "$INACTIVITY_THRESHOLD" ]]; then
+                log "WARNING: Inactivity threshold reached, triggering cluster sleep"
+                /usr/local/bin/vmstation-sleep.sh 2>&1 | tee -a "$LOG_FILE"
+              else
+                REMAINING=$((INACTIVITY_THRESHOLD - INACTIVE_DURATION))
+                log "No activity detected. Sleep in ${REMAINING}s if no activity"
               fi
             else
-              # No activity file, create one
+              # No activity file exists, create one
               date +%s > "$LAST_ACTIVITY_FILE"
+              log "Initialized activity tracking"
             fi
           fi
+          
+          log "Auto-sleep check completed"
         mode: '0755'
 
     - name: "Create cluster sleep script"
@@ -77,19 +122,77 @@
         content: |
           #!/bin/bash
           # VMStation Cluster Sleep Script
+          # Gracefully cordons, drains, and scales down cluster workloads
+          # All operations are logged and idempotent
           
-          echo "Initiating cluster sleep..."
+          set -euo pipefail
           
-          # Cordon and drain all nodes
-          for node in $(kubectl get nodes -o name); do
-            kubectl cordon "$node"
-            kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --force
+          LOG_FILE="/var/log/vmstation-sleep.log"
+          KUBECONFIG="${KUBECONFIG:-/etc/kubernetes/admin.conf}"
+          
+          log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+          }
+          
+          # Validate kubectl is available
+          if ! command -v kubectl >/dev/null 2>&1; then
+            log "ERROR: kubectl not found"
+            exit 1
+          fi
+          
+          export KUBECONFIG
+          
+          log "=========================================="
+          log "Initiating cluster sleep sequence"
+          log "=========================================="
+          
+          # Get all nodes
+          NODES=$(kubectl get nodes -o name 2>/dev/null || true)
+          
+          if [[ -z "$NODES" ]]; then
+            log "WARNING: No nodes found or cluster not accessible"
+            exit 0
+          fi
+          
+          # Cordon and drain all worker nodes (not control-plane)
+          log "Step 1: Cordoning and draining worker nodes..."
+          for node in $NODES; do
+            NODE_NAME=$(echo "$node" | cut -d'/' -f2)
+            
+            # Skip control-plane nodes
+            if kubectl get node "$NODE_NAME" -o jsonpath='{.metadata.labels}' | grep -q "node-role.kubernetes.io/control-plane"; then
+              log "Skipping control-plane node: $NODE_NAME"
+              continue
+            fi
+            
+            log "Cordoning node: $NODE_NAME"
+            kubectl cordon "$NODE_NAME" 2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to cordon $NODE_NAME"
+            
+            log "Draining node: $NODE_NAME"
+            kubectl drain "$NODE_NAME" \
+              --ignore-daemonsets \
+              --delete-emptydir-data \
+              --force \
+              --timeout=5m 2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to drain $NODE_NAME"
           done
           
-          # Scale down deployments
-          kubectl scale deployment --all --replicas=0 -n default
+          # Scale down deployments in default namespace
+          log "Step 2: Scaling down deployments..."
+          DEPLOYMENTS=$(kubectl get deployments -n default -o name 2>/dev/null || true)
           
-          echo "Cluster sleep complete"
+          if [[ -n "$DEPLOYMENTS" ]]; then
+            for deployment in $DEPLOYMENTS; do
+              log "Scaling down: $deployment"
+              kubectl scale "$deployment" --replicas=0 -n default 2>&1 | tee -a "$LOG_FILE" || \
+                log "WARNING: Failed to scale $deployment"
+            done
+          else
+            log "No deployments found in default namespace"
+          fi
+          
+          log "=========================================="
+          log "Cluster sleep sequence completed"
+          log "=========================================="
         mode: '0755'
 
     - name: "Create systemd service for auto-sleep monitor"
@@ -98,12 +201,23 @@
         content: |
           [Unit]
           Description=VMStation Auto-Sleep Monitor
+          Documentation=https://github.com/JashandeepJustinBains/VMStation
           After=kubelet.service
+          Requires=kubelet.service
           
           [Service]
           Type=oneshot
           ExecStart=/usr/local/bin/vmstation-autosleep-monitor.sh
           Environment=KUBECONFIG=/etc/kubernetes/admin.conf
+          # Configurable inactivity threshold (default: 7200s = 2 hours)
+          Environment=VMSTATION_INACTIVITY_THRESHOLD=7200
+          # Restart policy
+          Restart=on-failure
+          RestartSec=60
+          # Logging
+          StandardOutput=journal
+          StandardError=journal
+          SyslogIdentifier=vmstation-autosleep
           
           [Install]
           WantedBy=multi-user.target

@@ -12,9 +12,11 @@ INSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/install-rke2-homelab.yml"
 UNINSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/uninstall-rke2-homelab.yml"
 ARTIFACTS_DIR="$REPO_ROOT/ansible/artifacts"
 
-info(){ echo "[INFO] $*" >&2; }
-warn(){ echo "[WARN] $*" >&2; }
-err(){ echo "[ERROR] $*" >&2; exit 1; }
+# Logging functions with timestamps
+log_timestamp(){ date '+%Y-%m-%d %H:%M:%S'; }
+info(){ echo "[$(log_timestamp)] [INFO] $*" >&2; }
+warn(){ echo "[$(log_timestamp)] [WARN] $*" >&2; }
+err(){ echo "[$(log_timestamp)] [ERROR] $*" >&2; exit 1; }
 
 # Global flags
 FLAG_YES=false
@@ -62,7 +64,47 @@ Artifacts:
 EOF
 }
 
-require_bin(){ command -v "$1" >/dev/null 2>&1 || err "required binary '$1' not found"; }
+require_bin(){ 
+  command -v "$1" >/dev/null 2>&1 || err "required binary '$1' not found - please install it first"
+}
+
+# Validate required dependencies at startup
+validate_dependencies(){
+  local required_bins=("ansible" "ansible-playbook")
+  local missing_bins=()
+  
+  for bin in "${required_bins[@]}"; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      missing_bins+=("$bin")
+    fi
+  done
+  
+  if [[ ${#missing_bins[@]} -gt 0 ]]; then
+    err "Missing required dependencies: ${missing_bins[*]}"
+  fi
+}
+
+# Retry wrapper for network operations
+retry_cmd(){
+  local max_attempts="${1:-3}"
+  local delay="${2:-5}"
+  shift 2
+  local attempt=1
+  
+  while [[ $attempt -le $max_attempts ]]; do
+    if "$@"; then
+      return 0
+    fi
+    warn "Command failed (attempt $attempt/$max_attempts): $*"
+    if [[ $attempt -lt $max_attempts ]]; then
+      info "Retrying in ${delay}s..."
+      sleep "$delay"
+    fi
+    attempt=$((attempt + 1))
+  done
+  
+  return 1
+}
 
 confirm(){
   local prompt="$1"
@@ -76,11 +118,13 @@ confirm(){
 
 verify_ssh_homelab(){
   info "Verifying SSH connectivity to homelab..."
-  if ansible homelab -i "$INVENTORY_FILE" -m ping >/dev/null 2>&1; then
+  
+  # Retry SSH connectivity check
+  if retry_cmd 3 5 ansible homelab -i "$INVENTORY_FILE" -m ping >/dev/null 2>&1; then
     info "✓ SSH connectivity to homelab verified"
     return 0
   else
-    err "✗ Cannot reach homelab via SSH. Check inventory and SSH keys."
+    err "✗ Cannot reach homelab via SSH after 3 attempts. Check inventory and SSH keys."
   fi
 }
 

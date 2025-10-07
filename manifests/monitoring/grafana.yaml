@@ -206,6 +206,22 @@ spec:
           value: "false"
         - name: GF_INSTALL_PLUGINS
           value: "grafana-kubernetes-app"
+        # Enable anonymous access for monitoring dashboards
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: "true"
+        - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+          value: "Viewer"
+        - name: GF_AUTH_BASIC_ENABLED
+          value: "true"
+        # Disable login form to force anonymous access as default
+        - name: GF_AUTH_DISABLE_LOGIN_FORM
+          value: "false"
+        # Security: Disable signups and org creation
+        - name: GF_USERS_ALLOW_ORG_CREATE
+          value: "false"
+        # Set home dashboard to redirect anonymous users
+        - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+          value: "/var/lib/grafana/dashboards/kubernetes-overview.json"
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana

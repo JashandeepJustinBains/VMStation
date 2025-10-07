@@ -30,14 +30,31 @@
 
     # Download and install RKE2
     - name: "Download RKE2 installation script"
-      shell: curl -sfL https://get.rke2.io -o /tmp/install-rke2.sh && chmod +x /tmp/install-rke2.sh
-      args:
-        creates: /tmp/install-rke2.sh
+      get_url:
+        url: https://get.rke2.io
+        dest: /tmp/install-rke2.sh
+        mode: '0755'
+        timeout: 60
+      register: download_result
+      retries: 3
+      delay: 5
+      until: download_result is succeeded
       when: not rke2_installed.stat.exists
-
+    
     - name: "Install RKE2"
       shell: INSTALL_RKE2_TYPE=server /tmp/install-rke2.sh
+      environment:
+        INSTALL_RKE2_TYPE: server
+      register: install_result
       when: not rke2_installed.stat.exists
+      failed_when: install_result.rc != 0
+    
+    - name: "Log RKE2 installation output"
+      debug:
+        msg: "{{ install_result.stdout_lines }}"
+      when: 
+        - not rke2_installed.stat.exists
+        - install_result is defined
 
     # Configure RKE2
     - name: "Create RKE2 config directory"
@@ -86,6 +103,11 @@
         mode: '0644'
 
     # Verify installation
+    - name: "Wait for kubectl binary to be available"
+      wait_for:
+        path: /var/lib/rancher/rke2/bin/kubectl
+        timeout: 60
+    
     - name: "Verify RKE2 is running"
       shell: |
         export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
@@ -94,10 +116,26 @@
       retries: 10
       delay: 10
       until: rke2_nodes.rc == 0
+      failed_when: rke2_nodes.rc != 0
+    
+    - name: "Verify RKE2 pods are running"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl get pods -A
+      register: rke2_pods
+      retries: 5
+      delay: 10
+      until: rke2_pods.rc == 0
+      failed_when: false
 
     - name: "Display RKE2 node status"
       debug:
         msg: "{{ rke2_nodes.stdout_lines }}"
+    
+    - name: "Display RKE2 pods status"
+      debug:
+        msg: "{{ rke2_pods.stdout_lines }}"
+      when: rke2_pods is succeeded
 
     # Collect artifacts
     - name: "Create local artifacts directory"
@@ -111,9 +149,19 @@
     - name: "Fetch RKE2 kubeconfig"
       fetch:
         src: /etc/rancher/rke2/rke2.yaml
-        dest: "{{ playbook_dir }}/../artifacts/rke2-kubeconfig.yaml"
+        dest: "{{ playbook_dir }}/../artifacts/homelab-rke2-kubeconfig.yaml"
         flat: true
+      register: kubeconfig_fetch
       failed_when: false
+    
+    - name: "Update kubeconfig server address"
+      replace:
+        path: "{{ playbook_dir }}/../artifacts/homelab-rke2-kubeconfig.yaml"
+        regexp: 'https://127.0.0.1:6443'
+        replace: 'https://{{ ansible_host }}:6443'
+      delegate_to: localhost
+      become: false
+      when: kubeconfig_fetch is succeeded
 
     - name: "Display installation complete message"
       debug:
@@ -123,8 +171,13 @@
           
           Node: {{ inventory_hostname }}
           Kubeconfig: /etc/rancher/rke2/rke2.yaml
+          Local Kubeconfig: {{ playbook_dir }}/../artifacts/homelab-rke2-kubeconfig.yaml
           
-          Access cluster:
+          Access cluster from homelab node:
           export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+          kubectl get nodes
+          
+          Access cluster remotely:
+          export KUBECONFIG={{ playbook_dir }}/../artifacts/homelab-rke2-kubeconfig.yaml
           kubectl get nodes
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
