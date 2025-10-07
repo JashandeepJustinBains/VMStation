@@ -480,7 +480,7 @@
       changed_when: false
 
     - name: "Deploy Flannel CNI"
-      shell: kubectl apply -f /home/runner/work/VMStation/VMStation/manifests/cni/flannel.yaml
+      shell: kubectl apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       when: flannel_namespace.rc != 0
@@ -583,12 +583,12 @@
         KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Prometheus"
-      shell: kubectl apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus.yaml
+      shell: kubectl apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: "Deploy Grafana"
-      shell: kubectl apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/grafana.yaml
+      shell: kubectl apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana.yaml
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 

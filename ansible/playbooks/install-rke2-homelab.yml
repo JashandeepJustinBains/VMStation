@@ -103,7 +103,7 @@
     # Collect artifacts
     - name: "Create local artifacts directory"
       file:
-        path: /home/runner/work/VMStation/VMStation/ansible/artifacts
+        path: "{{ playbook_dir }}/../artifacts"
         state: directory
         mode: '0755'
       delegate_to: localhost
@@ -112,7 +112,7 @@
     - name: "Fetch RKE2 kubeconfig"
       fetch:
         src: /etc/rancher/rke2/rke2.yaml
-        dest: /home/runner/work/VMStation/VMStation/ansible/artifacts/rke2-kubeconfig.yaml
+        dest: "{{ playbook_dir }}/../artifacts/rke2-kubeconfig.yaml"
         flat: true
       failed_when: false
 
