@@ -331,18 +331,18 @@ spec:
         - name: grafana-dashboard-kubernetes
           mountPath: /var/lib/grafana/dashboards
           readOnly: true
-          - name: grafana-dashboard-node
-            mountPath: /var/lib/grafana/dashboards
-            readOnly: true
-          - name: grafana-dashboard-prometheus
-            mountPath: /var/lib/grafana/dashboards
-            readOnly: true
-          - name: grafana-dashboard-loki
-            mountPath: /var/lib/grafana/dashboards
-            readOnly: true
-          - name: grafana-dashboard-ipmi
-            mountPath: /var/lib/grafana/dashboards
-            readOnly: true
+        - name: grafana-dashboard-node
+          mountPath: /var/lib/grafana/dashboards
+          readOnly: true
+        - name: grafana-dashboard-prometheus
+          mountPath: /var/lib/grafana/dashboards
+          readOnly: true
+        - name: grafana-dashboard-loki
+          mountPath: /var/lib/grafana/dashboards
+          readOnly: true
+        - name: grafana-dashboard-ipmi
+          mountPath: /var/lib/grafana/dashboards
+          readOnly: true
         resources:
           requests:
             cpu: 100m
@@ -361,7 +361,7 @@ spec:
           name: grafana-dashboard-providers
       - name: grafana-dashboard-kubernetes
         configMap:
-        name: grafana-dashboard-kubernetes
+          name: grafana-dashboard-kubernetes
       - name: grafana-dashboard-node
         configMap:
           name: grafana-dashboard-node
