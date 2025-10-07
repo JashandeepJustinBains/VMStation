@@ -123,6 +123,7 @@ stringData:
 ---
 # Remote IPMI Exporter for Enterprise Server at 192.168.4.60
 # This deployment monitors remote BMC using network IPMI protocol
+# NOTE: Set replicas to 0 by default - only scale up when credentials are configured
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -132,7 +133,7 @@ metadata:
     app: ipmi-exporter-remote
     vmstation.io/component: monitoring
 spec:
-  replicas: 1
+  replicas: 0  # Set to 0 by default - requires valid IPMI credentials to be useful
   selector:
     matchLabels:
       app: ipmi-exporter-remote

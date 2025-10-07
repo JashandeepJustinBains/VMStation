@@ -469,6 +469,11 @@
     - name: "Deploy IPMI Exporter"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/ipmi-exporter.yaml
 
+    - name: "Scale up remote IPMI exporter if credentials are available"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf scale deployment ipmi-exporter-remote -n monitoring --replicas=1
+      when: ipmi_username is defined and ipmi_password is defined
+      failed_when: false
+
     - name: "Deploy Prometheus"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
 
@@ -497,13 +502,39 @@
       until: grafana_ready.rc == 0
       failed_when: false
 
+    - name: "Deploy Jellyfin media server"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/jellyfin/jellyfin.yaml
+      register: jellyfin_deploy
+      failed_when: false
+
+    - name: "Wait for Jellyfin pod to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod/jellyfin \
+          -n jellyfin \
+          --timeout=300s
+      retries: 3
+      delay: 10
+      register: jellyfin_ready
+      until: jellyfin_ready.rc == 0
+      failed_when: false
+
     - name: "Display monitoring stack status"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get all -n monitoring
       register: monitoring_status
 
+    - name: "Display Jellyfin status"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get all -n jellyfin -o wide
+      register: jellyfin_status
+      failed_when: false
+
     - name: "Display monitoring deployment result"
       debug:
         msg: "{{ monitoring_status.stdout_lines }}"
+
+    - name: "Display Jellyfin deployment result"
+      debug:
+        msg: "{{ jellyfin_status.stdout_lines }}"
+      when: jellyfin_status.rc == 0
     
     - name: "Verify Grafana endpoint is accessible"
       uri:
@@ -549,13 +580,16 @@
           - Worker Nodes: {{ groups['storage_nodes'] | join(', ') }}
           - CNI: Flannel
           - Monitoring: Prometheus, Grafana
+          - Media Server: Jellyfin (on {{ groups['storage_nodes'][0] }})
           
-          Monitoring Access (No Login Required):
+          Access URLs:
           - Grafana:    http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30300
           - Prometheus: http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30090
+          - Jellyfin:   http://{{ hostvars[groups['storage_nodes'][0]].ansible_host }}:30096
           
           Next Steps:
           - Check cluster: kubectl get nodes
           - View pods: kubectl get pods -A
           - Test monitoring: curl http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30300
+          - Test Jellyfin: curl http://{{ hostvars[groups['storage_nodes'][0]].ansible_host }}:30096/health
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

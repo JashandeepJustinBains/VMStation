@@ -2,6 +2,13 @@
 
 Quick diagnostic checks for VMStation clusters.
 
+## Recent Fixes (October 2025)
+
+For recently resolved deployment issues, see [Deployment Fixes Documentation](docs/DEPLOYMENT_FIXES_OCT2025.md):
+- **Jellyfin not running on storagenodet3500** - Fixed by adding deployment to Phase 7
+- **IPMI exporter-remote pod failures** - Fixed by setting replicas=0 when no credentials
+- **Missing dashboard data** - Documented optional scrape targets
+
 ## Common Issues
 
 ### Worker Node Join Hangs
@@ -245,6 +252,29 @@ This performs a clean deployment from scratch.
 - Check vault password: `ansible-vault view ansible/inventory/group_vars/secrets.yml`
 - Run with vault: `./deploy.sh rke2 --ask-vault-pass`
 - Check RKE2 logs: `sudo journalctl -xeu rke2-server`
+
+### Issue: Jellyfin not running or not on storagenodet3500
+**Fix**:
+- Verify deployment: `kubectl get pods -n jellyfin -o wide`
+- Check node selector: `kubectl describe pod jellyfin -n jellyfin | grep Node-Selectors`
+- Expected: Should be scheduled on storagenodet3500
+- If missing: Re-run deployment with Phase 7 fixes (see [DEPLOYMENT_FIXES_OCT2025.md](docs/DEPLOYMENT_FIXES_OCT2025.md))
+
+### Issue: IPMI exporter pods in Error state
+**Fix**:
+- Check if credentials configured: `kubectl get secret ipmi-credentials -n monitoring`
+- If no credentials needed: Pods should be at 0 replicas (not Error)
+- Verify: `kubectl get deployment ipmi-exporter-remote -n monitoring`
+- Expected replicas: 0 (unless credentials configured)
+- See [DEPLOYMENT_FIXES_OCT2025.md](docs/DEPLOYMENT_FIXES_OCT2025.md) for details
+
+### Issue: Grafana dashboards empty or missing data
+**Fix**:
+- Check Prometheus targets: http://192.168.4.63:30090/targets
+- Verify core targets UP: kubernetes-nodes, kubernetes-cadvisor, node-exporter
+- Optional targets DOWN are OK: rke2-federation, ipmi-exporter-remote
+- Check pod logs: `kubectl logs -n monitoring -l app=prometheus`
+- See [DEPLOYMENT_FIXES_OCT2025.md](docs/DEPLOYMENT_FIXES_OCT2025.md) for target details
 
 ### Issue: Idempotency test fails
 **Fix**:
