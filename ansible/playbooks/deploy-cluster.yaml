@@ -423,13 +423,14 @@
           shell: |
             set -o pipefail
             curl -k --max-time 5 -fsS https://127.0.0.1:6443/healthz || exit 1
+          args:
+            executable: /bin/bash
           register: api_health
           retries: 12
           delay: 5
           until: api_health.rc == 0
           changed_when: false
           failed_when: api_health.rc != 0
-          executable: /bin/bash
 
       when: kubeadm_full_path is defined
 
