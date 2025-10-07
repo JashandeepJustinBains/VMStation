@@ -15,6 +15,15 @@ data:
       url: http://prometheus:9090
       isDefault: true
       editable: true
+      jsonData:
+        timeInterval: 15s
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+      editable: true
+      jsonData:
+        maxLines: 1000
 ---
 # Grafana ConfigMap for dashboard providers
 apiVersion: v1
@@ -42,8 +51,10 @@ kind: ConfigMap
 metadata:
   name: grafana-dashboard-kubernetes
   namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
 data:
-  kubernetes-overview.json: |
+  kubernetes-overview.json: |-
     {
       "dashboard": {
         "id": null,
