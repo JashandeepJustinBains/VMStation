@@ -45,132 +45,102 @@ data:
       options:
         path: /var/lib/grafana/dashboards
 ---
-# Grafana Dashboard ConfigMap - Kubernetes Cluster Overview
----
-# Grafana Dashboard ConfigMap - Node Metrics
+# Grafana Dashboards ConfigMap - All dashboards in one ConfigMap
+# This prevents multiple volume mounts to the same path which Kubernetes doesn't allow
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboard-node
+  name: grafana-dashboards
   namespace: monitoring
   labels:
     grafana_dashboard: "1"
 data:
-  node-dashboard.json: |
+  kubernetes-cluster-dashboard.json: |
     {
-      "schemaVersion": 27,
-      "title": "Node Metrics - Detailed System Monitoring",
-      "uid": "node-metrics-detailed",
-      "tags": ["nodes", "system", "vmstation"],
-      "timezone": "browser",
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
       "editable": true,
-      "refresh": "30s",
-      "time": {"from": "now-1h", "to": "now"},
-      "panels": [ ...existing code... ]
-    }
----
-# Grafana Dashboard ConfigMap - Prometheus Metrics & Health
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard-prometheus
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  prometheus-dashboard.json: |
-    {
-      "schemaVersion": 27,
-      "title": "Prometheus Metrics & Health",
-      "uid": "prometheus-health",
-      "tags": ["prometheus", "metrics", "vmstation"],
-      "timezone": "browser",
-      "editable": true,
-      "refresh": "30s",
-      "time": {"from": "now-1h", "to": "now"},
-      "panels": [ ...existing code... ]
-    }
----
-# Grafana Dashboard ConfigMap - Loki Logs & Aggregation
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard-loki
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  loki-dashboard.json: |
-    {
-      "schemaVersion": 27,
-      "title": "Loki Logs & Aggregation",
-      "uid": "loki-logs",
-      "tags": ["loki", "logs", "vmstation"],
-      "timezone": "browser",
-      "editable": true,
-      "refresh": "30s",
-      "time": {"from": "now-1h", "to": "now"},
-      "panels": [ ...existing code... ]
-    }
----
-# Grafana Dashboard ConfigMap - IPMI Hardware Monitoring
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard-ipmi
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  ipmi-hardware-dashboard.json: |
-    {
-      "schemaVersion": 27,
-      "title": "IPMI Hardware Monitoring - RHEL 10 Enterprise Server",
-      "uid": "ipmi-hardware",
-      "tags": ["ipmi", "hardware", "rhel10", "enterprise", "vmstation"],
-      "timezone": "browser",
-      "editable": true,
-      "refresh": "1m",
-      "time": {"from": "now-6h", "to": "now"},
-      "panels": [ ...existing code... ]
-    }
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-dashboard-kubernetes
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  kubernetes-overview.json: |-
-    {
+      "gnetId": null,
+      "graphTooltip": 0,
       "id": null,
-      "title": "VMStation Kubernetes Cluster Overview",
-      "tags": ["kubernetes", "vmstation"],
-      "style": "dark",
-      "timezone": "browser",
+      "links": [],
       "panels": [
         {
-          "id": 1,
-          "title": "Cluster Nodes",
-          "type": "stat",
-          "targets": [
-            {
-              "expr": "kube_node_info",
-              "refId": "A"
-            }
-          ],
+          "datasource": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "displayMode": "list",
-                "orientation": "horizontal"
+                "mode": "thresholds"
               },
               "mappings": [],
               "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "count(kube_node_info)",
+              "refId": "A"
+            }
+          ],
+          "title": "Total Nodes",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
                 "steps": [
                   {
                     "color": "green",
@@ -178,25 +148,97 @@ data:
                   }
                 ]
               }
-            }
+            },
+            "overrides": []
           },
           "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
+            "h": 4,
+            "w": 6,
+            "x": 6,
             "y": 0
-          }
-        },
-        {
+          },
           "id": 2,
-          "title": "CPU Usage",
-          "type": "timeseries",
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.0.0",
           "targets": [
             {
-              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "expr": "sum(kube_pod_info)",
               "refId": "A"
             }
           ],
+          "title": "Running Pods",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 0
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "sum(kube_pod_status_phase{phase=\"Failed\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Failed Pods",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -210,9 +252,9 @@ data:
                 "fillOpacity": 10,
                 "gradientMode": "none",
                 "hideFrom": {
-                  "legend": false,
                   "tooltip": false,
-                  "vis": false
+                  "viz": false,
+                  "legend": false
                 },
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
@@ -232,6 +274,7 @@ data:
               },
               "mappings": [],
               "thresholds": {
+                "mode": "absolute",
                 "steps": [
                   {
                     "color": "green",
@@ -244,24 +287,1206 @@ data:
                 ]
               },
               "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 4
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single"
             }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "100 - (avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Node CPU Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
           },
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 0
-          }
+            "y": 4
+          },
+          "id": 5,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single"
+            }
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Node Memory Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Status"
+                },
+                "properties": [
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": {
+                            "color": "red",
+                            "index": 0,
+                            "text": "Down"
+                          },
+                          "1": {
+                            "color": "green",
+                            "index": 1,
+                            "text": "Up"
+                          }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 12
+          },
+          "id": 6,
+          "options": {
+            "footer": {
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "kube_node_info",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "up{job=\"node-exporter\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Node Status",
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Value #A": true,
+                  "__name__": true,
+                  "container_runtime_version": true,
+                  "instance": true,
+                  "job": true,
+                  "kernel_version": true,
+                  "kubelet_version": true,
+                  "kubeproxy_version": true,
+                  "os_image": true,
+                  "pod_cidr": true,
+                  "provider_id": true,
+                  "system_uuid": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "Value #B": "Status",
+                  "node": "Node Name",
+                  "os": "OS",
+                  "role": "Role"
+                }
+              }
+            }
+          ],
+          "type": "table"
         }
       ],
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "style": "dark",
+      "tags": [
+        "kubernetes",
+        "vmstation",
+        "cluster"
+      ],
+      "templating": {
+        "list": []
+      },
       "time": {
         "from": "now-1h",
         "to": "now"
       },
       "timepicker": {},
-      "timezone": "",
-      "version": 0
+      "timezone": "browser",
+      "title": "VMStation Kubernetes Cluster Overview",
+      "uid": "vmstation-k8s-overview",
+      "version": 1
     }
+
+  node-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Node Metrics - Detailed System Monitoring",
+      "uid": "node-metrics-detailed",
+      "tags": ["nodes", "system", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "CPU Usage by Node",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "100 - (avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "red", "value": 80}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Memory Usage by Node",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "red", "value": 85}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Disk Usage by Node",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})) * 100",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 75},
+                  {"color": "red", "value": 90}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Network Traffic by Node",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|flannel.*|cali.*\"}[5m])",
+              "legendFormat": "{{node}} - {{device}} RX",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|flannel.*|cali.*\"}[5m])",
+              "legendFormat": "{{node}} - {{device}} TX",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 5,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "System Load Average (5m)",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "targets": [
+            {
+              "expr": "node_load5",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "title": "OS Distribution by Node",
+          "type": "table",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "targets": [
+            {
+              "expr": "node_uname_info",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Value": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true
+                },
+                "renameByName": {
+                  "node": "Node",
+                  "os": "Operating System",
+                  "nodename": "Hostname",
+                  "sysname": "System",
+                  "release": "Kernel Version"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "version": 1
+    }
+  prometheus-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Prometheus Metrics & Health",
+      "uid": "prometheus-health",
+      "tags": ["prometheus", "metrics", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Prometheus Targets Up",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(up)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "green", "value": 3}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "orientation": "auto"
+          }
+        },
+        {
+          "id": 2,
+          "title": "Total Scrape Targets",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "targets": [
+            {
+              "expr": "count(up)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "orientation": "auto"
+          }
+        },
+        {
+          "id": 3,
+          "title": "Samples Ingested Rate",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+          "targets": [
+            {
+              "expr": "rate(prometheus_tsdb_head_samples_appended_total[5m])",
+              "legendFormat": "Samples/sec",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Query Duration",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, rate(prometheus_http_request_duration_seconds_bucket{handler=\"/api/v1/query\"}[5m]))",
+              "legendFormat": "99th percentile",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, rate(prometheus_http_request_duration_seconds_bucket{handler=\"/api/v1/query\"}[5m]))",
+              "legendFormat": "95th percentile",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 5,
+                "lineWidth": 2,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Scrape Target Status",
+          "type": "table",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+          "targets": [
+            {
+              "expr": "up",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true
+                },
+                "renameByName": {
+                  "job": "Job",
+                  "instance": "Instance",
+                  "Value": "Status",
+                  "node": "Node"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Status"},
+                "properties": [
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": {"color": "red", "text": "Down"},
+                          "1": {"color": "green", "text": "Up"}
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 6,
+          "title": "TSDB Head Series",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+          "targets": [
+            {
+              "expr": "prometheus_tsdb_head_series",
+              "legendFormat": "Series count",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Storage Size",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+          "targets": [
+            {
+              "expr": "prometheus_tsdb_storage_blocks_bytes",
+              "legendFormat": "Block storage",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              }
+            }
+          }
+        }
+      ],
+      "version": 1
+    }
+  loki-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Loki Logs & Aggregation",
+      "uid": "loki-logs",
+      "tags": ["loki", "logs", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Log Volume by Namespace",
+          "type": "timeseries",
+          "datasource": "Loki",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "sum by (namespace) (rate({job=\"kubernetes-pods\"}[1m]))",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "logs/sec",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 80,
+                "lineWidth": 0,
+                "showPoints": "never",
+                "stacking": {"mode": "normal"}
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": ["mean", "max"]
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Application Logs",
+          "type": "logs",
+          "datasource": "Loki",
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "{namespace!=\"kube-system\", namespace!=\"kube-flannel\", namespace!=\"monitoring\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "enableLogDetails": true
+          }
+        },
+        {
+          "id": 3,
+          "title": "System Logs (kube-system)",
+          "type": "logs",
+          "datasource": "Loki",
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 20},
+          "targets": [
+            {
+              "expr": "{namespace=\"kube-system\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "enableLogDetails": true
+          }
+        },
+        {
+          "id": 4,
+          "title": "Monitoring Stack Logs",
+          "type": "logs",
+          "datasource": "Loki",
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 32},
+          "targets": [
+            {
+              "expr": "{namespace=\"monitoring\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "dedupStrategy": "none",
+            "enableLogDetails": true
+          }
+        },
+        {
+          "id": 5,
+          "title": "Error Log Rate",
+          "type": "timeseries",
+          "datasource": "Loki",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 44},
+          "targets": [
+            {
+              "expr": "sum by (namespace, pod) (rate({job=\"kubernetes-pods\"} |= \"error\" [5m]))",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "errors/sec",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.1},
+                  {"color": "red", "value": 1}
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "version": 1
+    }
+  ipmi-hardware-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "IPMI Hardware Monitoring - RHEL 10 Enterprise Server",
+      "uid": "ipmi-hardware",
+      "tags": ["ipmi", "hardware", "rhel10", "enterprise", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "1m",
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Server Temperature Sensors",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "ipmi_temperature_celsius{node=\"homelab\"}",
+              "legendFormat": "{{sensor}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 65},
+                  {"color": "orange", "value": 75},
+                  {"color": "red", "value": 85}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": ["mean", "max", "last"]
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Fan Speeds",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "ipmi_fan_speed_rpm{node=\"homelab\"}",
+              "legendFormat": "{{sensor}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "rpm",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 1000},
+                  {"color": "green", "value": 2000}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": ["mean", "min", "last"]
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Power Consumption",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "ipmi_dcmi_power_consumption_watts{node=\"homelab\"}",
+              "legendFormat": "Power Draw",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2,
+                "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 200},
+                  {"color": "red", "value": 300}
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": ["mean", "max", "last"]
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Voltage Sensors",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "ipmi_voltage_volts{node=\"homelab\"}",
+              "legendFormat": "{{sensor}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "volt",
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 5,
+                "lineWidth": 1,
+                "showPoints": "never"
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": ["mean", "last"]
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Current Temperature Status",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 16},
+          "targets": [
+            {
+              "expr": "max(ipmi_temperature_celsius{node=\"homelab\"})",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 65},
+                  {"color": "orange", "value": 75},
+                  {"color": "red", "value": 85}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "orientation": "auto",
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 6,
+          "title": "BMC Status",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 8, "x": 8, "y": 16},
+          "targets": [
+            {
+              "expr": "up{job=\"ipmi-exporter\", node=\"homelab\"}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {
+                  "options": {
+                    "0": {"text": "Offline", "color": "red"},
+                    "1": {"text": "Online", "color": "green"}
+                  },
+                  "type": "value"
+                }
+              ],
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "orientation": "auto",
+            "textMode": "value"
+          }
+        },
+        {
+          "id": 7,
+          "title": "Current Power Draw",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 16},
+          "targets": [
+            {
+              "expr": "ipmi_dcmi_power_consumption_watts{node=\"homelab\"}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 200},
+                  {"color": "red", "value": 300}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "orientation": "auto",
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 8,
+          "title": "Sensor Status Table",
+          "type": "table",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+          "targets": [
+            {
+              "expr": "ipmi_up{node=\"homelab\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "instance": true,
+                  "job": true
+                },
+                "renameByName": {
+                  "sensor": "Sensor",
+                  "Value": "Status",
+                  "node": "Node"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Status"},
+                "properties": [
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": {"color": "red", "text": "Failed"},
+                          "1": {"color": "green", "text": "OK"}
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "version": 1
+    }
+
 ---
 # Grafana Deployment
 apiVersion: apps/v1
@@ -318,7 +1543,7 @@ spec:
           value: "false"
         # Set home dashboard to redirect anonymous users
         - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
-          value: "/var/lib/grafana/dashboards/kubernetes-overview.json"
+          value: "/var/lib/grafana/dashboards/kubernetes-cluster-dashboard.json"
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
@@ -328,19 +1553,7 @@ spec:
         - name: grafana-dashboard-providers
           mountPath: /etc/grafana/provisioning/dashboards
           readOnly: true
-        - name: grafana-dashboard-kubernetes
-          mountPath: /var/lib/grafana/dashboards
-          readOnly: true
-        - name: grafana-dashboard-node
-          mountPath: /var/lib/grafana/dashboards
-          readOnly: true
-        - name: grafana-dashboard-prometheus
-          mountPath: /var/lib/grafana/dashboards
-          readOnly: true
-        - name: grafana-dashboard-loki
-          mountPath: /var/lib/grafana/dashboards
-          readOnly: true
-        - name: grafana-dashboard-ipmi
+        - name: grafana-dashboards
           mountPath: /var/lib/grafana/dashboards
           readOnly: true
         resources:
@@ -359,21 +1572,9 @@ spec:
       - name: grafana-dashboard-providers
         configMap:
           name: grafana-dashboard-providers
-      - name: grafana-dashboard-kubernetes
+      - name: grafana-dashboards
         configMap:
-          name: grafana-dashboard-kubernetes
-      - name: grafana-dashboard-node
-        configMap:
-          name: grafana-dashboard-node
-      - name: grafana-dashboard-prometheus
-        configMap:
-          name: grafana-dashboard-prometheus
-      - name: grafana-dashboard-loki
-        configMap:
-          name: grafana-dashboard-loki
-      - name: grafana-dashboard-ipmi
-        configMap:
-          name: grafana-dashboard-ipmi
+          name: grafana-dashboards
 ---
 # Grafana Service
 apiVersion: v1
