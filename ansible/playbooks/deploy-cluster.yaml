@@ -212,6 +212,28 @@
         dest: /root/.kube/config
         remote_src: true
         mode: '0600'
+      when: not kubeconfig_exists.stat.exists
+
+    - name: "Set admin context and credentials in /root/.kube/config (O=system:masters)"
+      shell: |
+        kubectl config set-credentials admin \
+          --client-certificate=/etc/kubernetes/pki/admin.crt \
+          --client-key=/etc/kubernetes/pki/admin.key \
+          --embed-certs=true
+        kubectl config set-context admin@kubernetes \
+          --cluster=kubernetes \
+          --user=admin
+        kubectl config use-context admin@kubernetes
+      environment:
+        KUBECONFIG: /root/.kube/config
+      when: not kubeconfig_exists.stat.exists
+
+    - name: "Copy admin.conf to /root/.kube/config (idempotent, first run only)"
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: true
+        mode: '0600'
 
     - name: "Set admin context and credentials (O=system:masters) once after init"
       shell: |
@@ -271,8 +293,7 @@
     - name: "Verify control plane is responding"
       shell: kubectl cluster-info
       environment:
-          KUBECONFIG: /etc/kubernetes/admin.conf
-          KUBECONFIG: /etc/kubernetes/admin.conf
+        KUBECONFIG: /root/.kube/config
       register: cluster_info
       retries: 10
       delay: 10
