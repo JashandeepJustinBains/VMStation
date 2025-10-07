@@ -166,6 +166,28 @@ data:
       scrape_interval: 30s
       scrape_timeout: 20s
     
+    # Remote IPMI Exporter - Enterprise server at 192.168.4.60
+    # Monitors remote BMC via IPMI over LAN using credentials from secrets
+    - job_name: 'ipmi-exporter-remote'
+      static_configs:
+      - targets:
+        - '192.168.4.60'  # Remote enterprise server BMC address
+        labels:
+          node: 'enterprise-server-60'
+          role: 'enterprise-compute'
+          hardware: 'enterprise-server'
+      metrics_path: /metrics
+      scrape_interval: 30s
+      scrape_timeout: 20s
+      relabel_configs:
+      # Redirect scrape to ipmi-exporter-remote service
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: ipmi-exporter-remote.monitoring.svc.cluster.local:9291
+    
     # Kube State Metrics - Kubernetes object state
     - job_name: 'kube-state-metrics'
       kubernetes_sd_configs:
@@ -234,179 +256,14 @@ data:
 # Prometheus Alerting Rules
 apiVersion: v1
 kind: ConfigMap
----
-  prometheus.yml: |
-    global:
-      scrape_interval: 15s
-      scrape_timeout: 10s
-      evaluation_interval: 15s
-      external_labels:
-        cluster: 'vmstation-homelab'
-        environment: 'homelab'
-      
-    # Alerting configuration
-    alerting:
-      alertmanagers:
-      - static_configs:
-        - targets: []
-    
-    # Load alerting rules
-    rule_files:
-    - /etc/prometheus/rules/*.yml
-    
-    scrape_configs:
-    # Kubernetes API server metrics
-    - job_name: 'kubernetes-apiservers'
-      kubernetes_sd_configs:
-      - role: endpoints
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
-        action: keep
-        regex: default;kubernetes;https
-        
-    # Kubernetes node kubelet metrics
-    - job_name: 'kubernetes-nodes'
-      kubernetes_sd_configs:
-      - role: node
-      scheme: https
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        insecure_skip_verify: true
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      relabel_configs:
-      - action: labelmap
-        regex: __meta_kubernetes_node_label_(.+)
-      - target_label: __address__
-        replacement: kubernetes.default.svc:443
-      - source_labels: [__meta_kubernetes_node_name]
-        regex: (.+)
-        target_label: __metrics_path__
-        replacement: /api/v1/nodes/${1}/proxy/metrics
-        
-    # Container metrics via cAdvisor
-    - job_name: 'kubernetes-cadvisor'
-      kubernetes_sd_configs:
-      - role: node
-      scheme: https
-      metrics_path: /metrics/cadvisor
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        insecure_skip_verify: true
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      relabel_configs:
-      - action: labelmap
-        regex: __meta_kubernetes_node_label_(.+)
-      - target_label: __address__
-        replacement: kubernetes.default.svc:443
-      - source_labels: [__meta_kubernetes_node_name]
-        regex: (.+)
-        target_label: __metrics_path__
-        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
-    
-    # Node Exporter - All nodes
-    - job_name: 'node-exporter'
-      static_configs:
-      - targets:
-        - '192.168.4.63:9100'  # masternode (Debian control-plane)
-        labels:
-          node: 'masternode'
-          role: 'control-plane'
-          os: 'debian'
-      - targets:
-        - '192.168.4.61:9100'  # storagenodet3500 (Debian worker)
-        labels:
-          node: 'storagenodet3500'
-          role: 'storage'
-          os: 'debian'
-      - targets:
-        - '192.168.4.62:9100'  # homelab (RHEL 10 worker)
-        labels:
-          node: 'homelab'
-          role: 'compute'
-          os: 'rhel10'
-    
-    # IPMI Exporter - Enterprise server (homelab RHEL 10 node)
-    - job_name: 'ipmi-exporter'
-      static_configs:
-      - targets:
-        - '192.168.4.62:9290'  # IPMI exporter on homelab node
-        labels:
-          node: 'homelab'
-          role: 'compute'
-          os: 'rhel10'
-          hardware: 'enterprise-server'
-      metrics_path: /metrics
-      scrape_interval: 30s
-      scrape_timeout: 20s
-    
-    # Kube State Metrics - Kubernetes object state
-    - job_name: 'kube-state-metrics'
-      kubernetes_sd_configs:
-      - role: service
-        namespaces:
-          names:
-          - monitoring
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_service_name]
-        action: keep
-        regex: kube-state-metrics
-      - source_labels: [__meta_kubernetes_service_port_name]
-        action: keep
-        regex: http-metrics
-    
-    # Prometheus self-monitoring
-    - job_name: 'prometheus'
-      static_configs:
-      - targets:
-        - 'localhost:9090'
-    
-    # Service endpoints
-    - job_name: 'kubernetes-service-endpoints'
-      kubernetes_sd_configs:
-      - role: endpoints
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
-        action: keep
-        regex: true
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
-        action: replace
-        target_label: __scheme__
-        regex: (https?)
-      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
-        action: replace
-        target_label: __metrics_path__
-        regex: (.+)
-      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
-        action: replace
-        target_label: __address__
-        regex: ([^:]+)(?::\d+)?;(\d+)
-        replacement: $1:$2
-      - action: labelmap
-        regex: __meta_kubernetes_service_label_(.+)
-      - source_labels: [__meta_kubernetes_namespace]
-        action: replace
-        target_label: kubernetes_namespace
-      - source_labels: [__meta_kubernetes_service_name]
-        action: replace
-        target_label: kubernetes_name
-    
-    # RKE2 Federation - Federate metrics from RHEL 10 homelab RKE2 cluster
-    - job_name: 'rke2-federation'
-      honor_labels: true
-      metrics_path: /federate
-      params:
-        'match[]':
-        - '{job=~".+"}'
-      static_configs:
-      - targets:
-        - '192.168.4.62:30090'
-        labels:
-          cluster: 'rke2-homelab'
-          federated: 'true'
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  alerts.yml: |
+    # Placeholder for alerting rules
+    # Add your Prometheus alerting rules here
+    groups: []
 ---
 # Prometheus Deployment
 apiVersion: apps/v1

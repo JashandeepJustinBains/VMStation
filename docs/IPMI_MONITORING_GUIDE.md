@@ -212,6 +212,8 @@ ipmi_up{node="homelab"} == 0
 
 The IPMI exporter is automatically scraped by Prometheus with this configuration:
 
+### Local IPMI Monitoring (homelab node)
+
 ```yaml
 - job_name: 'ipmi-exporter'
   static_configs:
@@ -226,6 +228,44 @@ The IPMI exporter is automatically scraped by Prometheus with this configuration
   scrape_interval: 30s
   scrape_timeout: 20s
 ```
+
+### Remote IPMI Monitoring (enterprise server at 192.168.4.60)
+
+The Prometheus stack also supports remote IPMI monitoring for enterprise servers accessible via IPMI over LAN. This configuration monitors the BMC at 192.168.4.60:
+
+```yaml
+- job_name: 'ipmi-exporter-remote'
+  static_configs:
+  - targets:
+    - '192.168.4.60'  # Remote enterprise server BMC address
+    labels:
+      node: 'enterprise-server-60'
+      role: 'enterprise-compute'
+      hardware: 'enterprise-server'
+  metrics_path: /metrics
+  scrape_interval: 30s
+  scrape_timeout: 20s
+  relabel_configs:
+  # Redirect scrape to ipmi-exporter-remote service
+  - source_labels: [__address__]
+    target_label: __param_target
+  - source_labels: [__param_target]
+    target_label: instance
+  - target_label: __address__
+    replacement: ipmi-exporter-remote.monitoring.svc.cluster.local:9291
+```
+
+**Key Differences:**
+- Remote IPMI uses a separate deployment (`ipmi-exporter-remote`) that connects to BMC over the network
+- Authentication credentials are stored in Kubernetes secrets (created from `ansible/inventory/group_vars/secrets.yml`)
+- The exporter runs on port 9291 (vs. 9290 for local IPMI)
+- Uses relabel configs to redirect Prometheus scrapes to the remote IPMI exporter service
+
+**Security Note:** Remote IPMI credentials are securely managed through:
+1. Define `ipmi_username` and `ipmi_password` in `ansible/inventory/group_vars/secrets.yml`
+2. Encrypt the secrets file using ansible-vault
+3. The deployment process creates a Kubernetes secret `ipmi-credentials` in the monitoring namespace
+4. The IPMI exporter pod reads credentials from the secret via environment variables
 
 ## Grafana Dashboard
 
