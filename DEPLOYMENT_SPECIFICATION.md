@@ -69,6 +69,13 @@ VMStation is a comprehensive Kubernetes homelab deployment automation system des
 - Validate certificate configuration
 - Prepare for worker node joins
 
+**Critical Implementation Details**:
+- **Container Runtime Check**: Verify kube-apiserver, kube-controller-manager, kube-scheduler, etcd containers are running
+- **Systemd Fallback**: Check kubelet and containerd services if container check fails
+- **API Server Health**: Test HTTPS connectivity to port 6443
+- **Cluster Connectivity**: Verify kubectl can communicate with the cluster
+- **Multi-Method Validation**: Use both container inspection and systemd status checks for robustness
+
 ### Phase 3: Token Generation
 **Target**: monitoring_nodes (masternode)
 **Objectives**:
@@ -404,11 +411,22 @@ pkill -9 -f "kubeadm join" || true
 3. **Worker Join Hanging**: Comprehensive cleanup and retry logic
 4. **Kubelet Crash Loops**: Config file validation and service health checks
 5. **Partial Join States**: Thorough artifact cleanup before retry attempts
+6. **Control Plane Validation Hanging**: Incorrect pod label checks - use container runtime inspection instead
 
 ### Diagnostic Commands
 ```bash
 # Service status checks
 systemctl status containerd kubelet
+
+# Control plane container inspection
+docker ps | grep kube-apiserver
+ctr -n k8s.io containers ls | grep kube
+
+# API server connectivity
+curl -k https://localhost:6443/healthz
+
+# Cluster connectivity test
+kubectl cluster-info --kubeconfig=/etc/kubernetes/admin.conf
 
 # Log inspection
 journalctl -u kubelet -n 50 --no-pager
