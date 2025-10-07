@@ -248,9 +248,7 @@
         timeout: 120
 
     - name: "Verify control plane is responding"
-      shell: kubectl cluster-info
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
       register: cluster_info
       retries: 10
       delay: 10
@@ -278,8 +276,6 @@
 
     - name: "Generate join token"
       shell: kubeadm token create --print-join-command
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
       retries: 3
       delay: 5
@@ -329,24 +325,18 @@
       when: cni_plugin_count.stdout | int < 5
 
     - name: "Check if Flannel is already deployed"
-      shell: kubectl get namespace kube-flannel 2>/dev/null
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespace kube-flannel 2>/dev/null
       register: flannel_namespace
       failed_when: false
       changed_when: false
 
     - name: "Deploy Flannel CNI"
-      shell: kubectl apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
       when: flannel_namespace.rc != 0
       register: flannel_deploy
 
     - name: "Wait for Flannel DaemonSet to be available"
-      shell: kubectl get daemonset -n kube-flannel kube-flannel-ds 2>/dev/null
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get daemonset -n kube-flannel kube-flannel-ds 2>/dev/null
       register: flannel_ds
       retries: 10
       delay: 5
@@ -413,18 +403,14 @@
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     - name: "Wait for nodes to be Ready"
-      shell: kubectl get nodes -o json | jq -r '.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True")) | .metadata.name' | wc -l
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o json | jq -r '.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True")) | .metadata.name' | wc -l
       register: ready_nodes
       retries: 20
       delay: 10
       until: ready_nodes.stdout | int >= 2
 
     - name: "Get node status"
-      shell: kubectl get nodes -o wide
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
       register: nodes_status
 
     - name: "Display node status"
@@ -432,9 +418,7 @@
         msg: "{{ nodes_status.stdout_lines }}"
 
     - name: "Wait for CoreDNS to be Running"
-      shell: kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].status.phase}' | grep -c Running
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].status.phase}' | grep -c Running
       register: coredns_pods
       retries: 15
       delay: 10
@@ -466,27 +450,19 @@
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     - name: "Create monitoring namespace"
-      shell: kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
     - name: "Deploy Prometheus"
-      shell: kubectl apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
 
     - name: "Deploy Grafana"
-      shell: kubectl apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana.yaml
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana.yaml
 
     - name: "Wait for Prometheus to be ready"
       shell: |
-        kubectl wait --for=condition=available deployment/prometheus \
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/prometheus \
           -n monitoring \
           --timeout=120s
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
       retries: 5
       delay: 10
       register: prometheus_ready
@@ -495,11 +471,9 @@
 
     - name: "Wait for Grafana to be ready"
       shell: |
-        kubectl wait --for=condition=available deployment/grafana \
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/grafana \
           -n monitoring \
           --timeout=120s
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
       retries: 5
       delay: 10
       register: grafana_ready
@@ -507,9 +481,7 @@
       failed_when: false
 
     - name: "Display monitoring stack status"
-      shell: kubectl get all -n monitoring
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get all -n monitoring
       register: monitoring_status
 
     - name: "Display monitoring deployment result"
