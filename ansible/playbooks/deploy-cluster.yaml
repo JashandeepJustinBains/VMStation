@@ -111,6 +111,16 @@
         enabled: true
         daemon_reload: true
 
+    # Configure crictl to use containerd
+    - name: "Configure crictl runtime endpoint"
+      copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///var/run/containerd/containerd.sock
+          image-endpoint: unix:///var/run/containerd/containerd.sock
+          timeout: 10
+        mode: '0644'
+
     # Install Kubernetes binaries
     - name: "Add Kubernetes apt key"
       apt_key:
@@ -146,6 +156,17 @@
       systemd:
         name: kubelet
         enabled: true
+
+    # Create required directories with proper permissions
+    - name: "Create required Kubernetes directories"
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /opt/cni/bin
+        - /etc/cni/net.d
+        - /var/lib/kubelet
 
 # =============================================================================
 # Phase 1: Control Plane Initialization
@@ -192,20 +213,17 @@
         remote_src: true
         mode: '0600'
 
-    - name: "Generate admin kubeconfig with proper RBAC (O=system:masters)"
-      shell: |
-        kubectl config set-credentials admin \
-          --client-certificate=/etc/kubernetes/pki/admin.crt \
-          --client-key=/etc/kubernetes/pki/admin.key \
-          --embed-certs=true
-        
-        kubectl config set-context admin@kubernetes \
-          --cluster=kubernetes \
-          --user=admin
-        
-        kubectl config use-context admin@kubernetes
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+    - name: "Set KUBECONFIG environment variable globally"
+      lineinfile:
+        path: /etc/environment
+        line: 'KUBECONFIG=/etc/kubernetes/admin.conf'
+        create: yes
+
+    - name: "Add KUBECONFIG to root's bash profile"
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+        create: yes
 
 # =============================================================================
 # Phase 2: Control Plane Validation
@@ -229,49 +247,18 @@
         port: 6443
         timeout: 120
 
-    - name: "Verify control plane components are running"
-      shell: |
-        count=0
-        if crictl ps 2>/dev/null | grep -q kube-apiserver; then count=`expr $count + 1`; fi
-        if crictl ps 2>/dev/null | grep -q kube-controller-manager; then count=`expr $count + 1`; fi
-        if crictl ps 2>/dev/null | grep -q kube-scheduler; then count=`expr $count + 1`; fi
-        if crictl ps 2>/dev/null | grep -q etcd; then count=`expr $count + 1`; fi
-        if kubectl cluster-info >/dev/null 2>&1; then count=`expr $count + 1`; fi
-        echo $count
+    - name: "Verify control plane is responding"
+      shell: kubectl cluster-info
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      register: control_plane_check
-      retries: 20
-      delay: 15
-      until: control_plane_check.stdout | int >= 4
-      failed_when: false
-
-    - name: "Alternative: Check control plane via systemd (if container check fails)"
-      when: control_plane_check.stdout | int < 4
-      shell: |
-        count=0
-        if systemctl is-active --quiet kubelet; then count=`expr $count + 1`; fi
-        if systemctl is-active --quiet containerd; then count=`expr $count + 1`; fi
-        if curl -k --max-time 5 https://localhost:6443/healthz >/dev/null 2>&1; then count=`expr $count + 1`; fi
-        echo $count
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: systemd_check
+      register: cluster_info
       retries: 10
       delay: 10
-      until: systemd_check.stdout | int >= 2
-
-    - name: "Set final control plane status"
-      set_fact:
-        control_plane_ready: "{{ (control_plane_check.stdout | int >= 4) or (systemd_check.stdout | int >= 2) }}"
+      until: cluster_info.rc == 0
 
     - name: "Display control plane status"
       debug:
-        msg: |
-          Control plane validation results:
-          - Container check: {{ control_plane_check.stdout | default('0') }} components running
-          - Systemd check: {{ systemd_check.stdout | default('0') }} services running
-          - Overall status: {{ 'READY' if control_plane_ready else 'NOT READY' }}
+        msg: "{{ cluster_info.stdout_lines }}"
 
 # =============================================================================
 # Phase 3: Token Generation
@@ -289,191 +276,29 @@
           Phase 3: Token Generation
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    - name: "Ensure kubeadm binary available (locate or install)"
-      block:
-        - name: "Locate kubeadm in PATH"
-          command: command -v kubeadm
-          register: kubeadm_path
-          changed_when: false
-          failed_when: false
-
-        - name: "Install kubeadm if not found (Debian)"
-          apt:
-            name: kubeadm
-            state: present
-            update_cache: yes
-          when: kubeadm_path.rc != 0
-          register: kubeadm_install
-          ignore_errors: true
-
-        - name: "Re-locate kubeadm after install"
-          command: command -v kubeadm
-          register: kubeadm_path_after
-          changed_when: false
-          failed_when: false
-          when: kubeadm_path.rc != 0
-
-        - name: "Set kubeadm full path fact"
-          set_fact:
-            kubeadm_full_path: "{{ kubeadm_path.stdout | default(kubeadm_path_after.stdout | default('/usr/bin/kubeadm')) }}"
-
-      rescue:
-        - name: "Fail clearly if kubeadm is not available"
-          fail:
-            msg: "kubeadm binary not found and automatic install failed. Ensure kubeadm is installed on the control plane node."
-
-    - name: "Ensure admin kubeconfig is present for root"
-      block:
-        - name: "Create .kube directory for root (idempotent)"
-          file:
-            path: /root/.kube
-            state: directory
-            mode: '0700'
-
-        - name: "Copy admin.conf to /root/.kube/config"
-          copy:
-            src: /etc/kubernetes/admin.conf
-            dest: /root/.kube/config
-            remote_src: true
-            owner: root
-            group: root
-            mode: '0600'
-          register: copy_admin_conf
-          failed_when: false
-
-      when: kubeadm_full_path is defined
-
-    - name: "Wait for API server health before creating token"
-      block:
-        - name: "Ensure CNI host plugins and Flannel deployed (run once)"
-          block:
-            - name: "Check for existing CNI host plugin binaries"
-              shell: "[ -d /opt/cni/bin ] && ls -A /opt/cni/bin | wc -l || echo 0"
-              register: cni_bin_count
-              changed_when: false
-              failed_when: false
-
-            - name: "Create /opt/cni/bin if missing"
-              file:
-                path: /opt/cni/bin
-                state: directory
-                mode: '0755'
-              when: cni_bin_count.stdout | int == 0
-
-            - name: "Try extracting CNI plugins from known locations"
-              vars:
-                cni_candidates:
-                  - "{{ playbook_dir }}/../../manifests/cni/cni-plugins.tgz"
-                  - "/tmp/cni-plugins.tgz"
-                  - "/usr/share/cni/cni-plugins.tgz"
-                  - "/opt/cni/cni-plugins.tgz"
-              block:
-                - name: "Try extracting CNI plugins from candidate archives"
-                  shell: |
-                    if [ -f "{{ item }}" ]; then
-                      tar -xzf "{{ item }}" -C /opt/cni/bin && echo extracted {{ item }}
-                    else
-                      echo notfound {{ item }}
-                    fi
-                  args:
-                    executable: /bin/bash
-                  loop: "{{ cni_candidates }}"
-                  register: extract_result
-                  failed_when: false
-
-            - name: "Refresh CNI host plugin count"
-              shell: "ls -A /opt/cni/bin | wc -l || echo 0"
-              register: cni_bin_count_after
-              changed_when: false
-              failed_when: false
-
-            - name: "Deploy Flannel CNI manifest (run once)"
-              shell: kubectl apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
-              environment:
-                KUBECONFIG: /etc/kubernetes/admin.conf
-              register: flannel_apply
-              failed_when: false
-
-            - name: "Wait for Flannel pods to be ready (run once)"
-              shell: |
-                kubectl wait --for=condition=ready pod -l app=flannel -n kube-flannel --timeout=180s
-              environment:
-                KUBECONFIG: /etc/kubernetes/admin.conf
-              register: flannel_wait
-              retries: 6
-              delay: 10
-              until: flannel_wait.rc == 0
-              failed_when: false
-
-            - name: "Restart kubelet if we extracted CNI plugins"
-              systemd:
-                name: kubelet
-                state: restarted
-              when: cni_bin_count.stdout | int == 0 and cni_bin_count_after.stdout | int > 0
-
-          run_once: true
-          when: kubeadm_full_path is defined
-
-        - name: "Check API health (loop until healthy)"
-          shell: |
-            set -o pipefail
-            curl -k --max-time 5 -fsS https://127.0.0.1:6443/healthz || exit 1
-          args:
-            executable: /bin/bash
-          register: api_health
-          retries: 12
-          delay: 5
-          until: api_health.rc == 0
-          changed_when: false
-          failed_when: api_health.rc != 0
-
-      when: kubeadm_full_path is defined
-
-    - name: "Fail if kubeadm path is not executable before token creation"
-      stat:
-        path: "{{ kubeadm_full_path }}"
-      register: kubeadm_exec_stat
-      run_once: true
-
-    - name: "Abort if kubeadm is not executable"
-      fail:
-        msg: "kubeadm binary not found or not executable at {{ kubeadm_full_path }}. Check installation and permissions."
-      when: not kubeadm_exec_stat.stat.exists or not kubeadm_exec_stat.stat.executable
-      run_once: true
-
-    - name: "Generate join token (run once on control plane)"
-      shell: "'{{ kubeadm_full_path }}' token create --print-join-command"
+    - name: "Generate join token"
+      shell: kubeadm token create --print-join-command
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
-      retries: 6
-      delay: 10
+      retries: 3
+      delay: 5
       until: join_command.rc == 0
-      run_once: true
 
     - name: "Store join command"
       set_fact:
         kubernetes_join_command: "{{ join_command.stdout }}"
 
-    - name: "Persist join command to disk on control plane"
-      copy:
-        dest: /etc/kubernetes/join-command.txt
-        content: "{{ kubernetes_join_command }}\n"
-        owner: root
-        group: root
-        mode: '0640'
-      run_once: true
-
-    - name: "Display join command (for debugging)"
+    - name: "Display join command"
       debug:
         msg: "Join command: {{ kubernetes_join_command }}"
 
 # =============================================================================
-# Phase 4: Worker Node Join (Critical Phase)
-# Join worker nodes to cluster with comprehensive error handling
+# Phase 4: CNI Deployment
+# Deploy Flannel CNI plugin before worker nodes join
 # =============================================================================
-- name: "Phase 4: Worker Node Join - Debian Workers Only"
-  hosts: storage_nodes
+- name: "Phase 4: CNI Deployment - Flannel"
+  hosts: monitoring_nodes
   gather_facts: false
   become: true
   tasks:
@@ -481,194 +306,30 @@
       debug:
         msg: |
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          Phase 4: Worker Node Join
-          Target: {{ inventory_hostname }}
+          Phase 4: CNI Deployment (Flannel)
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    - name: "Check if node is already joined"
-      stat:
-        path: /etc/kubernetes/kubelet.conf
-      register: kubelet_conf
+    - name: "Check if CNI plugins are installed"
+      shell: "ls /opt/cni/bin 2>/dev/null | wc -l"
+      register: cni_plugin_count
+      changed_when: false
 
-    - name: "Skip join if already joined"
-      debug:
-        msg: "{{ inventory_hostname }} already joined to cluster"
-      when: kubelet_conf.stat.exists
+    - name: "Download CNI plugins if missing"
+      get_url:
+        url: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+        dest: /tmp/cni-plugins.tgz
+        mode: '0644'
+      when: cni_plugin_count.stdout | int < 5
 
-    # Pre-join cleanup
-    - name: "Kill any hanging kubeadm join processes"
-      shell: |
-        pkill -f "kubeadm join" || true
-        sleep 2
-        pkill -9 -f "kubeadm join" || true
-      when: not kubelet_conf.stat.exists
-
-    - name: "Remove partial join state"
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/kubernetes/kubelet.conf
-        - /etc/kubernetes/pki
-        - /var/lib/kubelet/pki
-      when: not kubelet_conf.stat.exists
-
-    # Prerequisites validation
-    - name: "Verify containerd socket exists"
-      stat:
-        path: /var/run/containerd/containerd.sock
-      register: containerd_socket
-      when: not kubelet_conf.stat.exists
-
-    - name: "Fail if containerd socket missing"
-      fail:
-        msg: "Containerd socket not found at /var/run/containerd/containerd.sock"
-      when: 
-        - not kubelet_conf.stat.exists
-        - not containerd_socket.stat.exists
-
-    - name: "Verify kubeadm binary exists"
-      stat:
-        path: /usr/bin/kubeadm
-      register: kubeadm_binary
-      when: not kubelet_conf.stat.exists
-
-    - name: "Fail if kubeadm binary missing"
-      fail:
-        msg: "kubeadm binary not found at /usr/bin/kubeadm"
-      when:
-        - not kubelet_conf.stat.exists
-        - not kubeadm_binary.stat.exists
-
-    - name: "Test connectivity to control plane"
-      wait_for:
-        host: "{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}"
-        port: 6443
-        timeout: 30
-      when: not kubelet_conf.stat.exists
-
-    # Execute join with retry logic
-    - name: "Join worker node to cluster"
-      shell: "{{ hostvars[groups['monitoring_nodes'][0]].kubernetes_join_command }}"
-      when: not kubelet_conf.stat.exists
-      register: join_result
-      retries: 3
-      delay: 10
-      until: join_result.rc == 0
-      failed_when: false
-
-    # Log success
-    - name: "Log successful join"
-      copy:
-        dest: /var/log/kubeadm-join.log
-        content: |
-          Join successful at {{ ansible_date_time.iso8601 }}
-          Node: {{ inventory_hostname }}
-          Command: {{ hostvars[groups['monitoring_nodes'][0]].kubernetes_join_command }}
-          Result: {{ join_result.stdout }}
-      when: 
-        - not kubelet_conf.stat.exists
-        - join_result.rc == 0
-
-    # Handle failure
-    - name: "Capture failure diagnostics"
-      block:
-        - name: "Get kubelet service status"
-          shell: systemctl status kubelet || true
-          register: kubelet_status
-
-        - name: "Get kubelet logs"
-          shell: journalctl -u kubelet -n 50 --no-pager || true
-          register: kubelet_logs
-
-        - name: "Get containerd logs"
-          shell: journalctl -u containerd -n 50 --no-pager || true
-          register: containerd_logs
-
-        - name: "Check network connectivity"
-          shell: |
-            ss -tlnp | grep -E '6443|10250' || true
-            ip route show || true
-          register: network_status
-
-        - name: "Write failure diagnostics"
-          copy:
-            dest: /var/log/kubeadm-join-failure.log
-            content: |
-              Join failed at {{ ansible_date_time.iso8601 }}
-              Node: {{ inventory_hostname }}
-              Command: {{ hostvars[groups['monitoring_nodes'][0]].kubernetes_join_command }}
-              
-              === Join Result ===
-              {{ join_result.stdout }}
-              {{ join_result.stderr }}
-              
-              === Kubelet Status ===
-              {{ kubelet_status.stdout }}
-              
-              === Kubelet Logs ===
-              {{ kubelet_logs.stdout }}
-              
-              === Containerd Logs ===
-              {{ containerd_logs.stdout }}
-              
-              === Network Status ===
-              {{ network_status.stdout }}
-
-        - name: "Fail with diagnostic information"
-          fail:
-            msg: |
-              Worker join failed. Diagnostics saved to /var/log/kubeadm-join-failure.log
-              Check the log file for details.
-      when:
-        - not kubelet_conf.stat.exists
-        - join_result.rc != 0
-
-    # Health validation
-    - name: "Wait for kubelet config file"
-      wait_for:
-        path: /etc/kubernetes/kubelet.conf
-        timeout: 120
-      when: 
-        - not kubelet_conf.stat.exists
-        - join_result.rc == 0
-
-    - name: "Ensure kubelet is running"
-      systemd:
-        name: kubelet
-        state: started
-        enabled: true
-      when:
-        - not kubelet_conf.stat.exists
-        - join_result.rc == 0
-
-    - name: "Verify kubelet health"
-      systemd:
-        name: kubelet
-        state: started
-      register: kubelet_health
-      when:
-        - not kubelet_conf.stat.exists
-        - join_result.rc == 0
-
-# =============================================================================
-# Phase 5: CNI Deployment
-# Deploy Flannel CNI plugin for pod networking
-# =============================================================================
-- name: "Phase 5: CNI Deployment - Flannel"
-  hosts: monitoring_nodes
-  gather_facts: false
-  become: true
-  tasks:
-    - name: "Display Phase 5 banner"
-      debug:
-        msg: |
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          Phase 5: CNI Deployment (Flannel)
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    - name: "Extract CNI plugins"
+      unarchive:
+        src: /tmp/cni-plugins.tgz
+        dest: /opt/cni/bin
+        remote_src: yes
+      when: cni_plugin_count.stdout | int < 5
 
     - name: "Check if Flannel is already deployed"
-      shell: kubectl get namespace kube-flannel
+      shell: kubectl get namespace kube-flannel 2>/dev/null
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: flannel_namespace
@@ -680,19 +341,60 @@
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       when: flannel_namespace.rc != 0
+      register: flannel_deploy
 
-    - name: "Wait for Flannel pods to be ready"
-      shell: |
-        kubectl wait --for=condition=ready pod \
-          -l app=flannel \
-          -n kube-flannel \
-          --timeout=120s
+    - name: "Wait for Flannel DaemonSet to be available"
+      shell: kubectl get daemonset -n kube-flannel kube-flannel-ds 2>/dev/null
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      retries: 5
-      delay: 10
-      register: flannel_ready
-      until: flannel_ready.rc == 0
+      register: flannel_ds
+      retries: 10
+      delay: 5
+      until: flannel_ds.rc == 0
+      when: flannel_deploy is changed
+
+    - name: "Display Flannel deployment status"
+      debug:
+        msg: "Flannel CNI deployed successfully"
+
+# =============================================================================
+# Phase 5: Worker Node Join
+# Join worker nodes to cluster
+# =============================================================================
+- name: "Phase 5: Worker Node Join"
+  hosts: storage_nodes
+  gather_facts: false
+  become: true
+  tasks:
+    - name: "Display Phase 5 banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Phase 5: Worker Node Join
+          Target: {{ inventory_hostname }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Check if node is already joined"
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: "Join worker node to cluster"
+      shell: "{{ hostvars[groups['monitoring_nodes'][0]].kubernetes_join_command }}"
+      when: not kubelet_conf.stat.exists
+      register: join_result
+
+    - name: "Wait for kubelet to start"
+      systemd:
+        name: kubelet
+        state: started
+        enabled: true
+      when: not kubelet_conf.stat.exists
+
+    - name: "Display join status"
+      debug:
+        msg: "{{ inventory_hostname }} successfully joined the cluster"
+      when: not kubelet_conf.stat.exists
 
 # =============================================================================
 # Phase 6: Cluster Validation
@@ -710,6 +412,15 @@
           Phase 6: Cluster Validation
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+    - name: "Wait for nodes to be Ready"
+      shell: kubectl get nodes -o json | jq -r '.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True")) | .metadata.name' | wc -l
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: ready_nodes
+      retries: 20
+      delay: 10
+      until: ready_nodes.stdout | int >= 2
+
     - name: "Get node status"
       shell: kubectl get nodes -o wide
       environment:
@@ -720,31 +431,12 @@
       debug:
         msg: "{{ nodes_status.stdout_lines }}"
 
-    - name: "Verify all nodes are Ready"
-      shell: kubectl get nodes -o json | jq -r '.items[] | select(.status.conditions[] | select(.type=="Ready" and .status=="True")) | .metadata.name' | wc -l
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: ready_nodes
-      retries: 10
-      delay: 10
-      until: ready_nodes.stdout | int >= 2
-
-    - name: "Get system pods status"
-      shell: kubectl get pods -n kube-system -o wide
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: system_pods
-
-    - name: "Display system pods"
-      debug:
-        msg: "{{ system_pods.stdout_lines }}"
-
-    - name: "Verify CoreDNS is running"
+    - name: "Wait for CoreDNS to be Running"
       shell: kubectl get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[*].status.phase}' | grep -c Running
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: coredns_pods
-      retries: 10
+      retries: 15
       delay: 10
       until: coredns_pods.stdout | int >= 1
 
