@@ -380,10 +380,9 @@
                     tar -xzf {{ item }} -C /opt/cni/bin
                   args:
                     executable: /bin/bash
-                  when: candidate_stat.results[loop.index0].stat.exists and (cni_bin_count.stdout | int == 0)
+                  when: candidate_stat.results[ansible_loop.index0].stat.exists and (cni_bin_count.stdout | int == 0)
                   register: extract_result
                   loop: "{{ cni_candidates }}"
-                  changed_when: extract_result.rc == 0
                   failed_when: false
 
             - name: "Refresh CNI host plugin count"
