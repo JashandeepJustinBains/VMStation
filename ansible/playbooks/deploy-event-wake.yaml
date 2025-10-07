@@ -1,0 +1,43 @@
+---
+# Deploy event-driven wake monitor and systemd units on masternode
+- name: "Deploy event-driven wake monitor"
+  hosts: masternode
+  become: true
+  tasks:
+    - name: "Copy event-wake script"
+      copy:
+        src: scripts/vmstation-event-wake.sh
+        dest: /usr/local/bin/vmstation-event-wake.sh
+        mode: '0755'
+
+    - name: "Copy systemd service unit"
+      copy:
+        src: scripts/vmstation-event-wake.service
+        dest: /etc/systemd/system/vmstation-event-wake.service
+        mode: '0644'
+
+    - name: "Copy systemd timer unit"
+      copy:
+        src: scripts/vmstation-event-wake.timer
+        dest: /etc/systemd/system/vmstation-event-wake.timer
+        mode: '0644'
+
+    - name: "Reload systemd"
+      systemd:
+        daemon_reload: true
+
+    - name: "Enable and start event-wake service"
+      systemd:
+        name: vmstation-event-wake.service
+        enabled: true
+        state: started
+
+    - name: "Enable and start event-wake timer"
+      systemd:
+        name: vmstation-event-wake.timer
+        enabled: true
+        state: started
+
+    - name: "Display event-wake deployment status"
+      debug:
+        msg: "Event-driven wake monitor and timer deployed and running on masternode."

@@ -1,0 +1,27 @@
+---
+# Deploy Jellyfin media server on storage node
+- name: "Deploy Jellyfin Pod and Service"
+  hosts: storage_nodes
+  become: true
+  tasks:
+    - name: "Create Jellyfin namespace"
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', 'manifests/jellyfin/jellyfin.yaml') }}"
+        wait: yes
+        apply: yes
+      register: jellyfin_namespace
+      failed_when: jellyfin_namespace.failed
+
+    - name: "Apply Jellyfin manifest"
+      kubernetes.core.k8s:
+        state: present
+        src: manifests/jellyfin/jellyfin.yaml
+        wait: yes
+        apply: yes
+      register: jellyfin_deploy
+      failed_when: jellyfin_deploy.failed
+
+    - name: "Display Jellyfin deployment status"
+      debug:
+        msg: "Jellyfin deployment: {{ jellyfin_deploy }}"

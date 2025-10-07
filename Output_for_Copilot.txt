@@ -1,913 +1,258 @@
-root@masternode:/srv/monitoring_data/VMStation# git pull
-
-# Reset cluster
-./deploy.sh reset
-
-# Deploy with fixed role
-./deploy.sh all --with-rke2 --yes
-remote: Enumerating objects: 15, done.
-remote: Counting objects: 100% (15/15), done.
-remote: Compressing objects: 100% (7/7), done.
-remote: Total 15 (delta 6), reused 15 (delta 6), pack-reused 0 (from 0)
-Unpacking objects: 100% (15/15), 12.58 KiB | 991.00 KiB/s, done.
-From https://github.com/JashandeepJustinBains/VMStation
-   6a353b2..4ce3ee3  main       -> origin/main
-Updating 6a353b2..4ce3ee3
-Fast-forward
- .github/instructions/memory.instruction.md        |  35 +++++++++++++++-
- READ_ME_FIRST.md                                  | 183 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- SOLUTION_SUMMARY.md                               | 307 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- SYSTEMD_FIX_SUMMARY.md                            | 166 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- ansible/roles/install-k8s-binaries/tasks/main.yml |  55 ++++++++++++++++++++++----
- docs/DEPLOY_FIXES_SUMMARY.md                      | 208 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 6 files changed, 945 insertions(+), 9 deletions(-)
- create mode 100644 READ_ME_FIRST.md
- create mode 100644 SOLUTION_SUMMARY.md
- create mode 100644 SYSTEMD_FIX_SUMMARY.md
- create mode 100644 docs/DEPLOY_FIXES_SUMMARY.md
-[INFO] ========================================
-[INFO]  Comprehensive Cluster Reset
-[INFO] ========================================
-[INFO] This will reset:
-[INFO]   - Debian Kubernetes cluster (kubeadm)
-[INFO]   - RKE2 cluster on homelab
-[INFO]   - All network interfaces and configs
-[INFO]
-[INFO] SSH keys and physical ethernet will be preserved
-[INFO]
-Proceed with comprehensive reset? [y/N]: y
-[INFO]
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO]   PHASE 1: Resetting Debian Nodes
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-PLAY [Pre-reset validation and spin-down] **************************************
-
-TASK [Confirm reset operation] *************************************************
-yes^M[Confirm reset operation]
-⚠️  CLUSTER RESET OPERATION ⚠️
-
-This will:
-- Stop all Kubernetes workloads
-- Run kubeadm reset on all nodes
-- Remove all Kubernetes config files
-- Delete all Kubernetes network interfaces
-- Clean container runtime state
-
-This will NOT affect:
-- SSH keys and access
-- Physical ethernet interfaces
-- Container runtime binaries
-
-Type 'yes' to proceed with reset
-:
-ok: [localhost]
-
-TASK [Set confirmation for automation mode] ************************************
-skipping: [localhost]
-
-TASK [Abort if not confirmed] **************************************************
-skipping: [localhost]
-
-TASK [Generate spin targets from cluster] **************************************
-ok: [localhost]
-
-TASK [Set spin_targets fact] ***************************************************
-ok: [localhost]
-
-TASK [Display nodes to be reset] ***********************************************
-ok: [localhost] =>
-  msg: 'Nodes to reset: No running cluster detected'
-
-PLAY [Drain and cordon nodes gracefully] ***************************************
-
-TASK [Cordon nodes to prevent new pods] ****************************************
-skipping: [localhost]
-
-TASK [Drain nodes safely] ******************************************************
-skipping: [localhost]
-
-TASK [Wait for pods to terminate] **********************************************
-skipping: [localhost]
-
-PLAY [Reset all worker nodes] **************************************************
-
-TASK [Gathering Facts] *********************************************************
-ok: [storagenodet3500]
-
-TASK [cluster-reset : Stop kubelet service before reset] ***********************
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Run kubeadm reset with force flag] ***********************
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Display kubeadm reset output] ****************************
-ok: [storagenodet3500] =>
-  kubeadm_reset_result.stdout_lines:
-  - '[preflight] Running pre-flight checks'
-  - '[reset] Deleted contents of the etcd data directory: /var/lib/etcd'
-  - '[reset] Stopping the kubelet service'
-  - '[reset] Unmounting mounted directories in "/var/lib/kubelet"'
-  - '[reset] Deleting contents of directories: [/etc/kubernetes/manifests /etc/kubernetes/pki]'
-  - '[reset] Deleting files: [/etc/kubernetes/admin.conf /etc/kubernetes/super-admin.conf /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf]'
-  - ''
-  - The reset process does not clean CNI configuration. To do so, you must remove /etc/cni/net.d
-  - ''
-  - The reset process does not reset or clean up iptables rules or IPVS tables.
-  - If you wish to reset iptables, you must do so manually by using the "iptables" command.
-  - ''
-  - If your cluster was setup to utilize IPVS, run ipvsadm --clear (or similar)
-  - to reset your system's IPVS tables.
-  - ''
-  - The reset process does not clean your kubeconfig files and you must remove them manually.
-  - Please, check the contents of the $HOME/.kube/config file.
-
-TASK [cluster-reset : Remove all CNI config files (cni/cbr cleanup)] ***********
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Remove Kubernetes config directories (except /etc/cni/net.d)] ***
-changed: [storagenodet3500] => (item=/etc/kubernetes)
-ok: [storagenodet3500] => (item=/var/lib/kubelet)
-ok: [storagenodet3500] => (item=/var/lib/etcd)
-ok: [storagenodet3500] => (item=/var/lib/cni)
-changed: [storagenodet3500] => (item=/run/flannel)
-ok: [storagenodet3500] => (item=/var/lib/flannel)
-ok: [storagenodet3500] => (item=/var/run/flannel)
-changed: [storagenodet3500] => (item=/opt/cni/bin)
-
-TASK [cluster-reset : Identify Kubernetes-related network interfaces] **********
-ok: [storagenodet3500]
-
-TASK [cluster-reset : Display identified Kubernetes interfaces] ****************
-skipping: [storagenodet3500]
-
-TASK [cluster-reset : Recreate /etc/kubernetes/manifests directory (empty)] ****
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Bring down Kubernetes network interfaces] ****************
-skipping: [storagenodet3500]
-
-TASK [cluster-reset : Delete Kubernetes network interfaces] ********************
-skipping: [storagenodet3500]
-
-TASK [cluster-reset : Remove iptables rules created by Kubernetes (flush all chains)] ***
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Flush nftables rules on RHEL 10+ (cleanup nftables tables)] ***
-skipping: [storagenodet3500]
-
-TASK [cluster-reset : Remove ipvs rules if present] ****************************
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Clean container runtime state (containerd)] **************
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Restart containerd after cleanup] ************************
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Remove any remaining Kubernetes processes] ***************
-changed: [storagenodet3500]
-
-TASK [cluster-reset : Find all authorized_keys files] **************************
-ok: [storagenodet3500]
-
-TASK [cluster-reset : Assert at least one SSH authorized_keys file exists] *****
-ok: [storagenodet3500] => changed=false
-  msg: SSH keys preserved successfully
-
-TASK [cluster-reset : Verify physical ethernet interfaces are preserved] *******
-ok: [storagenodet3500]
-
-TASK [cluster-reset : Assert physical interfaces still exist] ******************
-ok: [storagenodet3500] => changed=false
-  msg: Physical ethernet interfaces preserved successfully
-
-TASK [cluster-reset : Display reset completion summary] ************************
-ok: [storagenodet3500] =>
-  msg: |-
-    Kubernetes cluster reset completed successfully:
-    - kubeadm reset: OK
-    - Kubernetes interfaces removed: 0
-    - SSH keys: preserved
-    - Physical interfaces: preserved
-    - Node is ready for fresh cluster deployment
-
-PLAY [Reset all worker nodes] **************************************************
-
-TASK [Gathering Facts] *********************************************************
-ok: [homelab]
-
-TASK [cluster-reset : Stop kubelet service before reset] ***********************
-fatal: [homelab]: FAILED! => changed=false
-  msg: 'Could not find the requested service kubelet: host'
-...ignoring
-
-TASK [cluster-reset : Run kubeadm reset with force flag] ***********************
-fatal: [homelab]: FAILED! => changed=false
-  cmd: kubeadm reset --force
-  msg: '[Errno 2] No such file or directory: b''kubeadm'''
-  rc: 2
-  stderr: ''
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-...ignoring
-
-TASK [cluster-reset : Display kubeadm reset output] ****************************
-ok: [homelab] =>
-  kubeadm_reset_result.stdout_lines: []
-
-TASK [cluster-reset : Remove all CNI config files (cni/cbr cleanup)] ***********
-changed: [homelab]
-
-TASK [cluster-reset : Remove Kubernetes config directories (except /etc/cni/net.d)] ***
-changed: [homelab] => (item=/etc/kubernetes)
-ok: [homelab] => (item=/var/lib/kubelet)
-ok: [homelab] => (item=/var/lib/etcd)
-ok: [homelab] => (item=/var/lib/cni)
-ok: [homelab] => (item=/run/flannel)
-ok: [homelab] => (item=/var/lib/flannel)
-ok: [homelab] => (item=/var/run/flannel)
-ok: [homelab] => (item=/opt/cni/bin)
-
-TASK [cluster-reset : Identify Kubernetes-related network interfaces] **********
-ok: [homelab]
-
-TASK [cluster-reset : Display identified Kubernetes interfaces] ****************
-skipping: [homelab]
-
-TASK [cluster-reset : Recreate /etc/kubernetes/manifests directory (empty)] ****
-changed: [homelab]
-
-TASK [cluster-reset : Bring down Kubernetes network interfaces] ****************
-skipping: [homelab]
-
-TASK [cluster-reset : Delete Kubernetes network interfaces] ********************
-skipping: [homelab]
-
-TASK [cluster-reset : Remove iptables rules created by Kubernetes (flush all chains)] ***
-changed: [homelab]
-
-TASK [cluster-reset : Flush nftables rules on RHEL 10+ (cleanup nftables tables)] ***
-changed: [homelab]
-
-TASK [cluster-reset : Remove ipvs rules if present] ****************************
-changed: [homelab]
-
-TASK [cluster-reset : Clean container runtime state (containerd)] **************
-changed: [homelab]
-
-TASK [cluster-reset : Restart containerd after cleanup] ************************
-fatal: [homelab]: FAILED! => changed=false
-  msg: 'Could not find the requested service containerd: host'
-...ignoring
-
-TASK [cluster-reset : Remove any remaining Kubernetes processes] ***************
-changed: [homelab]
-
-TASK [cluster-reset : Find all authorized_keys files] **************************
-ok: [homelab]
-
-TASK [cluster-reset : Assert at least one SSH authorized_keys file exists] *****
-ok: [homelab] => changed=false
-  msg: SSH keys preserved successfully
-
-TASK [cluster-reset : Verify physical ethernet interfaces are preserved] *******
-ok: [homelab]
-
-TASK [cluster-reset : Assert physical interfaces still exist] ******************
-ok: [homelab] => changed=false
-  msg: Physical ethernet interfaces preserved successfully
-
-TASK [cluster-reset : Display reset completion summary] ************************
-ok: [homelab] =>
-  msg: |-
-    Kubernetes cluster reset completed successfully:
-    - kubeadm reset: FAILED (check if kubeadm was installed)
-    - Kubernetes interfaces removed: 0
-    - SSH keys: preserved
-    - Physical interfaces: preserved
-    - Node is ready for fresh cluster deployment
-
-PLAY [Reset control plane node] ************************************************
-
-TASK [Gathering Facts] *********************************************************
-ok: [masternode]
-
-TASK [cluster-reset : Stop kubelet service before reset] ***********************
-fatal: [masternode]: FAILED! => changed=false
-  cmd: /usr/bin/systemctl
-  msg: |-
-    System has not been booted with systemd as init system (PID 1). Can't operate.
-    Failed to connect to bus: Host is down
+Even after these changes 
+Problem
+The Kubernetes deployment playbook was failing at Phase 2: Control Plane Validation with kubectl prompting for username/password authentication instead of using the admin certificate:
+
+TASK [Verify control plane is responding] **************************************
+FAILED - RETRYING: [masternode]: Verify control plane is responding (10 retries left).
+...
+fatal: [masternode]: FAILED! => changed=true
+  attempts: 10
+  cmd: kubectl cluster-info
   rc: 1
-  stderr: |-
-    System has not been booted with systemd as init system (PID 1). Can't operate.
-    Failed to connect to bus: Host is down
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-...ignoring
+  stderr: 'error: EOF'
+  stdout: 'Please enter Username: '
+Root Cause
+The playbook was relying on Ansible's environment: parameter to set the KUBECONFIG environment variable for kubectl commands:
 
-TASK [cluster-reset : Run kubeadm reset with force flag] ***********************
-fatal: [masternode]: FAILED! => changed=false
-  cmd: kubeadm reset --force
-  msg: '[Errno 2] No such file or directory: b''kubeadm'''
-  rc: 2
-  stderr: ''
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-...ignoring
+- name: "Verify control plane is responding"
+  shell: kubectl cluster-info
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+When using the shell: module with environment:, environment variables don't always propagate correctly to the spawned shell process, especially when using ansible_connection: local or in certain shell configurations. This caused kubectl to fall back to interactive authentication, prompting for a username.
 
-TASK [cluster-reset : Display kubeadm reset output] ****************************
-ok: [masternode] =>
-  kubeadm_reset_result.stdout_lines: []
+Solution
+Replace all kubectl commands to use the --kubeconfig flag explicitly instead of relying on environment variable propagation:
 
-TASK [cluster-reset : Remove all CNI config files (cni/cbr cleanup)] ***********
-changed: [masternode]
+- name: "Verify control plane is responding"
+  shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+This ensures kubectl always uses the correct kubeconfig file regardless of environment variable behavior.
 
-TASK [cluster-reset : Remove Kubernetes config directories (except /etc/cni/net.d)] ***
-changed: [masternode] => (item=/etc/kubernetes)
-ok: [masternode] => (item=/var/lib/kubelet)
-ok: [masternode] => (item=/var/lib/etcd)
-ok: [masternode] => (item=/var/lib/cni)
-ok: [masternode] => (item=/run/flannel)
-ok: [masternode] => (item=/var/lib/flannel)
-ok: [masternode] => (item=/var/run/flannel)
-ok: [masternode] => (item=/opt/cni/bin)
+Changes
+Updated 14 kubectl commands across 4 deployment phases in ansible/playbooks/deploy-cluster.yaml:
 
-TASK [cluster-reset : Identify Kubernetes-related network interfaces] **********
-ok: [masternode]
+Phase 2 (Control Plane Validation): 1 command
+Phase 4 (CNI Deployment): 3 commands
+Phase 6 (Cluster Validation): 3 commands
+Phase 7 (Application Deployment): 7 commands
+Also removed unnecessary KUBECONFIG environment variable from Phase 3's kubeadm command (kubeadm reads /etc/kubernetes/admin.conf by default).
 
-TASK [cluster-reset : Display identified Kubernetes interfaces] ****************
-skipping: [masternode]
+Net impact: -28 lines (removed 41 lines of environment: blocks, added 13 lines with --kubeconfig flags)
 
-TASK [cluster-reset : Recreate /etc/kubernetes/manifests directory (empty)] ****
-changed: [masternode]
+and 
+Problem
+The Kubernetes deployment was failing at Phase 2 with an authentication error when validating the control plane:
 
-TASK [cluster-reset : Bring down Kubernetes network interfaces] ****************
-skipping: [masternode]
+TASK [Verify control plane is responding] **************************************
+fatal: [masternode]: FAILED!
+  cmd: kubectl cluster-info
+  stderr: 'error: EOF'
+  stdout: 'Please enter Username: '
+This occurred because kubectl cluster-info was prompting for credentials instead of using the admin certificate automatically.
 
-TASK [cluster-reset : Delete Kubernetes network interfaces] ********************
-skipping: [masternode]
+Root Cause
+Phase 1 (Control Plane Initialization) contained duplicate and complex logic that created a custom kubectl context requiring manual authentication. Specifically:
 
-TASK [cluster-reset : Remove iptables rules created by Kubernetes (flush all chains)] ***
-changed: [masternode]
+Lines 209-229: First set of duplicate tasks creating custom admin credentials and context
+Lines 238-250: Second set of duplicate tasks doing the same thing
+Phase 2 was using KUBECONFIG: /root/.kube/config which referenced this broken custom context
+The custom context setup was attempting to manually configure credentials with kubectl config set-credentials and kubectl config set-context, but this created an authentication context that required interactive login instead of using the admin certificate embedded in /etc/kubernetes/admin.conf.
 
-TASK [cluster-reset : Flush nftables rules on RHEL 10+ (cleanup nftables tables)] ***
-skipping: [masternode]
+Solution
+Phase 1 - Simplified kubeconfig setup (removed 43 lines):
 
-TASK [cluster-reset : Remove ipvs rules if present] ****************************
-changed: [masternode]
+Removed duplicate Copy admin.conf tasks with conditional logic
+Removed both Set admin context and credentials tasks that created the problematic custom context
+Kept simple, unconditional copy of admin.conf to /root/.kube/config for convenience
+Retained KUBECONFIG environment variable setup pointing to /etc/kubernetes/admin.conf
+Phase 2 - Fixed KUBECONFIG path:
 
-TASK [cluster-reset : Clean container runtime state (containerd)] **************
-changed: [masternode]
+Changed KUBECONFIG: /root/.kube/config to KUBECONFIG: /etc/kubernetes/admin.conf
+Result
+✅ kubectl now uses the admin certificate directly via /etc/kubernetes/admin.conf
+✅ No custom authentication context is created that requires manual login
+✅ Phase 2 validation will work without prompting for username/password
+✅ Reduced playbook from 579 lines to 535 lines (44 lines removed)
+✅ All syntax validation tests pass
 
-TASK [cluster-reset : Restart containerd after cleanup] ************************
-fatal: [masternode]: FAILED! => changed=false
-  cmd: /usr/bin/systemctl
-  msg: |-
-    System has not been booted with systemd as init system (PID 1). Can't operate.
-    Failed to connect to bus: Host is down
-  rc: 1
-  stderr: |-
-    System has not been booted with systemd as init system (PID 1). Can't operate.
-    Failed to connect to bus: Host is down
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-...ignoring
+This fix aligns with the documented behavior in PLAYBOOK_SIMPLIFICATION_SUMMARY.md and DEPLOYMENT_FIX_COMPLETE.md, where kubectl should work automatically without login by using /etc/kubernetes/admin.conf via the KUBECONFIG environment variable.
 
-TASK [cluster-reset : Remove any remaining Kubernetes processes] ***************
-changed: [masternode]
-
-TASK [cluster-reset : Find all authorized_keys files] **************************
-ok: [masternode]
-
-TASK [cluster-reset : Assert at least one SSH authorized_keys file exists] *****
-ok: [masternode] => changed=false
-  msg: SSH keys preserved successfully
-
-TASK [cluster-reset : Verify physical ethernet interfaces are preserved] *******
-ok: [masternode]
-
-TASK [cluster-reset : Assert physical interfaces still exist] ******************
-ok: [masternode] => changed=false
-  msg: Physical ethernet interfaces preserved successfully
-
-TASK [cluster-reset : Display reset completion summary] ************************
-ok: [masternode] =>
-  msg: |-
-    Kubernetes cluster reset completed successfully:
-    - kubeadm reset: FAILED (check if kubeadm was installed)
-    - Kubernetes interfaces removed: 0
-    - SSH keys: preserved
-    - Physical interfaces: preserved
-    - Node is ready for fresh cluster deployment
-
-PLAY [Post-reset validation] ***************************************************
-
-TASK [Verify kubelet is stopped] ***********************************************
-fatal: [masternode]: FAILED! => changed=false
-  cmd: /usr/bin/systemctl
-  msg: |-
-    System has not been booted with systemd as init system (PID 1). Can't operate.
-    Failed to connect to bus: Host is down
-  rc: 1
-  stderr: |-
-    System has not been booted with systemd as init system (PID 1). Can't operate.
-    Failed to connect to bus: Host is down
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-...ignoring
-ok: [storagenodet3500]
-fatal: [homelab]: FAILED! => changed=false
-  msg: 'Could not find the requested service kubelet: host'
-...ignoring
-
-TASK [Verify no Kubernetes config remains] *************************************
-ok: [masternode]
-ok: [storagenodet3500]
-ok: [homelab]
-
-TASK [Assert clean state] ******************************************************
-ok: [masternode] => changed=false
-  msg: Clean reset verified on masternode
-ok: [storagenodet3500] => changed=false
-  msg: Clean reset verified on storagenodet3500
-ok: [homelab] => changed=false
-  msg: Clean reset verified on homelab
-
-TASK [Verify SSH connectivity after reset] *************************************
-ok: [masternode]
-ok: [storagenodet3500]
-ok: [homelab]
-
-TASK [Display final reset summary] *********************************************
-ok: [masternode] =>
-  msg: |-
-    ✅ Cluster reset completed successfully on masternode
-    - Kubernetes config removed
-    - Network interfaces cleaned
-    - SSH access preserved
-    - Ready for fresh deployment
-ok: [storagenodet3500] =>
-  msg: |-
-    ✅ Cluster reset completed successfully on storagenodet3500
-    - Kubernetes config removed
-    - Network interfaces cleaned
-    - SSH access preserved
-    - Ready for fresh deployment
-ok: [homelab] =>
-  msg: |-
-    ✅ Cluster reset completed successfully on homelab
-    - Kubernetes config removed
-    - Network interfaces cleaned
-    - SSH access preserved
-    - Ready for fresh deployment
-
-PLAY [Final summary] ***********************************************************
-
-TASK [Display completion message] **********************************************
-ok: [localhost] =>
-  msg: |2-
-
-    ╔════════════════════════════════════════════════════════════╗
-    ║         CLUSTER RESET COMPLETED SUCCESSFULLY              ║
-    ╚════════════════════════════════════════════════════════════╝
-
-    All nodes have been reset and are ready for deployment.
-
-    Next steps:
-    1. Run deployment: ./deploy.sh
-    2. Or manually: ansible-playbook -i ansible/inventory/hosts ansible/playbooks/deploy-cluster.yaml
-
-    All nodes are now in a clean state with:
-    ✅ No Kubernetes configuration
-    ✅ No CNI network interfaces
-    ✅ SSH access preserved
-    ✅ Physical interfaces intact
-
-PLAY RECAP *********************************************************************
-homelab                    : ok=24   changed=8    unreachable=0    failed=0    skipped=3    rescued=0    ignored=4
-localhost                  : ok=5    changed=0    unreachable=0    failed=0    skipped=5    rescued=0    ignored=0
-masternode                 : ok=23   changed=7    unreachable=0    failed=0    skipped=4    rescued=0    ignored=4
-storagenodet3500           : ok=23   changed=10   unreachable=0    failed=0    skipped=4    rescued=0    ignored=0
-
-[INFO] ✓ Debian cluster reset completed
-[INFO]
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO]   PHASE 2: Resetting RKE2 on Homelab
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO] No RKE2 installation found on homelab, skipping
-[INFO]
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO]   Reset Complete!
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO]
-[INFO] Cluster is ready for fresh deployment
-[INFO]
-[INFO] Logs:
-[INFO]   - /srv/monitoring_data/VMStation/ansible/artifacts/reset-debian.log
-[INFO]   - /srv/monitoring_data/VMStation/ansible/artifacts/uninstall-rke2.log
-[INFO]
-[INFO] Next steps:
-[INFO]   ./deploy.sh all --with-rke2    # Full deployment
-[INFO]   ./deploy.sh debian             # Debian only
-[INFO]   ./deploy.sh rke2               # RKE2 only
-[INFO]
-[INFO] ========================================
-[INFO]  Two-Phase Deployment: Debian + RKE2
-[INFO] ========================================
-[INFO]
-[INFO]
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO]   PHASE 1: Deploying to Debian Nodes
-[INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[INFO] ========================================
-[INFO]  Deploying Kubernetes to Debian Nodes
-[INFO] ========================================
-[INFO] Target: monitoring_nodes + storage_nodes
-[INFO] Playbook: /srv/monitoring_data/VMStation/ansible/playbooks/deploy-cluster.yaml
-[INFO] Log: /srv/monitoring_data/VMStation/ansible/artifacts/deploy-debian.log
-[INFO]
-[INFO] Starting Debian deployment (this may take 10-15 minutes)...
-[WARNING]: Collection kubernetes.core does not support Ansible version 2.14.18
-
-PLAY [Phase 0 - Install Kubernetes binaries] ***********************************
+It sdoes not work 
+LAY [Phase 0: System Preparation - Install Kubernetes Binaries] ***************
 
 TASK [Gathering Facts] *********************************************************
 ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [install-k8s-binaries : Check if systemd is available] ********************
-ok: [masternode]
-ok: [storagenodet3500]
-
-TASK [install-k8s-binaries : Set systemd availability fact] ********************
-ok: [masternode]
-ok: [storagenodet3500]
-
-TASK [install-k8s-binaries : Check if kubelet binary exists] *******************
-ok: [masternode]
-ok: [storagenodet3500]
-
-TASK [install-k8s-binaries : Check if kubeadm binary exists] *******************
-ok: [masternode]
-ok: [storagenodet3500]
-
-TASK [install-k8s-binaries : Check if kubectl binary exists] *******************
-ok: [masternode]
-ok: [storagenodet3500]
-
-TASK [install-k8s-binaries : Set installation needed fact] *********************
-ok: [masternode]
-ok: [storagenodet3500]
-
-TASK [install-k8s-binaries : Display installation status] **********************
+TASK [Display Phase 0 banner] **************************************************
 ok: [masternode] =>
-  msg: Kubernetes binaries will be installed
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Phase 0: System Preparation
+    Target: masternode
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ok: [storagenodet3500] =>
-  msg: Kubernetes binaries already installed
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Phase 0: System Preparation
+    Target: storagenodet3500
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TASK [install-k8s-binaries : Install prerequisites] ****************************
-skipping: [storagenodet3500]
+TASK [Disable swap] ************************************************************
 ok: [masternode]
-
-TASK [install-k8s-binaries : Create keyrings directory] ************************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Add Kubernetes GPG key] ***************************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Add Kubernetes apt repository] ********************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Update apt cache] *********************************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Install containerd] *******************************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Create containerd config directory] ***************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Generate default containerd configuration] ********
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Enable SystemdCgroup in containerd config] ********
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Reload systemd daemon (if systemd available)] *****
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Enable and start containerd] **********************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Warn if containerd service failed to start] *******
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Install kubeadm, kubelet, and kubectl] ************
-skipping: [storagenodet3500]
-ok: [masternode]
-
-TASK [install-k8s-binaries : Hold Kubernetes packages at current version] ******
-skipping: [storagenodet3500] => (item=kubelet)
-skipping: [storagenodet3500] => (item=kubeadm)
-skipping: [storagenodet3500] => (item=kubectl)
-skipping: [storagenodet3500]
-ok: [masternode] => (item=kubelet)
-ok: [masternode] => (item=kubeadm)
-ok: [masternode] => (item=kubectl)
-
-TASK [install-k8s-binaries : Enable kubelet service] ***************************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Info about kubelet service] ***********************
-ok: [masternode] =>
-  msg: Kubelet service enabled successfully
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Add Kubernetes yum repository] ********************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Install containerd] *******************************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Create containerd config directory] ***************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Generate default containerd configuration] ********
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Enable SystemdCgroup in containerd config] ********
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Reload systemd daemon (if systemd available)] *****
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Enable and start containerd] **********************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Install kubeadm, kubelet, and kubectl] ************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Enable kubelet service] ***************************
-skipping: [masternode]
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Verify installation] ******************************
-skipping: [storagenodet3500] => (item=kubeadm)
-skipping: [storagenodet3500] => (item=kubelet)
-skipping: [storagenodet3500] => (item=kubectl)
-skipping: [storagenodet3500]
-failed: [masternode] (item=kubeadm) => changed=false
-  ansible_loop_var: item
-  cmd: kubeadm --version
-  item: kubeadm
-  msg: '[Errno 2] No such file or directory: b''kubeadm'''
-  rc: 2
-  stderr: ''
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-failed: [masternode] (item=kubelet) => changed=false
-  ansible_loop_var: item
-  cmd: kubelet --version
-  item: kubelet
-  msg: '[Errno 2] No such file or directory: b''kubelet'''
-  rc: 2
-  stderr: ''
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-failed: [masternode] (item=kubectl) => changed=false
-  ansible_loop_var: item
-  cmd: kubectl --version
-  item: kubectl
-  msg: '[Errno 2] No such file or directory: b''kubectl'''
-  rc: 2
-  stderr: ''
-  stderr_lines: <omitted>
-  stdout: ''
-  stdout_lines: <omitted>
-
-TASK [install-k8s-binaries : Display installed versions] ***********************
-skipping: [storagenodet3500] => (item={'changed': False, 'skipped': True, 'skip_reason': 'Conditional result was False', 'item': 'kubeadm', 'ansible_loop_var': 'item'})
-skipping: [storagenodet3500] => (item={'changed': False, 'skipped': True, 'skip_reason': 'Conditional result was False', 'item': 'kubelet', 'ansible_loop_var': 'item'})
-skipping: [storagenodet3500] => (item={'changed': False, 'skipped': True, 'skip_reason': 'Conditional result was False', 'item': 'kubectl', 'ansible_loop_var': 'item'})
-skipping: [storagenodet3500]
-
-TASK [install-k8s-binaries : Installation complete] ****************************
-ok: [storagenodet3500] =>
-  msg: Kubernetes binaries are installed and ready for cluster deployment
-
-PLAY [Phase 1 - System preparation] ********************************************
-
-TASK [preflight : Check for connectivity to all hosts] *************************
 ok: [storagenodet3500]
 
-TASK [preflight : Ensure required kernel modules present (overlay, br_netfilter)] ***
+TASK [Remove swap from fstab] **************************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [preflight : Verify sysctl parameters] ************************************
-ok: [storagenodet3500]
-
-TASK [preflight : Check if kubelet binary present] *****************************
-ok: [storagenodet3500]
-
-TASK [preflight : Warn if kubelet missing (installation role should have installed it)] ***
-skipping: [storagenodet3500]
-
-TASK [network-fix : Disable swap] **********************************************
-ok: [storagenodet3500]
-
-TASK [network-fix : Disable swap in fstab] *************************************
-ok: [storagenodet3500]
-
-TASK [network-fix : Load kernel modules (skip br_netfilter on RHEL 10+, module removed)] ***
+TASK [Load kernel modules for containerd] **************************************
+ok: [masternode] => (item=overlay)
 ok: [storagenodet3500] => (item=overlay)
-ok: [storagenodet3500] => (item=nf_conntrack)
-ok: [storagenodet3500] => (item=vxlan)
+ok: [masternode] => (item=br_netfilter)
 ok: [storagenodet3500] => (item=br_netfilter)
 
-TASK [network-fix : Persist kernel modules] ************************************
+TASK [Ensure modules load on boot] *********************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [network-fix : Set sysctl parameters] *************************************
+TASK [Configure sysctl for Kubernetes] *****************************************
+ok: [masternode] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
 ok: [storagenodet3500] => (item={'name': 'net.bridge.bridge-nf-call-iptables', 'value': '1'})
+ok: [masternode] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
 ok: [storagenodet3500] => (item={'name': 'net.bridge.bridge-nf-call-ip6tables', 'value': '1'})
+ok: [masternode] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
 ok: [storagenodet3500] => (item={'name': 'net.ipv4.ip_forward', 'value': '1'})
 
-TASK [network-fix : Persist sysctl settings] ***********************************
+TASK [Check if containerd is installed] ****************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [network-fix : Ensure /opt/cni/bin directory exists] **********************
+TASK [Install containerd (try containerd.io first)] ****************************
+skipping: [masternode]
+skipping: [storagenodet3500]
+
+TASK [Install containerd (fallback to containerd package)] *********************
+skipping: [masternode]
+skipping: [storagenodet3500]
+
+TASK [Create containerd config directory] **************************************
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [Generate containerd default config] **************************************
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [Enable SystemdCgroup in containerd] **************************************
+ok: [masternode]
+ok: [storagenodet3500]
+
+TASK [Restart containerd] ******************************************************
+changed: [masternode]
 changed: [storagenodet3500]
 
-TASK [network-fix : Apply SELinux context to /opt/cni/bin (RHEL)] **************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Ensure /etc/cni/net.d exists] ******************************
+TASK [Configure crictl runtime endpoint] ***************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [network-fix : Apply SELinux context to /etc/cni/net.d (RHEL)] ************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Ensure /run/flannel directory exists (for subnet.env)] *****
-changed: [storagenodet3500]
-
-TASK [network-fix : Apply SELinux context to /run/flannel (RHEL)] **************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Ensure /run/xtables.lock exists (required for iptables concurrency)] ***
+TASK [Add Kubernetes apt key] **************************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [network-fix : Install network packages (RHEL)] ***************************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Install network packages (Debian)] *************************
+TASK [Add Kubernetes apt repository] *******************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [network-fix : Stop and disable firewalld (RHEL)] *************************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Set iptables FORWARD policy to ACCEPT] *********************
+TASK [Install Kubernetes binaries] *********************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-TASK [network-fix : Check if iptables-nft binary exists (RHEL 10+)] ************
-skipping: [storagenodet3500]
+TASK [Hold Kubernetes packages at current version] *****************************
+ok: [masternode] => (item=kubelet)
+ok: [storagenodet3500] => (item=kubelet)
+ok: [masternode] => (item=kubeadm)
+ok: [storagenodet3500] => (item=kubeadm)
+ok: [masternode] => (item=kubectl)
+ok: [storagenodet3500] => (item=kubectl)
 
-TASK [network-fix : Check if iptables alternatives entry exists (RHEL 10+)] ****
-skipping: [storagenodet3500]
-
-TASK [network-fix : Install iptables alternatives if missing (RHEL 10+)] *******
-skipping: [storagenodet3500]
-
-TASK [network-fix : Configure iptables to use nftables backend (RHEL 10+)] *****
-skipping: [storagenodet3500]
-
-TASK [network-fix : Check if ip6tables alternatives entry exists (RHEL 10+)] ***
-skipping: [storagenodet3500]
-
-TASK [network-fix : Install ip6tables alternatives if missing (RHEL 10+)] ******
-skipping: [storagenodet3500]
-
-TASK [network-fix : Configure ip6tables to use nftables backend (RHEL 10+)] ****
-skipping: [storagenodet3500]
-
-TASK [network-fix : Pre-create iptables chains for kube-proxy (RHEL 10+)] ******
-skipping: [storagenodet3500]
-
-TASK [network-fix : Configure nftables permissive rules (RHEL 10+)] ************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Pre-create nftables tables for Flannel (RHEL 10+ - CRITICAL FIX)] ***
-skipping: [storagenodet3500]
-
-TASK [network-fix : Persist nftables rules (RHEL 10+)] *************************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Enable and start nftables service (RHEL 10+)] **************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Set SELinux to permissive (RHEL)] **************************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Persist SELinux permissive (RHEL)] *************************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Ensure NetworkManager conf.d directory exists (RHEL)] ******
-skipping: [storagenodet3500]
-
-TASK [network-fix : Configure NetworkManager to ignore CNI interfaces (RHEL)] ***
-skipping: [storagenodet3500]
-
-TASK [network-fix : Restart NetworkManager if config changed (RHEL)] ***********
-skipping: [storagenodet3500]
-
-TASK [network-fix : Pre-create Flannel CNI config (RHEL 10+)] ******************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Apply SELinux context to CNI config (RHEL 10+)] ************
-skipping: [storagenodet3500]
-
-TASK [network-fix : Ensure kubelet is enabled and started] *********************
-changed: [storagenodet3500]
-
-TASK [network-fix : Restart kubelet after network configuration (RHEL 10+)] ****
-skipping: [storagenodet3500]
-
-TASK [Ensure /etc/hosts has cluster nodes] *************************************
+TASK [Enable kubelet service] **************************************************
+ok: [masternode]
 ok: [storagenodet3500]
 
-PLAY [Phase 2 - Install CNI plugins] *******************************************
+TASK [Create required Kubernetes directories] **********************************
+ok: [masternode] => (item=/opt/cni/bin)
+ok: [storagenodet3500] => (item=/opt/cni/bin)
+ok: [masternode] => (item=/etc/cni/net.d)
+ok: [storagenodet3500] => (item=/etc/cni/net.d)
+ok: [masternode] => (item=/var/lib/kubelet)
+ok: [storagenodet3500] => (item=/var/lib/kubelet)
 
-TASK [Detect architecture] *****************************************************
-ok: [storagenodet3500]
+PLAY [Phase 1: Control Plane Initialization] ***********************************
 
-TASK [Check if CNI plugins installed] ******************************************
-ok: [storagenodet3500]
+TASK [Display Phase 1 banner] **************************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Phase 1: Control Plane Initialization
+    Target: masternode
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TASK [Download CNI plugins (get_url)] ******************************************
-ok: [storagenodet3500]
+TASK [Check if cluster is already initialized] *********************************
+ok: [masternode]
 
-TASK [Download CNI plugins (curl fallback)] ************************************
-skipping: [storagenodet3500]
+TASK [Initialize control plane (if not exists)] ********************************
+skipping: [masternode]
 
-TASK [Verify CNI archive downloaded] *******************************************
-ok: [storagenodet3500]
+TASK [Create .kube directory for root] *****************************************
+ok: [masternode]
 
-TASK [Ensure /opt/cni/bin directory exists] ************************************
-ok: [storagenodet3500]
+TASK [Copy admin.conf to /root/.kube/config] ***********************************
+ok: [masternode]
 
-TASK [Extract CNI plugins] *****************************************************
-changed: [storagenodet3500]
+TASK [Set KUBECONFIG environment variable globally] ****************************
+ok: [masternode]
 
-PLAY [Phase 3 - Initialize control plane] **************************************
+TASK [Add KUBECONFIG to root's bash profile] ***********************************
+ok: [masternode]
 
-PLAY [Phase 4 - Join worker nodes] *********************************************
+PLAY [Phase 2: Control Plane Validation] ***************************************
 
-TASK [Check if node already joined] ********************************************
-ok: [storagenodet3500]
+TASK [Display Phase 2 banner] **************************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Phase 2: Control Plane Validation
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TASK [Generate join command] ***************************************************
-fatal: [storagenodet3500 -> masternode(192.168.4.63)]: FAILED! => changed=true
-  cmd: kubeadm token create --print-join-command
-  delta: '0:00:00.002831'
-  end: '2025-10-06 16:38:47.302658'
+TASK [Wait for API server to be ready] *****************************************
+ok: [masternode]
+
+TASK [Verify control plane is responding] **************************************
+FAILED - RETRYING: [masternode]: Verify control plane is responding (10 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (9 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (8 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (7 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (6 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (5 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (4 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (3 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (2 retries left).
+FAILED - RETRYING: [masternode]: Verify control plane is responding (1 retries left).
+fatal: [masternode]: FAILED! => changed=true
+  attempts: 10
+  cmd: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+  delta: '0:00:00.049543'
+  end: '2025-10-07 10:23:21.954128'
   msg: non-zero return code
-  rc: 127
-  start: '2025-10-06 16:38:47.299827'
-  stderr: '/bin/sh: 1: kubeadm: not found'
+  rc: 1
+  start: '2025-10-07 10:23:21.904585'
+  stderr: 'error: EOF'
   stderr_lines: <omitted>
-  stdout: ''
+  stdout: 'Please enter Username: '
   stdout_lines: <omitted>
 
-NO MORE HOSTS LEFT *************************************************************
-
 PLAY RECAP *********************************************************************
-masternode                 : ok=20   changed=0    unreachable=0    failed=1    skipped=13   rescued=0    ignored=0
-storagenodet3500           : ok=34   changed=4    unreachable=0    failed=1    skipped=54   rescued=0    ignored=0
+masternode                 : ok=27   changed=1    unreachable=0    failed=1    skipped=3    rescued=0    ignored=0
+storagenodet3500           : ok=19   changed=1    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0
+
+
