@@ -289,15 +289,97 @@
           Phase 3: Token Generation
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    - name: "Generate join token"
-      shell: kubeadm token create --print-join-command
+    - name: "Ensure kubeadm binary available (locate or install)"
+      block:
+        - name: "Locate kubeadm in PATH"
+          command: command -v kubeadm
+          register: kubeadm_path
+          changed_when: false
+          failed_when: false
+
+        - name: "Install kubeadm if not found (Debian)"
+          apt:
+            name: kubeadm
+            state: present
+            update_cache: yes
+          when: kubeadm_path.rc != 0
+          register: kubeadm_install
+          ignore_errors: true
+
+        - name: "Re-locate kubeadm after install"
+          command: command -v kubeadm
+          register: kubeadm_path_after
+          changed_when: false
+          failed_when: false
+          when: kubeadm_path.rc != 0
+
+        - name: "Set kubeadm full path fact"
+          set_fact:
+            kubeadm_full_path: "{{ kubeadm_path.stdout | default(kubeadm_path_after.stdout | default('/usr/bin/kubeadm')) }}"
+
+      rescue:
+        - name: "Fail clearly if kubeadm is not available"
+          fail:
+            msg: "kubeadm binary not found and automatic install failed. Ensure kubeadm is installed on the control plane node."
+
+    - name: "Ensure admin kubeconfig is present for root"
+      block:
+        - name: "Create .kube directory for root (idempotent)"
+          file:
+            path: /root/.kube
+            state: directory
+            mode: '0700'
+
+        - name: "Copy admin.conf to /root/.kube/config"
+          copy:
+            src: /etc/kubernetes/admin.conf
+            dest: /root/.kube/config
+            remote_src: true
+            owner: root
+            group: root
+            mode: '0600'
+          register: copy_admin_conf
+          failed_when: false
+
+      when: kubeadm_full_path is defined
+
+    - name: "Wait for API server health before creating token"
+      block:
+        - name: "Check API health (loop until healthy)"
+          shell: |
+            set -o pipefail
+            curl -k --max-time 5 -fsS https://127.0.0.1:6443/healthz || exit 1
+          register: api_health
+          retries: 12
+          delay: 5
+          until: api_health.rc == 0
+          changed_when: false
+          failed_when: api_health.rc != 0
+
+      when: kubeadm_full_path is defined
+
+    - name: "Generate join token (run once on control plane)"
+      shell: "{{ kubeadm_full_path }} token create --print-join-command"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
+      retries: 6
+      delay: 10
+      until: join_command.rc == 0
+      run_once: true
 
     - name: "Store join command"
       set_fact:
         kubernetes_join_command: "{{ join_command.stdout }}"
+
+    - name: "Persist join command to disk on control plane"
+      copy:
+        dest: /etc/kubernetes/join-command.txt
+        content: "{{ kubernetes_join_command }}\n"
+        owner: root
+        group: root
+        mode: '0640'
+      run_once: true
 
     - name: "Display join command (for debugging)"
       debug:
