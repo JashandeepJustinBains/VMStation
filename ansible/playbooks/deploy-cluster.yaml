@@ -231,13 +231,12 @@
 
     - name: "Verify control plane components are running"
       shell: |
-        # Simple check for control plane components
         count=0
-        if docker ps | grep -q kube-apiserver; then count=$((count+1)); fi
-        if docker ps | grep -q kube-controller-manager; then count=$((count+1)); fi
-        if docker ps | grep -q kube-scheduler; then count=$((count+1)); fi
-        if docker ps | grep -q etcd; then count=$((count+1)); fi
-        if kubectl cluster-info >/dev/null 2>&1; then count=$((count+1)); fi
+        if crictl ps 2>/dev/null | grep -q kube-apiserver; then count=`expr $count + 1`; fi
+        if crictl ps 2>/dev/null | grep -q kube-controller-manager; then count=`expr $count + 1`; fi
+        if crictl ps 2>/dev/null | grep -q kube-scheduler; then count=`expr $count + 1`; fi
+        if crictl ps 2>/dev/null | grep -q etcd; then count=`expr $count + 1`; fi
+        if kubectl cluster-info >/dev/null 2>&1; then count=`expr $count + 1`; fi
         echo $count
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
@@ -250,11 +249,10 @@
     - name: "Alternative: Check control plane via systemd (if container check fails)"
       when: control_plane_check.stdout | int < 4
       shell: |
-        # Simple systemd check
         count=0
-        if systemctl is-active --quiet kubelet; then count=$((count+1)); fi
-        if systemctl is-active --quiet containerd; then count=$((count+1)); fi
-        if curl -k --max-time 5 https://localhost:6443/healthz >/dev/null 2>&1; then count=$((count+1)); fi
+        if systemctl is-active --quiet kubelet; then count=`expr $count + 1`; fi
+        if systemctl is-active --quiet containerd; then count=`expr $count + 1`; fi
+        if curl -k --max-time 5 https://localhost:6443/healthz >/dev/null 2>&1; then count=`expr $count + 1`; fi
         echo $count
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf

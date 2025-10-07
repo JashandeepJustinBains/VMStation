@@ -58,7 +58,7 @@
             if [ -f "$LAST_ACTIVITY_FILE" ]; then
               LAST_ACTIVITY=$(cat "$LAST_ACTIVITY_FILE")
               CURRENT_TIME=$(date +%s)
-              INACTIVE_DURATION=$((CURRENT_TIME - LAST_ACTIVITY))
+              INACTIVE_DURATION=`expr $CURRENT_TIME - $LAST_ACTIVITY`
               
               if [ "$INACTIVE_DURATION" -gt "$INACTIVITY_THRESHOLD" ]; then
                 echo "Inactivity threshold reached, triggering cluster sleep"
