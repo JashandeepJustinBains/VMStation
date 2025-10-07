@@ -1,0 +1,131 @@
+---
+# =============================================================================
+# VMStation RKE2 Installation
+# Deploy RKE2 on homelab RHEL10 node
+# =============================================================================
+
+- name: "RKE2 Installation - Homelab Node"
+  hosts: compute_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display RKE2 installation banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          RKE2 Installation on Homelab (RHEL 10)
+          Target: {{ inventory_hostname }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # Check if RKE2 is already installed
+    - name: "Check if RKE2 is installed"
+      stat:
+        path: /usr/local/bin/rke2
+      register: rke2_installed
+
+    - name: "Display skip message if already installed"
+      debug:
+        msg: "RKE2 already installed, skipping installation"
+      when: rke2_installed.stat.exists
+
+    # Download and install RKE2
+    - name: "Download RKE2 installation script"
+      get_url:
+        url: https://get.rke2.io
+        dest: /tmp/install-rke2.sh
+        mode: '0755'
+      when: not rke2_installed.stat.exists
+
+    - name: "Install RKE2"
+      shell: INSTALL_RKE2_TYPE=server /tmp/install-rke2.sh
+      when: not rke2_installed.stat.exists
+
+    # Configure RKE2
+    - name: "Create RKE2 config directory"
+      file:
+        path: /etc/rancher/rke2
+        state: directory
+        mode: '0755'
+
+    - name: "Create RKE2 configuration"
+      copy:
+        dest: /etc/rancher/rke2/config.yaml
+        content: |
+          write-kubeconfig-mode: "0644"
+          cni: "flannel"
+          cluster-cidr: "10.42.0.0/16"
+          service-cidr: "10.43.0.0/16"
+        mode: '0644'
+
+    # Start RKE2
+    - name: "Enable and start RKE2 server"
+      systemd:
+        name: rke2-server
+        enabled: true
+        state: started
+      register: rke2_started
+
+    - name: "Wait for RKE2 to be ready"
+      wait_for:
+        path: /etc/rancher/rke2/rke2.yaml
+        timeout: 300
+      when: rke2_started.changed
+
+    # Create kubectl alias
+    - name: "Create kubectl symlink"
+      file:
+        src: /var/lib/rancher/rke2/bin/kubectl
+        dest: /usr/local/bin/kubectl
+        state: link
+      failed_when: false
+
+    - name: "Set KUBECONFIG environment variable"
+      lineinfile:
+        path: /etc/profile.d/rke2.sh
+        line: 'export KUBECONFIG=/etc/rancher/rke2/rke2.yaml'
+        create: true
+        mode: '0644'
+
+    # Verify installation
+    - name: "Verify RKE2 is running"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl get nodes
+      register: rke2_nodes
+      retries: 10
+      delay: 10
+      until: rke2_nodes.rc == 0
+
+    - name: "Display RKE2 node status"
+      debug:
+        msg: "{{ rke2_nodes.stdout_lines }}"
+
+    # Collect artifacts
+    - name: "Create local artifacts directory"
+      file:
+        path: /home/runner/work/VMStation/VMStation/ansible/artifacts
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+
+    - name: "Fetch RKE2 kubeconfig"
+      fetch:
+        src: /etc/rancher/rke2/rke2.yaml
+        dest: /home/runner/work/VMStation/VMStation/ansible/artifacts/rke2-kubeconfig.yaml
+        flat: true
+      failed_when: false
+
+    - name: "Display installation complete message"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          ✅ RKE2 Installation Complete
+          
+          Node: {{ inventory_hostname }}
+          Kubeconfig: /etc/rancher/rke2/rke2.yaml
+          
+          Access cluster:
+          export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+          kubectl get nodes
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

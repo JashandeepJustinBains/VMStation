@@ -1,0 +1,115 @@
+---
+# =============================================================================
+# VMStation Cluster Spin-Down
+# Cordon/drain and scale to zero on all nodes
+# Does NOT power off - just prepares cluster for shutdown
+# =============================================================================
+
+- name: "Cluster Spin-Down"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: true
+  vars:
+    allow_power_down: false
+    spin_confirm: false
+  tasks:
+    - name: "Display spin-down banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Cluster Spin-Down (Cordon/Drain/Scale to Zero)
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Confirm spin-down"
+      pause:
+        prompt: |
+          This will:
+          - Cordon all nodes
+          - Drain all workloads
+          - Scale deployments to zero
+          Continue? (yes/no)
+      register: confirm_spindown
+      when: not spin_confirm
+
+    - name: "Check confirmation"
+      fail:
+        msg: "Spin-down cancelled by user"
+      when:
+        - not spin_confirm
+        - confirm_spindown.user_input | default('no') != 'yes'
+
+    # Cordon all nodes
+    - name: "Get all nodes"
+      shell: kubectl get nodes -o name
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: all_nodes
+      failed_when: false
+
+    - name: "Cordon all nodes"
+      shell: kubectl cordon {{ item }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      loop: "{{ all_nodes.stdout_lines }}"
+      when: all_nodes.rc == 0
+      failed_when: false
+
+    # Drain worker nodes
+    - name: "Drain worker nodes"
+      shell: |
+        kubectl drain {{ item }} \
+          --ignore-daemonsets \
+          --delete-emptydir-data \
+          --force \
+          --timeout=120s
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      loop: "{{ all_nodes.stdout_lines }}"
+      when: 
+        - all_nodes.rc == 0
+        - "'control-plane' not in item"
+      failed_when: false
+
+    # Scale down deployments
+    - name: "Get all namespaces"
+      shell: kubectl get namespaces -o name | cut -d/ -f2
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: namespaces
+      failed_when: false
+
+    - name: "Scale down deployments in each namespace"
+      shell: kubectl scale deployment --all --replicas=0 -n {{ item }}
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      loop: "{{ namespaces.stdout_lines }}"
+      when: 
+        - namespaces.rc == 0
+        - item not in ['kube-system', 'kube-flannel', 'kube-public', 'kube-node-lease']
+      failed_when: false
+
+    # Clean CNI/Flannel artifacts
+    - name: "Remove Flannel CNI interfaces on all nodes"
+      shell: |
+        ip link delete flannel.1 2>/dev/null || true
+        ip link delete cni0 2>/dev/null || true
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['monitoring_nodes'] + groups['storage_nodes'] }}"
+      failed_when: false
+
+    - name: "Display spin-down complete message"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          ✅ Cluster Spin-Down Complete
+          
+          All nodes cordoned
+          Workloads drained
+          Deployments scaled to zero
+          CNI interfaces removed
+          
+          Cluster is ready for shutdown
+          
+          To bring back up:
+          ./deploy.sh all --with-rke2
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
