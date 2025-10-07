@@ -142,6 +142,12 @@ spec:
         - '--web.console.templates=/etc/prometheus/consoles'
         - '--storage.tsdb.retention.time=30d'
         - '--web.enable-lifecycle'
+        # Enable remote write receiver for federation
+        - '--web.enable-remote-write-receiver'
+        # Expose all metrics endpoints without authentication
+        - '--web.route-prefix=/'
+        # Enable CORS for external access
+        - '--web.cors.origin=.*'
         volumeMounts:
         - name: prometheus-config
           mountPath: /etc/prometheus
