@@ -1,0 +1,110 @@
+---
+# IPMI Exporter for Enterprise Server Hardware Monitoring
+# Deploys on RHEL 10 homelab node for IPMI statistics collection
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ipmi-exporter
+  namespace: monitoring
+  labels:
+    app: ipmi-exporter
+    vmstation.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: ipmi-exporter
+  template:
+    metadata:
+      labels:
+        app: ipmi-exporter
+    spec:
+      # Deploy only on RHEL 10 compute node with enterprise hardware
+      nodeSelector:
+        vmstation.io/role: compute
+        kubernetes.io/os: linux
+      tolerations:
+      - key: node-role.kubernetes.io/worker
+        operator: Exists
+        effect: NoSchedule
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: ipmi-exporter
+        image: prometheuscommunity/ipmi-exporter:v1.6.1
+        ports:
+        - containerPort: 9290
+          hostPort: 9290
+          name: metrics
+        args:
+        - "--config.file=/config/ipmi.yml"
+        - "--web.listen-address=:9290"
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - SYS_RAWIO
+        volumeMounts:
+        - name: ipmi-config
+          mountPath: /config
+        - name: dev
+          mountPath: /dev
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: ipmi-config
+        configMap:
+          name: ipmi-exporter-config
+      - name: dev
+        hostPath:
+          path: /dev
+---
+# IPMI Exporter Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipmi-exporter-config
+  namespace: monitoring
+data:
+  ipmi.yml: |
+    # IPMI Exporter configuration for enterprise server monitoring
+    # Collects hardware metrics: temperature, fan speed, power, voltage
+    modules:
+      default:
+        # Collect all available IPMI sensors
+        collectors:
+        - ipmi
+        - dcmi
+        - bmc
+        - chassis
+        # Timeout for IPMI commands
+        timeout: 10s
+        # Use local BMC interface
+        driver: "LAN_2_0"
+        privilege: "user"
+---
+# IPMI Exporter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipmi-exporter
+  namespace: monitoring
+  labels:
+    app: ipmi-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9290"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9290
+    targetPort: 9290
+    name: metrics
+  selector:
+    app: ipmi-exporter
