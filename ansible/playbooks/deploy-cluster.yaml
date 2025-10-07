@@ -345,6 +345,80 @@
 
     - name: "Wait for API server health before creating token"
       block:
+        - name: "Ensure CNI host plugins and Flannel deployed (run once)"
+          block:
+            - name: "Check for existing CNI host plugin binaries"
+              shell: "[ -d /opt/cni/bin ] && ls -A /opt/cni/bin | wc -l || echo 0"
+              register: cni_bin_count
+              changed_when: false
+              failed_when: false
+
+            - name: "Create /opt/cni/bin if missing"
+              file:
+                path: /opt/cni/bin
+                state: directory
+                mode: '0755'
+              when: cni_bin_count.stdout | int == 0
+
+            - name: "Try extracting CNI plugins from known locations"
+              vars:
+                cni_candidates:
+                  - "{{ playbook_dir }}/../../manifests/cni/cni-plugins.tgz"
+                  - "/tmp/cni-plugins.tgz"
+                  - "/usr/share/cni/cni-plugins.tgz"
+                  - "/opt/cni/cni-plugins.tgz"
+              block:
+                - name: "Check candidate archive exists"
+                  stat:
+                    path: "{{ item }}"
+                  register: candidate_stat
+                  loop: "{{ cni_candidates }}"
+                  changed_when: false
+
+                - name: "Extract first available CNI archive"
+                  shell: |
+                    tar -xzf {{ item }} -C /opt/cni/bin
+                  args:
+                    executable: /bin/bash
+                  when: candidate_stat.results[loop.index0].stat.exists and (cni_bin_count.stdout | int == 0)
+                  register: extract_result
+                  loop: "{{ cni_candidates }}"
+                  changed_when: extract_result.rc == 0
+                  failed_when: false
+
+            - name: "Refresh CNI host plugin count"
+              shell: "ls -A /opt/cni/bin | wc -l || echo 0"
+              register: cni_bin_count_after
+              changed_when: false
+              failed_when: false
+
+            - name: "Deploy Flannel CNI manifest (run once)"
+              shell: kubectl apply -f {{ playbook_dir }}/../../manifests/cni/flannel.yaml
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: flannel_apply
+              failed_when: false
+
+            - name: "Wait for Flannel pods to be ready (run once)"
+              shell: |
+                kubectl wait --for=condition=ready pod -l app=flannel -n kube-flannel --timeout=180s
+              environment:
+                KUBECONFIG: /etc/kubernetes/admin.conf
+              register: flannel_wait
+              retries: 6
+              delay: 10
+              until: flannel_wait.rc == 0
+              failed_when: false
+
+            - name: "Restart kubelet if we extracted CNI plugins"
+              systemd:
+                name: kubelet
+                state: restarted
+              when: cni_bin_count.stdout | int == 0 and cni_bin_count_after.stdout | int > 0
+
+          run_once: true
+          when: kubeadm_full_path is defined
+
         - name: "Check API health (loop until healthy)"
           shell: |
             set -o pipefail
@@ -355,6 +429,7 @@
           until: api_health.rc == 0
           changed_when: false
           failed_when: api_health.rc != 0
+          executable: /bin/bash
 
       when: kubeadm_full_path is defined
 
