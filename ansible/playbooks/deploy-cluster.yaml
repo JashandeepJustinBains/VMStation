@@ -368,21 +368,17 @@
                   - "/usr/share/cni/cni-plugins.tgz"
                   - "/opt/cni/cni-plugins.tgz"
               block:
-                - name: "Check candidate archive exists"
-                  stat:
-                    path: "{{ item }}"
-                  register: candidate_stat
-                  loop: "{{ cni_candidates }}"
-                  changed_when: false
-
-                - name: "Extract first available CNI archive"
+                - name: "Try extracting CNI plugins from candidate archives"
                   shell: |
-                    tar -xzf {{ item }} -C /opt/cni/bin
+                    if [ -f "{{ item }}" ]; then
+                      tar -xzf "{{ item }}" -C /opt/cni/bin && echo extracted {{ item }}
+                    else
+                      echo notfound {{ item }}
+                    fi
                   args:
                     executable: /bin/bash
-                  when: candidate_stat.results[ansible_loop.index0].stat.exists and (cni_bin_count.stdout | int == 0)
-                  register: extract_result
                   loop: "{{ cni_candidates }}"
+                  register: extract_result
                   failed_when: false
 
             - name: "Refresh CNI host plugin count"
