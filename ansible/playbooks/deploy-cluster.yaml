@@ -200,6 +200,10 @@
       when: not kubeconfig_exists.stat.exists
       register: kubeadm_init
 
+    - name: "Regenerate admin.conf with kubeadm (fixes authentication issues)"
+      shell: kubeadm init phase kubeconfig admin
+      when: kubeconfig_exists.stat.exists
+
     - name: "Create .kube directory for root"
       file:
         path: /root/.kube
