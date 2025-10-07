@@ -231,24 +231,14 @@
 
     - name: "Verify control plane components are running"
       shell: |
-        # Check for core control plane components
-        components=("kube-apiserver" "kube-controller-manager" "kube-scheduler" "etcd")
-        running_count=0
-
-        for component in "${components[@]}"; do
-          if docker ps --filter "name=${component}" --format "{{ '{{' }}.Names{{ '}}' }}" | grep -q "${component}"; then
-            running_count=$((running_count + 1))
-          elif ctr -n k8s.io containers ls | grep -q "${component}"; then
-            running_count=$((running_count + 1))
-          fi
-        done
-
-        # Also check if kubectl can communicate with the cluster
-        if kubectl cluster-info >/dev/null 2>&1; then
-          running_count=$((running_count + 1))
-        fi
-
-        echo $running_count
+        # Simple check for control plane components
+        count=0
+        if docker ps | grep -q kube-apiserver; then count=$((count+1)); fi
+        if docker ps | grep -q kube-controller-manager; then count=$((count+1)); fi
+        if docker ps | grep -q kube-scheduler; then count=$((count+1)); fi
+        if docker ps | grep -q etcd; then count=$((count+1)); fi
+        if kubectl cluster-info >/dev/null 2>&1; then count=$((count+1)); fi
+        echo $count
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: control_plane_check
@@ -260,22 +250,12 @@
     - name: "Alternative: Check control plane via systemd (if container check fails)"
       when: control_plane_check.stdout | int < 4
       shell: |
-        # Check systemd services as fallback
-        services=("kubelet" "containerd")
-        running_count=0
-
-        for service in "${services[@]}"; do
-          if systemctl is-active --quiet "$service"; then
-            running_count=$((running_count + 1))
-          fi
-        done
-
-        # Check if API server is responding
-        if curl -k --max-time 5 https://localhost:6443/healthz >/dev/null 2>&1; then
-          running_count=$((running_count + 1))
-        fi
-
-        echo $running_count
+        # Simple systemd check
+        count=0
+        if systemctl is-active --quiet kubelet; then count=$((count+1)); fi
+        if systemctl is-active --quiet containerd; then count=$((count+1)); fi
+        if curl -k --max-time 5 https://localhost:6443/healthz >/dev/null 2>&1; then count=$((count+1)); fi
+        echo $count
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: systemd_check
