@@ -429,8 +429,20 @@
 
       when: kubeadm_full_path is defined
 
+    - name: "Fail if kubeadm path is not executable before token creation"
+      stat:
+        path: "{{ kubeadm_full_path }}"
+      register: kubeadm_exec_stat
+      run_once: true
+
+    - name: "Abort if kubeadm is not executable"
+      fail:
+        msg: "kubeadm binary not found or not executable at {{ kubeadm_full_path }}. Check installation and permissions."
+      when: not kubeadm_exec_stat.stat.exists or not kubeadm_exec_stat.stat.executable
+      run_once: true
+
     - name: "Generate join token (run once on control plane)"
-      shell: "{{ kubeadm_full_path }} token create --print-join-command"
+      shell: "'{{ kubeadm_full_path }}' token create --print-join-command"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
       register: join_command
