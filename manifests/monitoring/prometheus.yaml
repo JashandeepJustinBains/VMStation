@@ -153,6 +153,8 @@ data:
           os: 'rhel10'
     
     # IPMI Exporter - Enterprise server (homelab RHEL 10 node)
+    # NOTE: This target will be DOWN if homelab node doesn't have IPMI hardware
+    #       or if the DaemonSet doesn't schedule (no nodes match vmstation.io/role=compute)
     - job_name: 'ipmi-exporter'
       static_configs:
       - targets:
@@ -167,6 +169,10 @@ data:
       scrape_timeout: 20s
     
     # Remote IPMI Exporter - Enterprise server at 192.168.4.60
+    # NOTE: This target will be DOWN if:
+    #       - IPMI credentials are not configured (deployment stays at 0 replicas)
+    #       - Remote server 192.168.4.60 is not accessible
+    #       - Remote BMC doesn't support IPMI over LAN
     # Monitors remote BMC via IPMI over LAN using credentials from secrets
     - job_name: 'ipmi-exporter-remote'
       static_configs:
@@ -240,6 +246,10 @@ data:
         target_label: kubernetes_name
     
     # RKE2 Federation - Federate metrics from RHEL 10 homelab RKE2 cluster
+    # NOTE: This target will be DOWN if:
+    #       - RKE2 cluster is not deployed on homelab node
+    #       - RKE2 Prometheus is not accessible on NodePort 30090
+    # This is expected during Debian-only deployment
     - job_name: 'rke2-federation'
       honor_labels: true
       metrics_path: /federate
