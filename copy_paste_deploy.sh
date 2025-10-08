@@ -9,7 +9,7 @@ git pull
 ./deploy.sh all --with-rke2 --yes
 
 # Setup auto-sleep
-./deploy.sh setup
+./deploy.sh setup --yes
 
 # Access monitoring (no login required)
 curl http://192.168.4.63:30300

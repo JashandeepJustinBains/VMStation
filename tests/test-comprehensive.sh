@@ -292,13 +292,13 @@ else
 fi
 
 TOTAL_TESTS=$((TOTAL_TESTS + 1))
-echo -n "Checking RKE2 get_url module... "
-if grep -q "get_url:" ansible/playbooks/install-rke2-homelab.yml; then
+echo -n "Checking RKE2 download method... "
+if grep -A 2 "Download RKE2 installation script" ansible/playbooks/install-rke2-homelab.yml | grep -q "shell:.*curl"; then
   echo -e "${GREEN}✅ PASS${NC}"
   PASSED_TESTS=$((PASSED_TESTS + 1))
 else
-  echo -e "${YELLOW}⚠️  Using shell instead${NC}"
-  WARNINGS=$((WARNINGS + 1))
+  echo -e "${RED}❌ FAIL${NC}"
+  FAILED_TESTS=$((FAILED_TESTS + 1))
 fi
 
 echo ""

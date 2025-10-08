@@ -30,15 +30,9 @@
 
     # Download and install RKE2
     - name: "Download RKE2 installation script"
-      get_url:
-        url: https://get.rke2.io
-        dest: /tmp/install-rke2.sh
-        mode: '0755'
-        timeout: 60
-      register: download_result
-      retries: 3
-      delay: 5
-      until: download_result is succeeded
+      shell: curl -sfL https://get.rke2.io -o /tmp/install-rke2.sh && chmod +x /tmp/install-rke2.sh
+      args:
+        creates: /tmp/install-rke2.sh
       when: not rke2_installed.stat.exists
     
     - name: "Install RKE2"

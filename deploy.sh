@@ -405,7 +405,7 @@ cmd_rke2(){
         info "✓ RKE2 cluster has $nodes node(s) Ready"
         
         # Check monitoring pods
-        local monitoring_pods=$(kubectl --kubeconfig="$kubeconfig_artifact" get pods -n monitoring-rke2 --no-headers 2>/dev/null | grep -c Running || echo "0")
+        local monitoring_pods=$(kubectl --kubeconfig="$kubeconfig_artifact" get pods -n monitoring-rke2 --no-headers 2>/dev/null | grep Running | wc -l || echo "0")
         if [[ "$monitoring_pods" -gt 0 ]]; then
           info "✓ Monitoring stack deployed ($monitoring_pods pods Running)"
         fi
