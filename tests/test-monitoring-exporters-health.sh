@@ -53,14 +53,14 @@ curl_test() {
   
   if response=$(curl -sf --max-time 10 "$url" 2>&1); then
     if [[ -z "$expect_pattern" ]] || echo "$response" | grep -q "$expect_pattern"; then
-      echo "curl $url ok"
+      echo "success"
       return 0
     else
-      echo "curl $url error (unexpected response)"
+      echo "failure"
       return 1
     fi
   else
-    echo "curl $url error"
+    echo "error"
     return 1
   fi
 }
@@ -91,19 +91,25 @@ echo ""
 
 # Test 2: Node exporter health on all nodes
 echo "[2/8] Testing node-exporter on all nodes..."
-if curl_test "masternode node-exporter" "http://${MASTERNODE_IP}:${NODE_EXPORTER_PORT}/metrics" "node_cpu_seconds_total"; then
+result=$(curl_test "masternode node-exporter" "http://${MASTERNODE_IP}:${NODE_EXPORTER_PORT}/metrics" "node_cpu_seconds_total")
+echo "curl http://${MASTERNODE_IP}:${NODE_EXPORTER_PORT}/metrics $result"
+if [[ "$result" == "success" ]]; then
   log_pass "Node exporter healthy on masternode"
 else
   log_fail "Node exporter unhealthy on masternode"
 fi
 
-if curl_test "storage node-exporter" "http://${STORAGE_IP}:${NODE_EXPORTER_PORT}/metrics" "node_cpu_seconds_total"; then
+result=$(curl_test "storage node-exporter" "http://${STORAGE_IP}:${NODE_EXPORTER_PORT}/metrics" "node_cpu_seconds_total")
+echo "curl http://${STORAGE_IP}:${NODE_EXPORTER_PORT}/metrics $result"
+if [[ "$result" == "success" ]]; then
   log_pass "Node exporter healthy on storagenodet3500"
 else
   log_warn "Node exporter may be down on storagenodet3500 (node may be asleep)"
 fi
 
-if curl_test "homelab node-exporter" "http://${HOMELAB_IP}:${NODE_EXPORTER_PORT}/metrics" "node_cpu_seconds_total"; then
+result=$(curl_test "homelab node-exporter" "http://${HOMELAB_IP}:${NODE_EXPORTER_PORT}/metrics" "node_cpu_seconds_total")
+echo "curl http://${HOMELAB_IP}:${NODE_EXPORTER_PORT}/metrics $result"
+if [[ "$result" == "success" ]]; then
   log_pass "Node exporter healthy on homelab"
 else
   log_warn "Node exporter may be down on homelab (node may be asleep or using RKE2)"
@@ -121,7 +127,9 @@ if ssh root@${MASTERNODE_IP} "kubectl --kubeconfig=/etc/kubernetes/admin.conf ge
     log_pass "IPMI exporter pods are running"
     
     # Try to access IPMI exporter metrics
-    if curl_test "IPMI exporter" "http://${HOMELAB_IP}:${IPMI_EXPORTER_PORT}/metrics" "ipmi"; then
+    result=$(curl_test "IPMI exporter" "http://${HOMELAB_IP}:${IPMI_EXPORTER_PORT}/metrics" "ipmi")
+    echo "curl http://${HOMELAB_IP}:${IPMI_EXPORTER_PORT}/metrics $result"
+    if [[ "$result" == "success" ]]; then
       log_pass "IPMI exporter metrics accessible"
     else
       log_warn "IPMI exporter metrics not accessible (may need credentials or IPMI configuration)"
@@ -226,13 +234,16 @@ echo "Testing all monitoring endpoints with concise output:"
 echo ""
 
 # Prometheus
-curl_test "Prometheus" "http://${MASTERNODE_IP}:${PROMETHEUS_PORT}/-/healthy" "Prometheus is Healthy"
+result=$(curl_test "Prometheus" "http://${MASTERNODE_IP}:${PROMETHEUS_PORT}/-/healthy" "Prometheus is Healthy")
+echo "curl http://${MASTERNODE_IP}:${PROMETHEUS_PORT}/-/healthy $result"
 
 # Grafana
-curl_test "Grafana" "http://${MASTERNODE_IP}:${GRAFANA_PORT}/api/health" "database"
+result=$(curl_test "Grafana" "http://${MASTERNODE_IP}:${GRAFANA_PORT}/api/health" "database")
+echo "curl http://${MASTERNODE_IP}:${GRAFANA_PORT}/api/health $result"
 
 # Node exporters (only check master, others may be asleep)
-curl_test "Node exporter (master)" "http://${MASTERNODE_IP}:${NODE_EXPORTER_PORT}/metrics" "node_"
+result=$(curl_test "Node exporter (master)" "http://${MASTERNODE_IP}:${NODE_EXPORTER_PORT}/metrics" "node_")
+echo "curl http://${MASTERNODE_IP}:${NODE_EXPORTER_PORT}/metrics $result"
 
 echo ""
 

@@ -33,12 +33,12 @@ test_endpoint() {
   if response=$(curl -sf --max-time 10 "$url" 2>&1); then
     if [[ -z "$expect_pattern" ]] || echo "$response" | grep -q "$expect_pattern"; then
       echo "✅ PASS"
-      echo "  curl $url ok"
+      echo "  curl $url success"
       PASSED=$((PASSED + 1))
       return 0
     else
       echo "❌ FAIL (unexpected response)"
-      echo "  curl $url error"
+      echo "  curl $url failure"
       FAILED=$((FAILED + 1))
       return 1
     fi
