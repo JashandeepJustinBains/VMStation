@@ -110,8 +110,8 @@ spec:
           name: http-metrics
         - containerPort: 9096
           name: grpc
-  args:
-  - "--config.file=/etc/loki/local-config.yaml"
+        args:
+        - "--config.file=/etc/loki/local-config.yaml"
         volumeMounts:
         - name: loki-config
           mountPath: /etc/loki
@@ -129,7 +129,8 @@ spec:
         configMap:
           name: loki-config
       - name: loki-storage
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: loki-pvc
 ---
 # Loki Service (NodePort)
 apiVersion: v1
