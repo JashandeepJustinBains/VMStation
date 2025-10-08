@@ -467,6 +467,15 @@
       when: ipmi_username is defined and ipmi_password is defined
       no_log: true  # Don't log credentials
 
+    - name: "Deploy Node Exporter (system metrics)"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/node-exporter.yaml
+
+    - name: "Deploy Kube State Metrics (Kubernetes object state)"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/kube-state-metrics.yaml
+
+    - name: "Deploy Loki and Promtail (log aggregation and collection)"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/loki.yaml
+
     - name: "Deploy IPMI Exporter"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/ipmi-exporter.yaml
 
@@ -480,6 +489,50 @@
 
     - name: "Deploy Grafana"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana.yaml
+
+    - name: "Wait for Node Exporter DaemonSet to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf rollout status daemonset/node-exporter \
+          -n monitoring \
+          --timeout=120s
+      retries: 3
+      delay: 10
+      register: node_exporter_ready
+      until: node_exporter_ready.rc == 0
+      failed_when: false
+
+    - name: "Wait for Kube State Metrics to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/kube-state-metrics \
+          -n monitoring \
+          --timeout=120s
+      retries: 3
+      delay: 10
+      register: kube_state_metrics_ready
+      until: kube_state_metrics_ready.rc == 0
+      failed_when: false
+
+    - name: "Wait for Loki to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/loki \
+          -n monitoring \
+          --timeout=120s
+      retries: 3
+      delay: 10
+      register: loki_ready
+      until: loki_ready.rc == 0
+      failed_when: false
+
+    - name: "Wait for Promtail DaemonSet to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf rollout status daemonset/promtail \
+          -n monitoring \
+          --timeout=120s
+      retries: 3
+      delay: 10
+      register: promtail_ready
+      until: promtail_ready.rc == 0
+      failed_when: false
 
     - name: "Wait for Prometheus to be ready"
       shell: |
