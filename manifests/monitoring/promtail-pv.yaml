@@ -1,0 +1,37 @@
+---
+# HostPath PersistentVolume for Promtail positions (homelab/dev fallback)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: promtail-pv
+  labels:
+    app: promtail
+    vmstation.io/component: monitoring
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /srv/monitoring_data/promtail
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: monitoring
+    name: promtail-pvc
+
+---
+# PVC for Promtail positions
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: promtail-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ""

@@ -536,6 +536,15 @@
     - name: "Create monitoring namespace"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
+    - name: "Apply monitoring PersistentVolumes and PVCs (prometheus/grafana/loki/promtail)"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus-pv.yaml || true
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana-pv.yaml || true
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/loki-pv.yaml || true
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/promtail-pv.yaml || true
+      register: apply_pvs
+      failed_when: false
+
     - name: "Fail if IPMI credentials required but not provided"
       fail:
         msg: "IPMI credentials not provided. Set ipmi_username and ipmi_password in ansible/inventory/group_vars/secrets.yml (ansible-vault) or create the secret manually."
