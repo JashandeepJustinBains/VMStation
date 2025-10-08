@@ -82,8 +82,8 @@ data:
         - dcmi
         - bmc
         - chassis
-        # Timeout for IPMI commands
-        timeout: 10s
+  # Timeout for IPMI commands (seconds)
+  timeout: 10
         # Use local BMC interface
         driver: "LAN_2_0"
         privilege: "user"
@@ -202,8 +202,8 @@ data:
         - dcmi
         - bmc
         - chassis
-        # Timeout for remote IPMI commands
-        timeout: 20s
+  # Timeout for remote IPMI commands (seconds)
+  timeout: 20
         # Use IPMI over LAN for remote access
         driver: "LAN_2_0"
         # User privilege level for IPMI access

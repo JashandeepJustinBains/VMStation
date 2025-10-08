@@ -14,6 +14,11 @@
   gather_facts: true
   become: true
   tasks:
+    - name: "Set default flags"
+      set_fact:
+        ipmi_required: "{{ ipmi_required | default(false) }}"
+      tags: always
+
     - name: "Display Phase 0 banner"
       debug:
         msg: |
@@ -457,15 +462,26 @@
     - name: "Create monitoring namespace"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
-    - name: "Create IPMI credentials secret"
-      shell: |
-        kubectl --kubeconfig=/etc/kubernetes/admin.conf create secret generic ipmi-credentials \
-          --from-literal=username='{{ ipmi_username | default("") }}' \
-          --from-literal=password='{{ ipmi_password | default("") }}' \
-          --namespace=monitoring \
-          --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+    - name: "Fail if IPMI credentials required but not provided"
+      fail:
+        msg: "IPMI credentials not provided. Set ipmi_username and ipmi_password in ansible/inventory/group_vars/secrets.yml (ansible-vault) or create the secret manually."
+      when: ipmi_required | default(false) and (ipmi_username is not defined or ipmi_password is not defined)
+
+    - name: "Ensure ipmi credentials secret exists in monitoring namespace"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: ipmi-credentials
+            namespace: monitoring
+          type: Opaque
+          stringData:
+            username: "{{ ipmi_username }}"
+            password: "{{ ipmi_password }}"
       when: ipmi_username is defined and ipmi_password is defined
-      no_log: true  # Don't log credentials
+      no_log: true
 
     - name: "Deploy Node Exporter (system metrics)"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/node-exporter.yaml
@@ -486,11 +502,6 @@
 
     - name: "Deploy Prometheus"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
-
-    - name: "Deploy Blackbox Exporter"
-      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
-      args:
-        warn: false
 
     - name: "Deploy Grafana"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana.yaml
@@ -555,6 +566,11 @@
         kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/grafana \
           -n monitoring \
           --timeout=120s
+      retries: 5
+      delay: 10
+      register: grafana_ready
+      until: grafana_ready.rc == 0
+      failed_when: false
 
     - name: "Wait for Blackbox Exporter to be ready"
       shell: |
@@ -562,14 +578,9 @@
           -n monitoring \
           --timeout=120s
       register: blackbox_ready
-      retries: 3
-      delay: 10
-      until: blackbox_ready.rc == 0
-      failed_when: false
       retries: 5
       delay: 10
-      register: grafana_ready
-      until: grafana_ready.rc == 0
+      until: blackbox_ready.rc == 0
       failed_when: false
 
     - name: "Deploy Jellyfin media server"
