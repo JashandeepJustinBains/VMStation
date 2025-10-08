@@ -80,8 +80,8 @@
           
           # Validate kubeconfig exists
           if [[ ! -f "$KUBECONFIG" ]]; then
-            log "ERROR: kubeconfig not found at $KUBECONFIG"
-            exit 1
+            log "INFO: kubeconfig not found at $KUBECONFIG - skipping (not a control plane node)"
+            exit 0
           fi
           
           # Export kubeconfig for kubectl
