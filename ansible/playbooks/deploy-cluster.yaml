@@ -48,7 +48,7 @@
         - name: "Build wol_targets from inventory when not explicitly provided"
           set_fact:
             wol_targets: >-
-              [{% for h in (groups['monitoring_nodes'] + groups['storage_nodes'] + groups['compute_nodes']) | unique %}{% if hostvars[h].wol_mac is defined %}{'name':'{{ h }}','ip':'{{ hostvars[h].ansible_host }}','mac':'{{ hostvars[h].wol_mac.split()[0] }}' %}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}]
+              [{% for h in (groups['monitoring_nodes'] + groups['storage_nodes'] + groups['compute_nodes']) | unique %}{% if hostvars[h].wol_mac is defined %}{'name':'{{ h }}','ip':'{{ hostvars[h].ansible_host }}','mac':'{{ hostvars[h].wol_mac.split()[0] }}','user':'{{ hostvars[h].ansible_user }}' }{% if not loop.last %},{% endif %}{% endif %}{% endfor %}]
           when: wol_targets is not defined
 
         - name: "Ensure wakeonlan is installed on control node (Debian family)"
@@ -69,9 +69,11 @@
               # Note: Do not actually power off control-plane nodes in automated tests
 
         - name: "Trigger sleep helper on each wol target (run as background)"
-          shell: "ssh root@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
+          shell: "ssh {{ item.user }}@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
           loop: "{{ wol_targets }}"
           delegate_to: localhost
+          ignore_errors: yes
+          register: wol_trigger_result
 
         - name: "Send WoL magic packets from control-plane"
           shell: "wakeonlan {{ item.mac }}"
@@ -86,10 +88,12 @@
             timeout: 120
           loop: "{{ wol_targets }}"
           delegate_to: localhost
+          ignore_errors: yes
+          register: wol_wait_result
 
         - name: "Collect wake results"
           set_fact:
-            wol_report: "{{ wol_report | default([]) + [ { 'name': item.name, 'ip': item.ip, 'mac': item.mac, 'wol_out': (wol_results.results | selectattr('item.mac','equalto', item.mac) | list)[0].stdout | default('') } ] }}"
+            wol_report: "{{ wol_report | default([]) + [ { 'name': item.name, 'ip': item.ip, 'mac': item.mac, 'wol_out': (wol_results.results | selectattr('item.mac','equalto', item.mac) | list)[0].stdout | default(''), 'ssh_accessible': (wol_wait_result.results | selectattr('item.ip','equalto', item.ip) | list)[0].failed | default(false) | ternary('no', 'yes') } ] }}"
           loop: "{{ wol_targets }}"
 
         - name: "Show WoL report"

@@ -5,7 +5,7 @@
 # =============================================================================
 
 - name: "Setup Auto-Sleep Monitoring"
-  hosts: all
+  hosts: monitoring_nodes
   gather_facts: true
   become: true
   vars:

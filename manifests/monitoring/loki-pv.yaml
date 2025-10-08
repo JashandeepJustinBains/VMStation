@@ -12,10 +12,13 @@ spec:
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
+  storageClassName: ""
   hostPath:
     path: /srv/monitoring_data/loki
     type: DirectoryOrCreate
+  claimRef:
+    namespace: monitoring
+    name: loki-pvc
 
 ---
 # PVC for Loki to request the hostPath PV
@@ -30,4 +33,4 @@ spec:
   resources:
     requests:
       storage: 20Gi
-  storageClassName: local-storage
+  storageClassName: ""
