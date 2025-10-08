@@ -168,6 +168,26 @@
         - /etc/cni/net.d
         - /var/lib/kubelet
 
+    # Install CNI plugins on all nodes (required for pod networking)
+    - name: "Check if CNI plugins are installed"
+      shell: "ls /opt/cni/bin 2>/dev/null | wc -l"
+      register: cni_plugin_count
+      changed_when: false
+
+    - name: "Download CNI plugins if missing"
+      get_url:
+        url: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
+        dest: /tmp/cni-plugins.tgz
+        mode: '0644'
+      when: cni_plugin_count.stdout | int < 5
+
+    - name: "Extract CNI plugins"
+      unarchive:
+        src: /tmp/cni-plugins.tgz
+        dest: /opt/cni/bin
+        remote_src: yes
+      when: cni_plugin_count.stdout | int < 5
+
 # =============================================================================
 # Phase 1: Control Plane Initialization
 # Initialize Kubernetes control plane with kubeadm on master node
@@ -308,25 +328,6 @@
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           Phase 4: CNI Deployment (Flannel)
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    - name: "Check if CNI plugins are installed"
-      shell: "ls /opt/cni/bin 2>/dev/null | wc -l"
-      register: cni_plugin_count
-      changed_when: false
-
-    - name: "Download CNI plugins if missing"
-      get_url:
-        url: "https://github.com/containernetworking/plugins/releases/download/v1.3.0/cni-plugins-linux-amd64-v1.3.0.tgz"
-        dest: /tmp/cni-plugins.tgz
-        mode: '0644'
-      when: cni_plugin_count.stdout | int < 5
-
-    - name: "Extract CNI plugins"
-      unarchive:
-        src: /tmp/cni-plugins.tgz
-        dest: /opt/cni/bin
-        remote_src: yes
-      when: cni_plugin_count.stdout | int < 5
 
     - name: "Check if Flannel is already deployed"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespace kube-flannel 2>/dev/null
