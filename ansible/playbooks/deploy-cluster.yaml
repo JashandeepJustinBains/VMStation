@@ -28,74 +28,6 @@
         msg: |
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# =============================================================================
-# Phase 8: Optional Wake-on-LAN Validation (runs only when wol_test: true)
-# This validates sleep -> wake behavior for a list of homelab nodes defined in `wol_targets`.
-# Configure `wol_test: true` and `wol_targets` in inventory/group_vars to enable.
-# =============================================================================
-- name: "Phase 8: Wake-on-LAN Validation"
-  hosts: monitoring_nodes
-  gather_facts: false
-  become: true
-  tasks:
-    - name: "Skip WoL tests unless explicitly enabled"
-      debug:
-        msg: "Wake-on-LAN validation is disabled. Set wol_test: true to run."
-      when: not wol_test | bool
-
-    - name: "Run WoL validation sequence (only when enabled)"
-      block:
-        - name: "Build wol_targets from inventory when not explicitly provided"
-          set_fact:
-            wol_targets: >-
-              [{% for h in (groups['monitoring_nodes'] + groups['storage_nodes'] + groups['compute_nodes']) | unique %}{% if hostvars[h].wol_mac is defined %}{'name':'{{ h }}','ip':'{{ hostvars[h].ansible_host }}','mac':'{{ hostvars[h].wol_mac.split()[0] }}' %}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}]
-          when: wol_targets is not defined
-
-        - name: "Ensure wakeonlan is installed on control node (Debian family)"
-          apt:
-            name: wakeonlan
-            state: present
-          when: ansible_facts['os_family'] == 'Debian'
-
-        - name: "Create sleep helper script on target nodes"
-          copy:
-            dest: /usr/local/bin/vmstation-sleep-ansible.sh
-            mode: '0755'
-            content: |
-              #!/bin/sh
-              # Minimal sleep helper: stop kubelet briefly and sleep to simulate node sleep
-              systemctl stop kubelet || true
-              sleep 10
-              # Note: Do not actually power off control-plane nodes in automated tests
-
-        - name: "Trigger sleep helper on each wol target (run as background)"
-          shell: "ssh root@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
-          loop: "{{ wol_targets }}"
-          delegate_to: localhost
-
-        - name: "Send WoL magic packets from control-plane"
-          shell: "wakeonlan {{ item.mac }}"
-          loop: "{{ wol_targets }}"
-          register: wol_results
-          delegate_to: localhost
-
-        - name: "Wait for node SSH to return (timeout 120s)"
-          wait_for:
-            host: "{{ item.ip }}"
-            port: 22
-            timeout: 120
-          loop: "{{ wol_targets }}"
-          delegate_to: localhost
-
-        - name: "Collect wake results"
-          set_fact:
-            wol_report: "{{ wol_report | default([]) + [ { 'name': item.name, 'ip': item.ip, 'mac': item.mac, 'wol_out': (wol_results.results | selectattr('item.mac','equalto', item.mac) | list)[0].stdout | default('') } ] }}"
-          loop: "{{ wol_targets }}"
-
-        - name: "Show WoL report"
-          debug:
-            var: wol_report
-      when: wol_test | bool
     # Disable swap (required for Kubernetes)
     - name: "Disable swap"
       shell: swapoff -a
@@ -261,6 +193,7 @@
         dest: /opt/cni/bin
         remote_src: yes
       when: cni_plugin_count.stdout | int < 5
+
 
 # =============================================================================
 # Phase 1: Control Plane Initialization
@@ -767,3 +700,72 @@
           - Test monitoring: curl http://{{ hostvars[groups['monitoring_nodes'][0]].ansible_host }}:30300
           - Test Jellyfin: curl http://{{ hostvars[groups['storage_nodes'][0]].ansible_host }}:30096/health
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# =============================================================================
+# Phase 8: Optional Wake-on-LAN Validation (runs only when wol_test: true)
+# This validates sleep -> wake behavior for a list of homelab nodes defined in `wol_targets`.
+# Configure `wol_test: true` and `wol_targets` in inventory/group_vars to enable.
+# =============================================================================
+- name: "Phase 8: Wake-on-LAN Validation"
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: true
+  tasks:
+    - name: "Skip WoL tests unless explicitly enabled"
+      debug:
+        msg: "Wake-on-LAN validation is disabled. Set wol_test: true to run."
+      when: not wol_test | bool
+
+    - name: "Run WoL validation sequence (only when enabled)"
+      block:
+        - name: "Build wol_targets from inventory when not explicitly provided"
+          set_fact:
+            wol_targets: >-
+              [{% for h in (groups['monitoring_nodes'] + groups['storage_nodes'] + groups['compute_nodes']) | unique %}{% if hostvars[h].wol_mac is defined %}{'name':'{{ h }}','ip':'{{ hostvars[h].ansible_host }}','mac':'{{ hostvars[h].wol_mac.split()[0] }}' %}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}]
+          when: wol_targets is not defined
+
+        - name: "Ensure wakeonlan is installed on control node (Debian family)"
+          apt:
+            name: wakeonlan
+            state: present
+          when: ansible_facts['os_family'] == 'Debian'
+
+        - name: "Create sleep helper script on target nodes"
+          copy:
+            dest: /usr/local/bin/vmstation-sleep-ansible.sh
+            mode: '0755'
+            content: |
+              #!/bin/sh
+              # Minimal sleep helper: stop kubelet briefly and sleep to simulate node sleep
+              systemctl stop kubelet || true
+              sleep 10
+              # Note: Do not actually power off control-plane nodes in automated tests
+
+        - name: "Trigger sleep helper on each wol target (run as background)"
+          shell: "ssh root@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
+          loop: "{{ wol_targets }}"
+          delegate_to: localhost
+
+        - name: "Send WoL magic packets from control-plane"
+          shell: "wakeonlan {{ item.mac }}"
+          loop: "{{ wol_targets }}"
+          register: wol_results
+          delegate_to: localhost
+
+        - name: "Wait for node SSH to return (timeout 120s)"
+          wait_for:
+            host: "{{ item.ip }}"
+            port: 22
+            timeout: 120
+          loop: "{{ wol_targets }}"
+          delegate_to: localhost
+
+        - name: "Collect wake results"
+          set_fact:
+            wol_report: "{{ wol_report | default([]) + [ { 'name': item.name, 'ip': item.ip, 'mac': item.mac, 'wol_out': (wol_results.results | selectattr('item.mac','equalto', item.mac) | list)[0].stdout | default('') } ] }}"
+          loop: "{{ wol_targets }}"
+
+        - name: "Show WoL report"
+          debug:
+            var: wol_report
+      when: wol_test | bool
