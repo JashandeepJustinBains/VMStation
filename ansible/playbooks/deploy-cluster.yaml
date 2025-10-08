@@ -20,7 +20,7 @@
         # Optional Wake-on-LAN validation (disabled by default). Set to true in inventory/group_vars to run.
         wol_test: "{{ wol_test | default(false) }}"
         # Default WoL target list - override in inventory/group_vars with your MACs/IPs if needed.
-        wol_targets: "{{ wol_targets | default([{'name':'storagenodet3500','ip':'192.168.4.61','mac':'b8:ac:6f:7e:6c:9d'},{'name':'homelab','ip':'192.168.4.62','mac':'d0:94:66:30:d6:63'}]) }}"
+        wol_targets: "{{ wol_targets | default([{'name':'storagenodet3500','ip':'192.168.4.61','mac':'b8:ac:6f:7e:6c:9d','user':'root'},{'name':'homelab','ip':'192.168.4.62','mac':'d0:94:66:30:d6:63','user':'jashandeepjustinbains'}]) }}"
       tags: always
 
     - name: "Display Phase 0 banner"
