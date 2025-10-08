@@ -78,13 +78,13 @@ data:
       default:
         # Collect all available IPMI sensors
         collectors:
-        - ipmi
-        - dcmi
-        - bmc
-        - chassis
-  # Timeout for IPMI commands (seconds)
-  timeout: 10
-        # Use local BMC interface
+          - ipmi
+          - dcmi
+          - bmc
+          - chassis
+        # Timeout for IPMI commands (seconds)
+        timeout: 10
+        # Use local BMC interface (adjust as needed for your hardware)
         driver: "LAN_2_0"
         privilege: "user"
 ---
@@ -110,16 +110,9 @@ spec:
     app: ipmi-exporter
 ---
 # IPMI Credentials Secret (to be populated from secrets.yml via Ansible)
-# This secret should be created by Ansible playbook using variables from secrets.yml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ipmi-credentials
-  namespace: monitoring
-type: Opaque
-stringData:
-  username: ""  # Populated by Ansible from {{ ipmi_username }}
-  password: ""  # Populated by Ansible from {{ ipmi_password }}
+# NOTE: The ipmi-credentials Secret must NOT be created here with empty values.
+# It should be created idempotently by the Ansible playbook from vaulted variables
+# (or by the operator) so that accidental empty secrets are not applied.
 ---
 # Remote IPMI Exporter for Enterprise Server at 192.168.4.60
 # This deployment monitors remote BMC using network IPMI protocol
@@ -193,22 +186,21 @@ metadata:
 data:
   ipmi-remote.yml: |
     # IPMI Exporter configuration for remote enterprise server monitoring
-    # Monitors BMC at 192.168.4.60 via network IPMI protocol
+    # Monitors BMC via network IPMI protocol (IPMI over LAN)
     modules:
       default:
-        # Collect all available IPMI sensors via remote connection
         collectors:
-        - ipmi
-        - dcmi
-        - bmc
-        - chassis
-  # Timeout for remote IPMI commands (seconds)
-  timeout: 20
-        # Use IPMI over LAN for remote access
+          - ipmi
+          - dcmi
+          - bmc
+          - chassis
+        # Timeout for remote IPMI commands (seconds)
+        timeout: 20
         driver: "LAN_2_0"
-        # User privilege level for IPMI access
         privilege: "user"
-        # Credentials are passed via environment variables
+        # Credentials are expected to be supplied via environment variables
+        # when running the exporter (e.g. IPMI_USER / IPMI_PASSWORD)
+        # The deployment passes these through from the ipmi-credentials Secret.
         user: "${IPMI_USER}"
         password: "${IPMI_PASSWORD}"
 ---

@@ -110,8 +110,8 @@ spec:
           name: http-metrics
         - containerPort: 9096
           name: grpc
-        args:
-        - -config.file=/etc/loki/local-config.yaml
+  args:
+  - "--config.file=/etc/loki/local-config.yaml"
         volumeMounts:
         - name: loki-config
           mountPath: /etc/loki

@@ -190,6 +190,17 @@ Deploy RKE2 cluster to homelab node:
 
 This will make the RKE2 federation target available at `192.168.4.62:30090`.
 
+## Additional Operational Fixes
+
+- Added a hostPath PersistentVolume `manifests/monitoring/prometheus-pv.yaml` that binds the existing
+  `prometheus-pvc` on homelab setups without a dynamic storage provisioner. This allows Prometheus to start
+  when the cluster lacks a StorageClass. The PV uses `/srv/monitoring_data/prometheus` on the host and is
+  intended for homelab/dev environments only.
+
+- Removed an embedded, empty `ipmi-credentials` Secret from `manifests/monitoring/ipmi-exporter.yaml` to
+  avoid accidentally applying blank credentials. Secrets should be created by the Ansible playbook from
+  vaulted variables or manually by operators (see `docs/REMOTE_IPMI_SETUP.md`).
+
 ## Testing
 
 A comprehensive test suite was created to validate these changes:

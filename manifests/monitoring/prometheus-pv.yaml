@@ -1,0 +1,23 @@
+---
+# HostPath PersistentVolume for Prometheus (homelab/dev use only)
+# This PV binds the existing `prometheus-pvc` when no dynamic provisioner is available.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-pv
+  labels:
+    app: prometheus
+    vmstation.io/component: monitoring
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: /srv/monitoring_data/prometheus
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: monitoring
+    name: prometheus-pvc

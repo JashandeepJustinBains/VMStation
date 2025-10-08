@@ -475,6 +475,10 @@ spec:
         image: prom/blackbox-exporter:v0.25.0
         args:
         - '--config.file=/etc/blackbox/blackbox.yml'
+        securityContext:
+          capabilities:
+            add:
+              - NET_RAW
         ports:
         - containerPort: 9115
           name: http
