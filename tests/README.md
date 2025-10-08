@@ -4,7 +4,9 @@ This directory contains automated tests for the VMStation deployment system.
 
 ## Test Files
 
-### test-deploy-limits.sh
+### Core Deployment Tests
+
+#### test-deploy-limits.sh
 
 Automated tests to verify that the deploy.sh script correctly limits deployments to the appropriate hosts.
 
@@ -30,6 +32,130 @@ Automated tests to verify that the deploy.sh script correctly limits deployments
 [TEST-PASS] ✓ all command includes both phases
 [TEST-INFO] ALL TESTS PASSED
 ```
+
+### Auto-Sleep/Wake Tests
+
+#### test-autosleep-wake-validation.sh
+
+Validates auto-sleep and wake configuration on both storagenodet3500 (Debian) and homelab (RHEL10).
+
+**What it tests**:
+- Systemd timer configuration on both nodes
+- Auto-sleep scripts existence and permissions
+- Wake-on-LAN script and service
+- kubectl access from control plane
+- WoL tool availability
+- Node reachability
+- Monitoring services configuration
+- Log files and directories
+- Systemd timer schedules
+
+**How to run**:
+```bash
+./tests/test-autosleep-wake-validation.sh
+```
+
+#### test-sleep-wake-cycle.sh
+
+⚠️ **DESTRUCTIVE TEST** - Automated sleep/wake cycle validation.
+
+**What it tests**:
+- Records initial cluster state
+- Triggers cluster sleep (cordons/drains nodes)
+- Sends Wake-on-LAN packets
+- Measures wake time
+- Validates service restoration (kubelet, rke2, node-exporter)
+- Validates monitoring stack after wake
+
+**How to run**:
+```bash
+./tests/test-sleep-wake-cycle.sh
+```
+
+**Note**: This test requires user confirmation and will temporarily disrupt the cluster.
+
+### Monitoring & Exporter Tests
+
+#### test-monitoring-exporters-health.sh
+
+Validates monitoring exporters and dashboard health.
+
+**What it tests**:
+- Prometheus targets health (up/down status)
+- Node exporter health on all nodes
+- IPMI exporter health and credentials
+- Dashboard metric validation (non-zero values)
+- Grafana dashboards availability
+- Loki log aggregation health
+- Service connectivity with concise curl output
+
+**How to run**:
+```bash
+./tests/test-monitoring-exporters-health.sh
+```
+
+#### test-loki-validation.sh
+
+Validates Loki log aggregation and connectivity.
+
+**What it tests**:
+- Loki pod status
+- Loki service configuration and endpoints
+- Loki API connectivity
+- Promtail (log shipper) status
+- Loki DNS resolution
+- Loki datasource in Grafana
+
+**How to run**:
+```bash
+./tests/test-loki-validation.sh
+```
+
+#### test-monitoring-access.sh (Updated)
+
+Validates monitoring endpoints with concise curl output.
+
+**What it tests**:
+- Grafana web UI and API access
+- Prometheus web UI and health
+- Node exporter metrics
+- Grafana datasources
+- Grafana dashboards
+- Prometheus metrics collection
+- Anonymous access configuration
+
+**How to run**:
+```bash
+./tests/test-monitoring-access.sh
+```
+
+**Output format**: Now includes concise curl status messages:
+```
+curl http://192.168.4.63:30090/-/healthy ok
+curl http://192.168.4.63:30300/api/health ok
+```
+
+### Complete Validation Suite
+
+#### test-complete-validation.sh
+
+Master test suite that runs all validation tests in sequence.
+
+**What it tests**:
+- Phase 1: Auto-sleep/wake configuration
+- Phase 2: Monitoring health (exporters, Loki, access)
+- Phase 3: Sleep/wake cycle (optional, requires confirmation)
+
+**How to run**:
+```bash
+./tests/test-complete-validation.sh
+```
+
+**Features**:
+- Color-coded output
+- Suite-level pass/fail tracking
+- Optional destructive tests with user confirmation
+- Comprehensive summary report
 
 ## Running All Tests
 

@@ -22,7 +22,7 @@ echo ""
 FAILED=0
 PASSED=0
 
-# Test function
+# Test function with concise curl output
 test_endpoint() {
   local name="$1"
   local url="$2"
@@ -33,15 +33,18 @@ test_endpoint() {
   if response=$(curl -sf --max-time 10 "$url" 2>&1); then
     if [[ -z "$expect_pattern" ]] || echo "$response" | grep -q "$expect_pattern"; then
       echo "✅ PASS"
+      echo "  curl $url ok"
       PASSED=$((PASSED + 1))
       return 0
     else
       echo "❌ FAIL (unexpected response)"
+      echo "  curl $url error"
       FAILED=$((FAILED + 1))
       return 1
     fi
   else
     echo "❌ FAIL (not accessible)"
+    echo "  curl $url error"
     FAILED=$((FAILED + 1))
     return 1
   fi
