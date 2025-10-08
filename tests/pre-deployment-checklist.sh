@@ -1,8 +1,14 @@
 #!/bin/bash
 # Pre-deployment checklist - Run this before deploying to validate everything is ready
 
-REPO_ROOT="/home/runner/work/VMStation/VMStation"
-cd "$REPO_ROOT"
+# Determine repository root relative to this script so the checklist can be run
+# from any checked-out location (CI runners have different paths).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# The tests directory is one level below the repository root
+REPO_ROOT="${SCRIPT_DIR%/tests}"
+cd "$REPO_ROOT" || {
+    echo "Could not change directory to repository root: $REPO_ROOT" >&2
+}
 
 echo "=============================================="
 echo "VMStation Pre-Deployment Checklist"
@@ -97,11 +103,14 @@ fi
 
 echo
 echo "6. Verifying playbook phase order..."
-phases=$(awk '/^- name:.*Phase [0-9]/ {match($0, /Phase ([0-9]+)/, arr); print arr[1]}' ansible/playbooks/deploy-cluster.yaml)
+# Parse phase numbers in a portable way (avoid awk match() incompatibilities
+# across different awk implementations used on various CI/host platforms).
+phases=$(grep -oE 'Phase [0-9]+' ansible/playbooks/deploy-cluster.yaml 2>/dev/null | sed -E 's/Phase //g' | tr '\n' ' ' | sed -E 's/ +$//')
 expected="0 1 2 3 4 5 6 7 8"
-actual=$(echo $phases | tr '\n' ' ')
+actual="$phases"
 
-if [ "$actual" = "$expected " ]; then
+# Normalize whitespace and compare
+if [ "$(echo $actual)" = "$(echo $expected)" ]; then
     check_pass "Playbook phases in correct order (0-8)"
 else
     check_fail "Playbook phase order incorrect: $actual (expected: $expected)"

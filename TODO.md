@@ -2,10 +2,8 @@
 
 clear
 git pull
+./tests/pre-deployment-checklist.sh
 ./deploy.sh reset
-
-# Run comprehensive validation
-./tests/test-comprehensive.sh
 
 # Deploy with enhancements
 ./deploy.sh all --with-rke2 --yes
