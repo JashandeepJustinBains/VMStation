@@ -518,6 +518,10 @@
     - name: "Deploy Loki and Promtail (log aggregation and collection)"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/loki.yaml
 
+    - name: "Deploy Syslog Server (centralized log collection)"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/syslog.yaml
+      failed_when: false
+
     - name: "Deploy IPMI Exporter"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/ipmi-exporter.yaml
 
@@ -600,6 +604,35 @@
 
     - name: "Wait for Blackbox Exporter to be ready"
       shell: |
+        # Check if deployment exists first
+        if ! kubectl --kubeconfig=/etc/kubernetes/admin.conf get deployment blackbox-exporter -n monitoring >/dev/null 2>&1; then
+          echo "ERROR: blackbox-exporter deployment not found"
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf get deployments -n monitoring
+          exit 1
+        fi
+        
+        # Get pod status for debugging
+        echo "=== Blackbox Exporter Pod Status ==="
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l app=blackbox-exporter -n monitoring -o wide || true
+        
+        # Describe deployment for scheduling info
+        echo "=== Deployment Details ==="
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf describe deployment blackbox-exporter -n monitoring | grep -A 20 "^Conditions:\|^Replicas:\|^Pod Template:" || true
+        
+        # Check for pod if exists
+        POD=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l app=blackbox-exporter -n monitoring -o name 2>/dev/null | head -n1)
+        if [ -n "$POD" ]; then
+          echo "=== Pod Events ==="
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf describe $POD -n monitoring | tail -30 || true
+          
+          # Check logs if pod is running
+          if kubectl --kubeconfig=/etc/kubernetes/admin.conf get $POD -n monitoring -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; then
+            echo "=== Pod Logs ==="
+            kubectl --kubeconfig=/etc/kubernetes/admin.conf logs $POD -n monitoring --tail=50 || true
+          fi
+        fi
+        
+        # Now wait for availability
         kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/blackbox-exporter \
           -n monitoring \
           --timeout=120s
@@ -609,6 +642,27 @@
       until: blackbox_ready.rc == 0
       failed_when: false
 
+    - name: "Display blackbox-exporter diagnostic output on failure"
+      debug:
+        msg: "{{ blackbox_ready.stdout_lines }}"
+      when: blackbox_ready.rc != 0
+
+    - name: "Test blackbox-exporter readiness endpoint"
+      shell: |
+        POD=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -l app=blackbox-exporter -n monitoring -o name 2>/dev/null | head -n1)
+        if [ -n "$POD" ]; then
+          echo "Testing readiness probe from inside pod..."
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n monitoring $POD -- curl -sS -I http://127.0.0.1:9115/metrics || echo "Readiness test failed"
+        fi
+      register: blackbox_readiness_test
+      failed_when: false
+      when: blackbox_ready.rc != 0
+
+    - name: "Display readiness test results"
+      debug:
+        msg: "{{ blackbox_readiness_test.stdout_lines }}"
+      when: blackbox_ready.rc != 0 and blackbox_readiness_test.stdout_lines is defined
+
     - name: "Deploy Jellyfin media server"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/jellyfin/jellyfin.yaml
       register: jellyfin_deploy
@@ -616,6 +670,39 @@
 
     - name: "Wait for Jellyfin pod to be ready"
       shell: |
+        # Check if pod exists first
+        if ! kubectl --kubeconfig=/etc/kubernetes/admin.conf get pod jellyfin -n jellyfin >/dev/null 2>&1; then
+          echo "ERROR: jellyfin pod not found"
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n jellyfin -o wide
+          exit 1
+        fi
+        
+        # Get pod status for debugging
+        echo "=== Jellyfin Pod Status ==="
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pod jellyfin -n jellyfin -o wide
+        
+        # Get pod phase
+        PHASE=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pod jellyfin -n jellyfin -o jsonpath='{.status.phase}')
+        echo "Pod Phase: $PHASE"
+        
+        # Check events
+        echo "=== Pod Events (last 30 lines) ==="
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf describe pod jellyfin -n jellyfin | tail -30
+        
+        # Check logs if container is running
+        if [ "$PHASE" == "Running" ] || [ "$PHASE" == "Failed" ]; then
+          echo "=== Pod Logs (last 50 lines) ==="
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf logs pod/jellyfin -n jellyfin --tail=50 || echo "Could not fetch logs"
+        fi
+        
+        # Get node info
+        NODE=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pod jellyfin -n jellyfin -o jsonpath='{.spec.nodeName}')
+        if [ -n "$NODE" ]; then
+          echo "=== Node: $NODE ==="
+          kubectl --kubeconfig=/etc/kubernetes/admin.conf describe node $NODE | sed -n '/Taints:/,/Unschedulable:/p' || true
+        fi
+        
+        # Now wait for ready condition
         kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod/jellyfin \
           -n jellyfin \
           --timeout=300s
@@ -624,6 +711,11 @@
       register: jellyfin_ready
       until: jellyfin_ready.rc == 0
       failed_when: false
+
+    - name: "Display Jellyfin diagnostic output on failure"
+      debug:
+        msg: "{{ jellyfin_ready.stdout_lines }}"
+      when: jellyfin_ready.rc != 0
 
     - name: "Display monitoring stack status"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get all -n monitoring

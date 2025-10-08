@@ -1,0 +1,230 @@
+---
+# Syslog Server Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# Syslog ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: syslog-config
+  namespace: monitoring
+data:
+  syslog-ng.conf: |
+    @version: 3.35
+    @include "scl.conf"
+    
+    # Sources
+    source s_network {
+      network(
+        ip(0.0.0.0)
+        port(514)
+        transport("udp")
+        flags(no-parse)
+      );
+      network(
+        ip(0.0.0.0)
+        port(514)
+        transport("tcp")
+        flags(no-parse)
+        max-connections(1000)
+      );
+    };
+    
+    source s_local {
+      system();
+      internal();
+    };
+    
+    # Destinations
+    destination d_file {
+      file("/var/log/syslog-ng/messages"
+        create_dirs(yes)
+        dir_perm(0755)
+        perm(0644)
+      );
+    };
+    
+    destination d_loki {
+      syslog("loki.monitoring.svc.cluster.local" 
+        port(3100)
+        transport("tcp")
+        template("$(format-json --scope rfc5424 --exclude DATE --key ISODATE @timestamp=${ISODATE})")
+      );
+    };
+    
+    # Filters
+    filter f_critical {
+      level(crit..emerg);
+    };
+    
+    filter f_error {
+      level(err);
+    };
+    
+    filter f_warning {
+      level(warn);
+    };
+    
+    # Log paths
+    log {
+      source(s_network);
+      source(s_local);
+      destination(d_file);
+    };
+    
+    log {
+      source(s_network);
+      source(s_local);
+      filter(f_critical);
+      destination(d_file);
+    };
+---
+# Syslog DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: syslog-server
+  namespace: monitoring
+  labels:
+    app: syslog-server
+    vmstation.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: syslog-server
+  template:
+    metadata:
+      labels:
+        app: syslog-server
+    spec:
+      hostNetwork: true
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: syslog-ng
+        image: balabit/syslog-ng:latest
+        ports:
+        - containerPort: 514
+          protocol: UDP
+          name: syslog-udp
+        - containerPort: 514
+          protocol: TCP
+          name: syslog-tcp
+        - containerPort: 601
+          protocol: TCP
+          name: syslog-tls
+        volumeMounts:
+        - name: config
+          mountPath: /etc/syslog-ng/syslog-ng.conf
+          subPath: syslog-ng.conf
+        - name: syslog-data
+          mountPath: /var/log/syslog-ng
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        securityContext:
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            - SYSLOG
+      volumes:
+      - name: config
+        configMap:
+          name: syslog-config
+      - name: syslog-data
+        hostPath:
+          path: /var/log/syslog-collector
+          type: DirectoryOrCreate
+---
+# Syslog Service (for metrics scraping)
+apiVersion: v1
+kind: Service
+metadata:
+  name: syslog-server
+  namespace: monitoring
+  labels:
+    app: syslog-server
+spec:
+  type: ClusterIP
+  ports:
+  - port: 514
+    targetPort: 514
+    protocol: UDP
+    name: syslog-udp
+  - port: 514
+    targetPort: 514
+    protocol: TCP
+    name: syslog-tcp
+  selector:
+    app: syslog-server
+---
+# Syslog Exporter for Prometheus metrics
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: syslog-exporter
+  namespace: monitoring
+  labels:
+    app: syslog-exporter
+    vmstation.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: syslog-exporter
+  template:
+    metadata:
+      labels:
+        app: syslog-exporter
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: syslog-exporter
+        image: ghcr.io/prometheus-community/syslog-exporter:latest
+        args:
+        - --syslog.listen-address=:1514
+        - --syslog.listen-protocol=udp
+        - --web.listen-address=:9104
+        ports:
+        - containerPort: 1514
+          protocol: UDP
+          name: syslog
+        - containerPort: 9104
+          protocol: TCP
+          name: metrics
+        resources:
+          requests:
+            cpu: 25m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+---
+# ServiceMonitor for syslog-exporter
+apiVersion: v1
+kind: Service
+metadata:
+  name: syslog-exporter
+  namespace: monitoring
+  labels:
+    app: syslog-exporter
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9104
+    targetPort: 9104
+    protocol: TCP
+    name: metrics
+  selector:
+    app: syslog-exporter
