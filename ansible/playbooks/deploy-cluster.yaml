@@ -531,6 +531,21 @@
     - name: "Create monitoring namespace"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
 
+    - name: "Create monitoring data directories on control plane with proper permissions"
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+      loop:
+        - { path: '/srv/monitoring_data' }
+        - { path: '/srv/monitoring_data/grafana', owner: '472', group: '472' }  # Grafana UID:GID
+        - { path: '/srv/monitoring_data/prometheus', owner: '65534', group: '65534' }  # nobody UID:GID (Prometheus default)
+        - { path: '/srv/monitoring_data/loki', owner: '10001', group: '10001' }  # Loki UID:GID
+        - { path: '/srv/monitoring_data/promtail', owner: '0', group: '0' }  # Root (Promtail runs as root)
+      failed_when: false
+
     - name: "Apply monitoring PersistentVolumes and PVCs (prometheus/grafana/loki/promtail)"
       shell: |
         kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus-pv.yaml || true
