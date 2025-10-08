@@ -1001,6 +1001,100 @@ data:
       ],
       "version": 1
     }
+  network-latency-dashboard.json: |
+    {
+      "schemaVersion": 27,
+      "title": "Network & DNS Performance",
+      "uid": "network-dns-performance",
+      "tags": ["network", "dns", "latency", "vmstation"],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "id": 1,
+            "title": "HTTP Probe Success",
+            "type": "timeseries",
+            "datasource": "Prometheus",
+            "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+            "targets": [
+              {"expr": "probe_success{job=\"blackbox\"}", "legendFormat": "{{instance}}", "refId": "A"}
+            ],
+            "fieldConfig": {"defaults": {"unit": "bool", "color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 5, "lineWidth": 2, "showPoints": "never"}}}
+        },
+        {
+          "id": 2,
+          "title": "HTTP Latency (Seconds)",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {"expr": "probe_duration_seconds{job=\"blackbox\"}", "legendFormat": "{{instance}}", "refId": "A"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "s", "color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"}}}
+        },
+        {
+          "id": 3,
+          "title": "DNS Query Time",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+          "targets": [
+            {"expr": "histogram_quantile(0.95, sum(rate(coredns_dns_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "95th Percentile", "refId": "A"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "s", "color": {"mode": "palette-classic"}}}
+        },
+        {
+          "id": 4,
+          "title": "DNS Error Rate",
+          "type": "timeseries",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+          "targets": [
+            {"expr": "sum(rate(coredns_dns_responses_total{rcode!=\"NOERROR\"}[5m]))", "legendFormat": "Errors", "refId": "A"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "req/s", "color": {"mode": "palette-classic"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}}
+        },
+        {
+          "id": 5,
+          "title": "CoreDNS Pod Restarts",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 12},
+          "targets": [
+            {"expr": "sum(increase(kube_pod_container_status_restarts_total{pod=~\"coredns.*\"}[1h]))", "refId": "A"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}}
+        },
+        {
+          "id": 6,
+          "title": "Blackbox Probe Failures (Last Hour)",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 12},
+          "targets": [
+            {"expr": "sum(increase(probe_success{job=\"blackbox\"}[1h]) == 0)", "refId": "A"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}}
+        },
+        {
+          "id": 7,
+          "title": "Probe Status Table",
+          "type": "table",
+          "datasource": "Prometheus",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+          "targets": [
+            {"expr": "probe_success{job=\"blackbox\"}", "format": "table", "instant": true, "refId": "A"}
+          ],
+          "transformations": [
+            {"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true}, "renameByName": {"Value": "Success"}}}
+          ],
+          "fieldConfig": {"overrides": [{"matcher": {"id": "byName", "options": "Success"}, "properties": [{"id": "custom.displayMode", "value": "color-background"}, {"id": "mappings", "value": [{"options": {"0": {"color": "red", "text": "Fail"}, "1": {"color": "green", "text": "OK"}}, "type": "value"}]}]}]}
+        }
+      ],
+      "version": 1
+    }
   loki-dashboard.json: |
     {
       "schemaVersion": 27,
@@ -1565,7 +1659,8 @@ spec:
             memory: 256Mi
       volumes:
       - name: grafana-storage
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: grafana-pvc
       - name: grafana-datasources
         configMap:
           name: grafana-datasources
@@ -1593,3 +1688,16 @@ spec:
     name: web
   selector:
     app: grafana
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi

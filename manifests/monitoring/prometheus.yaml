@@ -244,6 +244,26 @@ data:
       - source_labels: [__meta_kubernetes_service_name]
         action: replace
         target_label: kubernetes_name
+
+    # Blackbox exporter - network / DNS / HTTP probes
+    - job_name: 'blackbox'
+      metrics_path: /probe
+      params:
+        module: [http_2xx]
+      static_configs:
+      - targets:
+        - http://prometheus.monitoring.svc.cluster.local:9090
+        - http://grafana.monitoring.svc.cluster.local:3000
+        - http://loki.monitoring.svc.cluster.local:3100
+        - https://1.1.1.1
+        - https://8.8.8.8
+      relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter.monitoring.svc.cluster.local:9115
     
     # RKE2 Federation - Federate metrics from RHEL 10 homelab RKE2 cluster
     # NOTE: This target will be DOWN if:
@@ -271,9 +291,53 @@ metadata:
   namespace: monitoring
 data:
   alerts.yml: |
-    # Placeholder for alerting rules
-    # Add your Prometheus alerting rules here
-    groups: []
+    groups:
+    - name: node-health.rules
+      interval: 30s
+      rules:
+      - alert: NodeExporterDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Node exporter down on {{ $labels.instance }}
+          description: Node exporter has been unreachable for more than 2 minutes.
+      - alert: HighNodeCPU
+        expr: (100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High CPU usage on {{ $labels.instance }}
+          description: Node CPU usage > 85% for 5m.
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High memory usage on {{ $labels.instance }}
+          description: Memory usage > 90% for 5m.
+    - name: dns-network.rules
+      interval: 1m
+      rules:
+      - alert: CoreDNSDown
+        expr: sum(up{job="kubernetes-service-endpoints", kubernetes_name="kube-dns"}) == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: CoreDNS appears down
+          description: No CoreDNS endpoints responding for 2 minutes.
+      - alert: BlackboxProbeFailed
+        expr: probe_success == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Blackbox probe failed for {{ $labels.instance }}
+          description: Network probe to {{ $labels.instance }} failing.
 ---
 # Prometheus Deployment
 apiVersion: apps/v1
@@ -346,7 +410,8 @@ spec:
         configMap:
           name: prometheus-rules
       - name: prometheus-storage
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
 ---
 # Prometheus Service
 apiVersion: v1
@@ -365,3 +430,108 @@ spec:
     name: web
   selector:
     app: prometheus
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# Blackbox Exporter (network, http, dns probing)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+  labels:
+    app: blackbox-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blackbox-exporter
+  template:
+    metadata:
+      labels:
+        app: blackbox-exporter
+    spec:
+      serviceAccountName: blackbox-exporter
+      containers:
+      - name: blackbox-exporter
+        image: prom/blackbox-exporter:v0.25.0
+        args:
+        - '--config.file=/etc/blackbox/blackbox.yml'
+        ports:
+        - containerPort: 9115
+          name: http
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        volumeMounts:
+        - name: config
+          mountPath: /etc/blackbox
+      volumes:
+      - name: config
+        configMap:
+          name: blackbox-exporter-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-exporter-config
+  namespace: monitoring
+data:
+  blackbox.yml: |
+    modules:
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          preferred_ip_protocol: ip4
+      icmp:
+        prober: icmp
+        timeout: 5s
+      dns:
+        prober: dns
+        dns:
+          query_name: kubernetes.default.svc.cluster.local
+          query_type: A
+          timeout: 5s
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+  labels:
+    app: blackbox-exporter
+spec:
+  ports:
+  - port: 9115
+    targetPort: 9115
+    name: http
+  selector:
+    app: blackbox-exporter

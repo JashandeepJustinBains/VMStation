@@ -487,6 +487,11 @@
     - name: "Deploy Prometheus"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
 
+    - name: "Deploy Blackbox Exporter"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/prometheus.yaml
+      args:
+        warn: false
+
     - name: "Deploy Grafana"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/grafana.yaml
 
@@ -550,6 +555,17 @@
         kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/grafana \
           -n monitoring \
           --timeout=120s
+
+    - name: "Wait for Blackbox Exporter to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=available deployment/blackbox-exporter \
+          -n monitoring \
+          --timeout=120s
+      register: blackbox_ready
+      retries: 3
+      delay: 10
+      until: blackbox_ready.rc == 0
+      failed_when: false
       retries: 5
       delay: 10
       register: grafana_ready
