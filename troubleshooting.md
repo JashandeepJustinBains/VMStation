@@ -2,6 +2,23 @@
 
 Quick diagnostic checks for VMStation clusters.
 
+## Automated Validation
+
+Before manually troubleshooting, run the automated validation suite:
+
+```bash
+# Run complete validation (recommended)
+./tests/test-complete-validation.sh
+
+# Or run individual validation tests
+./tests/test-autosleep-wake-validation.sh      # Auto-sleep/wake configuration
+./tests/test-monitoring-exporters-health.sh    # Monitoring stack health
+./tests/test-loki-validation.sh                # Loki log aggregation
+./tests/test-monitoring-access.sh              # Monitoring endpoints
+```
+
+See [Validation Test Guide](docs/VALIDATION_TEST_GUIDE.md) for detailed documentation.
+
 ## Recent Fixes (October 2025)
 
 For recently resolved deployment issues, see [Deployment Fixes Documentation](docs/DEPLOYMENT_FIXES_OCT2025.md):
@@ -259,6 +276,70 @@ This performs a clean deployment from scratch.
 - Check node selector: `kubectl describe pod jellyfin -n jellyfin | grep Node-Selectors`
 - Expected: Should be scheduled on storagenodet3500
 - If missing: Re-run deployment with Phase 7 fixes (see [DEPLOYMENT_FIXES_OCT2025.md](docs/DEPLOYMENT_FIXES_OCT2025.md))
+
+### Issue: Auto-sleep not triggering
+
+**Symptoms**: Cluster not sleeping after inactivity period
+
+**Diagnostic**:
+```bash
+./tests/test-autosleep-wake-validation.sh
+```
+
+**Fix**:
+- Check timer status: `systemctl status vmstation-autosleep.timer`
+- View logs: `journalctl -u vmstation-autosleep -n 50`
+- Manually trigger: `sudo systemctl start vmstation-autosleep.service`
+- Verify scripts exist: `ls -la /usr/local/bin/vmstation-*sleep*.sh`
+- Redeploy: `./deploy.sh setup`
+
+### Issue: Wake-on-LAN not working
+
+**Symptoms**: Nodes not waking after WoL packet sent
+
+**Diagnostic**:
+```bash
+# Check WoL configuration
+ssh root@node "ethtool eth0 | grep Wake-on"
+```
+
+**Fix**:
+- Enable WoL on NIC: `ethtool -s eth0 wol g`
+- Verify MAC address in inventory: `ansible/inventory/hosts.yml`
+- Test WoL packet: `wakeonlan b8:ac:6f:7e:6c:9d`
+- Check BIOS settings: Ensure WoL is enabled in BIOS/UEFI
+
+### Issue: Monitoring exporters DOWN
+
+**Symptoms**: Prometheus shows exporters as DOWN
+
+**Diagnostic**:
+```bash
+./tests/test-monitoring-exporters-health.sh
+```
+
+**Fix**:
+- Restart exporter: `systemctl restart node_exporter`
+- Check port open: `netstat -tulpn | grep 9100`
+- Test connectivity: `curl http://node-ip:9100/metrics`
+- Check firewall: `iptables -L -n | grep 9100`
+- For IPMI: Verify credentials with `kubectl get secret ipmi-credentials -n monitoring`
+
+### Issue: Loki logs not appearing
+
+**Symptoms**: No logs in Grafana Loki datasource
+
+**Diagnostic**:
+```bash
+./tests/test-loki-validation.sh
+```
+
+**Fix**:
+- Check Loki pods: `kubectl get pods -n monitoring | grep loki`
+- Check Promtail: `kubectl get pods -n monitoring | grep promtail`
+- View Loki logs: `kubectl logs -n monitoring -l app=loki`
+- Test DNS: `kubectl run -it --rm dns-test --image=busybox --restart=Never -- nslookup loki.monitoring`
+- Verify datasource: Check Grafana datasources health
 
 ### Issue: IPMI exporter pods in Error state
 **Fix**:

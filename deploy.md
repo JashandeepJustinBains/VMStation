@@ -99,9 +99,24 @@ all:
 
 ## Verification
 
-After deployment, verify:
+After deployment, verify cluster health:
 
-### Debian Cluster
+### Quick Validation (Recommended)
+```bash
+# Run complete validation suite
+./tests/test-complete-validation.sh
+
+# Or run specific validation tests
+./tests/test-autosleep-wake-validation.sh      # Auto-sleep/wake configuration
+./tests/test-monitoring-exporters-health.sh    # Monitoring stack health
+./tests/test-monitoring-access.sh              # Monitoring endpoints
+```
+
+See [Validation Test Guide](docs/VALIDATION_TEST_GUIDE.md) for detailed documentation.
+
+### Manual Verification
+
+#### Debian Cluster
 ```bash
 kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes
 kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A
@@ -109,7 +124,7 @@ kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A
 
 Expected: All nodes `Ready`, all pods `Running`, no `CrashLoopBackOff`.
 
-### RKE2 Cluster
+#### RKE2 Cluster
 ```bash
 export KUBECONFIG=ansible/artifacts/homelab-rke2-kubeconfig.yaml
 kubectl get nodes
@@ -117,6 +132,17 @@ kubectl get pods -A
 ```
 
 Expected: homelab node `Ready`, all system pods `Running`.
+
+#### Monitoring Stack
+```bash
+# Access monitoring dashboards
+open http://192.168.4.63:30300  # Grafana
+open http://192.168.4.63:30090  # Prometheus
+
+# Or test with curl
+curl http://192.168.4.63:30300/api/health  # Should return "ok"
+curl http://192.168.4.63:30090/-/healthy   # Should return "Prometheus is Healthy"
+```
 
 ## Flags
 
