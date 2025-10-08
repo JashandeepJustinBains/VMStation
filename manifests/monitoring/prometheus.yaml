@@ -470,6 +470,12 @@ spec:
         app: blackbox-exporter
     spec:
       serviceAccountName: blackbox-exporter
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
       containers:
       - name: blackbox-exporter
         image: prom/blackbox-exporter:v0.25.0
