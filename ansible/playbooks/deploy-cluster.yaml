@@ -96,11 +96,6 @@
           debug:
             var: wol_report
       when: wol_test | bool
-
-          Phase 0: System Preparation
-          Target: {{ inventory_hostname }}
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
     # Disable swap (required for Kubernetes)
     - name: "Disable swap"
       shell: swapoff -a
