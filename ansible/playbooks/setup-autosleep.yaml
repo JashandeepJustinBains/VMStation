@@ -5,8 +5,8 @@
 # =============================================================================
 
 - name: "Setup Auto-Sleep Monitoring"
-  hosts: monitoring_nodes
-  gather_facts: false
+  hosts: all
+  gather_facts: true
   become: true
   vars:
     skip_ansible_confirm: false
@@ -49,7 +49,15 @@
           INACTIVITY_THRESHOLD="${VMSTATION_INACTIVITY_THRESHOLD:-7200}"  # Default: 2 hours
           LAST_ACTIVITY_FILE="/var/lib/vmstation/last-activity"
           LOG_FILE="/var/log/vmstation-autosleep.log"
-          KUBECONFIG="${KUBECONFIG:-/etc/kubernetes/admin.conf}"
+          
+          # Detect kubeconfig based on cluster type
+          if [[ -f "/etc/kubernetes/admin.conf" ]]; then
+            KUBECONFIG="/etc/kubernetes/admin.conf"
+          elif [[ -f "/etc/rancher/rke2/rke2.yaml" ]]; then
+            KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+          else
+            KUBECONFIG="${KUBECONFIG:-/etc/kubernetes/admin.conf}"
+          fi
           
           # Logging function
           log() {
@@ -60,7 +68,12 @@
           mkdir -p /var/lib/vmstation /var/log
           
           # Validate kubectl is available
-          if ! command -v kubectl >/dev/null 2>&1; then
+          KUBECTL="kubectl"
+          if [[ ! -x "/usr/bin/kubectl" ]] && [[ -x "/var/lib/rancher/rke2/bin/kubectl" ]]; then
+            KUBECTL="/var/lib/rancher/rke2/bin/kubectl"
+          fi
+          
+          if ! command -v $KUBECTL >/dev/null 2>&1; then
             log "ERROR: kubectl not found"
             exit 1
           fi
@@ -78,7 +91,7 @@
           log "Checking cluster activity..."
           
           # Count running pods excluding system namespaces
-          ACTIVE_PODS=$(kubectl get pods -A \
+          ACTIVE_PODS=$($KUBECTL get pods -A \
             --field-selector=status.phase=Running \
             --no-headers 2>/dev/null | \
             grep -v "kube-system\|kube-flannel\|monitoring" | \
@@ -128,14 +141,27 @@
           set -euo pipefail
           
           LOG_FILE="/var/log/vmstation-sleep.log"
-          KUBECONFIG="${KUBECONFIG:-/etc/kubernetes/admin.conf}"
+          
+          # Detect kubeconfig based on cluster type
+          if [[ -f "/etc/kubernetes/admin.conf" ]]; then
+            KUBECONFIG="/etc/kubernetes/admin.conf"
+          elif [[ -f "/etc/rancher/rke2/rke2.yaml" ]]; then
+            KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+          else
+            KUBECONFIG="${KUBECONFIG:-/etc/kubernetes/admin.conf}"
+          fi
           
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
           }
           
           # Validate kubectl is available
-          if ! command -v kubectl >/dev/null 2>&1; then
+          KUBECTL="kubectl"
+          if [[ ! -x "/usr/bin/kubectl" ]] && [[ -x "/var/lib/rancher/rke2/bin/kubectl" ]]; then
+            KUBECTL="/var/lib/rancher/rke2/bin/kubectl"
+          fi
+          
+          if ! command -v $KUBECTL >/dev/null 2>&1; then
             log "ERROR: kubectl not found"
             exit 1
           fi
@@ -147,7 +173,7 @@
           log "=========================================="
           
           # Get all nodes
-          NODES=$(kubectl get nodes -o name 2>/dev/null || true)
+          NODES=$($KUBECTL get nodes -o name 2>/dev/null || true)
           
           if [[ -z "$NODES" ]]; then
             log "WARNING: No nodes found or cluster not accessible"
@@ -160,16 +186,16 @@
             NODE_NAME=$(echo "$node" | cut -d'/' -f2)
             
             # Skip control-plane nodes
-            if kubectl get node "$NODE_NAME" -o jsonpath='{.metadata.labels}' | grep -q "node-role.kubernetes.io/control-plane"; then
+            if $KUBECTL get node "$NODE_NAME" -o jsonpath='{.metadata.labels}' | grep -q "node-role.kubernetes.io/control-plane"; then
               log "Skipping control-plane node: $NODE_NAME"
               continue
             fi
             
             log "Cordoning node: $NODE_NAME"
-            kubectl cordon "$NODE_NAME" 2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to cordon $NODE_NAME"
+            $KUBECTL cordon "$NODE_NAME" 2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to cordon $NODE_NAME"
             
             log "Draining node: $NODE_NAME"
-            kubectl drain "$NODE_NAME" \
+            $KUBECTL drain "$NODE_NAME" \
               --ignore-daemonsets \
               --delete-emptydir-data \
               --force \
@@ -178,12 +204,12 @@
           
           # Scale down deployments in default namespace
           log "Step 2: Scaling down deployments..."
-          DEPLOYMENTS=$(kubectl get deployments -n default -o name 2>/dev/null || true)
+          DEPLOYMENTS=$($KUBECTL get deployments -n default -o name 2>/dev/null || true)
           
           if [[ -n "$DEPLOYMENTS" ]]; then
             for deployment in $DEPLOYMENTS; do
               log "Scaling down: $deployment"
-              kubectl scale "$deployment" --replicas=0 -n default 2>&1 | tee -a "$LOG_FILE" || \
+              $KUBECTL scale "$deployment" --replicas=0 -n default 2>&1 | tee -a "$LOG_FILE" || \
                 log "WARNING: Failed to scale $deployment"
             done
           else
