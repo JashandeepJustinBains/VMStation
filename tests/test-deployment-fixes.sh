@@ -37,7 +37,7 @@ else
   log_fail "Loki liveness probe is missing"
 fi
 
-if grep -A 5 "readinessProbe:" manifests/monitoring/loki.yaml | grep -q "initialDelaySeconds: 45"; then
+if grep -A 5 "readinessProbe:" manifests/monitoring/loki.yaml | grep -q "initialDelaySeconds: 60"; then
   log_pass "Loki readiness probe has appropriate initialDelaySeconds"
 else
   log_fail "Loki readiness probe initialDelaySeconds is incorrect"
@@ -88,7 +88,28 @@ fi
 
 echo ""
 
-echo "6. Validating YAML syntax..."
+echo "6. Testing Loki config drift prevention..."
+if [ -f "ansible/playbooks/fix-loki-config.yaml" ]; then
+  log_pass "Loki fix playbook exists"
+else
+  log_fail "Loki fix playbook is missing"
+fi
+
+if [ -x "tests/test-loki-config-drift.sh" ]; then
+  log_pass "Loki config drift test is executable"
+else
+  log_fail "Loki config drift test is missing or not executable"
+fi
+
+if grep -q "wal_directory" manifests/monitoring/loki.yaml; then
+  log_fail "Loki config contains invalid 'wal_directory' field"
+else
+  log_pass "Loki config does not contain invalid fields"
+fi
+
+echo ""
+
+echo "7. Validating YAML syntax..."
 YAML_VALID=true
 for file in manifests/monitoring/*.yaml; do
   if ! python3 -c "import yaml; yaml.safe_load_all(open('$file'))" 2>/dev/null; then
@@ -103,7 +124,7 @@ fi
 
 echo ""
 
-echo "7. Validating bash script syntax..."
+echo "8. Validating bash script syntax..."
 BASH_VALID=true
 for file in tests/test-*.sh; do
   if ! bash -n "$file" 2>/dev/null; then
@@ -134,6 +155,7 @@ if [[ $FAILED -eq 0 ]]; then
   echo "  3. Prometheus Web UI test is robust"
   echo "  4. Monitoring exporters test handles optional targets"
   echo "  5. Loki schema is boltdb-shipper compatible"
+  echo "  6. Loki config drift prevention automation in place"
   echo ""
   echo "Ready for deployment!"
   exit 0
