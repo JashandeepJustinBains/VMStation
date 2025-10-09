@@ -31,6 +31,12 @@
       when: monitoring_namespace.rc != 0
 
     - name: "Ensure Loki data directory exists with proper ownership"
+      state: directory
+      mode: '0755'
+      owner: '10001'
+      group: '10001'
+      failed_when: false
+
       file:
         path: /srv/monitoring_data/loki
         state: directory
@@ -39,6 +45,24 @@
         group: '10001'
       failed_when: false
 
+    - name: "Create Loki WAL and required subdirectories with correct ownership"
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: '10001'
+        group: '10001'
+      loop:
+        - /srv/monitoring_data/loki/wal
+        - /srv/monitoring_data/loki/chunks
+        - /srv/monitoring_data/loki/index
+        - /srv/monitoring_data/loki/index_cache
+        - /srv/monitoring_data/loki/compactor
+      failed_when: false
+
+    - name: "Recursively set ownership for all Loki data paths"
+      command: chown -R 10001:10001 /srv/monitoring_data/loki
+      failed_when: false
     - name: "Reapply Loki manifest from repository (includes ConfigMap)"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/loki.yaml
       register: loki_apply
