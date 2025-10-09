@@ -1,0 +1,680 @@
+---
+# Loki Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# Loki ConfigMap (anonymous access, enterprise configuration)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: monitoring
+  labels:
+    app: loki
+    vmstation.io/component: monitoring
+  annotations:
+    vmstation.io/anonymous-access: "true"
+data:
+  loki.yaml: |
+    # Loki Enterprise Configuration
+    # Target: All-in-one mode (suitable for small-medium deployments)
+    
+    auth_enabled: false
+    
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+      log_level: info
+      log_format: json
+      
+      # Graceful shutdown
+      grpc_server_max_concurrent_streams: 0
+      http_server_read_timeout: 30s
+      http_server_write_timeout: 30s
+    
+    # Common configuration
+    common:
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+    
+    # Distributor configuration
+    distributor:
+      ring:
+        kvstore:
+          store: inmemory
+    
+    # Ingester configuration
+    ingester:
+      lifecycler:
+        address: 127.0.0.1
+        ring:
+          kvstore:
+            store: inmemory
+          replication_factor: 1
+        final_sleep: 0s
+      
+      # Chunk settings
+      chunk_idle_period: 1h       # Flush chunks after 1h idle
+      chunk_block_size: 262144    # 256KB chunks
+      chunk_target_size: 1536000  # Target 1.5MB compressed chunk
+      chunk_retain_period: 30s    # Keep chunks in memory 30s after flush
+      max_transfer_retries: 0
+      
+      # WAL configuration
+      wal:
+        enabled: true
+        dir: /loki/wal
+        checkpoint_duration: 5m
+        flush_on_shutdown: true
+        replay_memory_ceiling: 1GB
+    
+    # Schema configuration
+    schema_config:
+      configs:
+      - from: 2020-10-24
+        store: boltdb-shipper
+        object_store: filesystem
+        schema: v11
+        index:
+          prefix: index_
+          period: 24h    # 24h index period (required for boltdb-shipper)
+    
+    # Storage configuration
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /loki/index
+        cache_location: /loki/index_cache
+        cache_ttl: 24h
+        shared_store: filesystem
+      
+      filesystem:
+        directory: /loki/chunks
+      
+      # Index query cache
+      index_queries_cache_config:
+        memcached_client:
+          consistent_hash: true
+        enable_fifocache: true
+        fifocache:
+          max_size_items: 1024
+          ttl: 24h
+    
+    # Limits configuration (production tuned)
+    limits_config:
+      # Ingestion limits
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h  # 7 days
+      ingestion_rate_mb: 10            # 10MB/s per distributor
+      ingestion_burst_size_mb: 20      # Burst to 20MB
+      
+      # Query limits
+      max_query_length: 721h           # 30 days
+      max_query_parallelism: 32        # Parallel query workers
+      max_query_series: 500            # Series per query
+      max_streams_per_user: 10000      # Total streams per tenant
+      max_global_streams_per_user: 10000
+      
+      # Label limits
+      max_label_name_length: 1024
+      max_label_value_length: 2048
+      max_label_names_per_series: 30
+      
+      # Line limits
+      max_line_size: 256KB             # Max size per log line
+      max_entries_limit_per_query: 5000
+      
+      # Cardinality limits
+      cardinality_limit: 100000
+      max_streams_matchers_per_query: 1000
+      
+      # Split queries by interval
+      split_queries_by_interval: 15m
+      
+      # Per-stream rate limits
+      per_stream_rate_limit: 3MB
+      per_stream_rate_limit_burst: 15MB
+    
+    # Chunk store configuration
+    chunk_store_config:
+      max_look_back_period: 0s
+      chunk_cache_config:
+        enable_fifocache: true
+        fifocache:
+          max_size_items: 1024
+          ttl: 24h
+    
+    # Table manager (retention)
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 720h  # 30 days retention
+      poll_interval: 10m
+    
+    # Compactor (log compaction and retention)
+    compactor:
+      working_directory: /loki/compactor
+      shared_store: filesystem
+      compaction_interval: 10m
+      retention_enabled: true
+      retention_delete_delay: 2h
+      retention_delete_worker_count: 150
+    
+    # Query scheduler (optional, for better query distribution)
+    query_scheduler:
+      max_outstanding_requests_per_tenant: 256
+    
+    # Frontend (query frontend for better caching)
+    frontend:
+      log_queries_longer_than: 5s
+      max_outstanding_per_tenant: 256
+      compress_responses: true
+    
+    # Frontend worker
+    frontend_worker:
+      frontend_address: 127.0.0.1:9095
+      parallelism: 10
+    
+    # Querier configuration
+    querier:
+      max_concurrent: 10
+      query_ingesters_within: 3h
+    
+    # Query range configuration
+    query_range:
+      align_queries_with_step: true
+      cache_results: true
+      max_retries: 5
+      results_cache:
+        cache:
+          enable_fifocache: true
+          fifocache:
+            max_size_items: 1024
+            ttl: 24h
+    
+    # Ruler (for alerting rules - optional)
+    ruler:
+      storage:
+        type: local
+        local:
+          directory: /loki/rules
+      rule_path: /loki/rules-temp
+      alertmanager_url: http://alertmanager:9093
+      ring:
+        kvstore:
+          store: inmemory
+      enable_api: true
+      enable_alertmanager_v2: true
+---
+---
+# Loki StatefulSet - Enterprise-Grade Configuration
+# Industry best practices:
+# - StatefulSet for stable persistent storage
+# - Production-ready Loki configuration with proper limits
+# - Security context with non-root user
+# - Readiness/liveness/startup probes
+# - Resource requests and limits
+# - Separate PVCs for data and WAL
+# - Structured logging and retention policies
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: monitoring
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/component: logging
+    app.kubernetes.io/part-of: vmstation-monitoring-stack
+    vmstation.io/component: monitoring
+spec:
+  serviceName: loki
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/component: logging
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: loki
+        app.kubernetes.io/name: loki
+        app.kubernetes.io/component: logging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3100"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: loki
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Node selection
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      # Priority class
+      priorityClassName: system-cluster-critical
+      
+      # Init container: Prepare directories and permissions
+      initContainers:
+      - name: init-loki-data
+        image: busybox:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          # Create required directories
+          mkdir -p /loki/chunks /loki/index /loki/index_cache /loki/wal /loki/compactor
+          
+          # Set ownership
+          chown -R 10001:10001 /loki
+          chmod -R 755 /loki
+          
+          echo "Loki data directories initialized"
+        volumeMounts:
+        - name: loki-data
+          mountPath: /loki
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+      
+      containers:
+      - name: loki
+        image: grafana/loki:2.9.4  # Updated to latest stable
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3100
+          name: http-metrics
+          protocol: TCP
+        - containerPort: 9096
+          name: grpc
+          protocol: TCP
+        args:
+        - -config.file=/etc/loki/loki.yaml
+        - -target=all
+        
+        volumeMounts:
+        - name: loki-config
+          mountPath: /etc/loki
+          readOnly: true
+        - name: loki-data
+          mountPath: /loki
+        - name: tmp
+          mountPath: /tmp
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001
+          capabilities:
+            drop:
+            - ALL
+        
+        # Startup probe - allow slow startup
+        startupProbe:
+          httpGet:
+            path: /ready
+            port: http-metrics
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 60  # 10 minutes (increased for slow starts)
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http-metrics
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: http-metrics
+            scheme: HTTP
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+      
+      volumes:
+      - name: loki-config
+        configMap:
+          name: loki-config
+          defaultMode: 0444
+      - name: tmp
+        emptyDir: {}
+      
+      terminationGracePeriodSeconds: 120
+  
+  # Persistent volume claim template
+  volumeClaimTemplates:
+  - metadata:
+      name: loki-data
+      labels:
+        app: loki
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 20Gi  # Increased for log retention
+---
+# Loki ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loki
+  namespace: monitoring
+---
+# Loki Service - ClusterIP for internal access
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: monitoring
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/component: logging
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3100"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for StatefulSet
+  ports:
+  - port: 3100
+    targetPort: http-metrics
+    name: http
+    protocol: TCP
+  - port: 9096
+    targetPort: grpc
+    name: grpc
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/component: logging
+---
+# Loki Service - NodePort for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki-external
+  namespace: monitoring
+  labels:
+    app: loki
+spec:
+  type: NodePort
+  ports:
+  - port: 3100
+    targetPort: http-metrics
+    nodePort: 31100
+    name: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/component: logging
+---
+# NetworkPolicy for Loki - Enterprise Security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-netpol
+  namespace: monitoring
+  labels:
+    app: loki
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+      app.kubernetes.io/component: logging
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow Grafana to query Loki
+  - from:
+    - podSelector:
+        matchLabels:
+          app: grafana
+    ports:
+    - protocol: TCP
+      port: 3100
+  # Allow Promtail to send logs
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: promtail
+    ports:
+    - protocol: TCP
+      port: 3100
+    - protocol: TCP
+      port: 9096
+  # Allow Syslog server to forward logs
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: infrastructure
+    - podSelector:
+        matchLabels:
+          app: syslog-server
+    ports:
+    - protocol: TCP
+      port: 3100
+  # Allow Prometheus to scrape metrics
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 3100
+  # Allow external access via NodePort
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3100
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+# Promtail ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: monitoring
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+    
+    positions:
+      filename: /tmp/positions.yaml
+    
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+    
+    scrape_configs:
+    # Scrape Kubernetes pod logs
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      pipeline_stages:
+      - docker: {}
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node_name
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: app
+      - replacement: kubernetes-pods
+        target_label: job
+      - replacement: /var/log/pods/*$1/*.log
+        separator: /
+        source_labels:
+        - __meta_kubernetes_pod_uid
+        - __meta_kubernetes_pod_container_name
+        target_label: __path__
+    
+    # Scrape system logs
+    - job_name: system-logs
+      static_configs:
+      - targets:
+        - localhost
+        labels:
+          job: system-logs
+          __path__: /var/log/*.log
+---
+# Promtail DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  namespace: monitoring
+  labels:
+    app: promtail
+    vmstation.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: promtail
+  template:
+    metadata:
+      labels:
+        app: promtail
+    spec:
+      serviceAccountName: promtail
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: promtail
+        image: grafana/promtail:2.9.2
+        args:
+        - -config.file=/etc/promtail/promtail.yaml
+        volumeMounts:
+        - name: config
+          mountPath: /etc/promtail
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: positions
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: config
+        configMap:
+          name: promtail-config
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: positions
+        emptyDir: {}
+---
+# Promtail ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail
+  namespace: monitoring
+---
+# Promtail ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promtail
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+---
+# Promtail ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: promtail
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: promtail
+subjects:
+- kind: ServiceAccount
+  name: promtail
+  namespace: monitoring
