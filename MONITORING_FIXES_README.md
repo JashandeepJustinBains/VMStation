@@ -37,9 +37,12 @@ Three critical issues preventing successful cluster deployment:
 - **[BLACKBOX_EXPORTER_DIAGNOSTICS.md](./docs/BLACKBOX_EXPORTER_DIAGNOSTICS.md)** - Detailed diagnostics & remediation
 - **[MONITORING_STACK_FIXES_OCT2025.md](./docs/MONITORING_STACK_FIXES_OCT2025.md)** - Executive summary & fix details
 - **[DIAGNOSTIC_COMMANDS_EXPECTED_OUTPUT.md](./docs/DIAGNOSTIC_COMMANDS_EXPECTED_OUTPUT.md)** - Expected outputs after fixes
+- **[LOKI_CONFIG_DRIFT_PREVENTION.md](./docs/LOKI_CONFIG_DRIFT_PREVENTION.md)** - Loki ConfigMap drift prevention & automation
 
 ### Automation
 - **[apply-monitoring-fixes.sh](./scripts/apply-monitoring-fixes.sh)** - Automated fix application script
+- **[ansible/playbooks/fix-loki-config.yaml](./ansible/playbooks/fix-loki-config.yaml)** - Loki ConfigMap sync and permission fix
+- **[tests/test-loki-config-drift.sh](./tests/test-loki-config-drift.sh)** - Detect Loki ConfigMap drift
 
 ## Changes Summary
 

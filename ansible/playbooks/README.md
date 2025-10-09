@@ -102,6 +102,30 @@ ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/cleanup-homela
 
 ### Operational Playbooks
 
+#### `fix-loki-config.yaml`
+**Purpose**: Fix Loki ConfigMap drift and permission issues  
+**Target Hosts**: `monitoring_nodes`  
+**Actions**:
+- Reapplies Loki manifest from repository to sync ConfigMap
+- Ensures `/srv/monitoring_data/loki` has proper ownership (UID 10001)
+- Restarts Loki deployment to pick up changes
+- Validates Loki becomes ready
+
+**Usage**:
+```bash
+ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/fix-loki-config.yaml
+```
+
+**When to use**:
+- Loki pods in CrashLoopBackOff with config parse errors
+- After detecting ConfigMap drift with `./tests/test-loki-config-drift.sh`
+- After manual repository changes to Loki configuration
+- As part of routine maintenance to prevent drift
+
+**Idempotency**: ✅ Safe to run multiple times
+
+See [LOKI_CONFIG_DRIFT_PREVENTION.md](../../docs/LOKI_CONFIG_DRIFT_PREVENTION.md) for details.
+
 #### `spin-down-cluster.yaml`
 **Purpose**: Gracefully shut down cluster workloads without powering off  
 **Target Hosts**: `monitoring_nodes`  
