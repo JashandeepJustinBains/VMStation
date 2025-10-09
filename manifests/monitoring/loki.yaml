@@ -55,9 +55,6 @@ data:
         shared_store: filesystem
       filesystem:
         directory: /tmp/loki/chunks
-      # Put the write-ahead log (WAL) inside the same PVC so Loki
-      # does not attempt to create /wal on the container rootfs.
-      wal_directory: /tmp/loki/wal
     
     limits_config:
       enforce_metric_name: false
@@ -112,9 +109,16 @@ spec:
         - sh
         - -c
         - |
-          echo "Ensuring /tmp/loki ownership and WAL dir";
+          echo "Ensuring /tmp/loki ownership and creating /wal symlink to PVC";
           mkdir -p /tmp/loki/wal;
-          chown -R 10001:10001 /tmp/loki || true;
+          # If /wal exists and is not the desired symlink, remove it so we can point it at the PVC
+          if [ -e /wal ] && [ ! -L /wal ]; then
+            rm -rf /wal || true;
+          fi
+          if [ ! -L /wal ]; then
+            ln -s /tmp/loki/wal /wal || true;
+          fi
+          chown -R 10001:10001 /tmp/loki /tmp/loki/wal || true;
         volumeMounts:
         - name: loki-storage
           mountPath: /tmp/loki
