@@ -179,7 +179,7 @@
 
     - name: "Deploy FreeIPA manifest"
       command: |
-  kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/freeipa-statefulset.yaml
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/freeipa-statefulset.yaml
       register: freeipa_deploy
       changed_when: "'configured' in freeipa_deploy.stdout or 'created' in freeipa_deploy.stdout"
 

@@ -130,7 +130,7 @@
     # =============================================================================
     
     - name: "Deploy Prometheus StatefulSet and services"
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/prometheus.yaml
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/prometheus.yaml
       register: prometheus_deploy
       changed_when: "'configured' in prometheus_deploy.stdout or 'created' in prometheus_deploy.stdout"
 
@@ -139,7 +139,7 @@
         msg: "{{ prometheus_deploy.stdout_lines }}"
 
     - name: "Deploy Loki StatefulSet and services"
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/loki.yaml
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/loki.yaml
       register: loki_deploy
       changed_when: "'configured' in loki_deploy.stdout or 'created' in loki_deploy.stdout"
 
@@ -148,7 +148,7 @@
         msg: "{{ loki_deploy.stdout_lines }}"
 
     - name: "Deploy Grafana"
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/grafana.yaml
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/grafana.yaml
       register: grafana_deploy
       changed_when: "'configured' in grafana_deploy.stdout or 'created' in grafana_deploy.stdout"
 
@@ -162,19 +162,19 @@
     
     - name: "Deploy Kube-state-metrics"
       command: |
-  kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/kube-state-metrics.yaml
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/kube-state-metrics.yaml
       register: kube_state_deploy
       changed_when: "'configured' in kube_state_deploy.stdout or 'created' in kube_state_deploy.stdout"
 
     - name: "Deploy Node-exporter DaemonSet"
       command: |
-  kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/node-exporter.yaml
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/node-exporter.yaml
       register: node_exporter_deploy
       changed_when: "'configured' in node_exporter_deploy.stdout or 'created' in node_exporter_deploy.stdout"
 
     - name: "Deploy IPMI-exporter (optional - may fail without IPMI hardware)"
       command: |
-  kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/ipmi-exporter.yaml
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/monitoring/ipmi-exporter.yaml
       register: ipmi_deploy
       changed_when: "'configured' in ipmi_deploy.stdout or 'created' in ipmi_deploy.stdout"
       failed_when: false

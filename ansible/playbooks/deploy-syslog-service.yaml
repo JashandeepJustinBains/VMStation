@@ -96,7 +96,7 @@
 
     - name: "Deploy syslog server manifest"
       command: |
-  kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/syslog-server.yaml
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/syslog-server.yaml
       register: syslog_deploy
       changed_when: "'configured' in syslog_deploy.stdout or 'created' in syslog_deploy.stdout"
 
