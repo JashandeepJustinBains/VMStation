@@ -421,6 +421,12 @@
       delay: 10
       until: ready_nodes.stdout | int >= 2
 
+    - name: "Ensure all nodes are schedulable (uncordon)"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | awk '{print $1}' | xargs -n1 kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon
+      register: uncordon_result
+      failed_when: false
+
     - name: "Get node status"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
       register: nodes_status
