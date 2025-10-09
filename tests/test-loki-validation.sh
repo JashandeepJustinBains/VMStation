@@ -8,7 +8,7 @@ cd "$REPO_ROOT"
 
 # Configuration
 MASTERNODE_IP="${MASTERNODE_IP:-192.168.4.63}"
-LOKI_PORT=3100
+LOKI_PORT=31100  # Loki NodePort
 GRAFANA_PORT=30300
 
 echo "========================================="
