@@ -222,6 +222,8 @@ data:
         target_label: container
       - source_labels: [__meta_kubernetes_pod_label_app]
         target_label: app
+      - replacement: kubernetes-pods
+        target_label: job
       - replacement: /var/log/pods/*$1/*.log
         separator: /
         source_labels:
@@ -230,12 +232,12 @@ data:
         target_label: __path__
     
     # Scrape system logs
-    - job_name: system
+    - job_name: system-logs
       static_configs:
       - targets:
         - localhost
         labels:
-          job: system
+          job: system-logs
           __path__: /var/log/*.log
 ---
 # Promtail DaemonSet

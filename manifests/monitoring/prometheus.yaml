@@ -282,6 +282,18 @@ data:
         labels:
           cluster: 'rke2-homelab'
           federated: 'true'
+    
+    # Homelab Node Exporter - Direct scrape from RHEL 10 node
+    # Collects system metrics from homelab node running RKE2
+    - job_name: 'homelab-node-exporter'
+      static_configs:
+      - targets:
+        - '192.168.4.62:9100'
+        labels:
+          node: 'homelab'
+          cluster: 'rke2-homelab'
+          instance: '192.168.4.62:9100'
+
 ---
 # Prometheus Alerting Rules
 apiVersion: v1

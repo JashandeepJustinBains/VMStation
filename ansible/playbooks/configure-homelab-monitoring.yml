@@ -1,0 +1,385 @@
+---
+# =============================================================================
+# VMStation Homelab Monitoring Configuration
+# Configure promtail and node-exporter on homelab RKE2 cluster
+# to forward logs and metrics to masternode monitoring stack
+# =============================================================================
+
+- name: "Configure Homelab Monitoring - Log and Metric Forwarding"
+  hosts: compute_nodes
+  gather_facts: true
+  become: true
+  vars:
+    masternode_ip: "192.168.4.63"
+    loki_port: "31100"
+    prometheus_federation_port: "30090"
+  tasks:
+    - name: "Display configuration banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Homelab Monitoring Configuration
+          Target: {{ inventory_hostname }} (RKE2)
+          Masternode: {{ masternode_ip }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # Check RKE2 is running
+    - name: "Check if RKE2 is running"
+      systemd:
+        name: rke2-server
+      register: rke2_status
+      failed_when: false
+
+    - name: "Fail if RKE2 is not running"
+      fail:
+        msg: "RKE2 is not running. Please run install-rke2-homelab.yml first"
+      when: rke2_status.status.ActiveState != "active"
+
+    # Create monitoring namespace
+    - name: "Create monitoring namespace in RKE2"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl create namespace monitoring --dry-run=client -o yaml | \
+        /var/lib/rancher/rke2/bin/kubectl apply -f -
+      register: ns_result
+      failed_when: false
+
+    # Deploy Promtail to forward logs to masternode Loki
+    - name: "Create Promtail ConfigMap"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        cat <<'EOF' | /var/lib/rancher/rke2/bin/kubectl apply -f -
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: promtail-config
+          namespace: monitoring
+        data:
+          promtail.yaml: |
+            server:
+              http_listen_port: 9080
+              grpc_listen_port: 0
+            
+            positions:
+              filename: /tmp/positions.yaml
+            
+            clients:
+              - url: http://{{ masternode_ip }}:{{ loki_port }}/loki/api/v1/push
+                external_labels:
+                  cluster: rke2-homelab
+                  node: {{ inventory_hostname }}
+            
+            scrape_configs:
+            # Scrape Kubernetes pod logs
+            - job_name: kubernetes-pods
+              kubernetes_sd_configs:
+              - role: pod
+              pipeline_stages:
+              - docker: {}
+              relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_node_name]
+                target_label: node_name
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+              - source_labels: [__meta_kubernetes_pod_container_name]
+                target_label: container
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                target_label: app
+              - replacement: kubernetes-pods
+                target_label: job
+              - replacement: /var/log/pods/*$1/*.log
+                separator: /
+                source_labels:
+                - __meta_kubernetes_pod_uid
+                - __meta_kubernetes_pod_container_name
+                target_label: __path__
+            
+            # Scrape system logs
+            - job_name: system-logs
+              static_configs:
+              - targets:
+                - localhost
+                labels:
+                  job: system-logs
+                  host: {{ inventory_hostname }}
+                  __path__: /var/log/*.log
+        EOF
+      register: promtail_cm_result
+
+    - name: "Create Promtail ServiceAccount"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        cat <<'EOF' | /var/lib/rancher/rke2/bin/kubectl apply -f -
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: promtail
+          namespace: monitoring
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: promtail
+        rules:
+        - apiGroups: [""]
+          resources:
+          - nodes
+          - nodes/proxy
+          - services
+          - endpoints
+          - pods
+          verbs: ["get", "list", "watch"]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: promtail
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: promtail
+        subjects:
+        - kind: ServiceAccount
+          name: promtail
+          namespace: monitoring
+        EOF
+      register: promtail_rbac_result
+
+    - name: "Deploy Promtail DaemonSet"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        cat <<'EOF' | /var/lib/rancher/rke2/bin/kubectl apply -f -
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: promtail
+          namespace: monitoring
+          labels:
+            app: promtail
+        spec:
+          selector:
+            matchLabels:
+              app: promtail
+          template:
+            metadata:
+              labels:
+                app: promtail
+            spec:
+              serviceAccountName: promtail
+              containers:
+              - name: promtail
+                image: grafana/promtail:2.9.2
+                args:
+                - -config.file=/etc/promtail/promtail.yaml
+                volumeMounts:
+                - name: config
+                  mountPath: /etc/promtail
+                - name: varlog
+                  mountPath: /var/log
+                  readOnly: true
+                - name: varlibdockercontainers
+                  mountPath: /var/lib/docker/containers
+                  readOnly: true
+                - name: positions
+                  mountPath: /tmp
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 64Mi
+                  limits:
+                    cpu: 200m
+                    memory: 128Mi
+              volumes:
+              - name: config
+                configMap:
+                  name: promtail-config
+              - name: varlog
+                hostPath:
+                  path: /var/log
+              - name: varlibdockercontainers
+                hostPath:
+                  path: /var/lib/docker/containers
+              - name: positions
+                emptyDir: {}
+        EOF
+      register: promtail_deploy_result
+
+    # Deploy node-exporter for metrics
+    - name: "Deploy Node Exporter DaemonSet"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        cat <<'EOF' | /var/lib/rancher/rke2/bin/kubectl apply -f -
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+          name: node-exporter
+          namespace: monitoring
+          labels:
+            app: node-exporter
+        spec:
+          selector:
+            matchLabels:
+              app: node-exporter
+          template:
+            metadata:
+              labels:
+                app: node-exporter
+            spec:
+              hostNetwork: true
+              hostPID: true
+              containers:
+              - name: node-exporter
+                image: prom/node-exporter:v1.7.0
+                args:
+                - '--path.procfs=/host/proc'
+                - '--path.sysfs=/host/sys'
+                - '--path.rootfs=/host/root'
+                - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+                ports:
+                - containerPort: 9100
+                  hostPort: 9100
+                  name: metrics
+                volumeMounts:
+                - name: proc
+                  mountPath: /host/proc
+                  readOnly: true
+                - name: sys
+                  mountPath: /host/sys
+                  readOnly: true
+                - name: root
+                  mountPath: /host/root
+                  readOnly: true
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 64Mi
+                  limits:
+                    cpu: 200m
+                    memory: 128Mi
+              volumes:
+              - name: proc
+                hostPath:
+                  path: /proc
+              - name: sys
+                hostPath:
+                  path: /sys
+              - name: root
+                hostPath:
+                  path: /
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: node-exporter
+          namespace: monitoring
+          labels:
+            app: node-exporter
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "9100"
+        spec:
+          type: ClusterIP
+          ports:
+          - port: 9100
+            targetPort: 9100
+            name: metrics
+          selector:
+            app: node-exporter
+        EOF
+      register: node_exporter_result
+
+    # Expose Prometheus for federation
+    - name: "Check if Prometheus exists in RKE2 cluster"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl get deployment -n monitoring prometheus 2>/dev/null || echo "not-found"
+      register: prometheus_check
+      failed_when: false
+
+    - name: "Display note about Prometheus federation"
+      debug:
+        msg: |
+          Note: Prometheus federation requires Prometheus to be installed in the RKE2 cluster.
+          If Prometheus is not installed, only node-exporter metrics will be available.
+          The masternode will federate metrics from {{ masternode_ip }}:{{ prometheus_federation_port }}
+      when: "'not-found' in prometheus_check.stdout"
+
+    # Verify deployments
+    - name: "Wait for Promtail pods to be ready"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl wait --for=condition=ready pod -l app=promtail -n monitoring --timeout=60s
+      register: promtail_ready
+      retries: 3
+      delay: 10
+      until: promtail_ready.rc == 0
+      failed_when: false
+
+    - name: "Wait for Node Exporter pods to be ready"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl wait --for=condition=ready pod -l app=node-exporter -n monitoring --timeout=60s
+      register: node_exporter_ready
+      retries: 3
+      delay: 10
+      until: node_exporter_ready.rc == 0
+      failed_when: false
+
+    - name: "Get monitoring pod status"
+      shell: |
+        export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+        /var/lib/rancher/rke2/bin/kubectl get pods -n monitoring
+      register: monitoring_pods
+
+    - name: "Display monitoring pods status"
+      debug:
+        msg: "{{ monitoring_pods.stdout_lines }}"
+
+    - name: "Test Loki connectivity from homelab"
+      shell: |
+        curl -sf -X POST "http://{{ masternode_ip }}:{{ loki_port }}/loki/api/v1/push" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "streams": [
+              {
+                "stream": {
+                  "job": "test",
+                  "cluster": "rke2-homelab",
+                  "host": "{{ inventory_hostname }}"
+                },
+                "values": [
+                  ["'$(date +%s)000000000'", "Test log from homelab RKE2"]
+                ]
+              }
+            ]
+          }' && echo "✅ Loki connectivity OK" || echo "❌ Loki connectivity FAILED"
+      register: loki_test
+      failed_when: false
+
+    - name: "Display Loki connectivity test result"
+      debug:
+        msg: "{{ loki_test.stdout }}"
+
+    - name: "Display configuration complete message"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          ✅ Homelab Monitoring Configuration Complete
+          
+          Node: {{ inventory_hostname }}
+          Masternode: {{ masternode_ip }}
+          
+          Deployed:
+          - Promtail (forwarding logs to Loki at {{ masternode_ip }}:{{ loki_port }})
+          - Node Exporter (metrics available for federation)
+          
+          Verify:
+          - Logs: Check Grafana Loki dashboard for cluster=rke2-homelab
+          - Metrics: Check Prometheus federation job rke2-federation
+          
+          Access monitoring:
+          export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+          kubectl get pods -n monitoring
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -49,6 +49,25 @@ ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/install-rke2-h
 
 **Idempotency**: ✅ Safe to run multiple times - skips if already installed
 
+#### `configure-homelab-monitoring.yml`
+**Purpose**: Configure promtail and node-exporter on homelab RKE2 cluster to forward logs and metrics to masternode  
+**Target Hosts**: `compute_nodes` (homelab - RHEL 10)  
+**Features**:
+- Deploys Promtail DaemonSet to forward logs to masternode Loki
+- Deploys Node Exporter for metric collection
+- Configures external labels for cluster identification
+- Tests connectivity to masternode Loki
+
+**Usage**:
+```bash
+ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/configure-homelab-monitoring.yml
+```
+
+**Prerequisites**: RKE2 must be installed (run `install-rke2-homelab.yml` first)
+
+**Idempotency**: ✅ Safe to run multiple times
+
+
 ### Cleanup Playbooks
 
 #### `reset-cluster.yaml`
