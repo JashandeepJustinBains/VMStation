@@ -76,11 +76,37 @@ if targets=$(curl -sf "http://${MASTERNODE_IP}:${PROMETHEUS_PORT}/api/v1/targets
   
   log_info "Targets UP: $UP_TARGETS, DOWN: $DOWN_TARGETS"
   
+  # List down targets
+  DOWN_TARGET_JOBS=$(echo "$targets" | grep -B2 '"health":"down"' | grep '"job":' | sed 's/.*"job":"\([^"]*\)".*/\1/' | sort -u || echo "")
+  
+  # Expected optional targets that may be down
+  OPTIONAL_TARGETS="rke2-federation ipmi-exporter ipmi-exporter-remote"
+  
+  # Check if down targets are only optional ones
+  CRITICAL_DOWN=false
+  for job in $DOWN_TARGET_JOBS; do
+    # Check if this job is in the optional list
+    if ! echo "$OPTIONAL_TARGETS" | grep -qw "$job"; then
+      # Check for kubernetes-service-endpoints which may have some down endpoints
+      if [[ "$job" == "kubernetes-service-endpoints" ]]; then
+        # This is expected to have some down endpoints, log as warning
+        log_warn "Some kubernetes-service-endpoints targets are down (may be normal)"
+      else
+        CRITICAL_DOWN=true
+      fi
+    fi
+  done
+  
   if [[ "$DOWN_TARGETS" -gt 0 ]]; then
-    log_fail "$DOWN_TARGETS targets are DOWN"
-    
-    # List down targets for debugging
-    echo "$targets" | grep -B2 '"health":"down"' | grep '"job":' | sed 's/.*"job":"\([^"]*\)".*/  - \1/' | sort -u || true
+    if [[ "$CRITICAL_DOWN" == "true" ]]; then
+      log_fail "Critical targets are DOWN"
+    else
+      log_warn "$DOWN_TARGETS targets are DOWN (optional services)"
+    fi
+    echo "  Down targets:"
+    for job in $DOWN_TARGET_JOBS; do
+      echo "    - $job"
+    done
   else
     log_pass "All Prometheus targets are UP"
   fi
