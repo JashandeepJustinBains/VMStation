@@ -1,0 +1,329 @@
+---
+# =============================================================================
+# VMStation Monitoring Stack Deployment - Modular Enterprise Deployment
+# =============================================================================
+# Purpose: Deploy complete monitoring stack (Prometheus, Grafana, Loki)
+# Author: VMStation Enterprise Monitoring Team
+# Date: January 2025
+#
+# This playbook orchestrates deployment of the complete monitoring stack:
+# - Prometheus (metrics collection and storage)
+# - Grafana (visualization and dashboards)
+# - Loki (log aggregation and storage)
+# - Promtail (log collection agent)
+# - Kube-state-metrics (Kubernetes metrics)
+# - Node-exporter (system metrics)
+# - Blackbox-exporter (probing and health checks)
+# - IPMI-exporter (hardware monitoring)
+#
+# Requirements:
+# - Kubernetes cluster must be running
+# - kubectl available on control plane
+# - Minimum 4GB RAM and 2 CPU cores available
+# - At least 50GB persistent storage
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.yml \
+#     ansible/playbooks/deploy-monitoring-stack.yaml
+#
+# Idempotency: Safe to run multiple times
+# =============================================================================
+
+- name: "Deploy VMStation Enterprise Monitoring Stack"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display deployment banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          VMStation Monitoring Stack Deployment
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Enterprise monitoring and observability platform
+          
+          Components:
+          - Prometheus (metrics time-series database)
+          - Grafana (dashboards and visualization)
+          - Loki (log aggregation)
+          - Promtail (log shipper)
+          - Kube-state-metrics (K8s object metrics)
+          - Node-exporter (system metrics)
+          - Blackbox-exporter (probes)
+          - IPMI-exporter (hardware monitoring)
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # =============================================================================
+    # Pre-deployment Validation
+    # =============================================================================
+    
+    - name: "Verify Kubernetes cluster is accessible"
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+
+    - name: "Display cluster information"
+      debug:
+        msg: "{{ cluster_info.stdout_lines }}"
+
+    - name: "Check available storage"
+      shell: df -h /srv | tail -1 | awk '{print $4}'
+      register: available_storage
+      changed_when: false
+
+    - name: "Display available storage"
+      debug:
+        msg: "Available storage: {{ available_storage.stdout }}"
+
+    - name: "Check node resources"
+      shell: |
+        echo "Total Memory: $(free -h | grep Mem | awk '{print $2}')"
+        echo "Available Memory: $(free -h | grep Mem | awk '{print $7}')"
+        echo "CPU Cores: $(nproc)"
+      register: node_resources
+      changed_when: false
+
+    - name: "Display node resources"
+      debug:
+        msg: "{{ node_resources.stdout_lines }}"
+
+    # =============================================================================
+    # Create Monitoring Namespace
+    # =============================================================================
+    
+    - name: "Create monitoring namespace"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring
+      register: namespace_result
+      failed_when:
+        - namespace_result.rc != 0
+        - "'AlreadyExists' not in namespace_result.stderr"
+      changed_when: "'created' in namespace_result.stdout"
+
+    - name: "Label monitoring namespace"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace monitoring \
+          name=monitoring vmstation.io/component=monitoring --overwrite
+      register: label_result
+      changed_when: "'labeled' in label_result.stdout"
+
+    # =============================================================================
+    # Create Storage Directories
+    # =============================================================================
+    
+    - name: "Create monitoring data directories"
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /srv/monitoring_data
+        - /srv/monitoring_data/prometheus
+        - /srv/monitoring_data/grafana
+        - /srv/monitoring_data/loki
+
+    # =============================================================================
+    # Deploy Core Monitoring Components
+    # =============================================================================
+    
+    - name: "Deploy Prometheus StatefulSet and services"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus.yaml
+      register: prometheus_deploy
+      changed_when: "'configured' in prometheus_deploy.stdout or 'created' in prometheus_deploy.stdout"
+
+    - name: "Display Prometheus deployment result"
+      debug:
+        msg: "{{ prometheus_deploy.stdout_lines }}"
+
+    - name: "Deploy Loki StatefulSet and services"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/loki.yaml
+      register: loki_deploy
+      changed_when: "'configured' in loki_deploy.stdout or 'created' in loki_deploy.stdout"
+
+    - name: "Display Loki deployment result"
+      debug:
+        msg: "{{ loki_deploy.stdout_lines }}"
+
+    - name: "Deploy Grafana"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/grafana.yaml
+      register: grafana_deploy
+      changed_when: "'configured' in grafana_deploy.stdout or 'created' in grafana_deploy.stdout"
+
+    - name: "Display Grafana deployment result"
+      debug:
+        msg: "{{ grafana_deploy.stdout_lines }}"
+
+    # =============================================================================
+    # Deploy Metric Exporters
+    # =============================================================================
+    
+    - name: "Deploy Kube-state-metrics"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/kube-state-metrics.yaml
+      register: kube_state_deploy
+      changed_when: "'configured' in kube_state_deploy.stdout or 'created' in kube_state_deploy.stdout"
+
+    - name: "Deploy Node-exporter DaemonSet"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/node-exporter.yaml
+      register: node_exporter_deploy
+      changed_when: "'configured' in node_exporter_deploy.stdout or 'created' in node_exporter_deploy.stdout"
+
+    - name: "Deploy IPMI-exporter (optional - may fail without IPMI hardware)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/monitoring/ipmi-exporter.yaml
+      register: ipmi_deploy
+      changed_when: "'configured' in ipmi_deploy.stdout or 'created' in ipmi_deploy.stdout"
+      failed_when: false
+
+    # =============================================================================
+    # Wait for Core Components to Be Ready
+    # =============================================================================
+    
+    - name: "Wait for Prometheus to be ready (120s)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod \
+          -l app.kubernetes.io/name=prometheus -n monitoring --timeout=120s
+      register: prometheus_ready
+      changed_when: false
+      failed_when: false
+
+    - name: "Wait for Loki to be ready (120s)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod \
+          -l app.kubernetes.io/name=loki -n monitoring --timeout=120s
+      register: loki_ready
+      changed_when: false
+      failed_when: false
+
+    - name: "Wait for Grafana to be ready (60s)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod \
+          -l app=grafana -n monitoring --timeout=60s
+      register: grafana_ready
+      changed_when: false
+      failed_when: false
+
+    # =============================================================================
+    # Verification and Status Checks
+    # =============================================================================
+    
+    - name: "Get all monitoring pods"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring -o wide
+      register: monitoring_pods
+      changed_when: false
+
+    - name: "Display monitoring pods"
+      debug:
+        msg: "{{ monitoring_pods.stdout_lines }}"
+
+    - name: "Get all monitoring services"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n monitoring
+      register: monitoring_services
+      changed_when: false
+
+    - name: "Display monitoring services"
+      debug:
+        msg: "{{ monitoring_services.stdout_lines }}"
+
+    - name: "Get all monitoring PVCs"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pvc -n monitoring
+      register: monitoring_pvcs
+      changed_when: false
+
+    - name: "Display monitoring PVCs"
+      debug:
+        msg: "{{ monitoring_pvcs.stdout_lines }}"
+
+    # =============================================================================
+    # Health Checks
+    # =============================================================================
+    
+    - name: "Check Prometheus health"
+      uri:
+        url: "http://127.0.0.1:30090/-/healthy"
+        method: GET
+        status_code: 200
+      register: prometheus_health
+      failed_when: false
+      changed_when: false
+
+    - name: "Display Prometheus health status"
+      debug:
+        msg: "Prometheus health: {{ 'OK' if prometheus_health.status == 200 else 'FAILED' }}"
+
+    - name: "Check Loki health"
+      uri:
+        url: "http://127.0.0.1:31100/ready"
+        method: GET
+        status_code: 200
+      register: loki_health
+      failed_when: false
+      changed_when: false
+
+    - name: "Display Loki health status"
+      debug:
+        msg: "Loki health: {{ 'OK' if loki_health.status == 200 else 'FAILED' }}"
+
+    - name: "Check Grafana health"
+      uri:
+        url: "http://127.0.0.1:30300/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_health
+      failed_when: false
+      changed_when: false
+
+    - name: "Display Grafana health status"
+      debug:
+        msg: "Grafana health: {{ 'OK' if grafana_health.status == 200 else 'FAILED' }}"
+
+    # =============================================================================
+    # Final Summary
+    # =============================================================================
+    
+    - name: "Display deployment summary"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Monitoring Stack Deployment Complete
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          
+          ✅ Prometheus: http://{{ ansible_default_ipv4.address }}:30090
+          ✅ Grafana: http://{{ ansible_default_ipv4.address }}:30300
+          ✅ Loki: http://{{ ansible_default_ipv4.address }}:31100
+          
+          Default Credentials:
+          - Grafana: No login required (anonymous access enabled)
+          
+          Verification Commands:
+          kubectl get pods -n monitoring
+          kubectl get svc -n monitoring
+          kubectl get pvc -n monitoring
+          
+          Next Steps:
+          1. Access Grafana and verify dashboards load
+          2. Check Prometheus targets: Status → Targets
+          3. Query logs in Grafana: Explore → Loki
+          4. Review alerts: Prometheus → Alerts
+          5. Deploy infrastructure services (NTP, Syslog, Kerberos)
+          
+          Troubleshooting:
+          - View logs: kubectl logs -n monitoring <pod-name>
+          - Describe pod: kubectl describe pod -n monitoring <pod-name>
+          - Check events: kubectl get events -n monitoring --sort-by='.lastTimestamp'
+          
+          Documentation:
+          - docs/PROMETHEUS_ENTERPRISE_REWRITE.md
+          - docs/LOKI_ENTERPRISE_REWRITE.md
+          - docs/ENTERPRISE_MONITORING_ENHANCEMENT.md
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

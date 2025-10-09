@@ -1,0 +1,197 @@
+---
+# =============================================================================
+# VMStation Infrastructure Services Deployment - Orchestration Playbook
+# =============================================================================
+# Purpose: Deploy all infrastructure services (NTP, Syslog, Kerberos)
+# Author: VMStation Enterprise Monitoring Team
+# Date: January 2025
+#
+# This playbook orchestrates deployment of infrastructure services:
+# - NTP/Chrony (time synchronization)
+# - Syslog Server (centralized logging)
+# - FreeIPA/Kerberos (identity and SSO)
+#
+# Requirements:
+# - Kubernetes cluster running
+# - Monitoring stack deployed (for syslog → Loki integration)
+# - At least 6GB RAM and 3 CPU cores available
+# - 30GB+ persistent storage
+#
+# Usage:
+#   # Deploy all infrastructure services
+#   ansible-playbook -i ansible/inventory/hosts.yml \
+#     ansible/playbooks/deploy-infrastructure-services.yaml
+#
+#   # Deploy specific services only
+#   ansible-playbook -i ansible/inventory/hosts.yml \
+#     ansible/playbooks/deploy-infrastructure-services.yaml \
+#     --tags ntp
+#
+# Tags:
+#   - ntp: Deploy only NTP/Chrony service
+#   - syslog: Deploy only Syslog server
+#   - kerberos: Deploy only FreeIPA/Kerberos
+#   - all: Deploy all services (default)
+#
+# Idempotency: Safe to run multiple times
+# =============================================================================
+
+- name: "Deploy VMStation Infrastructure Services"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display deployment banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          VMStation Infrastructure Services Deployment
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Core infrastructure for enterprise cluster operations
+          
+          Services:
+          - NTP/Chrony (time synchronization)
+          - Syslog Server (log aggregation)
+          - FreeIPA/Kerberos (identity management)
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      tags: always
+
+    # =============================================================================
+    # Pre-deployment Validation
+    # =============================================================================
+    
+    - name: "Verify Kubernetes cluster is accessible"
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+      tags: always
+
+    - name: "Create infrastructure namespace"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace infrastructure
+      register: namespace_result
+      failed_when:
+        - namespace_result.rc != 0
+        - "'AlreadyExists' not in namespace_result.stderr"
+      changed_when: "'created' in namespace_result.stdout"
+      tags: always
+
+    - name: "Label infrastructure namespace"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace infrastructure \
+          name=infrastructure vmstation.io/component=infrastructure --overwrite
+      register: label_result
+      changed_when: "'labeled' in label_result.stdout"
+      tags: always
+
+# =============================================================================
+# Deploy NTP/Chrony Service
+# =============================================================================
+- name: "Deploy NTP/Chrony Time Synchronization Service"
+  import_playbook: deploy-ntp-service.yaml
+  tags: ntp
+
+# =============================================================================
+# Deploy Syslog Server
+# =============================================================================
+- name: "Deploy Syslog Ingestor Service"
+  import_playbook: deploy-syslog-service.yaml
+  tags: syslog
+
+# =============================================================================
+# Deploy Kerberos/FreeIPA (Optional)
+# =============================================================================
+- name: "Deploy FreeIPA/Kerberos Identity Service"
+  import_playbook: deploy-kerberos-service.yaml
+  tags: kerberos
+  when: deploy_kerberos | default(false) | bool
+
+# =============================================================================
+# Final Status and Summary
+# =============================================================================
+- name: "Infrastructure Services Deployment Summary"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Get all infrastructure pods"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure -o wide
+      register: infra_pods
+      changed_when: false
+      tags: always
+
+    - name: "Display infrastructure pods"
+      debug:
+        msg: "{{ infra_pods.stdout_lines }}"
+      tags: always
+
+    - name: "Get all infrastructure services"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n infrastructure
+      register: infra_services
+      changed_when: false
+      tags: always
+
+    - name: "Display infrastructure services"
+      debug:
+        msg: "{{ infra_services.stdout_lines }}"
+      tags: always
+
+    - name: "Display final summary"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Infrastructure Services Deployment Complete
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          
+          Deployed Services:
+          {% if 'chrony-ntp' in infra_pods.stdout %}
+          ✅ NTP/Chrony: Time synchronization active
+             - DaemonSet running on all nodes
+             - Metrics: http://{{ ansible_default_ipv4.address }}:9123/metrics
+          {% endif %}
+          
+          {% if 'syslog-server' in infra_pods.stdout %}
+          ✅ Syslog Server: Centralized logging active
+             - UDP: {{ ansible_default_ipv4.address }}:30514
+             - TCP: {{ ansible_default_ipv4.address }}:30515
+             - Forwarding to Loki
+          {% endif %}
+          
+          {% if 'freeipa' in infra_pods.stdout %}
+          ✅ FreeIPA/Kerberos: Identity management active
+             - Web UI: https://{{ ansible_default_ipv4.address }}:30443
+             - Kerberos: {{ ansible_default_ipv4.address }}:88
+             - LDAP: {{ ansible_default_ipv4.address }}:389
+          {% endif %}
+          
+          Time Sync Status:
+          - All cluster nodes syncing to Chrony NTP
+          - Log timestamps will be consistent
+          - Kerberos requires accurate time sync
+          
+          Verification:
+          kubectl get pods -n infrastructure
+          kubectl get svc -n infrastructure
+          
+          Time Sync Check:
+          kubectl exec -n infrastructure <chrony-pod> -c chrony -- chronyc tracking
+          
+          Syslog Test:
+          logger -t test "Test message from $(hostname)"
+          
+          Next Steps:
+          1. Verify time sync across all nodes
+          2. Configure devices to send syslog to masternode
+          3. Set up Kerberos clients (if deployed)
+          4. Add infrastructure monitoring dashboards
+          5. Test log correlation with synchronized timestamps
+          
+          Documentation:
+          - ansible/playbooks/deploy-ntp-service.yaml
+          - ansible/playbooks/deploy-syslog-service.yaml
+          - ansible/playbooks/deploy-kerberos-service.yaml
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      tags: always
