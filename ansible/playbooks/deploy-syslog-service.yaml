@@ -82,6 +82,22 @@
         group: root
 
     # =============================================================================
+    # Deploy PersistentVolume for Syslog
+    # =============================================================================
+    
+    - name: "Apply syslog PersistentVolume"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/syslog-pv.yaml
+      register: syslog_pv_deploy
+      changed_when: "'configured' in syslog_pv_deploy.stdout or 'created' in syslog_pv_deploy.stdout"
+      failed_when: false
+
+    - name: "Display syslog PV deployment result"
+      debug:
+        msg: "{{ syslog_pv_deploy.stdout_lines }}"
+      when: syslog_pv_deploy.stdout_lines is defined
+
+    # =============================================================================
     # Deploy Syslog Service
     # =============================================================================
     

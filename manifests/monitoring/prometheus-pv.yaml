@@ -1,6 +1,6 @@
 ---
 # HostPath PersistentVolume for Prometheus (homelab/dev use only)
-# This PV binds the existing `prometheus-pvc` when no dynamic provisioner is available.
+# This PV binds to the StatefulSet volumeClaimTemplate-generated PVC
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -18,6 +18,12 @@ spec:
   hostPath:
     path: /srv/monitoring_data/prometheus
     type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
   claimRef:
     namespace: monitoring
-    name: prometheus-pvc
+    name: prometheus-storage-prometheus-0

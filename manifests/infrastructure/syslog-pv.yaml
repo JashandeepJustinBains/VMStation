@@ -1,20 +1,21 @@
 ---
-# HostPath PersistentVolume for Loki (homelab fallback)
+# HostPath PersistentVolume for Syslog Server (infrastructure component)
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: loki-pv
+  name: syslog-pv
   labels:
-    vmstation.io/component: monitoring
+    app: syslog-server
+    vmstation.io/component: logging
 spec:
   capacity:
-    storage: 20Gi
+    storage: 5Gi
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: /srv/monitoring_data/loki
+    path: /srv/monitoring_data/syslog
     type: DirectoryOrCreate
   nodeAffinity:
     required:
@@ -23,5 +24,5 @@ spec:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
   claimRef:
-    namespace: monitoring
-    name: loki-data-loki-0
+    namespace: infrastructure
+    name: syslog-data-syslog-server-0

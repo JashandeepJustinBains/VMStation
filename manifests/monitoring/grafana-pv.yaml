@@ -17,6 +17,12 @@ spec:
   hostPath:
     path: /srv/monitoring_data/grafana
     type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
   claimRef:
     namespace: monitoring
     name: grafana-pvc
