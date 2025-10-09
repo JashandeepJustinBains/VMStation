@@ -1,8 +1,13 @@
 # Modular Deployment Workflow (Oct 2025)
-- Deployment steps and validation procedures now documented in `docs/DEPLOYMENT_RUNBOOK.md`.
-- Modular Ansible playbooks for monitoring and infrastructure services.
-- Validation scripts for time sync, pod health, and security audit.
-- Troubleshooting notes: manifest path errors, chrony installation, NTP DaemonSet issues.
+- Simplified deployment commands via `deploy.sh`:
+  - `./deploy.sh debian` - Deploy Kubernetes cluster
+  - `./deploy.sh monitoring` - Deploy monitoring stack (Prometheus, Grafana, Loki)
+  - `./deploy.sh infrastructure` - Deploy infrastructure services (NTP, Syslog, Kerberos)
+  - `./deploy.sh setup` - Setup auto-sleep monitoring
+  - `./deploy.sh rke2` - Deploy RKE2 on homelab (optional)
+- Complete workflow documented in `docs/DEPLOYMENT_RUNBOOK.md`
+- Validation scripts for time sync, pod health, and security audit
+- Dry-run mode available with `--check` flag
 
 # Notes
 - Latest deployment runbook: `docs/DEPLOYMENT_RUNBOOK.md` (created Oct 2025)

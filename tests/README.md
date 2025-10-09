@@ -6,6 +6,38 @@ This directory contains automated tests for the VMStation deployment system.
 
 ### Core Deployment Tests
 
+#### test-modular-deployment.sh
+
+Comprehensive automated tests to verify the new modular deployment commands in deploy.sh.
+
+**What it tests**:
+- `./deploy.sh monitoring` uses deploy-monitoring-stack.yaml playbook
+- `./deploy.sh infrastructure` uses deploy-infrastructure-services.yaml playbook
+- Both commands support --check (dry-run) and --yes flags
+- Help documentation includes new commands and recommended workflow
+- Playbook files exist and are referenced correctly
+- Log file paths are correct
+- Existing commands (debian, rke2, all, reset, setup, spindown) remain functional
+- Documentation (DEPLOYMENT_RUNBOOK.md, memory.instruction.md) is updated
+
+**How to run**:
+```bash
+./tests/test-modular-deployment.sh
+```
+
+**Expected output**:
+```
+[TEST-INFO] Testing deploy.sh modular deployment commands
+[TEST-PASS] ✓ monitoring command uses deploy-monitoring-stack.yaml
+[TEST-PASS] ✓ infrastructure command uses deploy-infrastructure-services.yaml
+[TEST-PASS] ✓ monitoring command supports --yes flag
+[TEST-PASS] ✓ infrastructure command supports --yes flag
+[TEST-PASS] ✓ help includes monitoring command
+[TEST-PASS] ✓ help includes infrastructure command
+...
+[TEST-INFO] ALL TESTS PASSED (13/13)
+```
+
 #### test-deploy-limits.sh
 
 Automated tests to verify that the deploy.sh script correctly limits deployments to the appropriate hosts.
