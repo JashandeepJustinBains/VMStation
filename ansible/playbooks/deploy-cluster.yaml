@@ -483,6 +483,7 @@
         - { path: '/srv/monitoring_data/prometheus', owner: '65534', group: '65534' }  # nobody UID:GID (Prometheus default)
         - { path: '/srv/monitoring_data/loki', owner: '10001', group: '10001' }  # Loki UID:GID
         - { path: '/srv/monitoring_data/promtail', owner: '0', group: '0' }  # Root (Promtail runs as root)
+        - { path: '/srv/monitoring_data/syslog', owner: '0', group: '0' }  # Root (Syslog-ng runs as root)
       failed_when: false
 
     - name: "Apply monitoring PersistentVolumes and PVCs (prometheus/grafana/loki/promtail)"

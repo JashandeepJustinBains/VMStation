@@ -232,7 +232,7 @@ spec:
       
       # Sidecar container for metrics export
       - name: chrony-exporter
-        image: superq/chrony-exporter:latest
+        image: quay.io/superq/chrony-exporter:latest
         imagePullPolicy: IfNotPresent
         args:
         - --chrony.address=unix:///var/run/chrony/chronyd.sock
