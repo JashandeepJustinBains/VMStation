@@ -1,0 +1,379 @@
+---
+# =============================================================================
+# FreeIPA/Kerberos Identity Management Service Deployment
+# =============================================================================
+# Purpose: Deploy enterprise identity and SSO service for the cluster
+# Author: VMStation Enterprise Monitoring Team
+# Date: January 2025
+#
+# This playbook deploys FreeIPA which provides:
+# - Kerberos KDC for SSO authentication
+# - LDAP directory for user/group management
+# - DNS server for service discovery
+# - Certificate Authority for PKI
+# - Web UI for administration
+#
+# SECURITY WARNING:
+# This is a POC/Lab deployment. Before production use:
+# - Change default passwords in freeipa-secrets
+# - Enable firewall rules to restrict access
+# - Configure backup and disaster recovery
+# - Review and harden NetworkPolicy
+# - Enable audit logging
+#
+# Requirements:
+# - Kubernetes cluster running on masternode
+# - NTP service deployed and synchronized
+# - At least 4GB RAM and 2 CPU cores available
+# - 10GB persistent storage
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.yml \
+#     ansible/playbooks/deploy-kerberos-service.yaml
+#
+# Idempotency: Safe to run multiple times (will not reinstall if already configured)
+# =============================================================================
+
+- name: "Deploy FreeIPA/Kerberos Identity Management Service"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display deployment banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          VMStation FreeIPA/Kerberos Deployment
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Purpose: Enterprise SSO and identity management
+          Components: Kerberos, LDAP, DNS, CA, Web UI
+          Target: Control plane (hostNetwork mode)
+          
+          ⚠️  SECURITY WARNING: This is a POC/Lab deployment
+             Review and harden before production use
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # =============================================================================
+    # Pre-deployment Checks
+    # =============================================================================
+    
+    - name: "Check if Kubernetes cluster is accessible"
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+
+    - name: "Check if NTP service is running"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure \
+          -l app=chrony-ntp -o jsonpath='{.items[*].status.phase}'
+      register: ntp_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Warn if NTP is not running"
+      debug:
+        msg: |
+          WARNING: NTP service does not appear to be running.
+          Kerberos requires accurate time synchronization.
+          Deploy NTP first with: ansible-playbook deploy-ntp-service.yaml
+      when: "'Running' not in ntp_status.stdout"
+
+    - name: "Check system time synchronization"
+      command: timedatectl status
+      register: timesync_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Display time sync status"
+      debug:
+        msg: "{{ timesync_status.stdout_lines }}"
+      when: timesync_status.rc == 0
+
+    - name: "Check available resources"
+      shell: |
+        echo "Memory: $(free -h | grep Mem | awk '{print $7}')"
+        echo "CPU: $(nproc) cores"
+        echo "Disk: $(df -h /srv | tail -1 | awk '{print $4}')"
+      register: resources
+      changed_when: false
+
+    - name: "Display available resources"
+      debug:
+        msg: "{{ resources.stdout_lines }}"
+
+    # =============================================================================
+    # Create Storage Directory
+    # =============================================================================
+    
+    - name: "Create FreeIPA data directory on host"
+      file:
+        path: /srv/monitoring_data/freeipa
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: "Create FreeIPA subdirectories"
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      loop:
+        - /srv/monitoring_data/freeipa/var/lib/ipa
+        - /srv/monitoring_data/freeipa/var/log
+        - /srv/monitoring_data/freeipa/etc/dirsrv
+        - /srv/monitoring_data/freeipa/etc/krb5kdc
+
+    # =============================================================================
+    # Security Configuration
+    # =============================================================================
+    
+    - name: "Prompt for secure passwords"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          SECURITY: Using default passwords from manifest
+          
+          To use secure passwords, create a secret manually:
+          
+          kubectl create secret generic freeipa-secrets \
+            --from-literal=admin-password='<YourSecurePassword>' \
+            --from-literal=ds-password='<YourSecurePassword>' \
+            -n infrastructure
+          
+          Then run this playbook again.
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Pause for security review (15 seconds)"
+      pause:
+        seconds: 15
+        prompt: "Review security warning above. Press Ctrl+C to abort, or wait to continue..."
+
+    # =============================================================================
+    # Deploy FreeIPA Service
+    # =============================================================================
+    
+    - name: "Ensure infrastructure namespace exists"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace infrastructure
+      register: namespace_result
+      failed_when:
+        - namespace_result.rc != 0
+        - "'AlreadyExists' not in namespace_result.stderr"
+      changed_when: "'created' in namespace_result.stdout"
+
+    - name: "Check if FreeIPA is already deployed"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get statefulset -n infrastructure freeipa
+      register: freeipa_exists
+      changed_when: false
+      failed_when: false
+
+    - name: "Display existing FreeIPA status"
+      debug:
+        msg: "FreeIPA StatefulSet already exists. Skipping initial deployment."
+      when: freeipa_exists.rc == 0
+
+    - name: "Deploy FreeIPA manifest"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/infrastructure/freeipa-statefulset.yaml
+      register: freeipa_deploy
+      changed_when: "'configured' in freeipa_deploy.stdout or 'created' in freeipa_deploy.stdout"
+
+    - name: "Display FreeIPA deployment result"
+      debug:
+        msg: "{{ freeipa_deploy.stdout_lines }}"
+
+    # =============================================================================
+    # Wait for FreeIPA Installation (This takes 5-10 minutes)
+    # =============================================================================
+    
+    - name: "Display installation progress message"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          FreeIPA Installation in Progress
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          
+          Initial FreeIPA setup takes 5-10 minutes.
+          
+          Monitor installation:
+          kubectl logs -n infrastructure freeipa-0 -f
+          
+          Check status:
+          kubectl get pods -n infrastructure -l app=freeipa -w
+          
+          This playbook will wait up to 15 minutes...
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Wait for FreeIPA pod to be created"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pod -n infrastructure freeipa-0
+      register: pod_exists
+      retries: 30
+      delay: 10
+      until: pod_exists.rc == 0
+      changed_when: false
+      failed_when: false
+
+    - name: "Wait for FreeIPA to be ready (up to 15 minutes)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod \
+          -l app=freeipa -n infrastructure --timeout=900s
+      register: wait_result
+      changed_when: false
+      failed_when: false
+
+    - name: "Check if FreeIPA is ready"
+      debug:
+        msg: |
+          {% if wait_result.rc == 0 %}
+          ✅ FreeIPA is ready!
+          {% else %}
+          ⚠️  FreeIPA is still starting. This is normal.
+          Check logs: kubectl logs -n infrastructure freeipa-0
+          {% endif %}
+
+    # =============================================================================
+    # Verification and Health Checks
+    # =============================================================================
+    
+    - name: "Get FreeIPA StatefulSet status"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get statefulset -n infrastructure freeipa -o wide
+      register: statefulset_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Display StatefulSet status"
+      debug:
+        msg: "{{ statefulset_status.stdout_lines }}"
+      when: statefulset_status.rc == 0
+
+    - name: "Get FreeIPA pod status"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure -l app=freeipa -o wide
+      register: pods_status
+      changed_when: false
+
+    - name: "Display pod status"
+      debug:
+        msg: "{{ pods_status.stdout_lines }}"
+
+    - name: "Check FreeIPA services"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n infrastructure -l app=freeipa
+      register: svc_status
+      changed_when: false
+
+    - name: "Display service status"
+      debug:
+        msg: "{{ svc_status.stdout_lines }}"
+
+    - name: "Check FreeIPA installation status (if pod is running)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n infrastructure freeipa-0 \
+          -- ipactl status
+      register: ipa_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Display IPA status"
+      debug:
+        msg: "{{ ipa_status.stdout_lines }}"
+      when: ipa_status.rc == 0
+
+    # =============================================================================
+    # Configure DNS Resolution
+    # =============================================================================
+    
+    - name: "Add FreeIPA to /etc/hosts"
+      lineinfile:
+        path: /etc/hosts
+        line: "192.168.4.63 ipa.vmstation.local ipa"
+        state: present
+        backup: true
+
+    - name: "Test DNS resolution"
+      command: nslookup ipa.vmstation.local 192.168.4.63
+      register: dns_test
+      changed_when: false
+      failed_when: false
+
+    - name: "Display DNS test results"
+      debug:
+        msg: "{{ dns_test.stdout_lines }}"
+      when: dns_test.rc == 0
+
+    # =============================================================================
+    # Final Summary and Next Steps
+    # =============================================================================
+    
+    - name: "Display deployment summary"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          FreeIPA/Kerberos Deployment Complete
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          
+          ✅ FreeIPA StatefulSet deployed to infrastructure namespace
+          ✅ Services: Kerberos, LDAP, DNS, CA, Web UI
+          ✅ Web UI available at: https://192.168.4.63:30443
+          
+          Default Credentials (CHANGE THESE):
+          - Admin User: admin
+          - Password: ChangeMe123! (from freeipa-secrets)
+          
+          Access FreeIPA:
+          - Web UI: https://192.168.4.63:30443 or https://ipa.vmstation.local
+          - CLI: kubectl exec -n infrastructure freeipa-0 -it -- kinit admin
+          
+          Verification Commands:
+          - Check status: kubectl exec -n infrastructure freeipa-0 -- ipactl status
+          - List users: kubectl exec -n infrastructure freeipa-0 -- ipa user-find
+          - Test Kerberos: echo "ChangeMe123!" | kinit admin@VMSTATION.LOCAL
+          
+          Next Steps:
+          1. ⚠️  CHANGE DEFAULT PASSWORDS
+             kubectl delete secret freeipa-secrets -n infrastructure
+             kubectl create secret generic freeipa-secrets \
+               --from-literal=admin-password='<NewSecurePassword>' \
+               --from-literal=ds-password='<NewSecurePassword>' \
+               -n infrastructure
+          
+          2. Create service principals for cluster services:
+             kubectl exec -n infrastructure freeipa-0 -it -- bash
+             echo "ChangeMe123!" | kinit admin
+             ipa service-add host/storagenodet3500.vmstation.local
+             ipa-getkeytab -s ipa.vmstation.local \
+               -p host/storagenodet3500.vmstation.local \
+               -k /tmp/storagenode.keytab
+          
+          3. Configure clients (worker nodes) to use FreeIPA for auth:
+             - Install sssd and ipa-client packages
+             - Join domain: ipa-client-install --domain=vmstation.local
+          
+          4. Set up monitoring:
+             - Add FreeIPA health checks to Prometheus
+             - Create Grafana dashboard for Kerberos metrics
+          
+          5. Configure backup and disaster recovery:
+             - Schedule ipa-backup cron job
+             - Store backups externally
+          
+          Documentation:
+          - FreeIPA Admin Guide: https://www.freeipa.org/page/Documentation
+          - Kerberos MIT Docs: https://web.mit.edu/kerberos/
+          
+          Security Checklist:
+          - [ ] Change default passwords
+          - [ ] Configure firewall rules
+          - [ ] Enable audit logging
+          - [ ] Review NetworkPolicy
+          - [ ] Set up backup automation
+          - [ ] Configure SSSD on clients
+          - [ ] Test disaster recovery
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

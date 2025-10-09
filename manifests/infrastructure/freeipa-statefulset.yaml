@@ -1,0 +1,488 @@
+---
+# Enterprise Kerberos/FreeIPA Identity Management Service
+# Provides SSO, authentication, and identity services for the cluster
+# WARNING: This is a POC/Lab deployment - harden before production use
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infrastructure
+---
+# FreeIPA ConfigMap - Setup and configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: freeipa-config
+  namespace: infrastructure
+  labels:
+    app: freeipa
+    vmstation.io/component: identity
+data:
+  setup-env.sh: |
+    #!/bin/bash
+    # FreeIPA setup environment variables
+    # These are loaded during initial setup
+    
+    export IPA_SERVER_HOSTNAME=ipa.vmstation.local
+    export IPA_SERVER_IP=192.168.4.63
+    export REALM=VMSTATION.LOCAL
+    export DOMAIN=vmstation.local
+    export IPA_ADMIN_PASSWORD=${IPA_ADMIN_PASSWORD:-ChangeMe123!}
+    export DS_PASSWORD=${DS_PASSWORD:-ChangeMe123!}
+    
+    # DNS configuration
+    export IPA_DNS_FORWARDER=8.8.8.8
+    export IPA_REVERSE_ZONE=4.168.192.in-addr.arpa.
+    
+    # NTP configuration
+    export IPA_NTP_SERVER=127.0.0.1
+    
+    echo "FreeIPA Configuration:"
+    echo "  Hostname: ${IPA_SERVER_HOSTNAME}"
+    echo "  IP: ${IPA_SERVER_IP}"
+    echo "  Realm: ${REALM}"
+    echo "  Domain: ${DOMAIN}"
+---
+# FreeIPA Secrets - Admin and DS passwords
+# NOTE: These are example values - replace with secure secrets in production
+# Use: kubectl create secret generic freeipa-secrets --from-literal=admin-password=<secure-password> --from-literal=ds-password=<secure-password>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: freeipa-secrets
+  namespace: infrastructure
+  labels:
+    app: freeipa
+type: Opaque
+stringData:
+  admin-password: "ChangeMe123!"  # IPA admin password - CHANGE THIS
+  ds-password: "ChangeMe123!"     # Directory Server password - CHANGE THIS
+---
+# FreeIPA ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: freeipa
+  namespace: infrastructure
+---
+# FreeIPA RBAC - Cluster role for node access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: freeipa-node-reader
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: freeipa-node-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: freeipa-node-reader
+subjects:
+- kind: ServiceAccount
+  name: freeipa
+  namespace: infrastructure
+---
+# FreeIPA StatefulSet - High availability identity service
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: freeipa
+  namespace: infrastructure
+  labels:
+    app: freeipa
+    vmstation.io/component: identity
+spec:
+  serviceName: freeipa
+  replicas: 1  # Single replica for lab - increase for HA
+  selector:
+    matchLabels:
+      app: freeipa
+  template:
+    metadata:
+      labels:
+        app: freeipa
+      annotations:
+        # Disable Prometheus scraping for now - add exporter later
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: freeipa
+      # Run on control plane with host network for DNS/Kerberos
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      
+      # Init container: Prepare FreeIPA data directory
+      initContainers:
+      - name: init-data
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Ensure data directory has correct permissions
+          chown -R 0:0 /data
+          chmod 755 /data
+          
+          # Create required directories
+          mkdir -p /data/var/lib/ipa
+          mkdir -p /data/var/log
+          mkdir -p /data/etc/dirsrv
+          mkdir -p /data/etc/krb5kdc
+          
+          echo "FreeIPA data directory initialized"
+        volumeMounts:
+        - name: freeipa-data
+          mountPath: /data
+        securityContext:
+          runAsUser: 0
+          privileged: true
+      
+      containers:
+      - name: freeipa
+        image: freeipa/freeipa-server:rocky-9
+        imagePullPolicy: IfNotPresent
+        
+        # FreeIPA requires privileged container for systemd and Kerberos
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - NET_ADMIN
+            - SYS_TIME
+        
+        env:
+        # FreeIPA server configuration
+        - name: IPA_SERVER_HOSTNAME
+          value: "ipa.vmstation.local"
+        - name: IPA_SERVER_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        
+        # Realm and domain
+        - name: REALM
+          value: "VMSTATION.LOCAL"
+        - name: DOMAIN
+          value: "vmstation.local"
+        
+        # Admin credentials from secrets
+        - name: IPA_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: freeipa-secrets
+              key: admin-password
+        - name: DS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: freeipa-secrets
+              key: ds-password
+        
+        # DNS configuration
+        - name: IPA_DNS_FORWARDER
+          value: "8.8.8.8"
+        - name: IPA_SETUP_DNS
+          value: "yes"
+        
+        # NTP configuration
+        - name: IPA_NTP_SERVER
+          value: "127.0.0.1"
+        
+        # Installation options
+        - name: IPA_SERVER_INSTALL_OPTS
+          value: "--unattended --setup-dns --no-ntp --no-dnssec-validation --forwarder=8.8.8.8"
+        
+        ports:
+        # Kerberos
+        - name: kerberos-tcp
+          containerPort: 88
+          protocol: TCP
+        - name: kerberos-udp
+          containerPort: 88
+          protocol: UDP
+        - name: kpasswd-tcp
+          containerPort: 464
+          protocol: TCP
+        - name: kpasswd-udp
+          containerPort: 464
+          protocol: UDP
+        
+        # LDAP
+        - name: ldap
+          containerPort: 389
+          protocol: TCP
+        - name: ldaps
+          containerPort: 636
+          protocol: TCP
+        
+        # HTTP/HTTPS (Web UI)
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        - name: https
+          containerPort: 443
+          protocol: TCP
+        
+        # DNS
+        - name: dns-tcp
+          containerPort: 53
+          protocol: TCP
+        - name: dns-udp
+          containerPort: 53
+          protocol: UDP
+        
+        volumeMounts:
+        - name: freeipa-data
+          mountPath: /data
+        - name: freeipa-config
+          mountPath: /opt/setup
+        - name: run
+          mountPath: /run
+        - name: tmp
+          mountPath: /tmp
+        - name: cgroup
+          mountPath: /sys/fs/cgroup
+          readOnly: true
+        
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        
+        # Liveness probe - check if FreeIPA is responding
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if IPA is installed and running
+              if [ -f /data/var/lib/ipa/sysrestore/sysrestore.state ]; then
+                ipactl status || exit 1
+              else
+                # Still installing, consider healthy
+                exit 0
+              fi
+          initialDelaySeconds: 300  # 5 minutes for initial setup
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 5
+        
+        # Readiness probe - check if FreeIPA is ready to serve
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if IPA services are running
+              if [ -f /data/var/lib/ipa/sysrestore/sysrestore.state ]; then
+                ipactl status > /dev/null 2>&1 || exit 1
+                # Test Kerberos
+                echo "admin" | kinit admin@VMSTATION.LOCAL -c /tmp/krb5cc_test > /dev/null 2>&1
+                EXIT_CODE=$?
+                kdestroy -c /tmp/krb5cc_test > /dev/null 2>&1
+                exit $EXIT_CODE
+              else
+                # Still installing
+                exit 1
+              fi
+          initialDelaySeconds: 360  # 6 minutes
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+      
+      volumes:
+      - name: freeipa-config
+        configMap:
+          name: freeipa-config
+          defaultMode: 0755
+      - name: run
+        emptyDir:
+          medium: Memory
+      - name: tmp
+        emptyDir: {}
+      - name: cgroup
+        hostPath:
+          path: /sys/fs/cgroup
+          type: Directory
+  
+  # Persistent storage for FreeIPA data
+  volumeClaimTemplates:
+  - metadata:
+      name: freeipa-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+---
+# FreeIPA Service - ClusterIP for internal access
+apiVersion: v1
+kind: Service
+metadata:
+  name: freeipa
+  namespace: infrastructure
+  labels:
+    app: freeipa
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for StatefulSet
+  ports:
+  - name: kerberos-tcp
+    port: 88
+    protocol: TCP
+  - name: kerberos-udp
+    port: 88
+    protocol: UDP
+  - name: kpasswd-tcp
+    port: 464
+    protocol: TCP
+  - name: kpasswd-udp
+    port: 464
+    protocol: UDP
+  - name: ldap
+    port: 389
+    protocol: TCP
+  - name: ldaps
+    port: 636
+    protocol: TCP
+  - name: http
+    port: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    protocol: TCP
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+  - name: dns-udp
+    port: 53
+    protocol: UDP
+  selector:
+    app: freeipa
+---
+# FreeIPA NodePort Service - External access to Web UI
+apiVersion: v1
+kind: Service
+metadata:
+  name: freeipa-external
+  namespace: infrastructure
+  labels:
+    app: freeipa
+spec:
+  type: NodePort
+  ports:
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+    nodePort: 30443
+  selector:
+    app: freeipa
+---
+# NetworkPolicy for FreeIPA
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: freeipa-netpol
+  namespace: infrastructure
+spec:
+  podSelector:
+    matchLabels:
+      app: freeipa
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow Kerberos from all sources
+  - from:
+    - podSelector: {}
+    - namespaceSelector: {}
+    - ipBlock:
+        cidr: 192.168.4.0/24
+    ports:
+    - protocol: TCP
+      port: 88
+    - protocol: UDP
+      port: 88
+    - protocol: TCP
+      port: 464
+    - protocol: UDP
+      port: 464
+  
+  # Allow LDAP from all sources
+  - from:
+    - podSelector: {}
+    - namespaceSelector: {}
+    - ipBlock:
+        cidr: 192.168.4.0/24
+    ports:
+    - protocol: TCP
+      port: 389
+    - protocol: TCP
+      port: 636
+  
+  # Allow HTTP/HTTPS from all sources
+  - from:
+    - podSelector: {}
+    - namespaceSelector: {}
+    - ipBlock:
+        cidr: 192.168.4.0/24
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+  
+  # Allow DNS from all sources
+  - from:
+    - podSelector: {}
+    - namespaceSelector: {}
+    - ipBlock:
+        cidr: 192.168.4.0/24
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # Allow NTP sync
+  - to:
+    - podSelector:
+        matchLabels:
+          app: chrony-ntp
+    ports:
+    - protocol: UDP
+      port: 123
+  
+  # Allow all egress for upstream DNS forwarders and package repos
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0

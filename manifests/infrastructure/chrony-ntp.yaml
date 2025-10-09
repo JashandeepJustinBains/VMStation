@@ -1,0 +1,377 @@
+---
+# Enterprise NTP Service (Chrony)
+# Provides cluster-wide time synchronization to prevent log timestamp drift
+# and ensure accurate inactivity calculations for automation
+
+# Infrastructure Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infrastructure
+  labels:
+    name: infrastructure
+    vmstation.io/component: infrastructure
+---
+# Chrony ConfigMap - NTP Server Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chrony-config
+  namespace: infrastructure
+  labels:
+    app: chrony-ntp
+    vmstation.io/component: time-sync
+data:
+  chrony.conf: |
+    # Upstream NTP servers - using reliable public NTP sources
+    # Use Google Public NTP (anycast)
+    server time.google.com iburst prefer
+    server time1.google.com iburst
+    server time2.google.com iburst
+    server time3.google.com iburst
+    server time4.google.com iburst
+    
+    # Fallback to Cloudflare NTP
+    server time.cloudflare.com iburst
+    
+    # Fallback to NTP Pool Project
+    pool 0.pool.ntp.org iburst maxsources 2
+    pool 1.pool.ntp.org iburst maxsources 2
+    
+    # Allow local network clients to query this server
+    # Adjust subnet to match your cluster network
+    allow 10.244.0.0/16
+    allow 10.96.0.0/12
+    allow 192.168.4.0/24
+    
+    # Serve time even if not synchronized to a time source
+    local stratum 10
+    
+    # Record the rate at which the system clock gains/loses time
+    driftfile /var/lib/chrony/drift
+    
+    # Enable kernel synchronization of the real-time clock (RTC)
+    rtcsync
+    
+    # Step the system clock if the adjustment is larger than 1 second
+    # but only in the first three clock updates
+    makestep 1.0 3
+    
+    # Get TAI-UTC offset and leap seconds from the system tz database
+    leapsectz right/UTC
+    
+    # Log statistics
+    logdir /var/log/chrony
+    log measurements statistics tracking
+    
+    # Improved time accuracy
+    maxupdateskew 100.0
+    
+    # Enterprise NTP service settings
+    # Minimum number of selectable sources required to adjust the clock
+    minsources 2
+    
+    # Allow NTP client access over the network
+    bindcmdaddress 0.0.0.0
+    
+    # Specify the network interface to listen on
+    # Listen on all interfaces for NTP queries
+    bindaddress 0.0.0.0
+    
+    # Maximum allowed offset before correction
+    maxdistance 16.0
+    
+    # NTP server metrics for Prometheus monitoring
+    # Expose statistics on port 323 for monitoring
+---
+# Chrony ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chrony-ntp
+  namespace: infrastructure
+---
+# Chrony SecurityContext Constraint Role
+# Required for SYS_TIME capability to set system clock
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chrony-ntp-privileged
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chrony-ntp-privileged
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chrony-ntp-privileged
+subjects:
+- kind: ServiceAccount
+  name: chrony-ntp
+  namespace: infrastructure
+---
+# Chrony DaemonSet - Runs on all nodes for distributed time sync
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chrony-ntp
+  namespace: infrastructure
+  labels:
+    app: chrony-ntp
+    vmstation.io/component: time-sync
+spec:
+  selector:
+    matchLabels:
+      app: chrony-ntp
+  template:
+    metadata:
+      labels:
+        app: chrony-ntp
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9123"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: chrony-ntp
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      priorityClassName: system-node-critical
+      tolerations:
+      # Run on control-plane nodes
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      # Run on all nodes including any tainted nodes
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      containers:
+      - name: chrony
+        image: cturra/ntp:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_TIME
+            - SYS_NICE
+            - SYS_RESOURCE
+            - NET_BIND_SERVICE
+        env:
+        - name: NTP_SERVERS
+          value: "time.google.com,time1.google.com,time2.google.com,time.cloudflare.com"
+        - name: LOG_LEVEL
+          value: "0"
+        - name: ENABLE_NTS
+          value: "false"
+        - name: NOCLIENTLOG
+          value: "false"
+        ports:
+        - name: ntp
+          containerPort: 123
+          protocol: UDP
+          hostPort: 123
+        - name: ntp-tcp
+          containerPort: 123
+          protocol: TCP
+          hostPort: 123
+        volumeMounts:
+        - name: chrony-config
+          mountPath: /etc/chrony/chrony.conf
+          subPath: chrony.conf
+          readOnly: true
+        - name: chrony-drift
+          mountPath: /var/lib/chrony
+        - name: chrony-logs
+          mountPath: /var/log/chrony
+        - name: localtime
+          mountPath: /etc/localtime
+          readOnly: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if chronyd is running
+              pgrep chronyd || pgrep ntpd
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Check if chrony is synchronized
+              # Consider ready if chrony is running (sync takes time)
+              pgrep chronyd || pgrep ntpd
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+      
+      # Sidecar container for metrics export
+      - name: chrony-exporter
+        image: superq/chrony-exporter:latest
+        imagePullPolicy: IfNotPresent
+        args:
+        - --chrony.address=unix:///var/run/chrony/chronyd.sock
+        ports:
+        - name: metrics
+          containerPort: 9123
+          protocol: TCP
+        volumeMounts:
+        - name: chrony-socket
+          mountPath: /var/run/chrony
+          readOnly: true
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      
+      volumes:
+      - name: chrony-config
+        configMap:
+          name: chrony-config
+          defaultMode: 0644
+      - name: chrony-drift
+        hostPath:
+          path: /var/lib/chrony
+          type: DirectoryOrCreate
+      - name: chrony-logs
+        hostPath:
+          path: /var/log/chrony
+          type: DirectoryOrCreate
+      - name: chrony-socket
+        hostPath:
+          path: /var/run/chrony
+          type: DirectoryOrCreate
+      - name: localtime
+        hostPath:
+          path: /etc/localtime
+          type: FileOrCreate
+---
+# Chrony Service - For monitoring and metrics collection
+apiVersion: v1
+kind: Service
+metadata:
+  name: chrony-ntp
+  namespace: infrastructure
+  labels:
+    app: chrony-ntp
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9123"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for DaemonSet
+  ports:
+  - name: ntp
+    port: 123
+    protocol: UDP
+  - name: ntp-tcp
+    port: 123
+    protocol: TCP
+  - name: metrics
+    port: 9123
+    protocol: TCP
+  selector:
+    app: chrony-ntp
+---
+# NetworkPolicy for Chrony - Allow NTP traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chrony-ntp-netpol
+  namespace: infrastructure
+spec:
+  podSelector:
+    matchLabels:
+      app: chrony-ntp
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow NTP queries from all pods
+  - from:
+    - podSelector: {}
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 123
+    - protocol: TCP
+      port: 123
+  # Allow Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9123
+  egress:
+  # Allow NTP to upstream servers
+  - to:
+    - podSelector: {}
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 123
+    - protocol: TCP
+      port: 123
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow all egress for upstream NTP servers (Google, Cloudflare, NTP Pool)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: UDP
+      port: 123
