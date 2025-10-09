@@ -1,0 +1,103 @@
+---
+# =============================================================================
+# VMStation Loki Configuration Fix
+# Reapplies Loki ConfigMap from repository and ensures proper permissions
+# This prevents config drift and resolves WAL directory permission issues
+# =============================================================================
+
+- name: "Fix Loki Configuration and Permissions"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display Loki fix banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Loki Configuration Fix
+          - Reapply ConfigMap from repository
+          - Ensure proper hostPath ownership
+          - Restart Loki deployment
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Check if monitoring namespace exists"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get namespace monitoring 2>/dev/null
+      register: monitoring_namespace
+      failed_when: false
+      changed_when: false
+
+    - name: "Create monitoring namespace if missing"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace monitoring --dry-run=client -o yaml | kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f -
+      when: monitoring_namespace.rc != 0
+
+    - name: "Ensure Loki data directory exists with proper ownership"
+      file:
+        path: /srv/monitoring_data/loki
+        state: directory
+        mode: '0755'
+        owner: '10001'
+        group: '10001'
+      failed_when: false
+
+    - name: "Reapply Loki manifest from repository (includes ConfigMap)"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f {{ playbook_dir }}/../../manifests/monitoring/loki.yaml
+      register: loki_apply
+      changed_when: "'configured' in loki_apply.stdout or 'created' in loki_apply.stdout"
+
+    - name: "Display apply result"
+      debug:
+        msg: "{{ loki_apply.stdout_lines }}"
+
+    - name: "Restart Loki deployment to pick up ConfigMap changes"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf rollout restart deployment/loki -n monitoring
+      register: loki_restart
+      changed_when: true
+
+    - name: "Wait for Loki deployment to be ready"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf rollout status deployment/loki \
+          -n monitoring \
+          --timeout=180s
+      register: loki_ready
+      retries: 3
+      delay: 10
+      until: loki_ready.rc == 0
+
+    - name: "Get Loki pod status"
+      shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring -l app=loki
+      register: loki_pods
+
+    - name: "Display Loki pod status"
+      debug:
+        msg: "{{ loki_pods.stdout_lines }}"
+
+    - name: "Verify Loki is responding"
+      shell: |
+        POD=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring -l app=loki -o name | head -n1)
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n monitoring $POD -- curl -fsS http://127.0.0.1:3100/ready
+      register: loki_ready_check
+      retries: 3
+      delay: 5
+      until: loki_ready_check.rc == 0
+      failed_when: false
+
+    - name: "Display fix completion message"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          ✅ Loki Configuration Fix Complete
+          
+          Status:
+          - ConfigMap reapplied from repository
+          - Deployment restarted
+          - Pod status: {{ 'Ready' if loki_ready_check.rc == 0 else 'Check logs for errors' }}
+          
+          Next Steps:
+          - Test Loki: ./tests/test-loki-validation.sh
+          - Check logs: kubectl logs -n monitoring -l app=loki --tail=50
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "Fail if Loki is not ready"
+      fail:
+        msg: "Loki deployment failed to become ready. Check logs: kubectl logs -n monitoring -l app=loki"
+      when: loki_ready.rc != 0

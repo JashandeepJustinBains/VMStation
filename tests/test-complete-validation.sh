@@ -58,7 +58,8 @@ echo "This test suite validates:"
 echo "  1. Auto-sleep and wake configuration"
 echo "  2. Monitoring exporters health"
 echo "  3. Loki log aggregation"
-echo "  4. Sleep/wake cycle (optional - requires confirmation)"
+echo "  4. Loki ConfigMap drift prevention"
+echo "  5. Sleep/wake cycle (optional - requires confirmation)"
 echo ""
 echo "Test order:"
 echo "  - Non-destructive tests run first"
@@ -87,6 +88,11 @@ echo ""
 
 run_test_suite "Loki Log Aggregation" \
   "tests/test-loki-validation.sh" || true
+
+echo ""
+
+run_test_suite "Loki ConfigMap Drift Prevention" \
+  "tests/test-loki-config-drift.sh" || true
 
 echo ""
 

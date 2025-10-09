@@ -14,6 +14,7 @@ Before manually troubleshooting, run the automated validation suite:
 ./tests/test-autosleep-wake-validation.sh      # Auto-sleep/wake configuration
 ./tests/test-monitoring-exporters-health.sh    # Monitoring stack health
 ./tests/test-loki-validation.sh                # Loki log aggregation
+./tests/test-loki-config-drift.sh              # Loki ConfigMap drift prevention
 ./tests/test-monitoring-access.sh              # Monitoring endpoints
 ```
 
@@ -332,6 +333,7 @@ ssh root@node "ethtool eth0 | grep Wake-on"
 **Diagnostic**:
 ```bash
 ./tests/test-loki-validation.sh
+./tests/test-loki-config-drift.sh
 ```
 
 **Fix**:
@@ -340,6 +342,28 @@ ssh root@node "ethtool eth0 | grep Wake-on"
 - View Loki logs: `kubectl logs -n monitoring -l app=loki`
 - Test DNS: `kubectl run -it --rm dns-test --image=busybox --restart=Never -- nslookup loki.monitoring`
 - Verify datasource: Check Grafana datasources health
+
+### Issue: Loki pods in CrashLoopBackOff
+
+**Symptoms**: Loki pods repeatedly crashing with config parse errors
+
+**Common Errors**:
+- `failed parsing config: field wal_directory not found in type storage.Config`
+- `invalid schema config: boltdb-shipper works best with 24h periodic index config`
+
+**Diagnostic**:
+```bash
+kubectl logs -n monitoring -l app=loki --tail=50
+./tests/test-loki-config-drift.sh
+```
+
+**Fix**:
+```bash
+# Reapply correct configuration from repository
+ansible-playbook ansible/playbooks/fix-loki-config.yaml
+```
+
+See [Loki Config Drift Prevention Guide](docs/LOKI_CONFIG_DRIFT_PREVENTION.md) for detailed troubleshooting.
 
 ### Issue: IPMI exporter pods in Error state
 **Fix**:
