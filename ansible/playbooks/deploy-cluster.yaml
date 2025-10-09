@@ -748,7 +748,7 @@
               # Note: Do not actually power off control-plane nodes in automated tests
 
         - name: "Trigger sleep helper on each wol target (run as background)"
-          shell: "ssh root@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
+          shell: "ssh {{ hostvars[item.name].ansible_user | default('root') }}@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
           loop: "{{ wol_targets }}"
           delegate_to: localhost
 
