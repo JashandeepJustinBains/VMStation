@@ -30,6 +30,26 @@ git pull
   - Solution: Moved installation to Phase 0 on all Debian nodes
   - Documentation: `docs/CNI_PLUGIN_FIX_JAN2025.md`
 
+- [x] **Blackbox Exporter CrashLoopBackOff** - Fixed config parsing error (October 2025)
+  - Root cause: `timeout` field incorrectly nested in DNS prober config
+  - Solution: Moved `timeout` to module level in blackbox.yml ConfigMap
+  - Documentation: `docs/BLACKBOX_EXPORTER_DIAGNOSTICS.md`
+
+- [x] **Loki CrashLoopBackOff** - Fixed schema validation error (October 2025)
+  - Root cause: boltdb-shipper requires 24h index period, but 168h was configured
+  - Solution: Changed schema_config period from 168h to 24h
+  - Documentation: `docs/MONITORING_STACK_FIXES_OCT2025.md`
+
+- [x] **Jellyfin Pod Pending** - Fixed node scheduling issue (October 2025)
+  - Root cause: storagenodet3500 node was marked unschedulable
+  - Solution: Added automatic node uncordon task in ansible playbook
+  - Documentation: `docs/MONITORING_STACK_FIXES_OCT2025.md`
+
+- [x] **WoL Validation SSH Error** - Fixed homelab SSH authentication (October 2025)
+  - Root cause: WoL task hardcoded root user instead of using ansible_user
+  - Solution: Use `ansible_user` from inventory for SSH connections
+  - Documentation: `docs/MONITORING_STACK_FIXES_OCT2025.md`
+
 ### 🔧 Monitoring & Observability
 
 #### IPMI Hardware Monitoring
@@ -48,9 +68,11 @@ git pull
   - Investigate missing data source or query issues
   
 - [ ] Fix **Loki Logs & Aggregation** dashboard
-  - Error: `dial tcp: lookup loki on 10.96.0.10:53: no such host`
-  - Root cause: Loki service not deployed or DNS resolution failing
-  - **Action:** Deploy Loki log aggregation stack or remove dashboard
+  - ~~Previous error: `dial tcp: lookup loki on 10.96.0.10:53: no such host`~~
+  - **UPDATE (Oct 2025):** Loki deployment fixed (schema config corrected)
+  - New error from problem statement: Status 502 - `dial tcp 10.110.131.130:3100: connect: connection refused`
+  - Root cause: Loki service may not be fully ready or network policy blocking access
+  - **Action:** Verify Loki pod is Running and service endpoints are registered
   
 - [ ] Fix **Node Metrics - Detailed System Monitoring** dashboard
   - Verify node-exporter pods are running on all nodes

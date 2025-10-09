@@ -421,6 +421,12 @@
       delay: 10
       until: ready_nodes.stdout | int >= 2
 
+    - name: "Ensure all nodes are schedulable (uncordon)"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | awk '{print $1}' | xargs -n1 kubectl --kubeconfig=/etc/kubernetes/admin.conf uncordon
+      register: uncordon_result
+      failed_when: false
+
     - name: "Get node status"
       shell: kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes -o wide
       register: nodes_status
@@ -742,7 +748,7 @@
               # Note: Do not actually power off control-plane nodes in automated tests
 
         - name: "Trigger sleep helper on each wol target (run as background)"
-          shell: "ssh root@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
+          shell: "ssh {{ hostvars[item.name].ansible_user | default('root') }}@{{ item.ip }} 'nohup /usr/local/bin/vmstation-sleep-ansible.sh >/tmp/vmstation-sleep.log 2>&1 &'"
           loop: "{{ wol_targets }}"
           delegate_to: localhost
 

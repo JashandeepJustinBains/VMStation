@@ -526,10 +526,10 @@ data:
         timeout: 5s
       dns:
         prober: dns
+        timeout: 5s
         dns:
           query_name: kubernetes.default.svc.cluster.local
           query_type: A
-          timeout: 5s
 ---
 apiVersion: v1
 kind: Service
