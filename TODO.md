@@ -111,10 +111,58 @@ Current down targets from problem statement:
   - Format: "curl ip:port ok" or "curl ip:port ERROR: <reason>"
   - **Files to update:** Any scripts executing curl with verbose output
 
+## SSO / Kerberos (FreeIPA) Deployment — provide network SSO for home
+
+Goal: run a Kerberos/FreeIPA identity service on the control-plane (masternode) to enable SSO for Samba shares and Wi‑Fi (via RADIUS) for the home network. Intended for homelab/POC use — follow hardening checklist before trusting in production.
+
+Checklist:
+- [ ] Decide deployment target: Kubernetes pod on masternode (hostNetwork) or dedicated VM on `homelab` (recommended for production)
+- [ ] Create manifest: `manifests/idm/freeipa-statefulset.yaml` (StatefulSet, hostNetwork: true, nodeSelector -> control-plane, persistent storage)
+- [ ] Provision storage on masternode: PV or hostPath (example: `/var/lib/freeipa`) with proper ownership and backups
+- [ ] Ensure time sync: install/configure `chrony` or `ntpd` on masternode and all clients (Kerberos sensitive to clock drift)
+- [ ] Network hardening: NetworkPolicy + host firewall to restrict access to ports 88/464/749/389/636 and only allow trusted subnets (e.g., 192.168.4.0/24)
+- [ ] Deploy FreeRADIUS (or integrate RADIUS with FreeIPA) for 802.1X Wi‑Fi authentication
+- [ ] Create service principal(s) and keytabs for servers (Samba) and distribute securely to `storagenodet3500`
+- [ ] Configure Samba/SSSD on `storagenodet3500` to use Kerberos/LDAP for auth and join the realm
+- [ ] Backup & DR: schedule automated KDC DB + keytab backups to external storage
+- [ ] Monitoring & alerts: add lightweight KDC health checks to Prometheus (scrape node exporter + process checks)
+- [ ] Document exact commands and manifests in `docs/IDM_DEPLOYMENT.md`
+
+Quick commands / verification (examples):
+```bash
+# apply manifest (after editing)
+kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f manifests/idm/freeipa-statefulset.yaml
+
+# watch startup logs
+kubectl --kubeconfig=/etc/kubernetes/admin.conf -n idm get pods -w
+kubectl --kubeconfig=/etc/kubernetes/admin.conf -n idm logs -l app=freeipa --tail=200
+
+# inside pod: create service principal & keytab for Samba (example)
+# kubectl exec -n idm -it freeipa-0 -- ipa service-add host/storagenodet3500.example.internal
+# kubectl exec -n idm -it freeipa-0 -- ipa-getkeytab -s freeipa.example.internal -p host/storagenodet3500.example.internal -k /tmp/samba.keytab
+
+# on storagenodet3500: test kerberos and samba
+# kinit admin@EXAMPLE.INTERNAL
+# smbclient //storagenodet3500/share -k -U user@EXAMPLE.INTERNAL
+```
+
+Security notes:
+- Running a KDC inside Kubernetes is acceptable for a lab/PoC but treat the KDC as a high-value asset: isolate it, lock network access, use strong secrets, and back up frequently.
+- Prefer a dedicated VM for production identity services. If using Kubernetes: use hostNetwork, persistent PV, strict NetworkPolicy, and RBAC-limited Secrets.
+
+Docs / follow-ups:
+- Add `manifests/idm/freeipa-statefulset.yaml` (template) and `docs/IDM_DEPLOYMENT.md` with step-by-step commands, keytab procedures, and backup instructions.
+
+
+ 
+---
+
 ### 🚀 New Infrastructure - Scaffolding Required
 
 #### Malware Analysis Lab Deployment
 Create Terraform infrastructure for isolated malware analysis environment:
+
+* do not want to rely on internet downloads for large image pulls, I pre-downloaded some apps/system images that I want to store in a local repo that the machine can pull whenever necessary for a deployment. How do we set this up? Should it only be on the homelab node to create a seperate space for homelab only stuff and media serving stuff on the storagenodet3500? I have cisco switch OS images, splunk setup msi, the linux distro images, windows server 2019 images etc.
 
 **Directory Structure:**
 ```

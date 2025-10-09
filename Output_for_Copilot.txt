@@ -1,10 +1,314 @@
+
+TASK [Show WoL report] *********************************************************
+ok: [masternode] =>
+  wol_report:
+  - ip: 192.168.4.61
+    mac: b8:ac:6f:7e:6c:9d
+    name: storagenodet3500
+    wol_out: Sending magic packet to 255.255.255.255:9 with b8:ac:6f:7e:6c:9d
+  - ip: 192.168.4.62
+    mac: d0:94:66:30:d6:63
+    name: homelab
+    wol_out: Sending magic packet to 255.255.255.255:9 with d0:94:66:30:d6:63
+
+PLAY RECAP *********************************************************************
+masternode                 : ok=84   changed=35   unreachable=0    failed=0    skipped=8    rescued=0    ignored=0
+storagenodet3500           : ok=28   changed=4    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0
+
+[2025-10-08 20:35:46] [INFO]
+[2025-10-08 20:35:46] [INFO] ✓ Debian deployment completed successfully
+[2025-10-08 20:35:46] [INFO]
+[2025-10-08 20:35:46] [INFO] Running post-deployment verification...
+[2025-10-08 20:35:51] [INFO] Verifying Debian cluster health...
+[2025-10-08 20:35:51] [INFO] ✓ Debian cluster is healthy (2 Debian nodes Ready)
+[2025-10-08 20:35:51] [INFO]
+[2025-10-08 20:35:51] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:35:51] [INFO]   Debian Kubernetes Cluster Ready!
+[2025-10-08 20:35:51] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:35:51] [INFO]
+[2025-10-08 20:35:51] [INFO] Verification commands:
+[2025-10-08 20:35:51] [INFO]   kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes
+[2025-10-08 20:35:51] [INFO]   kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A
+[2025-10-08 20:35:51] [INFO]
+[2025-10-08 20:35:51] [INFO] Log saved to: /srv/monitoring_data/VMStation/ansible/artifacts/deploy-debian.log
+[2025-10-08 20:35:51] [INFO]
+[2025-10-08 20:35:51] [INFO]
+[2025-10-08 20:35:51] [INFO] Waiting 10 seconds before Phase 2...
+[2025-10-08 20:36:01] [INFO]
+[2025-10-08 20:36:01] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:36:01] [INFO]   PHASE 2: Deploying RKE2 to Homelab
+[2025-10-08 20:36:01] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:36:01] [INFO] ========================================
+[2025-10-08 20:36:01] [INFO]  Deploying RKE2 to Homelab (RHEL10)
+[2025-10-08 20:36:01] [INFO] ========================================
+[2025-10-08 20:36:01] [INFO] Target: homelab (192.168.4.62)
+[2025-10-08 20:36:01] [INFO] Playbook: /srv/monitoring_data/VMStation/ansible/playbooks/install-rke2-homelab.yml
+[2025-10-08 20:36:01] [INFO] Log: /srv/monitoring_data/VMStation/ansible/artifacts/install-rke2-homelab.log
+[2025-10-08 20:36:01] [INFO]
+[2025-10-08 20:36:01] [INFO] Running pre-flight checks...
+[2025-10-08 20:36:01] [INFO] Verifying SSH connectivity to homelab...
+[2025-10-08 20:36:03] [INFO] ✓ SSH connectivity to homelab verified
+[2025-10-08 20:36:03] [INFO] Checking if homelab is clean (no kubeadm artifacts)...
+[2025-10-08 20:36:04] [INFO] ✓ homelab appears clean
+[2025-10-08 20:36:04] [INFO] Verifying Debian cluster health...
+[2025-10-08 20:36:05] [INFO] ✓ Debian cluster is healthy (2 Debian nodes Ready)
+[2025-10-08 20:36:05] [INFO] ✓ Debian cluster is healthy - RKE2 federation will work
+[2025-10-08 20:36:05] [INFO] Starting RKE2 installation (this may take 15-20 minutes)...
+
+PLAY [RKE2 Installation - Homelab Node] ****************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [homelab]
+
+TASK [Display RKE2 installation banner] ****************************************
+ok: [homelab] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    RKE2 Installation on Homelab (RHEL 10)
+    Target: homelab
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TASK [Check if RKE2 is installed] **********************************************
+ok: [homelab]
+
+TASK [Display skip message if already installed] *******************************
+skipping: [homelab]
+
+TASK [Download RKE2 installation script] ***************************************
+ok: [homelab]
+
+TASK [Install RKE2] ************************************************************
+changed: [homelab]
+
+TASK [Log RKE2 installation output] ********************************************
+ok: [homelab] =>
+  msg:
+  - '[INFO]  finding release for channel stable'
+  - '[INFO]  using 1.33 series from channel stable'
+  - Updating Subscription Management repositories.
+  - 'Last metadata expiration check: 0:00:02 ago on Wed 08 Oct 2025 08:36:18 PM.'
+  - Package rke2-server-1.33.5~rke2r1-0.el8.x86_64 is already installed.
+  - Dependencies resolved.
+  - Nothing to do.
+  - Complete!
+
+TASK [Create RKE2 config directory] ********************************************
+ok: [homelab]
+
+TASK [Create RKE2 configuration] ***********************************************
+ok: [homelab]
+
+TASK [Enable and start RKE2 server] ********************************************
+ok: [homelab]
+
+TASK [Wait for RKE2 to be ready] ***********************************************
+skipping: [homelab]
+
+TASK [Create kubectl symlink] **************************************************
+ok: [homelab]
+
+TASK [Set KUBECONFIG environment variable] *************************************
+ok: [homelab]
+
+TASK [Wait for kubectl binary to be available] *********************************
+ok: [homelab]
+
+TASK [Verify RKE2 is running] **************************************************
+changed: [homelab]
+
+TASK [Verify RKE2 pods are running] ********************************************
+changed: [homelab]
+
+TASK [Display RKE2 node status] ************************************************
+ok: [homelab] =>
+  msg:
+  - NAME      STATUS   ROLES                       AGE   VERSION
+  - homelab   Ready    control-plane,etcd,master   33h   v1.33.5+rke2r1
+
+TASK [Display RKE2 pods status] ************************************************
+ok: [homelab] =>
+  msg:
+  - NAMESPACE     NAME                                                   READY   STATUS      RESTARTS   AGE
+  - kube-system   cloud-controller-manager-homelab                       1/1     Running     0          33h
+  - kube-system   etcd-homelab                                           1/1     Running     0          33h
+  - kube-system   helm-install-rke2-coredns-7n8lh                        0/1     Completed   0          33h
+  - kube-system   helm-install-rke2-flannel-bt926                        0/1     Completed   0          33h
+  - kube-system   helm-install-rke2-ingress-nginx-hps8d                  0/1     Completed   0          33h
+  - kube-system   helm-install-rke2-metrics-server-jtqdr                 0/1     Completed   0          33h
+  - kube-system   helm-install-rke2-runtimeclasses-jz8wg                 0/1     Completed   0          33h
+  - kube-system   helm-install-rke2-snapshot-controller-crd-m7tnz        0/1     Completed   0          33h
+  - kube-system   helm-install-rke2-snapshot-controller-vhqr5            0/1     Completed   0          33h
+  - kube-system   kube-apiserver-homelab                                 1/1     Running     0          33h
+  - kube-system   kube-controller-manager-homelab                        1/1     Running     0          33h
+  - kube-system   kube-flannel-ds-bnkml                                  1/1     Running     0          33h
+  - kube-system   kube-proxy-homelab                                     1/1     Running     0          33h
+  - kube-system   kube-scheduler-homelab                                 1/1     Running     0          33h
+  - kube-system   rke2-coredns-rke2-coredns-6464f98784-5vsfj             1/1     Running     0          33h
+  - kube-system   rke2-coredns-rke2-coredns-autoscaler-67bb49dff-ws7zm   1/1     Running     0          33h
+  - kube-system   rke2-ingress-nginx-controller-md86g                    1/1     Running     0          32h
+  - kube-system   rke2-metrics-server-75d485c65b-tk6kw                   1/1     Running     0          33h
+  - kube-system   rke2-snapshot-controller-696989ffdd-d7j9b              1/1     Running     0          32h
+
+TASK [Create local artifacts directory] ****************************************
+ok: [homelab -> localhost]
+
+TASK [Fetch RKE2 kubeconfig] ***************************************************
+changed: [homelab]
+
+TASK [Update kubeconfig server address] ****************************************
+changed: [homelab -> localhost]
+
+TASK [Display installation complete message] ***********************************
+ok: [homelab] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ✅ RKE2 Installation Complete
+
+    Node: homelab
+    Kubeconfig: /etc/rancher/rke2/rke2.yaml
+    Local Kubeconfig: /srv/monitoring_data/VMStation/ansible/playbooks/../artifacts/homelab-rke2-kubeconfig.yaml
+
+    Access cluster from homelab node:
+    export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+    kubectl get nodes
+
+    Access cluster remotely:
+    export KUBECONFIG=/srv/monitoring_data/VMStation/ansible/playbooks/../artifacts/homelab-rke2-kubeconfig.yaml
+    kubectl get nodes
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PLAY RECAP *********************************************************************
+homelab                    : ok=20   changed=5    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0
+
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] ✓ RKE2 installation completed successfully
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Verifying RKE2 cluster...
+[2025-10-08 20:36:27] [INFO] ✓ RKE2 cluster has 1 node(s) Ready
+./deploy.sh: line 409: [[: 0
+0: syntax error in expression (error token is "0")
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:36:27] [INFO]   RKE2 Cluster Ready on Homelab!
+[2025-10-08 20:36:27] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Artifacts:
+[2025-10-08 20:36:27] [INFO]   - Kubeconfig: /srv/monitoring_data/VMStation/ansible/artifacts/homelab-rke2-kubeconfig.yaml
+[2025-10-08 20:36:27] [INFO]   - Log: /srv/monitoring_data/VMStation/ansible/artifacts/install-rke2-homelab.log
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Verification commands:
+[2025-10-08 20:36:27] [INFO]   export KUBECONFIG=/srv/monitoring_data/VMStation/ansible/artifacts/homelab-rke2-kubeconfig.yaml
+[2025-10-08 20:36:27] [INFO]   kubectl get nodes
+[2025-10-08 20:36:27] [INFO]   kubectl get pods -A
+[2025-10-08 20:36:27] [INFO]   kubectl get pods -n monitoring-rke2
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Monitoring endpoints:
+[2025-10-08 20:36:27] [INFO]   - Node Exporter: http://192.168.4.62:9100/metrics
+[2025-10-08 20:36:27] [INFO]   - Prometheus: http://192.168.4.62:30090
+[2025-10-08 20:36:27] [INFO]   - Federation: http://192.168.4.62:30090/federate
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Federation test:
+[2025-10-08 20:36:27] [INFO]   curl -s 'http://192.168.4.62:30090/federate?match[]={job=~".+"}' | head -20
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:36:27] [INFO]   TWO-PHASE DEPLOYMENT COMPLETE!
+[2025-10-08 20:36:27] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Summary:
+[2025-10-08 20:36:27] [INFO]   ✓ Debian cluster: monitoring_nodes + storage_nodes
+[2025-10-08 20:36:27] [INFO]   ✓ RKE2 cluster: homelab
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Logs:
+[2025-10-08 20:36:27] [INFO]   - /srv/monitoring_data/VMStation/ansible/artifacts/deploy-debian.log
+[2025-10-08 20:36:27] [INFO]   - /srv/monitoring_data/VMStation/ansible/artifacts/install-rke2-homelab.log
+[2025-10-08 20:36:27] [INFO]
+[2025-10-08 20:36:27] [INFO] Setting up auto-sleep monitoring...
+
+PLAY [Setup Auto-Sleep Monitoring] ********************************************************************************************************************************************************
+
+TASK [Gathering Facts] ********************************************************************************************************************************************************************
+ok: [masternode]
+ok: [homelab]
+ok: [storagenodet3500]
+
+TASK [Display auto-sleep setup banner] ****************************************************************************************************************************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Auto-Sleep Monitoring Setup
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ok: [storagenodet3500] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Auto-Sleep Monitoring Setup
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ok: [homelab] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Auto-Sleep Monitoring Setup
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TASK [Confirm setup] **********************************************************************************************************************************************************************
+[Confirm setup]
+This will configure auto-sleep monitoring.
+Cluster will sleep after 2 hours of inactivity.
+Continue? (yes/no)
+:
+yes^Mok: [masternode]
+
+TASK [Check confirmation] *****************************************************************************************************************************************************************
+skipping: [masternode]
+fatal: [storagenodet3500]: FAILED! => changed=false
+  msg: Setup cancelled by user
+fatal: [homelab]: FAILED! => changed=false
+  msg: Setup cancelled by user
+
+TASK [Create auto-sleep monitor script] ***************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Create cluster sleep script] ********************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Create systemd service for auto-sleep monitor] **************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Create systemd timer for auto-sleep monitor] ****************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Reload systemd] *********************************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Enable and start auto-sleep timer] **************************************************************************************************************************************************
+ok: [masternode]
+
+TASK [Display setup complete message] *****************************************************************************************************************************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ✅ Auto-Sleep Monitoring Setup Complete
+
+    Cluster will automatically sleep after 2 hours of inactivity
+
+    Monitor status:
+    systemctl status vmstation-autosleep.timer
+
+    Disable auto-sleep:
+    systemctl stop vmstation-autosleep.timer
+    systemctl disable vmstation-autosleep.timer
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PLAY RECAP ********************************************************************************************************************************************************************************
+homelab                    : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0
+masternode                 : ok=10   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+storagenodet3500           : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0
+
 =========================================
 VMStation Security Audit
 =========================================
 
 [1/10] Checking for hardcoded secrets...
-⚠️  WARNING: Hardcoded passwords - Found potential hardcoded passwords
-  Review these files and use Kubernetes Secrets or ansible-vault
+✅ PASS: Hardcoded passwords
 
 [2/10] Checking SSH key security...
 ✅ PASS: SSH directory permissions
@@ -51,6 +355,7 @@ VMStation Security Audit
   - grafana/loki:2.9.2
   - grafana/promtail:2.9.2
   - jellyfin/jellyfin:latest
+  - prom/blackbox-exporter:v0.25.0
   - prometheuscommunity/ipmi-exporter:v1.6.1
   - prom/node-exporter:v1.6.1
   - prom/prometheus:v2.45.0
@@ -61,8 +366,8 @@ VMStation Security Audit
 =========================================
 Security Audit Summary
 =========================================
-Passed:   10
-Warnings: 6
+Passed:   11
+Warnings: 5
 Errors:   0
 
 ⚠️  Security audit found warnings - review recommended
@@ -93,14 +398,16 @@ Testing sleep/wake cycle and monitoring
 =========================================
 
 [1/10] Testing systemd timer on storagenodet3500...
-❌ FAIL: Auto-sleep timer is not enabled on storagenodet3500
+✅ PASS: Auto-sleep timer is enabled on storagenodet3500
+✅ PASS: Auto-sleep timer is active on storagenodet3500
 
 [2/10] Testing systemd timer on homelab (RHEL10)...
-❌ FAIL: Auto-sleep timer is not enabled on homelab
+✅ PASS: Auto-sleep timer is enabled on homelab
+⚠️  WARN: Auto-sleep timer is not active on homelab
 
 [3/10] Testing auto-sleep script existence...
-❌ FAIL: Auto-sleep monitor script missing on storagenodet3500
-❌ FAIL: Sleep script missing on storagenodet3500
+✅ PASS: Auto-sleep monitor script exists on storagenodet3500
+✅ PASS: Sleep script exists on storagenodet3500
 
 [4/10] Testing WoL configuration...
 ✅ PASS: WoL script exists and is executable
@@ -109,8 +416,8 @@ Testing sleep/wake cycle and monitoring
 [5/10] Testing kubectl access...
 ✅ PASS: kubectl access verified on masternode
 ℹ️  INFO: Current cluster status:
-  masternode         Ready   control-plane   7m33s   v1.29.15
-  storagenodet3500   Ready   <none>          7m11s   v1.29.15
+  masternode         Ready   control-plane   8m52s   v1.29.15
+  storagenodet3500   Ready   <none>          8m31s   v1.29.15
 
 [6/10] Testing WoL tool availability...
 ✅ PASS: wakeonlan tool is available
@@ -131,23 +438,29 @@ Testing sleep/wake cycle and monitoring
 [10/10] Testing systemd timer schedules...
 ✅ PASS: Auto-sleep timer is scheduled
 ℹ️  INFO: Timer schedule:
-  Wed 2025-10-08 14:52:24 EDT 9min left Wed 2025-10-08 14:37:24 EDT 5min ago vmstation-autosleep.timer vmstation-autosleep.service
+  Wed 2025-10-08 20:40:18 EDT 1min 12s left Wed 2025-10-08 20:25:18 EDT 13min ago vmstation-autosleep.timer vmstation-autosleep.service
 
 =========================================
 Test Results Summary
 =========================================
-Passed:   11
-Failed:   4
-Warnings: 1
+Passed:   16
+Failed:   0
+Warnings: 2
 
-❌ Some tests failed. Review details above.
+✅ All critical tests passed!
 
-Common fixes:
-  1. Deploy auto-sleep: ./deploy.sh setup
-  2. Check systemd status: systemctl status vmstation-autosleep.timer
-  3. Review logs: journalctl -u vmstation-autosleep -n 50
+Auto-Sleep/Wake Configuration:
+  - Systemd timers configured on both nodes
+  - Scripts deployed and executable
+  - Monitoring services available
 
-❌ SUITE FAILED: Auto-Sleep/Wake Configuration
+Manual Testing:
+  1. Trigger sleep: ssh root@192.168.4.63 'sudo /usr/local/bin/vmstation-sleep.sh'
+  2. Check node status: ssh root@192.168.4.63 'kubectl get nodes'
+  3. Send WoL: wakeonlan b8:ac:6f:7e:6c:9d
+  4. Monitor wake time and verify services
+
+✅ SUITE PASSED: Auto-Sleep/Wake Configuration
 
 
 Phase 2: Monitoring Health Validation
@@ -164,7 +477,7 @@ Validating exporters, targets, and dashboards
 
 [1/8] Testing Prometheus targets...
 ✅ PASS: Prometheus targets API accessible
-ℹ️  INFO: Targets UP: 14, DOWN: 4
+ℹ️  INFO: Targets UP: 19, DOWN: 4
 ❌ FAIL: 4 targets are DOWN
   - kubernetes-service-endpoints
 
@@ -187,13 +500,13 @@ Validating Loki connectivity and log ingestion
 
 [1/6] Testing Loki pod status...
 ℹ️  INFO: Loki pods found:
-  loki-85ccd4898d-xq56h                 0/1     CrashLoopBackOff   6 (59s ago)   6m59s
+  loki-74577b9557-2d8rm                 0/1     CrashLoopBackOff   6 (2m33s ago)   8m16s
 ❌ FAIL: Loki pods are not running
 
 [2/6] Testing Loki service configuration...
 ✅ PASS: Loki service exists
 ℹ️  INFO: Loki service details:
-  loki                   NodePort    10.104.56.130    <none>        3100:31100/TCP      7m
+  loki                   NodePort    10.105.117.71    <none>        3100:31100/TCP      8m16s
 ✅ PASS: Loki service has endpoints
 
 [3/6] Testing Loki API connectivity...
@@ -204,8 +517,8 @@ curl http://192.168.4.63:3100/ready error
 
 [4/6] Testing Promtail log shipper...
 ℹ️  INFO: Promtail pods found:
-  promtail-tn9jk                        1/1     Running            0             7m2s
-  promtail-wv7mf                        1/1     Running            0             7m2s
+  promtail-86czm                        1/1     Running            0               8m18s
+  promtail-sg792                        1/1     Running            0               8m18s
 ✅ PASS: Promtail pods are running (2 instances)
 
 [5/6] Testing Loki DNS resolution...
@@ -289,36 +602,36 @@ Continue with sleep/wake cycle test? [y/N]: y
 [1/7] Recording initial cluster state...
 ✅ PASS: Cluster is accessible
 ℹ️  INFO: Initial node status:
-  masternode         Ready   control-plane   7m52s   v1.29.15
-  storagenodet3500   Ready   <none>          7m30s   v1.29.15
+  masternode         Ready   control-plane   9m15s   v1.29.15
+  storagenodet3500   Ready   <none>          8m54s   v1.29.15
 ℹ️  INFO: Ready nodes: 2
 
 [2/7] Triggering cluster sleep...
 ℹ️  INFO: Running vmstation-sleep.sh on masternode...
-[2025-10-08 14:42:43] ==========================================
-[2025-10-08 14:42:43] Initiating cluster sleep sequence
-[2025-10-08 14:42:43] ==========================================
-[2025-10-08 14:42:43] Step 1: Cordoning and draining worker nodes...
-[2025-10-08 14:42:43] Skipping control-plane node: masternode
-[2025-10-08 14:42:43] Cordoning node: storagenodet3500
+[2025-10-08 20:39:28] ==========================================
+[2025-10-08 20:39:28] Initiating cluster sleep sequence
+[2025-10-08 20:39:28] ==========================================
+[2025-10-08 20:39:28] Step 1: Cordoning and draining worker nodes...
+[2025-10-08 20:39:28] Skipping control-plane node: masternode
+[2025-10-08 20:39:28] Cordoning node: storagenodet3500
 node/storagenodet3500 cordoned
-[2025-10-08 14:42:43] Draining node: storagenodet3500
+[2025-10-08 20:39:28] Draining node: storagenodet3500
 node/storagenodet3500 already cordoned
-Warning: ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-w627d, kube-system/kube-proxy-jsnkw, monitoring/node-exporter-w9628, monitoring/promtail-tn9jk; deleting Pods that declare no controller: jellyfin/jellyfin
+Warning: deleting Pods that declare no controller: jellyfin/jellyfin; ignoring DaemonSet-managed Pods: kube-flannel/kube-flannel-ds-5gdm8, kube-system/kube-proxy-stjww, monitoring/node-exporter-sxfwj, monitoring/promtail-86czm
 evicting pod jellyfin/jellyfin
 pod/jellyfin evicted
 node/storagenodet3500 drained
-[2025-10-08 14:42:46] Step 2: Scaling down deployments...
-[2025-10-08 14:42:46] No deployments found in default namespace
-[2025-10-08 14:42:46] ==========================================
-[2025-10-08 14:42:46] Cluster sleep sequence completed
-[2025-10-08 14:42:46] ==========================================
+[2025-10-08 20:39:31] Step 2: Scaling down deployments...
+[2025-10-08 20:39:31] No deployments found in default namespace
+[2025-10-08 20:39:31] ==========================================
+[2025-10-08 20:39:31] Cluster sleep sequence completed
+[2025-10-08 20:39:31] ==========================================
 ✅ PASS: Sleep script executed
 
 [3/7] Verifying node status after sleep...
 ℹ️  INFO: Node status after sleep:
-  masternode         Ready                      control-plane   8m5s    v1.29.15
-  storagenodet3500   Ready,SchedulingDisabled   <none>          7m43s   v1.29.15
+  masternode         Ready                      control-plane   9m30s   v1.29.15
+  storagenodet3500   Ready,SchedulingDisabled   <none>          9m9s    v1.29.15
 ✅ PASS: Worker nodes are cordoned (1 nodes)
 
 [4/7] Sending Wake-on-LAN packets...
@@ -342,8 +655,8 @@ Sending magic packet to 255.255.255.255:9 with d0:94:66:30:d6:63
 ✅ PASS: rke2 service is active on homelab
 ℹ️  INFO: Checking cluster node status...
 ℹ️  INFO: Node status after wake:
-  masternode         Ready                      control-plane   8m37s   v1.29.15
-  storagenodet3500   Ready,SchedulingDisabled   <none>          8m15s   v1.29.15
+  masternode         Ready                      control-plane   10m     v1.29.15
+  storagenodet3500   Ready,SchedulingDisabled   <none>          9m40s   v1.29.15
 ℹ️  INFO: Note: Nodes remain cordoned until manually uncordoned with 'kubectl uncordon <node>'
 
 [7/7] Validating monitoring stack...
@@ -373,8 +686,8 @@ Complete Validation Summary
 =========================================
 
 Test Suites Run:    5
-Suites Passed:      0
-Suites Failed:      5
+Suites Passed:      1
+Suites Failed:      4
 
 ❌ Some test suites failed.
 
@@ -392,14 +705,16 @@ Testing sleep/wake cycle and monitoring
 =========================================
 
 [1/10] Testing systemd timer on storagenodet3500...
-❌ FAIL: Auto-sleep timer is not enabled on storagenodet3500
+✅ PASS: Auto-sleep timer is enabled on storagenodet3500
+✅ PASS: Auto-sleep timer is active on storagenodet3500
 
 [2/10] Testing systemd timer on homelab (RHEL10)...
-❌ FAIL: Auto-sleep timer is not enabled on homelab
+✅ PASS: Auto-sleep timer is enabled on homelab
+⚠️  WARN: Auto-sleep timer is not active on homelab
 
 [3/10] Testing auto-sleep script existence...
-❌ FAIL: Auto-sleep monitor script missing on storagenodet3500
-❌ FAIL: Sleep script missing on storagenodet3500
+✅ PASS: Auto-sleep monitor script exists on storagenodet3500
+✅ PASS: Sleep script exists on storagenodet3500
 
 [4/10] Testing WoL configuration...
 ✅ PASS: WoL script exists and is executable
@@ -408,8 +723,8 @@ Testing sleep/wake cycle and monitoring
 [5/10] Testing kubectl access...
 ✅ PASS: kubectl access verified on masternode
 ℹ️  INFO: Current cluster status:
-  masternode         Ready                      control-plane   8m39s   v1.29.15
-  storagenodet3500   Ready,SchedulingDisabled   <none>          8m17s   v1.29.15
+  masternode         Ready                      control-plane   10m     v1.29.15
+  storagenodet3500   Ready,SchedulingDisabled   <none>          9m43s   v1.29.15
 
 [6/10] Testing WoL tool availability...
 ✅ PASS: wakeonlan tool is available
@@ -430,21 +745,27 @@ Testing sleep/wake cycle and monitoring
 [10/10] Testing systemd timer schedules...
 ✅ PASS: Auto-sleep timer is scheduled
 ℹ️  INFO: Timer schedule:
-  Wed 2025-10-08 14:52:24 EDT 8min left Wed 2025-10-08 14:37:24 EDT 6min ago vmstation-autosleep.timer vmstation-autosleep.service
+  Wed 2025-10-08 20:55:18 EDT 14min left Wed 2025-10-08 20:40:18 EDT 930ms ago vmstation-autosleep.timer vmstation-autosleep.service
 
 =========================================
 Test Results Summary
 =========================================
-Passed:   11
-Failed:   4
-Warnings: 1
+Passed:   16
+Failed:   0
+Warnings: 2
 
-❌ Some tests failed. Review details above.
+✅ All critical tests passed!
 
-Common fixes:
-  1. Deploy auto-sleep: ./deploy.sh setup
-  2. Check systemd status: systemctl status vmstation-autosleep.timer
-  3. Review logs: journalctl -u vmstation-autosleep -n 50
+Auto-Sleep/Wake Configuration:
+  - Systemd timers configured on both nodes
+  - Scripts deployed and executable
+  - Monitoring services available
+
+Manual Testing:
+  1. Trigger sleep: ssh root@192.168.4.63 'sudo /usr/local/bin/vmstation-sleep.sh'
+  2. Check node status: ssh root@192.168.4.63 'kubectl get nodes'
+  3. Send WoL: wakeonlan b8:ac:6f:7e:6c:9d
+  4. Monitor wake time and verify services
 
 =========================================
 VMStation Monitoring Exporters Health
@@ -453,7 +774,7 @@ Validating exporters, targets, and dashboards
 
 [1/8] Testing Prometheus targets...
 ✅ PASS: Prometheus targets API accessible
-ℹ️  INFO: Targets UP: 14, DOWN: 4
+ℹ️  INFO: Targets UP: 19, DOWN: 4
 ❌ FAIL: 4 targets are DOWN
   - kubernetes-service-endpoints
 
@@ -469,13 +790,13 @@ Validating Loki connectivity and log ingestion
 
 [1/6] Testing Loki pod status...
 ℹ️  INFO: Loki pods found:
-  loki-85ccd4898d-xq56h                 0/1     CrashLoopBackOff   6 (2m6s ago)   8m6s
+  loki-74577b9557-2d8rm                 0/1     CrashLoopBackOff   6 (3m46s ago)   9m29s
 ❌ FAIL: Loki pods are not running
 
 [2/6] Testing Loki service configuration...
 ✅ PASS: Loki service exists
 ℹ️  INFO: Loki service details:
-  loki                   NodePort    10.104.56.130    <none>        3100:31100/TCP      8m6s
+  loki                   NodePort    10.105.117.71    <none>        3100:31100/TCP      9m30s
 ✅ PASS: Loki service has endpoints
 
 [3/6] Testing Loki API connectivity...
@@ -486,8 +807,8 @@ curl http://192.168.4.63:3100/ready error
 
 [4/6] Testing Promtail log shipper...
 ℹ️  INFO: Promtail pods found:
-  promtail-tn9jk                        1/1     Running            0              8m8s
-  promtail-wv7mf                        1/1     Running            0              8m8s
+  promtail-86czm                        1/1     Running            0               9m31s
+  promtail-sg792                        1/1     Running            0               9m31s
 ✅ PASS: Promtail pods are running (2 instances)
 
 [5/6] Testing Loki DNS resolution...
@@ -516,3 +837,4 @@ Connectivity errors:
   - DNS lookup failures: Check CoreDNS pods
   - 500 status: Check Loki logs for errors
   - Service unavailable: Verify Loki pods are running
+
