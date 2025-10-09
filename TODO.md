@@ -18,9 +18,9 @@ git pull
 ./tests/test-complete-validation.sh
 
 # Run individual tests
-./tests/test-autosleep-wake-validation.sh
+# ./tests/test-autosleep-wake-validation.sh
 ./tests/test-monitoring-exporters-health.sh
-./tests/test-loki-validation.sh
+./tests/test-deployment-fixes.sh
 
 ## Immediate Issues - January 2025
 
@@ -73,6 +73,7 @@ git pull
   - New error from problem statement: Status 502 - `dial tcp 10.110.131.130:3100: connect: connection refused`
   - Root cause: Loki service may not be fully ready or network policy blocking access
   - **Action:** Verify Loki pod is Running and service endpoints are registered
+  - **Action (Loki PV/Config):** Ensure hostPath `/srv/monitoring_data/loki` on masternode exists and is owned by UID 10001 (Loki). If using PVC/PV, verify `loki-pv.yaml` and `loki-pvc` storageClassName match and permissions allow container write access.
   
 - [ ] Fix **Node Metrics - Detailed System Monitoring** dashboard
   - Verify node-exporter pods are running on all nodes
