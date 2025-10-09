@@ -1117,7 +1117,7 @@ data:
           "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
           "targets": [
             {
-              "expr": "sum by (namespace) (rate({job=\"kubernetes-pods\"}[1m]))",
+              "expr": "sum by (namespace) (rate({job=~\".+\"}[1m]))",
               "refId": "A"
             }
           ],
@@ -1150,7 +1150,7 @@ data:
           "gridPos": {"h": 12, "w": 24, "x": 0, "y": 8},
           "targets": [
             {
-              "expr": "{namespace!=\"kube-system\", namespace!=\"kube-flannel\", namespace!=\"monitoring\"}",
+              "expr": "{job=~\".+\"} | namespace !~ \"kube-system|kube-flannel|monitoring\"",
               "refId": "A"
             }
           ],
@@ -1171,7 +1171,7 @@ data:
           "gridPos": {"h": 12, "w": 24, "x": 0, "y": 20},
           "targets": [
             {
-              "expr": "{namespace=\"kube-system\"}",
+              "expr": "{job=~\".+\", namespace=\"kube-system\"}",
               "refId": "A"
             }
           ],
@@ -1192,7 +1192,7 @@ data:
           "gridPos": {"h": 12, "w": 24, "x": 0, "y": 32},
           "targets": [
             {
-              "expr": "{namespace=\"monitoring\"}",
+              "expr": "{job=~\".+\", namespace=\"monitoring\"}",
               "refId": "A"
             }
           ],
@@ -1213,7 +1213,7 @@ data:
           "gridPos": {"h": 8, "w": 24, "x": 0, "y": 44},
           "targets": [
             {
-              "expr": "sum by (namespace, pod) (rate({job=\"kubernetes-pods\"} |= \"error\" [5m]))",
+              "expr": "sum by (namespace, pod) (rate({job=~\".+\"} |= \"error\" [5m]))",
               "refId": "A"
             }
           ],
