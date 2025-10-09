@@ -117,6 +117,22 @@ spec:
           mountPath: /etc/loki
         - name: loki-storage
           mountPath: /tmp/loki
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3100
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /ready
+            port: 3100
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 5
         resources:
           requests:
             cpu: 100m

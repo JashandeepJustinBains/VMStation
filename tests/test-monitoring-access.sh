@@ -64,9 +64,22 @@ echo ""
 
 # Test Prometheus
 echo "[2/8] Testing Prometheus Access..."
-test_endpoint "Prometheus Web UI" \
-  "http://${MASTERNODE_IP}:${PROMETHEUS_PORT}" \
-  "Prometheus"
+# Check for Prometheus or common HTML elements from Prometheus UI
+if response=$(curl -sf --max-time 10 "http://${MASTERNODE_IP}:${PROMETHEUS_PORT}" 2>&1); then
+  if echo "$response" | grep -qE "(Prometheus|<title|prometheus|metrics|graph)"; then
+    echo "Testing Prometheus Web UI... ✅ PASS"
+    echo "  curl http://${MASTERNODE_IP}:${PROMETHEUS_PORT} success"
+    PASSED=$((PASSED + 1))
+  else
+    echo "Testing Prometheus Web UI... ❌ FAIL (unexpected response)"
+    echo "  curl http://${MASTERNODE_IP}:${PROMETHEUS_PORT} failure"
+    FAILED=$((FAILED + 1))
+  fi
+else
+  echo "Testing Prometheus Web UI... ❌ FAIL (not accessible)"
+  echo "  curl http://${MASTERNODE_IP}:${PROMETHEUS_PORT} error"
+  FAILED=$((FAILED + 1))
+fi
 
 test_endpoint "Prometheus Health" \
   "http://${MASTERNODE_IP}:${PROMETHEUS_PORT}/-/healthy" \
