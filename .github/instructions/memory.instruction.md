@@ -1,3 +1,14 @@
+# Modular Deployment Workflow (Oct 2025)
+- Deployment steps and validation procedures now documented in `docs/DEPLOYMENT_RUNBOOK.md`.
+- Modular Ansible playbooks for monitoring and infrastructure services.
+- Validation scripts for time sync, pod health, and security audit.
+- Troubleshooting notes: manifest path errors, chrony installation, NTP DaemonSet issues.
+
+# Notes
+- Latest deployment runbook: `docs/DEPLOYMENT_RUNBOOK.md` (created Oct 2025)
+- Ansible output and validation findings incorporated into runbook.
+- Common issues: missing manifests, chrony not installed, NTP DaemonSet not found.
+- All deployment steps and validation procedures are actionable and up to date.
 applyTo: '**'
 
 # User Memory
