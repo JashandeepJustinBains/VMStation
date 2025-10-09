@@ -55,6 +55,9 @@ data:
         shared_store: filesystem
       filesystem:
         directory: /tmp/loki/chunks
+      # Put the write-ahead log (WAL) inside the same PVC so Loki
+      # does not attempt to create /wal on the container rootfs.
+      wal_directory: /tmp/loki/wal
     
     limits_config:
       enforce_metric_name: false
@@ -109,7 +112,8 @@ spec:
         - sh
         - -c
         - |
-          echo "Ensuring /tmp/loki ownership";
+          echo "Ensuring /tmp/loki ownership and WAL dir";
+          mkdir -p /tmp/loki/wal;
           chown -R 10001:10001 /tmp/loki || true;
         volumeMounts:
         - name: loki-storage
