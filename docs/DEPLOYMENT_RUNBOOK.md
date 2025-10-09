@@ -22,6 +22,8 @@ git pull
 ./tests/pre-deployment-checklist.sh
 ./deploy.sh reset
 ```
+**Purpose of `deploy.sh reset`:**
+Resets the cluster state by cleaning up previous deployments, removing partial or failed resources, and ensuring all directories and services are in a clean state before redeployment. This step is critical for avoiding configuration drift and deployment errors.
 
 ### 2. Deploy Monitoring Stack
 ```
@@ -53,6 +55,8 @@ ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/deploy-infrast
 ```
 ./deploy.sh all --with-rke2 --yes
 ```
+**Purpose of `deploy.sh all --with-rke2 --yes`:**
+Performs a full deployment of the VMStation stack spliting the deployment into 2 stages 1: the debian bookworm nodes masternode (always on kubernetes control-plane + NTP server + Kerberos server + DNS server + monitoring stack) as well as the storagenodet3500 which hosts the jellyfin server and media files. Stage 2 is to deploy the homelab compute node which needs to run RKE2 Kubernetes cluster due to RHEL10 not allowing regular kubernetes setup. The `--with-rke2` flag ensures the RKE2 cluster is included, and `--yes` auto-confirms all prompts for a non-interactive, streamlined deployment. This step provisions all required services and applies the latest configuration and monitoring improvements.
 
 ### 6. Setup Auto-Sleep
 ```
