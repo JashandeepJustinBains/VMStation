@@ -10,6 +10,8 @@ AUTOSLEEP_SETUP_PLAYBOOK="$REPO_ROOT/ansible/playbooks/setup-autosleep.yaml"
 CLEANUP_HOMELAB_PLAYBOOK="$REPO_ROOT/ansible/playbooks/cleanup-homelab.yml"
 INSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/install-rke2-homelab.yml"
 UNINSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/uninstall-rke2-homelab.yml"
+MONITORING_STACK_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-monitoring-stack.yaml"
+INFRASTRUCTURE_SERVICES_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-infrastructure-services.yaml"
 ARTIFACTS_DIR="$REPO_ROOT/ansible/artifacts"
 
 # Logging functions with timestamps
@@ -29,13 +31,15 @@ usage(){
 Usage: $(basename "$0") [command] [flags]
 
 Commands:
-  debian       Deploy kubeadm/Kubernetes to Debian nodes only (monitoring_nodes + storage_nodes)
-  rke2         Deploy RKE2 to homelab RHEL10 node with pre-checks
-  all          Deploy both Debian and RKE2 (requires --with-rke2 or confirmation)
-  reset        Comprehensive cluster reset - removes all K8s config/network (Debian + RKE2)
-  setup        Setup auto-sleep monitoring (one-time setup)
-  spindown     Cordon/drain and scale to zero on all nodes, then cleanup CNI/flannel artifacts (does NOT power off)
-  help         Show this message
+  debian          Deploy kubeadm/Kubernetes to Debian nodes only (monitoring_nodes + storage_nodes)
+  rke2            Deploy RKE2 to homelab RHEL10 node with pre-checks
+  all             Deploy both Debian and RKE2 (requires --with-rke2 or confirmation)
+  monitoring      Deploy monitoring stack (Prometheus, Grafana, Loki, exporters)
+  infrastructure  Deploy infrastructure services (NTP/Chrony, Syslog, Kerberos)
+  reset           Comprehensive cluster reset - removes all K8s config/network (Debian + RKE2)
+  setup           Setup auto-sleep monitoring (one-time setup)
+  spindown        Cordon/drain and scale to zero on all nodes, then cleanup CNI/flannel artifacts (does NOT power off)
+  help            Show this message
 
 Flags:
   --yes        Skip interactive confirmations (for automation)
@@ -45,20 +49,24 @@ Flags:
 
 Examples:
   ./deploy.sh debian                    # Deploy kubeadm to Debian nodes only
+  ./deploy.sh monitoring                # Deploy monitoring stack
+  ./deploy.sh infrastructure            # Deploy infrastructure services (NTP, Syslog, Kerberos)
   ./deploy.sh rke2                      # Deploy RKE2 to homelab (with pre-checks)
   ./deploy.sh all --with-rke2           # Deploy both phases non-interactively
   ./deploy.sh reset                     # Full reset (Debian + RKE2)
   ./deploy.sh debian --check            # Show what would be deployed
   ./deploy.sh setup                     # Setup auto-sleep monitoring
 
-Workflow:
-  1. ./deploy.sh debian    # Deploy Debian control-plane and worker
-  2. Verify Debian cluster is healthy
-  3. ./deploy.sh rke2      # Deploy RKE2 on homelab node
-  4. Configure Prometheus federation between clusters
+Recommended Workflow:
+  1. ./deploy.sh reset                  # Clean slate
+  2. ./deploy.sh debian                 # Deploy Debian control-plane and worker
+  3. ./deploy.sh monitoring             # Deploy monitoring stack
+  4. ./deploy.sh infrastructure         # Deploy infrastructure services
+  5. ./deploy.sh setup                  # Setup auto-sleep
+  6. ./deploy.sh rke2                   # Deploy RKE2 on homelab node (optional)
 
 Artifacts:
-  - Logs: ansible/artifacts/deploy-debian.log, install-rke2-homelab.log
+  - Logs: ansible/artifacts/deploy-debian.log, install-rke2-homelab.log, etc.
   - RKE2 kubeconfig: ansible/artifacts/homelab-rke2-kubeconfig.yaml
 
 EOF
@@ -595,6 +603,145 @@ cmd_reset(){
   info ""
 }
 
+cmd_monitoring(){
+  info "========================================"
+  info " Deploy Monitoring Stack                "
+  info "========================================"
+  info "Target: monitoring_nodes"
+  info "Playbook: $MONITORING_STACK_PLAYBOOK"
+  info "Log: $LOG_DIR/deploy-monitoring-stack.log"
+  info ""
+  
+  require_bin ansible-playbook
+  
+  # Validate inventory file exists
+  if [ ! -f "$INVENTORY_FILE" ]; then
+    err "Inventory file not found: $INVENTORY_FILE"
+  fi
+  
+  # Ensure artifacts directory exists
+  mkdir -p "$LOG_DIR"
+  
+  if [[ "$FLAG_CHECK" == "true" ]]; then
+    info "DRY-RUN: Would execute:"
+    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $MONITORING_STACK_PLAYBOOK"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
+    fi
+    echo "  $dry_run_cmd | tee $LOG_DIR/deploy-monitoring-stack.log"
+    return 0
+  fi
+  
+  info "Starting monitoring stack deployment..."
+  info "Components: Prometheus, Grafana, Loki, Promtail, Kube-state-metrics, Node-exporter, IPMI-exporter"
+  info ""
+  
+  # Build ansible-playbook command with proper flags
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $MONITORING_STACK_PLAYBOOK"
+  
+  # Add skip_ansible_confirm when FLAG_YES is true
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+  
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-monitoring-stack.log"
+  local deploy_result=${PIPESTATUS[0]}
+  
+  if [[ $deploy_result -eq 0 ]]; then
+    info ""
+    info "✓ Monitoring stack deployment completed successfully"
+    info ""
+    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    info "  Monitoring Stack Ready!"
+    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    info ""
+    info "Access URLs (assuming masternode at 192.168.4.63):"
+    info "  - Prometheus: http://192.168.4.63:30090"
+    info "  - Grafana: http://192.168.4.63:30300"
+    info "  - Loki: http://192.168.4.63:31100"
+    info ""
+    info "Verification:"
+    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring"
+    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n monitoring"
+    info ""
+    info "Log saved to: $LOG_DIR/deploy-monitoring-stack.log"
+    info ""
+  else
+    err "Monitoring stack deployment failed - check logs: $LOG_DIR/deploy-monitoring-stack.log"
+  fi
+}
+
+cmd_infrastructure(){
+  info "========================================"
+  info " Deploy Infrastructure Services         "
+  info "========================================"
+  info "Target: monitoring_nodes"
+  info "Playbook: $INFRASTRUCTURE_SERVICES_PLAYBOOK"
+  info "Log: $LOG_DIR/deploy-infrastructure-services.log"
+  info ""
+  
+  require_bin ansible-playbook
+  
+  # Validate inventory file exists
+  if [ ! -f "$INVENTORY_FILE" ]; then
+    err "Inventory file not found: $INVENTORY_FILE"
+  fi
+  
+  # Ensure artifacts directory exists
+  mkdir -p "$LOG_DIR"
+  
+  if [[ "$FLAG_CHECK" == "true" ]]; then
+    info "DRY-RUN: Would execute:"
+    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $INFRASTRUCTURE_SERVICES_PLAYBOOK"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
+    fi
+    echo "  $dry_run_cmd | tee $LOG_DIR/deploy-infrastructure-services.log"
+    return 0
+  fi
+  
+  info "Starting infrastructure services deployment..."
+  info "Services: NTP/Chrony (time sync), Syslog Server, FreeIPA/Kerberos (optional)"
+  info ""
+  
+  # Build ansible-playbook command with proper flags
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $INFRASTRUCTURE_SERVICES_PLAYBOOK"
+  
+  # Add skip_ansible_confirm when FLAG_YES is true
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+  
+  # Force color output for better readability
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-infrastructure-services.log"
+  local deploy_result=${PIPESTATUS[0]}
+  
+  if [[ $deploy_result -eq 0 ]]; then
+    info ""
+    info "✓ Infrastructure services deployment completed successfully"
+    info ""
+    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    info "  Infrastructure Services Ready!"
+    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    info ""
+    info "Deployed services:"
+    info "  - NTP/Chrony: Cluster-wide time synchronization"
+    info "  - Syslog Server: Centralized log aggregation"
+    info "  - FreeIPA/Kerberos: Identity management (if enabled)"
+    info ""
+    info "Verification:"
+    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure"
+    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n infrastructure"
+    info "  ./tests/validate-time-sync.sh"
+    info ""
+    info "Log saved to: $LOG_DIR/deploy-infrastructure-services.log"
+    info ""
+  else
+    err "Infrastructure services deployment failed - check logs: $LOG_DIR/deploy-infrastructure-services.log"
+  fi
+}
+
 cmd_setup_autosleep(){
   require_bin ansible-playbook
   info "Setting up auto-sleep monitoring..."
@@ -690,7 +837,7 @@ main(){
         usage
         exit 0
         ;;
-      debian|rke2|all|reset|setup|spindown)
+      debian|rke2|all|reset|setup|spindown|monitoring|infrastructure)
         cmd="$1"
         shift
         ;;
@@ -709,8 +856,9 @@ main(){
     info ""
     info "Quick start:"
     info "  ./deploy.sh all --with-rke2    # Deploy both Debian and RKE2"
-    info "  ./deploy.sh debian             # Deploy Debian only"
-    info "  ./deploy.sh rke2               # Deploy RKE2 only"
+    info "  ./deploy.sh debian             # Deploy Debian cluster only"
+    info "  ./deploy.sh monitoring         # Deploy monitoring stack"
+    info "  ./deploy.sh infrastructure     # Deploy infrastructure services"
     info ""
     usage
     exit 1
@@ -735,6 +883,12 @@ main(){
       ;;
     spindown)
       cmd_spindown
+      ;;
+    monitoring)
+      cmd_monitoring
+      ;;
+    infrastructure)
+      cmd_infrastructure
       ;;
     *)
       usage
