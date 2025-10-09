@@ -1,0 +1,1438 @@
+TASK [Display monitoring pods] *************************************************
+ok: [masternode] =>
+  msg:
+  - NAME                                  READY   STATUS             RESTARTS        AGE     IP             NODE               NOMINATED NODE   READINESS GATES
+  - blackbox-exporter-5949885fb9-gb5sq    1/1     Running            0               9m56s   10.244.0.226   masternode         <none>           <none>
+  - grafana-5f879c7654-dnmhs              1/1     Running            0               9m55s   10.244.0.227   masternode         <none>           <none>
+  - kube-state-metrics-5f6f5666cc-49wc5   1/1     Running            0               9m59s   10.244.0.223   masternode         <none>           <none>
+  - loki-0                                0/1     Running            1 (4m55s ago)   9m58s   10.244.0.225   masternode         <none>           <none>
+  - node-exporter-g4lxr                   1/1     Running            0               10m     192.168.4.61   storagenodet3500   <none>           <none>
+  - node-exporter-qqq8s                   1/1     Running            0               10m     192.168.4.63   masternode         <none>           <none>
+  - prometheus-0                          1/2     CrashLoopBackOff   6 (3m18s ago)   9m56s   10.244.0.228   masternode         <none>           <none>
+  - promtail-nrblm                        1/1     Running            0               9m58s   10.244.1.56    storagenodet3500   <none>           <none>
+  - promtail-zhrw5                        1/1     Running            0               9m58s   10.244.0.224   masternode         <none>           <none>
+
+TASK [Get all monitoring services] *********************************************
+ok: [masternode]
+
+TASK [Display monitoring services] *********************************************
+ok: [masternode] =>
+  msg:
+  - NAME                   TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)             AGE
+  - blackbox-exporter      ClusterIP   10.99.160.55     <none>        9115/TCP            9m56s
+  - grafana                NodePort    10.105.251.26    <none>        3000:30300/TCP      9m55s
+  - ipmi-exporter          ClusterIP   10.102.193.89    <none>        9290/TCP            9m57s
+  - ipmi-exporter-remote   ClusterIP   10.98.106.198    <none>        9291/TCP            9m57s
+  - kube-state-metrics     ClusterIP   10.108.243.214   <none>        8080/TCP,8081/TCP   9m59s
+  - loki                   ClusterIP   None             <none>        3100/TCP,9096/TCP   9m58s
+  - loki-external          NodePort    10.108.220.85    <none>        3100:31100/TCP      9m58s
+  - node-exporter          ClusterIP   None             <none>        9100/TCP            10m
+  - prometheus             ClusterIP   None             <none>        9090/TCP            9m56s
+  - prometheus-external    NodePort    10.100.142.18    <none>        9090:30090/TCP      9m56s
+
+TASK [Get all monitoring PVCs] *************************************************
+ok: [masternode]
+
+TASK [Display monitoring PVCs] *************************************************
+ok: [masternode] =>
+  msg:
+  - NAME                              STATUS   VOLUME          CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+  - grafana-pvc                       Bound    grafana-pv      2Gi        RWO                           <unset>                 10m
+  - loki-data-loki-0                  Bound    loki-pv         20Gi       RWO                           <unset>                 9m59s
+  - prometheus-storage-prometheus-0   Bound    prometheus-pv   10Gi       RWO                           <unset>                 9m57s
+  - promtail-pvc                      Bound    promtail-pv     1Gi        RWO                           <unset>                 10m
+
+TASK [Check Prometheus health] *************************************************
+ok: [masternode]
+
+TASK [Display Prometheus health status] ****************************************
+ok: [masternode] =>
+  msg: 'Prometheus health: FAILED'
+
+TASK [Check Loki health] *******************************************************
+ok: [masternode]
+
+TASK [Display Loki health status] **********************************************
+ok: [masternode] =>
+  msg: 'Loki health: FAILED'
+
+TASK [Check Grafana health] ****************************************************
+ok: [masternode]
+
+TASK [Display Grafana health status] *******************************************
+ok: [masternode] =>
+  msg: 'Grafana health: OK'
+
+TASK [Display deployment summary] **********************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Monitoring Stack Deployment Complete
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ✅ Prometheus: http://192.168.4.63:30090
+    ✅ Grafana: http://192.168.4.63:30300
+    ✅ Loki: http://192.168.4.63:31100
+
+    Default Credentials:
+    - Grafana: No login required (anonymous access enabled)
+
+    Verification Commands:
+    kubectl get pods -n monitoring
+    kubectl get svc -n monitoring
+    kubectl get pvc -n monitoring
+
+    Next Steps:
+    1. Access Grafana and verify dashboards load
+    2. Check Prometheus targets: Status → Targets
+    3. Query logs in Grafana: Explore → Loki
+    4. Review alerts: Prometheus → Alerts
+    5. Deploy infrastructure services (NTP, Syslog, Kerberos)
+
+    Troubleshooting:
+    - View logs: kubectl logs -n monitoring <pod-name>
+    - Describe pod: kubectl describe pod -n monitoring <pod-name>
+    - Check events: kubectl get events -n monitoring --sort-by='.lastTimestamp'
+
+    Documentation:
+    - docs/PROMETHEUS_ENTERPRISE_REWRITE.md
+    - docs/LOKI_ENTERPRISE_REWRITE.md
+    - docs/ENTERPRISE_MONITORING_ENHANCEMENT.md
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PLAY RECAP *********************************************************************
+masternode                 : ok=36   changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] ✓ Monitoring stack deployment completed successfully
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-09 17:42:31] [INFO]   Monitoring Stack Ready!
+[2025-10-09 17:42:31] [INFO] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] Access URLs (assuming masternode at 192.168.4.63):
+[2025-10-09 17:42:31] [INFO]   - Prometheus: http://192.168.4.63:30090
+[2025-10-09 17:42:31] [INFO]   - Grafana: http://192.168.4.63:30300
+[2025-10-09 17:42:31] [INFO]   - Loki: http://192.168.4.63:31100
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] Verification:
+[2025-10-09 17:42:31] [INFO]   kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring
+[2025-10-09 17:42:31] [INFO]   kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n monitoring
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] Log saved to: /srv/monitoring_data/VMStation/ansible/artifacts/deploy-monitoring-stack.log
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] ========================================
+[2025-10-09 17:42:31] [INFO]  Deploy Infrastructure Services
+[2025-10-09 17:42:31] [INFO] ========================================
+[2025-10-09 17:42:31] [INFO] Target: monitoring_nodes
+[2025-10-09 17:42:31] [INFO] Playbook: /srv/monitoring_data/VMStation/ansible/playbooks/deploy-infrastructure-services.yaml
+[2025-10-09 17:42:31] [INFO] Log: /srv/monitoring_data/VMStation/ansible/artifacts/deploy-infrastructure-services.log
+[2025-10-09 17:42:31] [INFO]
+[2025-10-09 17:42:31] [INFO] Starting infrastructure services deployment...
+[2025-10-09 17:42:31] [INFO] Services: NTP/Chrony (time sync), Syslog Server, FreeIPA/Kerberos (optional)
+[2025-10-09 17:42:31] [INFO]
+
+PLAY [Deploy VMStation Infrastructure Services] ********************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [masternode]
+
+TASK [Display deployment banner] ***********************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    VMStation Infrastructure Services Deployment
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Core infrastructure for enterprise cluster operations
+
+    Services:
+    - NTP/Chrony (time synchronization)
+    - Syslog Server (log aggregation)
+    - FreeIPA/Kerberos (identity management)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TASK [Verify Kubernetes cluster is accessible] *********************************
+ok: [masternode]
+
+TASK [Create infrastructure namespace] *****************************************
+changed: [masternode]
+
+TASK [Label infrastructure namespace] ******************************************
+changed: [masternode]
+
+PLAY [Deploy NTP/Chrony Time Synchronization Service] **************************
+
+TASK [Display deployment banner] ***********************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    VMStation NTP Service Deployment
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Purpose: Enterprise time synchronization for cluster
+    Component: Chrony NTP DaemonSet
+    Target: All cluster nodes
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TASK [Check if Kubernetes cluster is accessible] *******************************
+ok: [masternode]
+
+TASK [Display cluster info] ****************************************************
+ok: [masternode] =>
+  msg:
+  - "\e[0;32mKubernetes control plane\e[0m is running at \e[0;33mhttps://192.168.4.63:6443\e[0m"
+  - "\e[0;32mCoreDNS\e[0m is running at \e[0;33mhttps://192.168.4.63:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy\e[0m"
+  - ''
+  - To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+
+TASK [Check current time on control plane] *************************************
+ok: [masternode]
+
+TASK [Display control plane time] **********************************************
+ok: [masternode] =>
+  msg: 'Control plane current time: 2025-10-09 17:42:35 EDT'
+
+TASK [Create infrastructure namespace] *****************************************
+ok: [masternode]
+
+TASK [Label infrastructure namespace] ******************************************
+changed: [masternode]
+
+TASK [Deploy Chrony NTP service manifest] **************************************
+changed: [masternode]
+
+TASK [Display NTP deployment result] *******************************************
+ok: [masternode] =>
+  msg:
+  - namespace/infrastructure configured
+  - configmap/chrony-config created
+  - serviceaccount/chrony-ntp created
+  - clusterrole.rbac.authorization.k8s.io/chrony-ntp-privileged created
+  - clusterrolebinding.rbac.authorization.k8s.io/chrony-ntp-privileged created
+  - daemonset.apps/chrony-ntp created
+  - service/chrony-ntp created
+  - networkpolicy.networking.k8s.io/chrony-ntp-netpol created
+
+TASK [Wait for Chrony DaemonSet to be ready (60s)] *****************************
+ok: [masternode]
+
+TASK [Get Chrony DaemonSet status] *********************************************
+ok: [masternode]
+
+TASK [Display DaemonSet status] ************************************************
+ok: [masternode] =>
+  msg:
+  - NAME         DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE   CONTAINERS               IMAGES                                                    SELECTOR
+  - chrony-ntp   2         2         2       2            2           <none>          11s   chrony,chrony-exporter   cturra/ntp:latest,quay.io/superq/chrony-exporter:latest   app=chrony-ntp
+
+TASK [Get Chrony pods status] **************************************************
+ok: [masternode]
+
+TASK [Display pods status] *****************************************************
+ok: [masternode] =>
+  msg:
+  - NAME               READY   STATUS    RESTARTS   AGE   IP             NODE               NOMINATED NODE   READINESS GATES
+  - chrony-ntp-5ljwt   2/2     Running   0          11s   192.168.4.63   masternode         <none>           <none>
+  - chrony-ntp-n5hqc   2/2     Running   0          11s   192.168.4.61   storagenodet3500   <none>           <none>
+
+TASK [Check Chrony service] ****************************************************
+ok: [masternode]
+
+TASK [Display service status] **************************************************
+ok: [masternode] =>
+  msg:
+  - NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                    AGE
+  - chrony-ntp   ClusterIP   None         <none>        123/UDP,123/TCP,9123/TCP   12s
+
+TASK [Get Chrony pod name for testing] *****************************************
+ok: [masternode]
+
+TASK [Check Chrony sources (if pod is running)] ********************************
+ok: [masternode]
+
+TASK [Display Chrony sources] **************************************************
+ok: [masternode] =>
+  msg:
+  - 'MS Name/IP address         Stratum Poll Reach LastRx Last sample               '
+  - ===============================================================================
+  - ^* time1.google.com              1   6    17     2    -45us[  +24us] +/-   16ms
+  - ^- time2.google.com              1   6    17     3   -653us[ -584us] +/-   17ms
+  - ^- time3.google.com              1   6    17     3   -239us[ -170us] +/-   17ms
+  - ^- time4.google.com              1   6    17     3   -490us[ -421us] +/-   16ms
+  - ^- time.cloudflare.com           3   6    17     4  -2113us[-2043us] +/-   18ms
+  - ^- 23.133.168.244                4   6    17     4  +1302us[+1371us] +/-   41ms
+  - ^- 23.133.168.246                4   6    17    10  +1545us[+1614us] +/-   41ms
+  - ^- ntp.netlinkify.com            2   6    17    15  -2462us[-2392us] +/-   13ms
+  - ^- archer.fsck.ca                2   6    17    15  -1110us[-1041us] +/- 9787us
+
+TASK [Check Chrony tracking (if pod is running)] *******************************
+ok: [masternode]
+
+TASK [Display Chrony tracking info] ********************************************
+ok: [masternode] =>
+  msg:
+  - 'Reference ID    : D8EF2300 (time1.google.com)'
+  - 'Stratum         : 2'
+  - 'Ref time (UTC)  : Thu Oct 09 21:42:45 2025'
+  - 'System time     : 0.000011019 seconds fast of NTP time'
+  - 'Last offset     : +0.000069217 seconds'
+  - 'RMS offset      : 0.000069217 seconds'
+  - 'Frequency       : 17.527 ppm fast'
+  - 'Residual freq   : +67.879 ppm'
+  - 'Skew            : 0.506 ppm'
+  - 'Root delay      : 0.031481832 seconds'
+  - 'Root dispersion : 0.001278513 seconds'
+  - 'Update interval : 2.0 seconds'
+  - 'Leap status     : Normal'
+
+TASK [Install chrony on control plane (if not present)] ************************
+ok: [masternode]
+
+TASK [Configure chrony client on control plane] ********************************
+ok: [masternode]
+
+TASK [Enable and start chrony service] *****************************************
+ok: [masternode]
+
+TASK [Wait for chrony to sync (10s)] *******************************************
+ok: [masternode]
+
+TASK [Verify system time sync status] ******************************************
+ok: [masternode]
+
+TASK [Display system time sync status] *****************************************
+ok: [masternode] =>
+  msg:
+  - 'Reference ID    : D8EF2308 (time3.google.com)'
+  - 'Stratum         : 2'
+  - 'Ref time (UTC)  : Thu Oct 09 21:39:09 2025'
+  - 'System time     : 0.000154837 seconds slow of NTP time'
+  - 'Last offset     : -0.000018064 seconds'
+  - 'RMS offset      : 0.000228103 seconds'
+  - 'Frequency       : 17.401 ppm fast'
+  - 'Residual freq   : -0.004 ppm'
+  - 'Skew            : 0.346 ppm'
+  - 'Root delay      : 0.034124810 seconds'
+  - 'Root dispersion : 0.000984871 seconds'
+  - 'Update interval : 128.7 seconds'
+  - 'Leap status     : Normal'
+
+TASK [Display deployment summary] **********************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    NTP Service Deployment Complete
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ✅ Chrony DaemonSet deployed to infrastructure namespace
+    ✅ NTP service running on all cluster nodes
+    ✅ Time synchronization active
+
+    Verification:
+    - Check pods: kubectl get pods -n infrastructure -l app=chrony-ntp
+    - Check sync: kubectl exec -n infrastructure <pod-name> -c chrony -- chronyc tracking
+    - View logs: kubectl logs -n infrastructure -l app=chrony-ntp -c chrony
+
+    Monitoring:
+    - Chrony metrics exposed on port 9123
+    - Add to Prometheus scrape config for monitoring
+
+    Next Steps:
+    1. Verify time sync across all worker nodes
+    2. Update Prometheus to scrape chrony-exporter metrics
+    3. Add NTP monitoring dashboard to Grafana
+    4. Test log timestamp consistency
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PLAY [Configure Time Sync on Debian Worker Nodes] ******************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [storagenodet3500]
+
+TASK [Install chrony on worker node] *******************************************
+ok: [storagenodet3500]
+
+TASK [Configure chrony client on worker node] **********************************
+ok: [storagenodet3500]
+
+TASK [Enable and start chrony on worker] ***************************************
+ok: [storagenodet3500]
+
+TASK [Wait for worker chrony to sync (10s)] ************************************
+ok: [storagenodet3500]
+
+TASK [Verify worker time sync] *************************************************
+ok: [storagenodet3500]
+
+TASK [Display worker time sync status] *****************************************
+ok: [storagenodet3500] =>
+  msg:
+  - 'Reference ID    : C0A8043F (masternode)'
+  - 'Stratum         : 3'
+  - 'Ref time (UTC)  : Thu Oct 09 21:42:51 2025'
+  - 'System time     : 0.000688272 seconds fast of NTP time'
+  - 'Last offset     : +0.000897802 seconds'
+  - 'RMS offset      : 0.000325131 seconds'
+  - 'Frequency       : 8.219 ppm fast'
+  - 'Residual freq   : +0.460 ppm'
+  - 'Skew            : 1.471 ppm'
+  - 'Root delay      : 0.031708617 seconds'
+  - 'Root dispersion : 0.000959407 seconds'
+  - 'Update interval : 776.9 seconds'
+  - 'Leap status     : Normal'
+
+PLAY [Configure Time Sync on RHEL Homelab Node] ********************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [homelab]
+
+TASK [Install chrony on homelab (RHEL)] ****************************************
+ok: [homelab]
+
+TASK [Configure chrony client on homelab] **************************************
+ok: [homelab]
+
+TASK [Enable and start chrony on homelab] **************************************
+ok: [homelab]
+
+TASK [Wait for homelab chrony to sync (10s)] ***********************************
+ok: [homelab]
+
+TASK [Verify homelab time sync] ************************************************
+ok: [homelab]
+
+TASK [Display homelab time sync status] ****************************************
+ok: [homelab] =>
+  msg:
+  - 'Reference ID    : C0A8043F (homelab)'
+  - 'Stratum         : 3'
+  - 'Ref time (UTC)  : Thu Oct 09 21:43:06 2025'
+  - 'System time     : 0.000832674 seconds fast of NTP time'
+  - 'Last offset     : +0.001111719 seconds'
+  - 'RMS offset      : 0.000399710 seconds'
+  - 'Frequency       : 0.849 ppm fast'
+  - 'Residual freq   : +0.719 ppm'
+  - 'Skew            : 1.580 ppm'
+  - 'Root delay      : 0.031636249 seconds'
+  - 'Root dispersion : 0.002085785 seconds'
+  - 'Update interval : 775.5 seconds'
+  - 'Leap status     : Normal'
+
+PLAY [Deploy Syslog Ingestor Service] ******************************************
+
+TASK [Display deployment banner] ***********************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    VMStation Syslog Ingestor Deployment
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Purpose: Centralized syslog collection and forwarding
+    Component: Syslog-NG StatefulSet
+    Integration: Loki log aggregation
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TASK [Check if Kubernetes cluster is accessible] *******************************
+ok: [masternode]
+
+TASK [Check if Loki is deployed and ready] *************************************
+ok: [masternode]
+
+TASK [Display Loki status] *****************************************************
+ok: [masternode] =>
+  msg: 'Loki pod status: Running'
+
+TASK [Warn if Loki is not ready] ***********************************************
+skipping: [masternode]
+
+TASK [Create syslog data directory on host] ************************************
+ok: [masternode]
+
+TASK [Apply syslog PersistentVolume] *******************************************
+changed: [masternode]
+
+TASK [Display syslog PV deployment result] *************************************
+ok: [masternode] =>
+  msg:
+  - persistentvolume/syslog-pv created
+
+TASK [Ensure infrastructure namespace exists] **********************************
+ok: [masternode]
+
+TASK [Deploy syslog server manifest] *******************************************
+changed: [masternode]
+
+TASK [Display syslog deployment result] ****************************************
+ok: [masternode] =>
+  msg:
+  - namespace/infrastructure configured
+  - configmap/syslog-ng-config created
+  - serviceaccount/syslog-server created
+  - statefulset.apps/syslog-server created
+  - configmap/syslog-exporter-config created
+  - service/syslog-server created
+  - networkpolicy.networking.k8s.io/syslog-server-netpol created
+
+TASK [Wait for syslog StatefulSet to be ready (60s)] ***************************
+ok: [masternode]
+
+TASK [Get syslog StatefulSet status] *******************************************
+ok: [masternode]
+
+TASK [Display StatefulSet status] **********************************************
+ok: [masternode] =>
+  msg:
+  - NAME            READY   AGE   CONTAINERS                  IMAGES
+  - syslog-server   1/1     32s   syslog-ng,syslog-exporter   balabit/syslog-ng:latest,prom/statsd-exporter:latest
+
+TASK [Get syslog pods status] **************************************************
+ok: [masternode]
+
+TASK [Display pods status] *****************************************************
+ok: [masternode] =>
+  msg:
+  - NAME              READY   STATUS    RESTARTS   AGE   IP             NODE         NOMINATED NODE   READINESS GATES
+  - syslog-server-0   2/2     Running   0          32s   10.244.0.229   masternode   <none>           <none>
+
+TASK [Check syslog service] ****************************************************
+ok: [masternode]
+
+TASK [Display service status] **************************************************
+ok: [masternode] =>
+  msg:
+  - NAME            TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)                                                    AGE
+  - syslog-server   NodePort   10.97.56.69   <none>        514:30514/UDP,514:30515/TCP,601:30601/TCP,9102:32268/TCP   33s
+
+TASK [Get syslog pod name] *****************************************************
+ok: [masternode]
+
+TASK [Send test log message] ***************************************************
+ok: [masternode]
+
+TASK [Check syslog-ng logs] ****************************************************
+ok: [masternode]
+
+TASK [Display syslog logs] *****************************************************
+ok: [masternode] =>
+  msg:
+  - SYSLOG_SERVER_PORT_9102_TCP_ADDR=10.97.56.69
+  - SYSLOG_SERVER_PORT_9102_TCP_PORT=9102
+  - SYSLOG_SERVER_PORT_9102_TCP_PROTO=tcp
+  - SYSLOG_SERVER_SERVICE_HOST=10.97.56.69
+  - SYSLOG_SERVER_SERVICE_PORT=514
+  - SYSLOG_SERVER_SERVICE_PORT_METRICS=9102
+  - SYSLOG_SERVER_SERVICE_PORT_SYSLOG_TCP=514
+  - SYSLOG_SERVER_SERVICE_PORT_SYSLOG_TLS=601
+  - SYSLOG_SERVER_SERVICE_PORT_SYSLOG_UDP=514
+  - TERM=dumb
+  - UID=0
+  - _=echo
+  - ''
+  - 'Starting syslog-ng with params: '
+  - 'syslog-ng: Error setting capabilities, capability management disabled; error=''Operation not permitted'''
+  - '[2025-10-09T21:44:03.866072] WARNING: Configuration file format is too old, syslog-ng is running in compatibility mode. Please update it to use the syslog-ng 4.10 format at your time of convenience. To upgrade the configuration, please review the warnings about incompatible changes printed by syslog-ng, and once completed change the @version header at the top of the configuration file; config-version=''4.0'''
+  - '[2025-10-09T21:44:03.866072] WARNING: Your configuration file uses an obsoleted keyword, please update your configuration; keyword=''stats_freq'', change=''Use the stats() block. E.g. stats(freq(1));'', location=''/etc/syslog-ng/syslog-ng.conf:19:3'''
+  - '[2025-10-09T21:44:03.866072] WARNING: Your configuration file uses an obsoleted keyword, please update your configuration; keyword=''stats_level'', change=''Use the stats() block. E.g. stats(level(1));'', location=''/etc/syslog-ng/syslog-ng.conf:20:3'''
+  - '[2025-10-09T21:44:03.866072] WARNING: window sizing for tcp sources were changed in syslog-ng 3.3, the configuration value was divided by the value of max-connections(). The result was too small, increasing to a reasonable minimum value; orig_log_iw_size=''10'', new_log_iw_size=''100'', min_iw_size_per_reader=''100'', min_log_fifo_size=''100000'''
+  - '[2025-10-09T21:44:03.866072] WARNING: window sizing for tcp sources were changed in syslog-ng 3.3, the configuration value was divided by the value of max-connections(). The result was too small, increasing to a reasonable minimum value; orig_log_iw_size=''10'', new_log_iw_size=''100'', min_iw_size_per_reader=''100'', min_log_fifo_size=''100000'''
+
+TASK [Install rsyslog on control plane (if not present)] ***********************
+ok: [masternode]
+
+TASK [Configure rsyslog to forward to cluster syslog server] *******************
+ok: [masternode]
+
+TASK [Restart rsyslog service] *************************************************
+changed: [masternode]
+
+TASK [Test rsyslog forwarding] *************************************************
+ok: [masternode]
+
+TASK [Wait for log propagation (5s)] *******************************************
+ok: [masternode]
+
+TASK [Display deployment summary] **********************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Syslog Ingestor Deployment Complete
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    ✅ Syslog-NG StatefulSet deployed to infrastructure namespace
+    ✅ Syslog service listening on:
+       - UDP: NodePort 30514 (traditional)
+       - TCP: NodePort 30515 (reliable)
+       - TLS: NodePort 30601 (RFC5424)
+    ✅ Logs forwarding to Loki in monitoring namespace
+    ✅ Local backup logs stored in /var/log/syslog-ng (in pod)
+
+    Verification:
+    - Check pods: kubectl get pods -n infrastructure -l app=syslog-server
+    - View logs: kubectl logs -n infrastructure -l app=syslog-server -c syslog-ng
+    - Test: logger -t test "Test message" (on any node)
+    - Query in Grafana: {job="syslog"}
+
+    External Syslog Sources:
+    - Configure devices to send syslog to: 192.168.4.63:30514 (UDP)
+    - Or: 192.168.4.63:30515 (TCP, recommended)
+
+    Monitoring:
+    - Syslog metrics exposed on port 9102
+    - Add to Prometheus for monitoring
+
+    Next Steps:
+    1. Configure worker nodes to forward syslog
+    2. Configure external devices (routers, switches, etc.)
+    3. Add syslog monitoring dashboard to Grafana
+    4. Test log search in Loki/Grafana
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PLAY [Configure Syslog Forwarding on Debian Worker Nodes] **********************
+
+TASK [Install rsyslog on worker] ***********************************************
+ok: [storagenodet3500]
+
+TASK [Configure rsyslog forwarding on worker] **********************************
+ok: [storagenodet3500]
+
+TASK [Restart rsyslog on worker] ***********************************************
+changed: [storagenodet3500]
+
+TASK [Test worker syslog forwarding] *******************************************
+ok: [storagenodet3500]
+
+PLAY [Configure Syslog Forwarding on RHEL Homelab Node] ************************
+
+TASK [Install rsyslog on homelab (RHEL)] ***************************************
+ok: [homelab]
+
+TASK [Configure rsyslog forwarding on homelab] *********************************
+ok: [homelab]
+
+TASK [Restart rsyslog on homelab] **********************************************
+changed: [homelab]
+
+TASK [Test homelab syslog forwarding] ******************************************
+ok: [homelab]
+
+PLAY [Deploy FreeIPA/Kerberos Identity Management Service] *********************
+
+TASK [Display deployment banner] ***********************************************
+skipping: [masternode]
+
+TASK [Check if Kubernetes cluster is accessible] *******************************
+skipping: [masternode]
+
+TASK [Check if NTP service is running] *****************************************
+skipping: [masternode]
+
+TASK [Warn if NTP is not running] **********************************************
+skipping: [masternode]
+
+TASK [Check system time synchronization] ***************************************
+skipping: [masternode]
+
+TASK [Display time sync status] ************************************************
+skipping: [masternode]
+
+TASK [Check available resources] ***********************************************
+skipping: [masternode]
+
+TASK [Display available resources] *********************************************
+skipping: [masternode]
+
+TASK [Create FreeIPA data directory on host] ***********************************
+skipping: [masternode]
+
+TASK [Create FreeIPA subdirectories] *******************************************
+skipping: [masternode] => (item=/srv/monitoring_data/freeipa/var/lib/ipa)
+skipping: [masternode] => (item=/srv/monitoring_data/freeipa/var/log)
+skipping: [masternode] => (item=/srv/monitoring_data/freeipa/etc/dirsrv)
+skipping: [masternode] => (item=/srv/monitoring_data/freeipa/etc/krb5kdc)
+skipping: [masternode]
+
+TASK [Prompt for secure passwords] *********************************************
+skipping: [masternode]
+
+TASK [Pause for security review (15 seconds)] **********************************
+skipping: [masternode]
+
+TASK [Ensure infrastructure namespace exists] **********************************
+skipping: [masternode]
+
+TASK [Check if FreeIPA is already deployed] ************************************
+skipping: [masternode]
+
+TASK [Display existing FreeIPA status] *****************************************
+skipping: [masternode]
+
+TASK [Deploy FreeIPA manifest] *************************************************
+skipping: [masternode]
+
+TASK [Display FreeIPA deployment result] ***************************************
+skipping: [masternode]
+
+TASK [Display installation progress message] ***********************************
+skipping: [masternode]
+
+TASK [Wait for FreeIPA pod to be created] **************************************
+skipping: [masternode]
+
+TASK [Wait for FreeIPA to be ready (up to 15 minutes)] *************************
+skipping: [masternode]
+
+TASK [Check if FreeIPA is ready] ***********************************************
+skipping: [masternode]
+
+TASK [Get FreeIPA StatefulSet status] ******************************************
+skipping: [masternode]
+
+TASK [Display StatefulSet status] **********************************************
+skipping: [masternode]
+
+TASK [Get FreeIPA pod status] **************************************************
+skipping: [masternode]
+
+TASK [Display pod status] ******************************************************
+skipping: [masternode]
+
+TASK [Check FreeIPA services] **************************************************
+skipping: [masternode]
+
+TASK [Display service status] **************************************************
+skipping: [masternode]
+
+TASK [Check FreeIPA installation status (if pod is running)] *******************
+skipping: [masternode]
+
+TASK [Display IPA status] ******************************************************
+skipping: [masternode]
+
+TASK [Add FreeIPA to /etc/hosts] ***********************************************
+skipping: [masternode]
+
+TASK [Test DNS resolution] *****************************************************
+skipping: [masternode]
+
+TASK [Display DNS test results] ************************************************
+skipping: [masternode]
+
+TASK [Display deployment summary] **********************************************
+skipping: [masternode]
+
+PLAY [Infrastructure Services Deployment Summary] ******************************
+
+TASK [Get all infrastructure pods] *********************************************
+ok: [masternode]
+
+TASK [Display infrastructure pods] *********************************************
+ok: [masternode] =>
+  msg:
+  - NAME               READY   STATUS    RESTARTS   AGE    IP             NODE               NOMINATED NODE   READINESS GATES
+  - chrony-ntp-5ljwt   2/2     Running   0          2m7s   192.168.4.63   masternode         <none>           <none>
+  - chrony-ntp-n5hqc   2/2     Running   0          2m7s   192.168.4.61   storagenodet3500   <none>           <none>
+  - syslog-server-0    2/2     Running   0          54s    10.244.0.229   masternode         <none>           <none>
+
+TASK [Get all infrastructure services] *****************************************
+ok: [masternode]
+
+TASK [Display infrastructure services] *****************************************
+ok: [masternode] =>
+  msg:
+  - NAME            TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)                                                    AGE
+  - chrony-ntp      ClusterIP   None          <none>        123/UDP,123/TCP,9123/TCP                                   2m7s
+  - syslog-server   NodePort    10.97.56.69   <none>        514:30514/UDP,514:30515/TCP,601:30601/TCP,9102:32268/TCP   54s
+
+TASK [Display final summary] ***************************************************
+ok: [masternode] =>
+  msg: |-
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Infrastructure Services Deployment Complete
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    Deployed Services:
+    ✅ NTP/Chrony: Time synchronization active
+       - DaemonSet running on all nodes
+       - Metrics: http://192.168.4.63:9123/metrics
+
+    ✅ Syslog Server: Centralized logging active
+       - UDP: 192.168.4.63:30514
+       - TCP: 192.168.4.63:30515
+       - Forwarding to Loki
+
+
+    Time Sync Status:
+    - All cluster nodes syncing to Chrony NTP
+    - Log timestamps will be consistent
+    - Kerberos requires accurate time sync
+
+    Verification:
+    kubectl get pods -n infrastructure
+    kubectl get svc -n infrastructure
+
+    Time Sync Check:
+    kubectl exec -n infrastructure <chrony-pod> -c chrony -- chronyc tracking
+
+    Syslog Test:
+    logger -t test "Test message from $(hostname)"
+
+    Next Steps:
+    1. Verify time sync across all nodes
+    2. Configure devices to send syslog to masternode
+    3. Set up Kerberos clients (if deployed)
+    4. Add infrastructure monitoring dashboards
+    5. Test log correlation with synchronized timestamps
+
+    Documentation:
+    - ansible/playbooks/deploy-ntp-service.yaml
+    - ansible/playbooks/deploy-syslog-service.yaml
+    - ansible/playbooks/deploy-kerberos-service.yaml
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Example of errors on grafana dashboards, however these are actually on all dashboards
+Status: 500. Message: Get "http://loki:3100/loki/api/v1/query_range?direction=backward&end=1760046867026000000&limit=1000&query=sum+by+%28namespace%29+%28rate%28%7Bjob%3D~%22.%2B%22%7D%5B1m%5D%29%29&start=1760043267026000000&step=2000ms": dial tcp: lookup loki on 10.96.0.10:53: no such host
+Status: 500. Message: Get "http://prometheus:9090/api/v1/query_range?end=1760046915&query=count%28kube_node_info%29&start=1760043315&step=15": dial tcp: lookup prometheus on 10.96.0.10:53: no such host
+Status: 500. Message: Get "http://prometheus:9090/api/v1/query_range?end=1760046880&query=ipmi_temperature_celsius%7Bnode%3D%22homelab%22%7D&start=1760025280&step=20": dial tcp: lookup prometheus on 10.96.0.10:53: no such host
+
+root@masternode:/srv/monitoring_data/VMStation# kubectl get pods -o wide -A
+NAMESPACE        NAME                                  READY   STATUS             RESTARTS        AGE   IP             NODE               NOMINATED NODE   READINESS GATES
+infrastructure   chrony-ntp-5ljwt                      2/2     Running            0               14m   192.168.4.63   masternode         <none>           <none>
+infrastructure   chrony-ntp-n5hqc                      2/2     Running            0               14m   192.168.4.61   storagenodet3500   <none>           <none>
+infrastructure   syslog-server-0                       2/2     Running            0               12m   10.244.0.229   masternode         <none>           <none>
+jellyfin         jellyfin                              1/1     Running            0               22m   10.244.1.57    storagenodet3500   <none>           <none>
+kube-flannel     kube-flannel-ds-hhttk                 1/1     Running            0               24m   192.168.4.63   masternode         <none>           <none>
+kube-flannel     kube-flannel-ds-s79vx                 1/1     Running            0               24m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-system      coredns-76f75df574-8s2kj              1/1     Running            0               24m   10.244.0.222   masternode         <none>           <none>
+kube-system      coredns-76f75df574-ttm7f              1/1     Running            0               24m   10.244.0.221   masternode         <none>           <none>
+kube-system      etcd-masternode                       1/1     Running            42              24m   192.168.4.63   masternode         <none>           <none>
+kube-system      kube-apiserver-masternode             1/1     Running            42              24m   192.168.4.63   masternode         <none>           <none>
+kube-system      kube-controller-manager-masternode    1/1     Running            42              24m   192.168.4.63   masternode         <none>           <none>
+kube-system      kube-proxy-df2xc                      1/1     Running            0               24m   192.168.4.63   masternode         <none>           <none>
+kube-system      kube-proxy-rmdvk                      1/1     Running            0               24m   192.168.4.61   storagenodet3500   <none>           <none>
+kube-system      kube-scheduler-masternode             1/1     Running            42              24m   192.168.4.63   masternode         <none>           <none>
+monitoring       blackbox-exporter-5949885fb9-gb5sq    1/1     Running            0               24m   10.244.0.226   masternode         <none>           <none>
+monitoring       grafana-5f879c7654-dnmhs              1/1     Running            0               24m   10.244.0.227   masternode         <none>           <none>
+monitoring       kube-state-metrics-5f6f5666cc-49wc5   1/1     Running            0               24m   10.244.0.223   masternode         <none>           <none>
+monitoring       loki-0                                0/1     Running            4 (4m11s ago)   24m   10.244.0.225   masternode         <none>           <none>
+monitoring       node-exporter-g4lxr                   1/1     Running            0               24m   192.168.4.61   storagenodet3500   <none>           <none>
+monitoring       node-exporter-qqq8s                   1/1     Running            0               24m   192.168.4.63   masternode         <none>           <none>
+monitoring       prometheus-0                          1/2     CrashLoopBackOff   9 (2m5s ago)    24m   10.244.0.228   masternode         <none>           <none>
+monitoring       promtail-nrblm                        1/1     Running            0               24m   10.244.1.56    storagenodet3500   <none>           <none>
+monitoring       promtail-zhrw5                        1/1     Running            0               24m   10.244.0.224   masternode         <none>           <none>
+root@masternode:/srv/monitoring_data/VMStation# kubectl describe pod -n monitoring       prometheus-0
+Name:                 prometheus-0
+Namespace:            monitoring
+Priority:             2000000000
+Priority Class Name:  system-cluster-critical
+Service Account:      prometheus
+Node:                 masternode/192.168.4.63
+Start Time:           Thu, 09 Oct 2025 17:32:34 -0400
+Labels:               app=prometheus
+                      app.kubernetes.io/component=monitoring
+                      app.kubernetes.io/name=prometheus
+                      apps.kubernetes.io/pod-index=0
+                      controller-revision-hash=prometheus-76499699f4
+                      statefulset.kubernetes.io/pod-name=prometheus-0
+Annotations:          checksum/config: {{ .Values.config | sha256sum }}
+                      prometheus.io/path: /metrics
+                      prometheus.io/port: 9090
+                      prometheus.io/scrape: true
+Status:               Running
+SeccompProfile:       RuntimeDefault
+IP:                   10.244.0.228
+IPs:
+  IP:           10.244.0.228
+Controlled By:  StatefulSet/prometheus
+Init Containers:
+  init-chown-data:
+    Container ID:  containerd://8b4e9ac2c92578403b6f52f71fcd59a5ebf5212ee22661479900da91fdae62d0
+    Image:         busybox:latest
+    Image ID:      docker.io/library/busybox@sha256:d82f458899c9696cb26a7c02d5568f81c8c8223f8661bb2a7988b269c8b9051e
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      chown -R 65534:65534 /prometheus
+      chmod -R 755 /prometheus
+
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 09 Oct 2025 17:32:35 -0400
+      Finished:     Thu, 09 Oct 2025 17:32:35 -0400
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /prometheus from prometheus-storage (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-blgfd (ro)
+Containers:
+  prometheus:
+    Container ID:  containerd://5e174a3fcd117a634d697ab56dfed6e55b89008896b0339fa726681944b26d80
+    Image:         prom/prometheus:v2.48.0
+    Image ID:      docker.io/prom/prometheus@sha256:b440bc0e8aa5bab44a782952c09516b6a50f9d7b2325c1ffafac7bc833298e2e
+    Port:          9090/TCP
+    Host Port:     0/TCP
+    Args:
+      --config.file=/etc/prometheus/prometheus.yml
+      --storage.tsdb.path=/prometheus
+      --storage.tsdb.retention.time=30d
+      --storage.tsdb.retention.size=4GB
+      --storage.tsdb.wal-compression
+      --query.timeout=2m
+      --query.max-concurrency=20
+      --query.max-samples=50000000
+      --web.console.libraries=/etc/prometheus/console_libraries
+      --web.console.templates=/etc/prometheus/consoles
+      --web.route-prefix=/
+      --web.external-url=http://prometheus.monitoring.svc.cluster.local:9090
+      --web.enable-lifecycle
+      --web.enable-remote-write-receiver
+      --web.cors.origin=.*
+      --web.enable-admin-api
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Thu, 09 Oct 2025 17:54:40 -0400
+      Finished:     Thu, 09 Oct 2025 17:54:40 -0400
+    Ready:          False
+    Restart Count:  9
+    Limits:
+      cpu:     2
+      memory:  4Gi
+    Requests:
+      cpu:        500m
+      memory:     1Gi
+    Liveness:     http-get http://:web/-/healthy delay=30s timeout=10s period=30s #success=1 #failure=3
+    Readiness:    http-get http://:web/-/ready delay=30s timeout=5s period=10s #success=1 #failure=3
+    Startup:      http-get http://:web/-/ready delay=0s timeout=5s period=15s #success=1 #failure=20
+    Environment:  <none>
+    Mounts:
+      /etc/prometheus from prometheus-config (ro)
+      /etc/prometheus/rules from prometheus-rules (ro)
+      /prometheus from prometheus-storage (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-blgfd (ro)
+  config-reloader:
+    Container ID:  containerd://501ee42783e49a9555c0c6a0628c029c249824673d019afce215640a9d569398
+    Image:         quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0
+    Image ID:      quay.io/prometheus-operator/prometheus-config-reloader@sha256:e20576b76ffd85d2a28d62809092f47b339737320e80646ec6d0e7ac0f4c8e43
+    Port:          8080/TCP
+    Host Port:     0/TCP
+    Args:
+      --listen-address=:8080
+      --reload-url=http://localhost:9090/-/reload
+      --watched-dir=/etc/prometheus
+    State:          Running
+      Started:      Thu, 09 Oct 2025 17:32:50 -0400
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     50m
+      memory:  64Mi
+    Requests:
+      cpu:        10m
+      memory:     16Mi
+    Environment:  <none>
+    Mounts:
+      /etc/prometheus from prometheus-config (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-blgfd (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       False
+  ContainersReady             False
+  PodScheduled                True
+Volumes:
+  prometheus-storage:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  prometheus-storage-prometheus-0
+    ReadOnly:   false
+  prometheus-config:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      prometheus-config
+    Optional:  false
+  prometheus-rules:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      prometheus-rules
+    Optional:  false
+  kube-api-access-blgfd:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              node-role.kubernetes.io/control-plane=
+Tolerations:                 node-role.kubernetes.io/control-plane:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age                   From               Message
+  ----     ------            ----                  ----               -------
+  Warning  FailedScheduling  24m                   default-scheduler  0/2 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+  Normal   Scheduled         24m                   default-scheduler  Successfully assigned monitoring/prometheus-0 to masternode
+  Normal   Pulled            24m                   kubelet            Container image "busybox:latest" already present on machine
+  Normal   Created           24m                   kubelet            Created container: init-chown-data
+  Normal   Started           24m                   kubelet            Started container init-chown-data
+  Normal   Pulling           24m                   kubelet            Pulling image "prom/prometheus:v2.48.0"
+  Normal   Pulled            24m                   kubelet            Successfully pulled image "prom/prometheus:v2.48.0" in 7.904s (10.891s including waiting)
+  Normal   Pulling           24m                   kubelet            Pulling image "quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0"
+  Normal   Pulled            24m                   kubelet            Successfully pulled image "quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0" in 2.943s (2.943s including waiting)
+  Normal   Created           24m                   kubelet            Created container: config-reloader
+  Normal   Started           24m                   kubelet            Started container config-reloader
+  Warning  Unhealthy         23m                   kubelet            Startup probe failed: HTTP probe failed with statuscode: 503
+  Normal   Started           23m (x4 over 24m)     kubelet            Started container prometheus
+  Normal   Created           23m (x4 over 24m)     kubelet            Created container: prometheus
+  Normal   Pulled            23m (x3 over 24m)     kubelet            Container image "prom/prometheus:v2.48.0" already present on machine
+  Warning  BackOff           4m26s (x97 over 23m)  kubelet            Back-off restarting failed container prometheus in pod prometheus-0_monitoring(2ba08edf-75cf-4354-a555-4420ae7c9f4e)
+root@masternode:/srv/monitoring_data/VMStation# kubectl logs -n monitoring       prometheus-0
+Defaulted container "prometheus" out of: prometheus, config-reloader, init-chown-data (init)
+ts=2025-10-09T21:54:40.305Z caller=main.go:583 level=info msg="Starting Prometheus Server" mode=server version="(version=2.48.0, branch=HEAD, revision=6d80b30990bc297d95b5c844e118c4011fad8054)"
+ts=2025-10-09T21:54:40.305Z caller=main.go:588 level=info build_context="(go=go1.21.4, platform=linux/amd64, user=root@26117804242c, date=20231116-04:35:21, tags=netgo,builtinassets,stringlabels)"
+ts=2025-10-09T21:54:40.305Z caller=main.go:589 level=info host_details="(Linux 6.1.0-32-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.1.129-1 (2025-03-06) x86_64 prometheus-0 (none))"
+ts=2025-10-09T21:54:40.306Z caller=main.go:590 level=info fd_limits="(soft=1048576, hard=1048576)"
+ts=2025-10-09T21:54:40.306Z caller=main.go:591 level=info vm_limits="(soft=unlimited, hard=unlimited)"
+ts=2025-10-09T21:54:40.308Z caller=web.go:566 level=info component=web msg="Start listening for connections" address=0.0.0.0:9090
+ts=2025-10-09T21:54:40.308Z caller=main.go:1024 level=info msg="Starting TSDB ..."
+ts=2025-10-09T21:54:40.308Z caller=repair.go:56 level=info component=tsdb msg="Found healthy block" mint=1759964317177 maxt=1759968000000 ulid=01K73B2599T4AQZSHDS79QV2XZ
+ts=2025-10-09T21:54:40.309Z caller=repair.go:56 level=info component=tsdb msg="Found healthy block" mint=1759989600336 maxt=1759996800000 ulid=01K7435QAC72RY72Z7V8Q4QQ45
+ts=2025-10-09T21:54:40.309Z caller=repair.go:56 level=info component=tsdb msg="Found healthy block" mint=1759968000000 maxt=1759989600000 ulid=01K7435V9KGM8RMJ130R8ZVH3M
+ts=2025-10-09T21:54:40.309Z caller=repair.go:56 level=info component=tsdb msg="Found healthy block" mint=1759996800221 maxt=1760004000000 ulid=01K74A1EA3W6BPHA9CJSBBHM20
+ts=2025-10-09T21:54:40.309Z caller=repair.go:56 level=info component=tsdb msg="Found healthy block" mint=1760004000000 maxt=1760011200000 ulid=01K74GX61KCGJ91FNG3GCB66FY
+ts=2025-10-09T21:54:40.309Z caller=main.go:883 level=info msg="Stopping scrape discovery manager..."
+ts=2025-10-09T21:54:40.309Z caller=main.go:897 level=info msg="Stopping notify discovery manager..."
+ts=2025-10-09T21:54:40.309Z caller=manager.go:1026 level=info component="rule manager" msg="Stopping rule manager..."
+ts=2025-10-09T21:54:40.309Z caller=manager.go:1012 level=info component="rule manager" msg="Starting rule manager..."
+ts=2025-10-09T21:54:40.309Z caller=manager.go:1036 level=info component="rule manager" msg="Rule manager stopped"
+ts=2025-10-09T21:54:40.309Z caller=main.go:934 level=info msg="Stopping scrape manager..."
+ts=2025-10-09T21:54:40.309Z caller=main.go:879 level=info msg="Scrape discovery manager stopped"
+ts=2025-10-09T21:54:40.309Z caller=main.go:926 level=info msg="Scrape manager stopped"
+ts=2025-10-09T21:54:40.309Z caller=main.go:893 level=info msg="Notify discovery manager stopped"
+ts=2025-10-09T21:54:40.309Z caller=notifier.go:604 level=info component=notifier msg="Stopping notification manager..."
+ts=2025-10-09T21:54:40.309Z caller=main.go:1155 level=info msg="Notifier manager stopped"
+ts=2025-10-09T21:54:40.310Z caller=tls_config.go:274 level=info component=web msg="Listening on" address=[::]:9090
+ts=2025-10-09T21:54:40.310Z caller=tls_config.go:277 level=info component=web msg="TLS is disabled." http2=false address=[::]:9090
+ts=2025-10-09T21:54:40.310Z caller=main.go:1164 level=error err="opening storage failed: lock DB directory: open /prometheus/lock: permission denied"
+root@masternode:/srv/monitoring_data/VMStation# kubectl events -n monitoring       prometheus-0
+LAST SEEN              TYPE      REASON              OBJECT                                     MESSAGE
+25m                    Normal    Scheduled           Pod/node-exporter-g4lxr                    Successfully assigned monitoring/node-exporter-g4lxr to storagenodet3500
+25m                    Normal    SuccessfulCreate    DaemonSet/node-exporter                    Created pod: node-exporter-g4lxr
+25m                    Normal    SuccessfulCreate    DaemonSet/node-exporter                    Created pod: node-exporter-qqq8s
+25m                    Normal    Scheduled           Pod/node-exporter-qqq8s                    Successfully assigned monitoring/node-exporter-qqq8s to masternode
+24m                    Normal    Created             Pod/node-exporter-g4lxr                    Created container: node-exporter
+24m                    Normal    SuccessfulCreate    ReplicaSet/kube-state-metrics-5f6f5666cc   Created pod: kube-state-metrics-5f6f5666cc-49wc5
+24m                    Normal    Pulled              Pod/node-exporter-g4lxr                    Container image "prom/node-exporter:v1.6.1" already present on machine
+24m                    Normal    Created             Pod/node-exporter-qqq8s                    Created container: node-exporter
+24m                    Normal    Started             Pod/node-exporter-g4lxr                    Started container node-exporter
+24m                    Normal    ScalingReplicaSet   Deployment/kube-state-metrics              Scaled up replica set kube-state-metrics-5f6f5666cc to 1
+24m                    Normal    Started             Pod/node-exporter-qqq8s                    Started container node-exporter
+24m                    Normal    Pulled              Pod/node-exporter-qqq8s                    Container image "prom/node-exporter:v1.6.1" already present on machine
+24m                    Normal    Scheduled           Pod/kube-state-metrics-5f6f5666cc-49wc5    Successfully assigned monitoring/kube-state-metrics-5f6f5666cc-49wc5 to masternode
+24m                    Normal    Pulled              Pod/kube-state-metrics-5f6f5666cc-49wc5    Container image "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.0" already present on machine
+24m                    Normal    Created             Pod/kube-state-metrics-5f6f5666cc-49wc5    Created container: kube-state-metrics
+24m                    Normal    Scheduled           Pod/promtail-zhrw5                         Successfully assigned monitoring/promtail-zhrw5 to masternode
+24m                    Normal    Scheduled           Pod/promtail-nrblm                         Successfully assigned monitoring/promtail-nrblm to storagenodet3500
+24m                    Normal    SuccessfulCreate    StatefulSet/loki                           create Pod loki-0 in StatefulSet loki successful
+24m                    Warning   FailedScheduling    Pod/loki-0                                 0/2 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+24m                    Normal    Started             Pod/kube-state-metrics-5f6f5666cc-49wc5    Started container kube-state-metrics
+24m                    Normal    SuccessfulCreate    StatefulSet/loki                           create Claim loki-data-loki-0 Pod loki-0 in StatefulSet loki success
+24m                    Normal    Pulled              Pod/promtail-zhrw5                         Container image "grafana/promtail:2.9.2" already present on machine
+24m                    Normal    SuccessfulCreate    DaemonSet/promtail                         Created pod: promtail-nrblm
+24m                    Normal    SuccessfulCreate    DaemonSet/promtail                         Created pod: promtail-zhrw5
+24m                    Normal    Scheduled           Pod/loki-0                                 Successfully assigned monitoring/loki-0 to masternode
+24m                    Normal    Pulled              Pod/promtail-nrblm                         Container image "grafana/promtail:2.9.2" already present on machine
+24m                    Normal    Created             Pod/promtail-zhrw5                         Created container: promtail
+24m                    Normal    Started             Pod/promtail-zhrw5                         Started container promtail
+24m                    Normal    Created             Pod/promtail-nrblm                         Created container: promtail
+24m                    Normal    Started             Pod/promtail-nrblm                         Started container promtail
+24m                    Normal    Pulling             Pod/loki-0                                 Pulling image "busybox:latest"
+24m                    Normal    ScalingReplicaSet   Deployment/blackbox-exporter               Scaled up replica set blackbox-exporter-5949885fb9 to 1
+24m                    Normal    SuccessfulCreate    ReplicaSet/blackbox-exporter-5949885fb9    Created pod: blackbox-exporter-5949885fb9-gb5sq
+24m                    Normal    Created             Pod/blackbox-exporter-5949885fb9-gb5sq     Created container: blackbox-exporter
+24m                    Warning   FailedScheduling    Pod/prometheus-0                           0/2 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+24m                    Normal    SuccessfulCreate    StatefulSet/prometheus                     create Claim prometheus-storage-prometheus-0 Pod prometheus-0 in StatefulSet prometheus success
+24m                    Normal    Pulled              Pod/blackbox-exporter-5949885fb9-gb5sq     Container image "prom/blackbox-exporter:v0.25.0" already present on machine
+24m                    Normal    SuccessfulCreate    StatefulSet/prometheus                     create Pod prometheus-0 in StatefulSet prometheus successful
+24m                    Normal    Scheduled           Pod/blackbox-exporter-5949885fb9-gb5sq     Successfully assigned monitoring/blackbox-exporter-5949885fb9-gb5sq to masternode
+24m                    Normal    Pulled              Pod/loki-0                                 Successfully pulled image "busybox:latest" in 1.963s (1.963s including waiting)
+24m                    Normal    Started             Pod/loki-0                                 Started container init-loki-data
+24m                    Normal    Started             Pod/blackbox-exporter-5949885fb9-gb5sq     Started container blackbox-exporter
+24m                    Normal    Scheduled           Pod/grafana-5f879c7654-dnmhs               Successfully assigned monitoring/grafana-5f879c7654-dnmhs to masternode
+24m                    Normal    Scheduled           Pod/prometheus-0                           Successfully assigned monitoring/prometheus-0 to masternode
+24m                    Normal    Pulled              Pod/prometheus-0                           Container image "busybox:latest" already present on machine
+24m                    Normal    Created             Pod/prometheus-0                           Created container: init-chown-data
+24m                    Normal    Pulled              Pod/grafana-5f879c7654-dnmhs               Container image "grafana/grafana:10.0.0" already present on machine
+24m                    Normal    Created             Pod/grafana-5f879c7654-dnmhs               Created container: grafana
+24m                    Normal    Started             Pod/grafana-5f879c7654-dnmhs               Started container grafana
+24m                    Normal    SuccessfulCreate    ReplicaSet/grafana-5f879c7654              Created pod: grafana-5f879c7654-dnmhs
+24m                    Normal    ScalingReplicaSet   Deployment/grafana                         Scaled up replica set grafana-5f879c7654 to 1
+24m                    Normal    Created             Pod/loki-0                                 Created container: init-loki-data
+24m                    Normal    Pulling             Pod/loki-0                                 Pulling image "grafana/loki:2.9.4"
+24m                    Normal    Started             Pod/prometheus-0                           Started container init-chown-data
+24m                    Normal    Pulling             Pod/prometheus-0                           Pulling image "prom/prometheus:v2.48.0"
+24m                    Normal    Started             Pod/loki-0                                 Started container loki
+24m                    Normal    Created             Pod/loki-0                                 Created container: loki
+24m                    Normal    Pulled              Pod/loki-0                                 Successfully pulled image "grafana/loki:2.9.4" in 2.989s (2.989s including waiting)
+24m                    Normal    Pulled              Pod/prometheus-0                           Successfully pulled image "prom/prometheus:v2.48.0" in 7.904s (10.891s including waiting)
+24m                    Normal    Pulling             Pod/prometheus-0                           Pulling image "quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0"
+24m                    Normal    Created             Pod/prometheus-0                           Created container: config-reloader
+24m                    Normal    Pulled              Pod/prometheus-0                           Successfully pulled image "quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0" in 2.943s (2.943s including waiting)
+24m                    Normal    Started             Pod/prometheus-0                           Started container config-reloader
+24m                    Warning   Unhealthy           Pod/prometheus-0                           Startup probe failed: HTTP probe failed with statuscode: 503
+23m (x4 over 24m)      Normal    Created             Pod/prometheus-0                           Created container: prometheus
+23m (x4 over 24m)      Normal    Started             Pod/prometheus-0                           Started container prometheus
+23m (x3 over 24m)      Normal    Pulled              Pod/prometheus-0                           Container image "prom/prometheus:v2.48.0" already present on machine
+22m (x17 over 24m)     Warning   Unhealthy           Pod/loki-0                                 Startup probe failed: HTTP probe failed with statuscode: 503
+4m55s (x4 over 19m)    Normal    Pulled              Pod/loki-0                                 Container image "grafana/loki:2.9.4" already present on machine
+4m54s (x97 over 24m)   Warning   BackOff             Pod/prometheus-0                           Back-off restarting failed container prometheus in pod prometheus-0_monitoring(2ba08edf-75cf-4354-a555-4420ae7c9f4e)
+root@masternode:/srv/monitoring_data/VMStation# kubectl describe pod -n monitoring       loki-0
+Name:                 loki-0
+Namespace:            monitoring
+Priority:             2000000000
+Priority Class Name:  system-cluster-critical
+Service Account:      loki
+Node:                 masternode/192.168.4.63
+Start Time:           Thu, 09 Oct 2025 17:32:32 -0400
+Labels:               app=loki
+                      app.kubernetes.io/component=logging
+                      app.kubernetes.io/name=loki
+                      apps.kubernetes.io/pod-index=0
+                      controller-revision-hash=loki-7cff998ffc
+                      statefulset.kubernetes.io/pod-name=loki-0
+Annotations:          prometheus.io/path: /metrics
+                      prometheus.io/port: 3100
+                      prometheus.io/scrape: true
+Status:               Running
+SeccompProfile:       RuntimeDefault
+IP:                   10.244.0.225
+IPs:
+  IP:           10.244.0.225
+Controlled By:  StatefulSet/loki
+Init Containers:
+  init-loki-data:
+    Container ID:  containerd://79f9831149fbee983dfdc334480cdf802ca180e98d6728692a29bf79347390a7
+    Image:         busybox:latest
+    Image ID:      docker.io/library/busybox@sha256:d82f458899c9696cb26a7c02d5568f81c8c8223f8661bb2a7988b269c8b9051e
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+      -c
+      # Create required directories
+      mkdir -p /loki/chunks /loki/index /loki/index_cache /loki/wal /loki/compactor
+
+      # Set ownership
+      chown -R 10001:10001 /loki
+      chmod -R 755 /loki
+
+      echo "Loki data directories initialized"
+
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 09 Oct 2025 17:32:34 -0400
+      Finished:     Thu, 09 Oct 2025 17:32:34 -0400
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /loki from loki-data (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-x6lqx (ro)
+Containers:
+  loki:
+    Container ID:  containerd://9bd691ca69903e1979af42fda63e93f765f4cf5701f3bded2768eebde5869d26
+    Image:         grafana/loki:2.9.4
+    Image ID:      docker.io/grafana/loki@sha256:f379a20ce9dd815884ed6446aad8819b81a8ba4d36b548ca14be8cecbc6cbca0
+    Ports:         3100/TCP, 9096/TCP
+    Host Ports:    0/TCP, 0/TCP
+    Args:
+      -config.file=/etc/loki/loki.yaml
+      -target=all
+    State:          Running
+      Started:      Thu, 09 Oct 2025 17:57:34 -0400
+    Last State:     Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 09 Oct 2025 17:52:34 -0400
+      Finished:     Thu, 09 Oct 2025 17:57:34 -0400
+    Ready:          False
+    Restart Count:  5
+    Limits:
+      cpu:     1
+      memory:  2Gi
+    Requests:
+      cpu:        200m
+      memory:     512Mi
+    Liveness:     http-get http://:http-metrics/ready delay=90s timeout=5s period=30s #success=1 #failure=5
+    Readiness:    http-get http://:http-metrics/ready delay=30s timeout=5s period=10s #success=1 #failure=3
+    Startup:      http-get http://:http-metrics/ready delay=0s timeout=5s period=10s #success=1 #failure=30
+    Environment:  <none>
+    Mounts:
+      /etc/loki from loki-config (ro)
+      /loki from loki-data (rw)
+      /tmp from tmp (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-x6lqx (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True
+  Initialized                 True
+  Ready                       False
+  ContainersReady             False
+  PodScheduled                True
+Volumes:
+  loki-data:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  loki-data-loki-0
+    ReadOnly:   false
+  loki-config:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      loki-config
+    Optional:  false
+  tmp:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:
+    SizeLimit:  <unset>
+  kube-api-access-x6lqx:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              node-role.kubernetes.io/control-plane=
+Tolerations:                 node-role.kubernetes.io/control-plane:NoSchedule op=Exists
+                             node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age                 From               Message
+  ----     ------            ----                ----               -------
+  Warning  FailedScheduling  25m                 default-scheduler  0/2 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+  Normal   Scheduled         25m                 default-scheduler  Successfully assigned monitoring/loki-0 to masternode
+  Normal   Pulling           25m                 kubelet            Pulling image "busybox:latest"
+  Normal   Pulled            25m                 kubelet            Successfully pulled image "busybox:latest" in 1.963s (1.963s including waiting)
+  Normal   Created           25m                 kubelet            Created container: init-loki-data
+  Normal   Started           25m                 kubelet            Started container init-loki-data
+  Normal   Pulling           25m                 kubelet            Pulling image "grafana/loki:2.9.4"
+  Normal   Pulled            25m                 kubelet            Successfully pulled image "grafana/loki:2.9.4" in 2.989s (2.989s including waiting)
+  Normal   Created           25m                 kubelet            Created container: loki
+  Normal   Started           25m                 kubelet            Started container loki
+  Warning  Unhealthy         22m (x17 over 25m)  kubelet            Startup probe failed: HTTP probe failed with statuscode: 503
+  Normal   Pulled            21s (x5 over 20m)   kubelet            Container image "grafana/loki:2.9.4" already present on machine
+root@masternode:/srv/monitoring_data/VMStation# kubectl logs -n monitoring       loki-0
+Defaulted container "loki" out of: loki, init-loki-data (init)
+{"caller":"loki.go:288","level":"warn","msg":"global timeout not configured, using default engine timeout (\"5m0s\"). This behavior will change in the next major to always use the default global timeout (\"5m\").","ts":"2025-10-09T21:57:34.809518106Z"}
+{"caller":"main.go:108","level":"info","msg":"Starting Loki","ts":"2025-10-09T21:57:34.812474158Z","version":"(version=2.9.4, branch=HEAD, revision=f599ebc535)"}
+{"caller":"server.go:322","grpc":"[::]:9096","http":"[::]:3100","level":"info","msg":"server listening on addresses","ts":"2025-10-09T21:57:34.813752509Z"}
+{"caller":"cache.go:127","level":"warn","msg":"fifocache config is deprecated. use embedded-cache instead","ts":"2025-10-09T21:57:34.816483741Z"}
+{"caller":"experimental.go:20","feature":"In-memory (FIFO) cache - frontend.embedded-cache","level":"warn","msg":"experimental feature in use","ts":"2025-10-09T21:57:34.816518048Z"}
+{"caller":"cache.go:127","level":"warn","msg":"fifocache config is deprecated. use embedded-cache instead","ts":"2025-10-09T21:57:34.817166184Z"}
+{"caller":"experimental.go:20","feature":"In-memory (FIFO) cache - store.index-cache-read.embedded-cache","level":"warn","msg":"experimental feature in use","ts":"2025-10-09T21:57:34.817183095Z"}
+{"caller":"cache.go:127","level":"warn","msg":"fifocache config is deprecated. use embedded-cache instead","ts":"2025-10-09T21:57:34.817273291Z"}
+{"caller":"experimental.go:20","feature":"In-memory (FIFO) cache - chunksembedded-cache","level":"warn","msg":"experimental feature in use","ts":"2025-10-09T21:57:34.817284716Z"}
+{"caller":"table_manager.go:427","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"loading local table index_20370","ts":"2025-10-09T21:57:34.817761278Z"}
+{"caller":"table_manager.go:136","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"uploading tables","ts":"2025-10-09T21:57:34.81779881Z"}
+{"caller":"spanlogger.go:86","level":"info","msg":"building table names cache","ts":"2025-10-09T21:57:34.817930924Z"}
+{"caller":"spanlogger.go:86","duration":"92.918µs","level":"info","msg":"table names cache built","ts":"2025-10-09T21:57:34.818039711Z"}
+{"caller":"spanlogger.go:86","level":"info","msg":"building table cache","ts":"2025-10-09T21:57:34.81805707Z"}
+{"caller":"spanlogger.go:86","duration":"40.948µs","level":"info","msg":"table cache built","ts":"2025-10-09T21:57:34.818104827Z"}
+{"caller":"table_manager.go:271","distinct_users":"","distinct_users_len":0,"duration":"997ns","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"query readiness setup completed","ts":"2025-10-09T21:57:34.818408435Z"}
+{"caller":"shipper.go:165","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"starting index shipper in RW mode","ts":"2025-10-09T21:57:34.818430665Z"}
+{"caller":"table_manager.go:240","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"loading table index_20370","ts":"2025-10-09T21:57:34.818530198Z"}
+{"caller":"table.go:318","level":"info","msg":"handing over indexes to shipper index_20370","ts":"2025-10-09T21:57:34.818768416Z"}
+{"caller":"table.go:334","level":"info","msg":"finished handing over table index_20370","ts":"2025-10-09T21:57:34.818791589Z"}
+{"caller":"shipper_index_client.go:76","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"starting boltdb shipper in RW mode","ts":"2025-10-09T21:57:34.81881891Z"}
+{"caller":"table_manager.go:171","index-store":"boltdb-shipper-2020-10-24","level":"info","msg":"handing over indexes to shipper","ts":"2025-10-09T21:57:34.818884766Z"}
+{"caller":"table.go:318","level":"info","msg":"handing over indexes to shipper index_20370","ts":"2025-10-09T21:57:34.818960868Z"}
+{"caller":"table.go:334","level":"info","msg":"finished handing over table index_20370","ts":"2025-10-09T21:57:34.818978619Z"}
+{"caller":"worker.go:121","frontend":"127.0.0.1:9095","level":"info","msg":"Starting querier worker connected to query-frontend","ts":"2025-10-09T21:57:34.820698472Z"}
+{"caller":"mapper.go:47","level":"info","msg":"cleaning up mapped rules directory","path":"/loki/rules-temp","ts":"2025-10-09T21:57:34.822093358Z"}
+{"caller":"module_service.go:82","level":"info","module":"cache-generation-loader","msg":"initialising","ts":"2025-10-09T21:57:34.825017115Z"}
+{"caller":"module_service.go:82","level":"info","module":"server","msg":"initialising","ts":"2025-10-09T21:57:34.82507753Z"}
+{"caller":"module_service.go:82","level":"info","module":"memberlist-kv","msg":"initialising","ts":"2025-10-09T21:57:34.825132298Z"}
+{"caller":"module_service.go:82","level":"info","module":"store","msg":"initialising","ts":"2025-10-09T21:57:34.825165313Z"}
+{"caller":"module_service.go:82","level":"info","module":"query-frontend-tripperware","msg":"initialising","ts":"2025-10-09T21:57:34.825188013Z"}
+{"caller":"module_service.go:82","level":"info","module":"ring","msg":"initialising","ts":"2025-10-09T21:57:34.825233132Z"}
+{"caller":"ring.go:273","level":"info","msg":"ring doesn't exist in KV store yet","ts":"2025-10-09T21:57:34.825329974Z"}
+{"caller":"module_service.go:82","level":"info","module":"analytics","msg":"initialising","ts":"2025-10-09T21:57:34.825462883Z"}
+{"caller":"module_service.go:82","level":"info","module":"ingester-querier","msg":"initialising","ts":"2025-10-09T21:57:34.825646278Z"}
+{"caller":"module_service.go:82","level":"info","module":"compactor","msg":"initialising","ts":"2025-10-09T21:57:34.825829747Z"}
+{"caller":"module_service.go:82","level":"info","module":"ingester","msg":"initialising","ts":"2025-10-09T21:57:34.825856459Z"}
+{"caller":"module_service.go:82","level":"info","module":"distributor","msg":"initialising","ts":"2025-10-09T21:57:34.825862386Z"}
+{"caller":"ingester.go:431","level":"info","msg":"recovering from checkpoint","ts":"2025-10-09T21:57:34.825882683Z"}
+{"caller":"ring.go:273","level":"info","msg":"ring doesn't exist in KV store yet","ts":"2025-10-09T21:57:34.825925289Z"}
+{"caller":"basic_lifecycler.go:297","instance":"loki-0","level":"info","msg":"instance not found in the ring","ring":"distributor","ts":"2025-10-09T21:57:34.825961459Z"}
+{"caller":"recovery.go:40","level":"info","msg":"no checkpoint found, treating as no-op","ts":"2025-10-09T21:57:34.825988183Z"}
+{"caller":"module_service.go:82","level":"info","module":"query-scheduler","msg":"initialising","ts":"2025-10-09T21:57:34.826025519Z"}
+{"caller":"ingester.go:447","elapsed":"161.124µs","errors":false,"level":"info","msg":"recovered WAL checkpoint recovery finished","ts":"2025-10-09T21:57:34.826034184Z"}
+{"caller":"ingester.go:453","level":"info","msg":"recovering from WAL","ts":"2025-10-09T21:57:34.826083449Z"}
+{"caller":"ring.go:273","level":"info","msg":"ring doesn't exist in KV store yet","ts":"2025-10-09T21:57:34.826087688Z"}
+{"caller":"module_service.go:82","level":"info","module":"ruler","msg":"initialising","ts":"2025-10-09T21:57:34.826095016Z"}
+{"caller":"ruler.go:528","level":"info","msg":"ruler up and running","ts":"2025-10-09T21:57:34.826126831Z"}
+{"caller":"module_service.go:82","level":"info","module":"query-frontend","msg":"initialising","ts":"2025-10-09T21:57:34.826216964Z"}
+{"caller":"basic_lifecycler.go:297","instance":"loki-0","level":"info","msg":"instance not found in the ring","ring":"compactor","ts":"2025-10-09T21:57:34.826222889Z"}
+{"caller":"basic_lifecycler_delegates.go:63","level":"info","msg":"not loading tokens from file, tokens file path is empty","ts":"2025-10-09T21:57:34.826244802Z"}
+{"caller":"module_service.go:82","level":"info","module":"querier","msg":"initialising","ts":"2025-10-09T21:57:34.826273256Z"}
+{"addr":"127.0.0.1:9095","caller":"worker.go:209","level":"info","msg":"adding connection","ts":"2025-10-09T21:57:34.826315863Z"}
+{"caller":"ingester.go:469","elapsed":"452.555µs","errors":false,"level":"info","msg":"WAL segment recovery finished","ts":"2025-10-09T21:57:34.826325162Z"}
+{"caller":"ingester.go:417","level":"info","msg":"closing recoverer","ts":"2025-10-09T21:57:34.82635305Z"}
+{"caller":"ingester.go:425","level":"info","msg":"WAL recovery finished","time":"495.91µs","ts":"2025-10-09T21:57:34.82636899Z"}
+{"caller":"compactor.go:395","level":"info","msg":"waiting until compactor is JOINING in the ring","ts":"2025-10-09T21:57:34.826392888Z"}
+{"caller":"compactor.go:399","level":"info","msg":"compactor is JOINING in the ring","ts":"2025-10-09T21:57:34.826418998Z"}
+{"caller":"lifecycler.go:614","level":"info","msg":"not loading tokens from file, tokens file path is empty","ts":"2025-10-09T21:57:34.826450138Z"}
+{"caller":"compactor.go:409","level":"info","msg":"waiting until compactor is ACTIVE in the ring","ts":"2025-10-09T21:57:34.826491835Z"}
+{"caller":"lifecycler.go:643","level":"info","msg":"instance not found in ring, adding with no tokens","ring":"ingester","ts":"2025-10-09T21:57:34.826522867Z"}
+{"caller":"lifecycler.go:483","level":"info","msg":"auto-joining cluster after timeout","ring":"ingester","ts":"2025-10-09T21:57:34.826611949Z"}
+{"caller":"wal.go:156","component":"wal","level":"info","msg":"started","ts":"2025-10-09T21:57:34.826626022Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827085814Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827146355Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827153193Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827148069Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827150425Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827199942Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.82721093Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827210933Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.827216202Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:34.82724882Z"}
+{"caller":"compactor.go:413","level":"info","msg":"compactor is ACTIVE in the ring","ts":"2025-10-09T21:57:35.025817861Z"}
+{"caller":"loki.go:505","level":"info","msg":"Loki started","ts":"2025-10-09T21:57:35.02598559Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.333967845Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.536691281Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.571983218Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.574228446Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.581654617Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.593857179Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.699174393Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.708330247Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.737622276Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:35.804882908Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:36.660643631Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:36.69479447Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:36.817009785Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:36.841691803Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:36.9121698Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:36.963400197Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:37.058956196Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:37.071093547Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:37.172669509Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:37.486182782Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:39.501450123Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:39.542189219Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:39.634272251Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:39.640663014Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:39.76344411Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:39.839015715Z"}
+{"caller":"compactor.go:474","level":"info","msg":"this instance has been chosen to run the compactor, starting compactor","ts":"2025-10-09T21:57:40.026843861Z"}
+{"caller":"compactor.go:503","level":"info","msg":"waiting 10m0s for ring to stay stable and previous compactions to finish before starting compactor","ts":"2025-10-09T21:57:40.026937288Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:40.537948303Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:40.660182681Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:40.859436058Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:40.898799961Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:43.920378534Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:43.977672728Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:44.072141325Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:44.370052553Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:44.439824506Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:44.575443297Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:44.969260839Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:45.298487768Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:45.342362478Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:45.501051425Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:47.996330689Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:48.07797288Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:48.761154688Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:49.047801007Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:49.232152706Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:49.279451312Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:49.459368074Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:49.531875373Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:49.543187439Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:50.194262835Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:52.243566452Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:53.03319581Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:53.340318328Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:53.372702127Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:53.507295853Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:53.596243546Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:53.612994653Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:54.294765023Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:54.466733559Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:54.649878919Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:57.152698041Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:57.752036894Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:57.780307853Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:57.920024543Z"}
+{"address":"127.0.0.1:9095","caller":"frontend_processor.go:63","err":"rpc error: code = Unavailable desc = connection error: desc = \"transport: Error while dialing: dial tcp 127.0.0.1:9095: connect: connection refused\"","level":"error","msg":"error contacting frontend","ts":"2025-10-09T21:57:57.973430359Z"}
+root@masternode:/srv/monitoring_data/VMStation# kubectl events -n monitoring       loki-0
+LAST SEEN             TYPE      REASON              OBJECT                                     MESSAGE
+25m                   Normal    Scheduled           Pod/node-exporter-g4lxr                    Successfully assigned monitoring/node-exporter-g4lxr to storagenodet3500
+25m                   Normal    SuccessfulCreate    DaemonSet/node-exporter                    Created pod: node-exporter-g4lxr
+25m                   Normal    SuccessfulCreate    DaemonSet/node-exporter                    Created pod: node-exporter-qqq8s
+25m                   Normal    Scheduled           Pod/node-exporter-qqq8s                    Successfully assigned monitoring/node-exporter-qqq8s to masternode
+25m                   Normal    Created             Pod/node-exporter-g4lxr                    Created container: node-exporter
+25m                   Normal    SuccessfulCreate    ReplicaSet/kube-state-metrics-5f6f5666cc   Created pod: kube-state-metrics-5f6f5666cc-49wc5
+25m                   Normal    Pulled              Pod/node-exporter-g4lxr                    Container image "prom/node-exporter:v1.6.1" already present on machine
+25m                   Normal    Created             Pod/node-exporter-qqq8s                    Created container: node-exporter
+25m                   Normal    Started             Pod/node-exporter-g4lxr                    Started container node-exporter
+25m                   Normal    ScalingReplicaSet   Deployment/kube-state-metrics              Scaled up replica set kube-state-metrics-5f6f5666cc to 1
+25m                   Normal    Started             Pod/node-exporter-qqq8s                    Started container node-exporter
+25m                   Normal    Pulled              Pod/node-exporter-qqq8s                    Container image "prom/node-exporter:v1.6.1" already present on machine
+25m                   Normal    Scheduled           Pod/kube-state-metrics-5f6f5666cc-49wc5    Successfully assigned monitoring/kube-state-metrics-5f6f5666cc-49wc5 to masternode
+25m                   Normal    Pulled              Pod/kube-state-metrics-5f6f5666cc-49wc5    Container image "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.0" already present on machine
+25m                   Normal    Created             Pod/kube-state-metrics-5f6f5666cc-49wc5    Created container: kube-state-metrics
+25m                   Normal    Scheduled           Pod/promtail-zhrw5                         Successfully assigned monitoring/promtail-zhrw5 to masternode
+25m                   Normal    Scheduled           Pod/promtail-nrblm                         Successfully assigned monitoring/promtail-nrblm to storagenodet3500
+25m                   Normal    SuccessfulCreate    StatefulSet/loki                           create Pod loki-0 in StatefulSet loki successful
+25m                   Warning   FailedScheduling    Pod/loki-0                                 0/2 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+25m                   Normal    Started             Pod/kube-state-metrics-5f6f5666cc-49wc5    Started container kube-state-metrics
+25m                   Normal    SuccessfulCreate    StatefulSet/loki                           create Claim loki-data-loki-0 Pod loki-0 in StatefulSet loki success
+25m                   Normal    Pulled              Pod/promtail-zhrw5                         Container image "grafana/promtail:2.9.2" already present on machine
+25m                   Normal    SuccessfulCreate    DaemonSet/promtail                         Created pod: promtail-nrblm
+25m                   Normal    SuccessfulCreate    DaemonSet/promtail                         Created pod: promtail-zhrw5
+25m                   Normal    Scheduled           Pod/loki-0                                 Successfully assigned monitoring/loki-0 to masternode
+25m                   Normal    Pulled              Pod/promtail-nrblm                         Container image "grafana/promtail:2.9.2" already present on machine
+25m                   Normal    Created             Pod/promtail-zhrw5                         Created container: promtail
+25m                   Normal    Started             Pod/promtail-zhrw5                         Started container promtail
+25m                   Normal    Created             Pod/promtail-nrblm                         Created container: promtail
+25m                   Normal    Started             Pod/promtail-nrblm                         Started container promtail
+25m                   Normal    Pulling             Pod/loki-0                                 Pulling image "busybox:latest"
+25m                   Normal    ScalingReplicaSet   Deployment/blackbox-exporter               Scaled up replica set blackbox-exporter-5949885fb9 to 1
+25m                   Normal    SuccessfulCreate    ReplicaSet/blackbox-exporter-5949885fb9    Created pod: blackbox-exporter-5949885fb9-gb5sq
+25m                   Normal    Created             Pod/blackbox-exporter-5949885fb9-gb5sq     Created container: blackbox-exporter
+25m                   Warning   FailedScheduling    Pod/prometheus-0                           0/2 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.
+25m                   Normal    SuccessfulCreate    StatefulSet/prometheus                     create Claim prometheus-storage-prometheus-0 Pod prometheus-0 in StatefulSet prometheus success
+25m                   Normal    Pulled              Pod/blackbox-exporter-5949885fb9-gb5sq     Container image "prom/blackbox-exporter:v0.25.0" already present on machine
+25m                   Normal    SuccessfulCreate    StatefulSet/prometheus                     create Pod prometheus-0 in StatefulSet prometheus successful
+25m                   Normal    Scheduled           Pod/blackbox-exporter-5949885fb9-gb5sq     Successfully assigned monitoring/blackbox-exporter-5949885fb9-gb5sq to masternode
+25m                   Normal    Pulled              Pod/loki-0                                 Successfully pulled image "busybox:latest" in 1.963s (1.963s including waiting)
+25m                   Normal    Started             Pod/loki-0                                 Started container init-loki-data
+25m                   Normal    Started             Pod/blackbox-exporter-5949885fb9-gb5sq     Started container blackbox-exporter
+25m                   Normal    Scheduled           Pod/grafana-5f879c7654-dnmhs               Successfully assigned monitoring/grafana-5f879c7654-dnmhs to masternode
+25m                   Normal    Scheduled           Pod/prometheus-0                           Successfully assigned monitoring/prometheus-0 to masternode
+25m                   Normal    Pulled              Pod/prometheus-0                           Container image "busybox:latest" already present on machine
+25m                   Normal    Created             Pod/prometheus-0                           Created container: init-chown-data
+25m                   Normal    Pulled              Pod/grafana-5f879c7654-dnmhs               Container image "grafana/grafana:10.0.0" already present on machine
+25m                   Normal    Created             Pod/grafana-5f879c7654-dnmhs               Created container: grafana
+25m                   Normal    Started             Pod/grafana-5f879c7654-dnmhs               Started container grafana
+25m                   Normal    SuccessfulCreate    ReplicaSet/grafana-5f879c7654              Created pod: grafana-5f879c7654-dnmhs
+25m                   Normal    ScalingReplicaSet   Deployment/grafana                         Scaled up replica set grafana-5f879c7654 to 1
+25m                   Normal    Created             Pod/loki-0                                 Created container: init-loki-data
+25m                   Normal    Pulling             Pod/loki-0                                 Pulling image "grafana/loki:2.9.4"
+25m                   Normal    Started             Pod/prometheus-0                           Started container init-chown-data
+25m                   Normal    Pulling             Pod/prometheus-0                           Pulling image "prom/prometheus:v2.48.0"
+25m                   Normal    Started             Pod/loki-0                                 Started container loki
+25m                   Normal    Created             Pod/loki-0                                 Created container: loki
+25m                   Normal    Pulled              Pod/loki-0                                 Successfully pulled image "grafana/loki:2.9.4" in 2.989s (2.989s including waiting)
+25m                   Normal    Pulled              Pod/prometheus-0                           Successfully pulled image "prom/prometheus:v2.48.0" in 7.904s (10.891s including waiting)
+25m                   Normal    Pulling             Pod/prometheus-0                           Pulling image "quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0"
+25m                   Normal    Created             Pod/prometheus-0                           Created container: config-reloader
+25m                   Normal    Pulled              Pod/prometheus-0                           Successfully pulled image "quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0" in 2.943s (2.943s including waiting)
+25m                   Normal    Started             Pod/prometheus-0                           Started container config-reloader
+24m                   Warning   Unhealthy           Pod/prometheus-0                           Startup probe failed: HTTP probe failed with statuscode: 503
+24m (x4 over 25m)     Normal    Created             Pod/prometheus-0                           Created container: prometheus
+24m (x4 over 25m)     Normal    Started             Pod/prometheus-0                           Started container prometheus
+24m (x3 over 25m)     Normal    Pulled              Pod/prometheus-0                           Container image "prom/prometheus:v2.48.0" already present on machine
+22m (x17 over 25m)    Warning   Unhealthy           Pod/loki-0                                 Startup probe failed: HTTP probe failed with statuscode: 503
+27s (x5 over 20m)     Normal    Pulled              Pod/loki-0                                 Container image "grafana/loki:2.9.4" already present on machine
+25s (x121 over 24m)   Warning   BackOff             Pod/prometheus-0                           Back-off restarting failed container prometheus in pod prometheus-0_monitoring(2ba08edf-75cf-4354-a555-4420ae7c9f4e)

@@ -2,25 +2,10 @@
 
 clear
 git pull
-./tests/pre-deployment-checklist.sh
-./deploy.sh reset
-
-# Deploy with enhancements
-./deploy.sh all --with-rke2 --yes
-
-# Setup auto-sleep
-./deploy.sh setup
-
-# Run security audit
-./tests/test-security-audit.sh
-
-# Run complete validation suite
-./tests/test-complete-validation.sh
-
-# Run individual tests
-# ./tests/test-autosleep-wake-validation.sh
-./tests/test-monitoring-exporters-health.sh
-./tests/test-deployment-fixes.sh
+./deploy.sh reset          
+./deploy.sh debian         
+./deploy.sh monitoring     
+./deploy.sh infrastructure 
 
 ## Immediate Issues - January 2025
 

@@ -12,7 +12,7 @@ data:
     - name: Prometheus
       type: prometheus
       access: proxy
-      url: http://prometheus:9090
+      url: http://prometheus.monitoring.svc.cluster.local:9090
       isDefault: true
       editable: true
       jsonData:
@@ -20,7 +20,7 @@ data:
     - name: Loki
       type: loki
       access: proxy
-      url: http://loki:3100
+      url: http://loki.monitoring.svc.cluster.local:3100
       editable: true
       jsonData:
         maxLines: 1000

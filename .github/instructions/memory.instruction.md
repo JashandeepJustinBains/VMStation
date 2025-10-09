@@ -14,6 +14,41 @@
 - Ansible output and validation findings incorporated into runbook.
 - Common issues: missing manifests, chrony not installed, NTP DaemonSet not found.
 - All deployment steps and validation procedures are actionable and up to date.
+
+## Deployment Fixes (October 2025 - Part 2)
+
+### Critical Issues Resolved
+1. **Prometheus CrashLoopBackOff**: Permission denied on `/prometheus/lock`
+   - Root Cause: Modular playbook `deploy-monitoring-stack.yaml` created directories with root:root ownership
+   - Fix: Updated directory creation to use proper UIDs (65534 for Prometheus, 10001 for Loki, 472 for Grafana)
+   - File: `ansible/playbooks/deploy-monitoring-stack.yaml`
+
+2. **Loki Startup Failures**: HTTP 503 errors, permission denied on `/loki`
+   - Root Cause: Same ownership issue + insufficient startup probe timeout for WAL recovery
+   - Fix: Proper ownership + increased startup probe failureThreshold from 30 to 60 (10 minutes)
+   - File: `manifests/monitoring/loki.yaml`
+
+3. **Grafana DNS Resolution Errors**: `lookup loki on 10.96.0.10:53: no such host`
+   - Root Cause: Headless services (ClusterIP: None) require FQDN for DNS resolution
+   - Fix: Changed datasource URLs from short names to FQDNs (e.g., `prometheus.monitoring.svc.cluster.local:9090`)
+   - File: `manifests/monitoring/grafana.yaml`
+
+### Quick Fix Script
+- Created `scripts/fix-monitoring-permissions.sh` for immediate resolution of existing deployments
+- Fixes ownership, deletes/recreates pods, waits for readiness
+- Usage: `./scripts/fix-monitoring-permissions.sh`
+
+### Documentation
+- **User Guide**: `DEPLOYMENT_ISSUE_RESOLUTION_SUMMARY.md` (repository root)
+- **Technical Analysis**: `docs/DEPLOYMENT_FIXES_OCT2025_PART2.md`
+- **Updated Runbook**: `docs/DEPLOYMENT_RUNBOOK.md` with troubleshooting section
+
+### Lessons Learned
+- Modular playbooks must maintain parity with original deploy-cluster.yaml for critical settings
+- Headless Kubernetes services always require FQDN DNS resolution
+- Container UIDs must match directory ownership: Prometheus (65534), Loki (10001), Grafana (472)
+- Loki WAL recovery can take 5+ minutes; plan probe timeouts accordingly
+
 applyTo: '**'
 
 # User Memory

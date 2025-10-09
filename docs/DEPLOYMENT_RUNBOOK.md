@@ -180,10 +180,15 @@ Assuming masternode at 192.168.4.63:
 - **Loki:** http://192.168.4.63:31100
 
 ## Common Issues & Fixes
-- **Manifest Not Found:** Ensure all referenced manifests exist and paths are correct.
+- **Manifest Not Found:** Ensure all referenced manifests exist and paths are correct. Manifests should be at `/srv/monitoring_data/VMStation/manifests/...`
 - **Chrony Not Installed:** Install chrony on control plane and all nodes, then re-run validation.
 - **NTP DaemonSet Missing:** Check manifest and node selectors; ensure correct namespace.
-- **Pod Permission Errors:** Verify PVC/hostPath ownership and permissions.
+- **Pod Permission Errors:** Verify PVC/hostPath ownership and permissions:
+  - Prometheus: `/srv/monitoring_data/prometheus` should be owned by `65534:65534`
+  - Loki: `/srv/monitoring_data/loki` should be owned by `10001:10001`
+  - Grafana: `/srv/monitoring_data/grafana` should be owned by `472:472`
+- **Prometheus/Loki CrashLoopBackOff:** Usually permission errors. Check logs with `kubectl logs -n monitoring <pod-name>` and verify directory ownership.
+- **Grafana DNS Errors ("lookup loki/prometheus on 10.96.0.10:53: no such host"):** Datasources must use FQDNs like `prometheus.monitoring.svc.cluster.local:9090` instead of short names.
 
 ## Validation Checklist
 - [ ] Debian cluster deployed successfully (`kubectl get nodes`)

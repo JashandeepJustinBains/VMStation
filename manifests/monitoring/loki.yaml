@@ -351,7 +351,7 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           successThreshold: 1
-          failureThreshold: 30  # 5 minutes
+          failureThreshold: 60  # 10 minutes (increased for slow starts)
         
         # Readiness probe
         readinessProbe:

@@ -109,21 +109,22 @@
       changed_when: "'labeled' in label_result.stdout"
 
     # =============================================================================
-    # Create Storage Directories
+    # Create Storage Directories with Correct Ownership
     # =============================================================================
     
-    - name: "Create monitoring data directories"
+    - name: "Create monitoring data directories with proper permissions"
       file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
         mode: '0755'
-        owner: root
-        group: root
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
       loop:
-        - /srv/monitoring_data
-        - /srv/monitoring_data/prometheus
-        - /srv/monitoring_data/grafana
-        - /srv/monitoring_data/loki
+        - { path: '/srv/monitoring_data' }
+        - { path: '/srv/monitoring_data/grafana', owner: '472', group: '472' }  # Grafana UID:GID
+        - { path: '/srv/monitoring_data/prometheus', owner: '65534', group: '65534' }  # nobody UID:GID (Prometheus default)
+        - { path: '/srv/monitoring_data/loki', owner: '10001', group: '10001' }  # Loki UID:GID
+        - { path: '/srv/monitoring_data/promtail', owner: '0', group: '0' }  # Root (Promtail runs as root)
 
     # =============================================================================
     # Deploy Core Monitoring Components
