@@ -252,9 +252,9 @@ data:
         module: [http_2xx]
       static_configs:
       - targets:
-        - http://prometheus.monitoring.svc.cluster.local:9090
-        - http://grafana.monitoring.svc.cluster.local:3000
-        - http://loki.monitoring.svc.cluster.local:3100
+        - http://prometheus.monitoring.svc.cluster.local:9090/-/healthy
+        - http://grafana.monitoring.svc.cluster.local:3000/api/health
+        - http://loki.monitoring.svc.cluster.local:3100/ready
         - https://1.1.1.1
         - https://8.8.8.8
       relabel_configs:
