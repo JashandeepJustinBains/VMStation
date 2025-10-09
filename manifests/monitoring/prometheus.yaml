@@ -293,6 +293,42 @@ data:
           node: 'homelab'
           cluster: 'rke2-homelab'
           instance: '192.168.4.62:9100'
+    
+    # Chrony NTP Exporter - Time synchronization monitoring
+    # Monitors NTP sync status across all cluster nodes
+    - job_name: 'chrony-ntp'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+          - infrastructure
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: chrony-ntp
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        action: keep
+        regex: metrics
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: node
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+    
+    # Syslog Server Metrics - Log aggregation monitoring
+    # Monitors syslog message rates and health
+    - job_name: 'syslog-server'
+      kubernetes_sd_configs:
+      - role: service
+        namespaces:
+          names:
+          - infrastructure
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: syslog-server
+      - source_labels: [__meta_kubernetes_service_port_name]
+        action: keep
+        regex: metrics
 
 ---
 # Prometheus Alerting Rules
@@ -350,82 +386,346 @@ data:
         annotations:
           summary: Blackbox probe failed for {{ $labels.instance }}
           description: Network probe to {{ $labels.instance }} failing.
+    
+    - name: time-sync.rules
+      interval: 1m
+      rules:
+      - alert: NTPServiceDown
+        expr: up{job="chrony-ntp"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: NTP service down on {{ $labels.node }}
+          description: Chrony NTP exporter has been down for 5 minutes on {{ $labels.node }}. Time drift may occur.
+      - alert: HighTimeOffset
+        expr: abs(chrony_tracking_last_offset_seconds) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: High time offset on {{ $labels.node }}
+          description: System time offset is {{ $value }}s on {{ $labels.node }}. Expected < 0.5s.
+      - alert: NTPNotSynchronized
+        expr: chrony_tracking_stratum > 10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: NTP not synchronized on {{ $labels.node }}
+          description: NTP stratum is {{ $value }} (expected <= 10) on {{ $labels.node }}. Time source may be unreachable.
+    
+    - name: logging.rules
+      interval: 1m
+      rules:
+      - alert: SyslogServerDown
+        expr: up{job="syslog-server"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Syslog server is down
+          description: Centralized syslog server has been unreachable for 5 minutes.
+      - alert: HighSyslogMessageRate
+        expr: rate(syslog_messages_total[5m]) > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: High syslog message rate
+          description: Syslog server receiving {{ $value }} messages/sec (threshold: 1000/sec).
+    
+    - name: monitoring.rules
+      interval: 1m
+      rules:
+      - alert: PrometheusTargetsDown
+        expr: (count(up == 0) BY (job) / count(up) BY (job)) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 30% of {{ $labels.job }} targets are down
+          description: "{{ $value | humanizePercentage }} of {{ $labels.job }} targets are down."
+      - alert: PrometheusTSDBReloadsFailing
+        expr: increase(prometheus_tsdb_reloads_failures_total[3h]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Prometheus TSDB reloads are failing
+          description: Prometheus had {{ $value }} reload failures in the last 3 hours.
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus configuration reload failed
+          description: Prometheus config reload has failed. Check logs for details.
 ---
-# Prometheus Deployment
+# Prometheus StatefulSet - Enterprise-Grade Configuration
+# Industry best practices:
+# - StatefulSet for stable network identity and ordered deployment
+# - Proper resource requests/limits for QoS
+# - Readiness/liveness probes for health monitoring
+# - Security context with non-root user
+# - Anti-affinity for HA (if replicas > 1)
+# - ConfigMap reload sidecar for zero-downtime config updates
+# - Persistent storage with proper volume management
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: prometheus
   namespace: monitoring
   labels:
     app: prometheus
     app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: vmstation-monitoring-stack
     vmstation.io/component: monitoring
 spec:
+  serviceName: prometheus
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: prometheus
+      app.kubernetes.io/component: monitoring
+  # Ordered deployment and termination
+  podManagementPolicy: OrderedReady
+  # Update strategy - rolling update
+  updateStrategy:
+    type: RollingUpdate
   template:
     metadata:
       labels:
         app: prometheus
         app.kubernetes.io/name: prometheus
+        app.kubernetes.io/component: monitoring
+      annotations:
+        # Prometheus scraping annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # ConfigMap version for automatic rollout on config change
+        checksum/config: "{{ .Values.config | sha256sum }}"
     spec:
       serviceAccountName: prometheus
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534  # nobody user
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      # Node selection and scheduling
       nodeSelector:
         node-role.kubernetes.io/control-plane: ""
       tolerations:
       - key: node-role.kubernetes.io/control-plane
         operator: Exists
         effect: NoSchedule
+      # Anti-affinity for HA (prevents multiple replicas on same node)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - prometheus
+              topologyKey: kubernetes.io/hostname
+      # Priority class for important workloads
+      priorityClassName: system-cluster-critical
+      
+      # Init container: Set proper permissions for data directory
+      initContainers:
+      - name: init-chown-data
+        image: busybox:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          chown -R 65534:65534 /prometheus
+          chmod -R 755 /prometheus
+        volumeMounts:
+        - name: prometheus-storage
+          mountPath: /prometheus
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+      
       containers:
+      # Main Prometheus container
       - name: prometheus
-        image: prom/prometheus:v2.45.0
+        image: prom/prometheus:v2.48.0  # Updated to latest stable version
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9090
           name: web
+          protocol: TCP
         args:
+        # Core configuration
         - '--config.file=/etc/prometheus/prometheus.yml'
         - '--storage.tsdb.path=/prometheus'
+        
+        # Storage and retention
+        - '--storage.tsdb.retention.time=30d'
+        - '--storage.tsdb.retention.size=4GB'  # Prevent disk space exhaustion
+        - '--storage.tsdb.wal-compression'     # Reduce WAL size
+        
+        # Performance tuning
+        - '--query.timeout=2m'
+        - '--query.max-concurrency=20'
+        - '--query.max-samples=50000000'
+        
+        # Web interface
         - '--web.console.libraries=/etc/prometheus/console_libraries'
         - '--web.console.templates=/etc/prometheus/consoles'
-        - '--storage.tsdb.retention.time=30d'
-        - '--web.enable-lifecycle'
-        # Enable remote write receiver for federation
-        - '--web.enable-remote-write-receiver'
-        # Expose all metrics endpoints without authentication
         - '--web.route-prefix=/'
-        # Enable CORS for external access
+        - '--web.external-url=http://prometheus.monitoring.svc.cluster.local:9090'
+        
+        # Lifecycle and reload
+        - '--web.enable-lifecycle'
+        
+        # Federation and remote write
+        - '--web.enable-remote-write-receiver'
+        
+        # CORS for external access (Grafana, etc.)
         - '--web.cors.origin=.*'
-        # Enable admin API for enterprise operations
+        
+        # Admin API (use with caution in production)
         - '--web.enable-admin-api'
+        
         volumeMounts:
         - name: prometheus-config
           mountPath: /etc/prometheus
+          readOnly: true
         - name: prometheus-rules
           mountPath: /etc/prometheus/rules
+          readOnly: true
         - name: prometheus-storage
           mountPath: /prometheus
+        
+        # Resource limits and requests (QoS Guaranteed)
         resources:
           requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
             cpu: 500m
             memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        
+        # Security context for container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+            - ALL
+        
+        # Liveness probe - check if Prometheus is alive
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: web
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Readiness probe - check if Prometheus is ready to serve traffic
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: web
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Startup probe - allow slow startup without failing liveness
+        startupProbe:
+          httpGet:
+            path: /-/ready
+            port: web
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 20  # 5 minutes to start
+      
+      # Sidecar: Config reloader for zero-downtime updates
+      - name: config-reloader
+        image: quay.io/prometheus-operator/prometheus-config-reloader:v0.70.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - --listen-address=:8080
+        - --reload-url=http://localhost:9090/-/reload
+        - --watched-dir=/etc/prometheus
+        ports:
+        - containerPort: 8080
+          name: reloader-web
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+          readOnly: true
+      
+      # Volumes (ConfigMaps, emptyDirs, and secrets)
       volumes:
       - name: prometheus-config
         configMap:
           name: prometheus-config
+          defaultMode: 0444  # Read-only
       - name: prometheus-rules
         configMap:
           name: prometheus-rules
-      - name: prometheus-storage
-        persistentVolumeClaim:
-          claimName: prometheus-pvc
+          defaultMode: 0444  # Read-only
+      
+      # Termination grace period for graceful shutdown
+      terminationGracePeriodSeconds: 120
+  
+  # Persistent Volume Claim template
+  volumeClaimTemplates:
+  - metadata:
+      name: prometheus-storage
+      labels:
+        app: prometheus
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi  # Increased from 5Gi for production use
+      # Storage class can be specified if needed
+      # storageClassName: fast-ssd
 ---
-# Prometheus Service
+# Prometheus Service - ClusterIP for internal access
 apiVersion: v1
 kind: Service
 metadata:
@@ -433,6 +733,38 @@ metadata:
   namespace: monitoring
   labels:
     app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for StatefulSet
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: web
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+  # Session affinity for sticky sessions
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+---
+# Prometheus Service - NodePort for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-external
+  namespace: monitoring
+  labels:
+    app: prometheus
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
 spec:
   type: NodePort
   ports:
@@ -440,21 +772,110 @@ spec:
     targetPort: 9090
     nodePort: 30090
     name: web
+    protocol: TCP
   selector:
-    app: prometheus
-
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
 ---
-apiVersion: v1
-kind: PersistentVolumeClaim
+# NetworkPolicy for Prometheus - Enterprise Security
+# Controls ingress and egress traffic to Prometheus pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
-  name: prometheus-pvc
+  name: prometheus-netpol
   namespace: monitoring
+  labels:
+    app: prometheus
 spec:
-  accessModes:
-  - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+      app.kubernetes.io/component: monitoring
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow Grafana to query Prometheus
+  - from:
+    - podSelector:
+        matchLabels:
+          app: grafana
+    ports:
+    - protocol: TCP
+      port: 9090
+  # Allow Prometheus to scrape itself
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  # Allow external access via NodePort (from all sources)
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow Prometheus to scrape all pods in monitoring namespace
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9100
+    - protocol: TCP
+      port: 9115
+    - protocol: TCP
+      port: 9290
+    - protocol: TCP
+      port: 3100
+    - protocol: TCP
+      port: 3000
+  # Allow scraping kube-state-metrics
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: kube-state-metrics
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow scraping Kubernetes API server
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow scraping node exporters on host network
+  - to:
+    - ipBlock:
+        cidr: 192.168.4.0/24
+    ports:
+    - protocol: TCP
+      port: 9100
+  # Allow scraping external NTP servers (if monitoring them)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: TCP
+      port: 9123
 
 ---
 # Blackbox Exporter (network, http, dns probing)

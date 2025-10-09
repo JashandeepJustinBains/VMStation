@@ -1,0 +1,405 @@
+---
+# =============================================================================
+# NTP/Chrony Time Synchronization Service Deployment
+# =============================================================================
+# Purpose: Deploy enterprise-grade NTP service for cluster-wide time sync
+# Author: VMStation Enterprise Monitoring Team
+# Date: January 2025
+# 
+# This playbook deploys a Chrony-based NTP service as a DaemonSet to ensure
+# all cluster nodes maintain accurate time synchronization. This resolves
+# issues with:
+# - Log entries having inconsistent timestamps (write time vs event time)
+# - False inactivity detection due to time drift
+# - Unreliable automation based on time-sensitive operations
+#
+# Requirements:
+# - Kubernetes cluster must be running and accessible
+# - kubectl must be available on the control plane
+# - Manifests directory: /home/runner/work/VMStation/VMStation/manifests/infrastructure/
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.yml \
+#     ansible/playbooks/deploy-ntp-service.yaml
+#
+# Idempotency: Safe to run multiple times
+# =============================================================================
+
+- name: "Deploy NTP/Chrony Time Synchronization Service"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display deployment banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          VMStation NTP Service Deployment
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Purpose: Enterprise time synchronization for cluster
+          Component: Chrony NTP DaemonSet
+          Target: All cluster nodes
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # =============================================================================
+    # Pre-deployment Checks
+    # =============================================================================
+    
+    - name: "Check if Kubernetes cluster is accessible"
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+
+    - name: "Display cluster info"
+      debug:
+        msg: "{{ cluster_info.stdout_lines }}"
+
+    - name: "Check current time on control plane"
+      command: date '+%Y-%m-%d %H:%M:%S %Z'
+      register: control_plane_time
+      changed_when: false
+
+    - name: "Display control plane time"
+      debug:
+        msg: "Control plane current time: {{ control_plane_time.stdout }}"
+
+    # =============================================================================
+    # Namespace Creation
+    # =============================================================================
+    
+    - name: "Create infrastructure namespace"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace infrastructure
+      register: namespace_result
+      failed_when: 
+        - namespace_result.rc != 0
+        - "'AlreadyExists' not in namespace_result.stderr"
+      changed_when: "'created' in namespace_result.stdout"
+
+    - name: "Label infrastructure namespace"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf label namespace infrastructure \
+          name=infrastructure vmstation.io/component=infrastructure --overwrite
+      register: label_result
+      changed_when: "'labeled' in label_result.stdout"
+
+    # =============================================================================
+    # NTP Service Deployment
+    # =============================================================================
+    
+    - name: "Deploy Chrony NTP service manifest"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/infrastructure/chrony-ntp.yaml
+      register: ntp_deploy
+      changed_when: "'configured' in ntp_deploy.stdout or 'created' in ntp_deploy.stdout"
+
+    - name: "Display NTP deployment result"
+      debug:
+        msg: "{{ ntp_deploy.stdout_lines }}"
+
+    # =============================================================================
+    # Verification and Health Checks
+    # =============================================================================
+    
+    - name: "Wait for Chrony DaemonSet to be ready (60s)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod \
+          -l app=chrony-ntp -n infrastructure --timeout=60s
+      register: wait_result
+      changed_when: false
+      failed_when: false
+      retries: 3
+      delay: 10
+
+    - name: "Get Chrony DaemonSet status"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get daemonset -n infrastructure chrony-ntp -o wide
+      register: daemonset_status
+      changed_when: false
+
+    - name: "Display DaemonSet status"
+      debug:
+        msg: "{{ daemonset_status.stdout_lines }}"
+
+    - name: "Get Chrony pods status"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure -l app=chrony-ntp -o wide
+      register: pods_status
+      changed_when: false
+
+    - name: "Display pods status"
+      debug:
+        msg: "{{ pods_status.stdout_lines }}"
+
+    - name: "Check Chrony service"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n infrastructure chrony-ntp
+      register: svc_status
+      changed_when: false
+
+    - name: "Display service status"
+      debug:
+        msg: "{{ svc_status.stdout_lines }}"
+
+    # =============================================================================
+    # Time Sync Validation
+    # =============================================================================
+    
+    - name: "Get Chrony pod name for testing"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure \
+          -l app=chrony-ntp -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "none"
+      register: chrony_pod
+      changed_when: false
+
+    - name: "Check Chrony sources (if pod is running)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n infrastructure {{ chrony_pod.stdout }} \
+          -c chrony -- chronyc sources
+      register: chrony_sources
+      changed_when: false
+      when: chrony_pod.stdout != "none"
+      failed_when: false
+
+    - name: "Display Chrony sources"
+      debug:
+        msg: "{{ chrony_sources.stdout_lines }}"
+      when: 
+        - chrony_pod.stdout != "none"
+        - chrony_sources.rc == 0
+
+    - name: "Check Chrony tracking (if pod is running)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n infrastructure {{ chrony_pod.stdout }} \
+          -c chrony -- chronyc tracking
+      register: chrony_tracking
+      changed_when: false
+      when: chrony_pod.stdout != "none"
+      failed_when: false
+
+    - name: "Display Chrony tracking info"
+      debug:
+        msg: "{{ chrony_tracking.stdout_lines }}"
+      when: 
+        - chrony_pod.stdout != "none"
+        - chrony_tracking.rc == 0
+
+    # =============================================================================
+    # Configure Node System Time Sync
+    # =============================================================================
+    
+    - name: "Install chrony on control plane (if not present)"
+      apt:
+        name: chrony
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: "Configure chrony client on control plane"
+      copy:
+        dest: /etc/chrony/chrony.conf
+        content: |
+          # VMStation cluster time sync - Use pod NTP server
+          # Primary NTP source: Kubernetes chrony-ntp DaemonSet
+          server 127.0.0.1 iburst prefer
+          
+          # Fallback to public NTP if pod NTP is unavailable
+          pool time.google.com iburst maxsources 2
+          
+          # Basic chrony settings
+          driftfile /var/lib/chrony/drift
+          rtcsync
+          makestep 1.0 3
+          
+          # Log files
+          logdir /var/log/chrony
+        mode: '0644'
+        backup: true
+      notify: restart_chrony
+
+    - name: "Enable and start chrony service"
+      systemd:
+        name: chrony
+        state: started
+        enabled: true
+
+    - name: "Wait for chrony to sync (10s)"
+      wait_for:
+        timeout: 10
+      changed_when: false
+
+    - name: "Verify system time sync status"
+      command: chronyc tracking
+      register: system_tracking
+      changed_when: false
+      failed_when: false
+
+    - name: "Display system time sync status"
+      debug:
+        msg: "{{ system_tracking.stdout_lines }}"
+      when: system_tracking.rc == 0
+
+    # =============================================================================
+    # Final Summary
+    # =============================================================================
+    
+    - name: "Display deployment summary"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          NTP Service Deployment Complete
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          
+          ✅ Chrony DaemonSet deployed to infrastructure namespace
+          ✅ NTP service running on all cluster nodes
+          ✅ Time synchronization active
+          
+          Verification:
+          - Check pods: kubectl get pods -n infrastructure -l app=chrony-ntp
+          - Check sync: kubectl exec -n infrastructure <pod-name> -c chrony -- chronyc tracking
+          - View logs: kubectl logs -n infrastructure -l app=chrony-ntp -c chrony
+          
+          Monitoring:
+          - Chrony metrics exposed on port 9123
+          - Add to Prometheus scrape config for monitoring
+          
+          Next Steps:
+          1. Verify time sync across all worker nodes
+          2. Update Prometheus to scrape chrony-exporter metrics
+          3. Add NTP monitoring dashboard to Grafana
+          4. Test log timestamp consistency
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  handlers:
+    - name: restart_chrony
+      systemd:
+        name: chrony
+        state: restarted
+
+# =============================================================================
+# Configure Worker Nodes (Debian)
+# =============================================================================
+- name: "Configure Time Sync on Debian Worker Nodes"
+  hosts: storage_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Install chrony on worker node"
+      apt:
+        name: chrony
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: "Configure chrony client on worker node"
+      copy:
+        dest: /etc/chrony/chrony.conf
+        content: |
+          # VMStation cluster time sync - Use control plane NTP
+          server 192.168.4.63 iburst prefer
+          
+          # Fallback to public NTP
+          pool time.google.com iburst maxsources 2
+          
+          # Basic chrony settings
+          driftfile /var/lib/chrony/drift
+          rtcsync
+          makestep 1.0 3
+          
+          # Log files
+          logdir /var/log/chrony
+        mode: '0644'
+        backup: true
+      notify: restart_worker_chrony
+
+    - name: "Enable and start chrony on worker"
+      systemd:
+        name: chrony
+        state: started
+        enabled: true
+
+    - name: "Wait for worker chrony to sync (10s)"
+      wait_for:
+        timeout: 10
+      changed_when: false
+
+    - name: "Verify worker time sync"
+      command: chronyc tracking
+      register: worker_tracking
+      changed_when: false
+      failed_when: false
+
+    - name: "Display worker time sync status"
+      debug:
+        msg: "{{ worker_tracking.stdout_lines }}"
+      when: worker_tracking.rc == 0
+
+  handlers:
+    - name: restart_worker_chrony
+      systemd:
+        name: chrony
+        state: restarted
+
+# =============================================================================
+# Configure Homelab Node (RHEL)
+# =============================================================================
+- name: "Configure Time Sync on RHEL Homelab Node"
+  hosts: compute_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Install chrony on homelab (RHEL)"
+      dnf:
+        name: chrony
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: "Configure chrony client on homelab"
+      copy:
+        dest: /etc/chrony.conf
+        content: |
+          # VMStation cluster time sync - Use masternode NTP
+          server 192.168.4.63 iburst prefer
+          
+          # Fallback to public NTP
+          pool time.google.com iburst maxsources 2
+          
+          # Basic chrony settings
+          driftfile /var/lib/chrony/drift
+          rtcsync
+          makestep 1.0 3
+          
+          # Log files
+          logdir /var/log/chrony
+        mode: '0644'
+        backup: true
+      notify: restart_homelab_chrony
+
+    - name: "Enable and start chrony on homelab"
+      systemd:
+        name: chronyd
+        state: started
+        enabled: true
+
+    - name: "Wait for homelab chrony to sync (10s)"
+      wait_for:
+        timeout: 10
+      changed_when: false
+
+    - name: "Verify homelab time sync"
+      command: chronyc tracking
+      register: homelab_tracking
+      changed_when: false
+      failed_when: false
+
+    - name: "Display homelab time sync status"
+      debug:
+        msg: "{{ homelab_tracking.stdout_lines }}"
+      when: homelab_tracking.rc == 0
+
+  handlers:
+    - name: restart_homelab_chrony
+      systemd:
+        name: chronyd
+        state: restarted

@@ -1,0 +1,428 @@
+---
+# Enterprise Syslog Ingestor Service
+# Centralized syslog collection and forwarding to Loki
+# Provides cluster-wide log aggregation for system services
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: infrastructure
+---
+# Syslog-NG ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: syslog-ng-config
+  namespace: infrastructure
+  labels:
+    app: syslog-server
+    vmstation.io/component: logging
+data:
+  syslog-ng.conf: |
+    @version: 4.0
+    @include "scl.conf"
+    
+    # Global options
+    options {
+      # Disable DNS resolution for performance
+      use-dns(no);
+      use-fqdn(no);
+      
+      # Performance tuning
+      log-fifo-size(10000);
+      log-msg-size(65536);
+      
+      # Time settings
+      time-reopen(10);
+      time-reap(360);
+      
+      # Keep statistics
+      stats-freq(3600);
+      stats-level(1);
+      
+      # Chain hostnames for tracking
+      chain-hostnames(yes);
+      keep-hostname(yes);
+      
+      # Create directory structure
+      create-dirs(yes);
+      dir-perm(0755);
+      perm(0644);
+    };
+    
+    # Source: Network syslog (UDP and TCP)
+    source s_network {
+      # RFC3164 syslog over UDP (traditional)
+      network(
+        transport("udp")
+        port(514)
+        flags(no-parse)
+        log-iw-size(10000)
+        max-connections(1000)
+      );
+      
+      # RFC3164 syslog over TCP (reliable)
+      network(
+        transport("tcp")
+        port(514)
+        flags(no-parse)
+        log-iw-size(10000)
+        max-connections(1000)
+        so-keepalive(yes)
+      );
+      
+      # RFC5424 syslog over TCP (structured)
+      syslog(
+        transport("tcp")
+        port(601)
+        flags(syslog-protocol)
+        log-iw-size(10000)
+        max-connections(1000)
+      );
+    };
+    
+    # Source: Local system logs
+    source s_local {
+      system();
+      internal();
+    };
+    
+    # Filter: Parse and categorize logs
+    filter f_emergency { level(emerg); };
+    filter f_alert { level(alert); };
+    filter f_critical { level(crit); };
+    filter f_error { level(err); };
+    filter f_warning { level(warning); };
+    filter f_notice { level(notice); };
+    filter f_info { level(info); };
+    filter f_debug { level(debug); };
+    
+    # Filter: By facility
+    filter f_auth { facility(auth, authpriv); };
+    filter f_kern { facility(kern); };
+    filter f_mail { facility(mail); };
+    filter f_daemon { facility(daemon); };
+    filter f_syslog { facility(syslog); };
+    
+    # Template: JSON format for Loki
+    template t_json {
+      template("$(format-json --scope rfc5424 --scope nv-pairs --exclude DATE --key ISODATE @timestamp=${ISODATE})\n");
+    };
+    
+    # Template: Traditional syslog format
+    template t_traditional {
+      template("$ISODATE $HOST $PROGRAM[$PID]: $MSG\n");
+    };
+    
+    # Destination: Loki via HTTP
+    destination d_loki {
+      http(
+        url("http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push")
+        method("POST")
+        headers("Content-Type: application/json")
+        body('{"streams": [{"stream": {"job": "syslog", "host": "$HOST", "facility": "$FACILITY", "level": "$LEVEL"}, "values": [["${S_UNIXTIME}000000000", "$MSG"]]}]}')
+        batch-lines(100)
+        batch-timeout(1000)
+        timeout(10)
+        workers(4)
+        log-fifo-size(10000)
+      );
+    };
+    
+    # Destination: Local file storage (backup)
+    destination d_file_all {
+      file("/var/log/syslog-ng/all.log" template(t_traditional));
+    };
+    
+    destination d_file_auth {
+      file("/var/log/syslog-ng/auth.log" template(t_traditional));
+    };
+    
+    destination d_file_kern {
+      file("/var/log/syslog-ng/kern.log" template(t_traditional));
+    };
+    
+    destination d_file_error {
+      file("/var/log/syslog-ng/error.log" template(t_traditional));
+    };
+    
+    # Log paths: Route logs to destinations
+    log {
+      source(s_network);
+      source(s_local);
+      destination(d_loki);
+      destination(d_file_all);
+      flags(flow-control);
+    };
+    
+    log {
+      source(s_network);
+      source(s_local);
+      filter(f_auth);
+      destination(d_file_auth);
+    };
+    
+    log {
+      source(s_network);
+      source(s_local);
+      filter(f_kern);
+      destination(d_file_kern);
+    };
+    
+    log {
+      source(s_network);
+      source(s_local);
+      filter(f_error);
+      destination(d_file_error);
+    };
+    
+    # Statistics destination for monitoring
+    destination d_stats {
+      file("/var/log/syslog-ng/stats.log" template("$ISODATE $MSG\n"));
+    };
+    
+    log {
+      source(s_local);
+      filter(f_syslog);
+      destination(d_stats);
+    };
+---
+# Syslog ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: syslog-server
+  namespace: infrastructure
+---
+# Syslog Server Deployment (StatefulSet for persistence)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: syslog-server
+  namespace: infrastructure
+  labels:
+    app: syslog-server
+    vmstation.io/component: logging
+spec:
+  serviceName: syslog-server
+  replicas: 1
+  selector:
+    matchLabels:
+      app: syslog-server
+  template:
+    metadata:
+      labels:
+        app: syslog-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9577"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: syslog-server
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: syslog-ng
+        image: balabit/syslog-ng:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: syslog-udp
+          containerPort: 514
+          protocol: UDP
+        - name: syslog-tcp
+          containerPort: 514
+          protocol: TCP
+        - name: syslog-tls
+          containerPort: 601
+          protocol: TCP
+        volumeMounts:
+        - name: syslog-config
+          mountPath: /etc/syslog-ng/syslog-ng.conf
+          subPath: syslog-ng.conf
+          readOnly: true
+        - name: syslog-data
+          mountPath: /var/log/syslog-ng
+        - name: syslog-run
+          mountPath: /var/run/syslog-ng
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pgrep syslog-ng
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 514
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      
+      # Sidecar: Syslog-ng exporter for Prometheus metrics
+      - name: syslog-exporter
+        image: prom/statsd-exporter:latest
+        imagePullPolicy: IfNotPresent
+        args:
+        - --statsd.mapping-config=/etc/statsd/mapping.conf
+        ports:
+        - name: metrics
+          containerPort: 9102
+          protocol: TCP
+        volumeMounts:
+        - name: exporter-config
+          mountPath: /etc/statsd
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi
+      
+      volumes:
+      - name: syslog-config
+        configMap:
+          name: syslog-ng-config
+          defaultMode: 0644
+      - name: syslog-run
+        emptyDir: {}
+      - name: exporter-config
+        configMap:
+          name: syslog-exporter-config
+          defaultMode: 0644
+  
+  volumeClaimTemplates:
+  - metadata:
+      name: syslog-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
+---
+# Syslog Exporter ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: syslog-exporter-config
+  namespace: infrastructure
+data:
+  mapping.conf: |
+    mappings:
+    - match: "syslog.*"
+      name: "syslog_messages_total"
+      labels:
+        facility: "$1"
+---
+# Syslog Service (LoadBalancer/NodePort for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: syslog-server
+  namespace: infrastructure
+  labels:
+    app: syslog-server
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9102"
+spec:
+  type: NodePort
+  ports:
+  - name: syslog-udp
+    port: 514
+    targetPort: 514
+    protocol: UDP
+    nodePort: 30514
+  - name: syslog-tcp
+    port: 514
+    targetPort: 514
+    protocol: TCP
+    nodePort: 30515
+  - name: syslog-tls
+    port: 601
+    targetPort: 601
+    protocol: TCP
+    nodePort: 30601
+  - name: metrics
+    port: 9102
+    targetPort: 9102
+    protocol: TCP
+  selector:
+    app: syslog-server
+---
+# NetworkPolicy for Syslog Server
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: syslog-server-netpol
+  namespace: infrastructure
+spec:
+  podSelector:
+    matchLabels:
+      app: syslog-server
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow syslog from all sources
+  - from:
+    - podSelector: {}
+    - namespaceSelector: {}
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    ports:
+    - protocol: UDP
+      port: 514
+    - protocol: TCP
+      port: 514
+    - protocol: TCP
+      port: 601
+  # Allow Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9102
+  egress:
+  # Allow forwarding to Loki
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: loki
+    ports:
+    - protocol: TCP
+      port: 3100
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow all egress (for external syslog sources)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0

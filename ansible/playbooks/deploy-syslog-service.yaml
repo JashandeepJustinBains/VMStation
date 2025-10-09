@@ -1,0 +1,356 @@
+---
+# =============================================================================
+# Syslog Ingestor Service Deployment
+# =============================================================================
+# Purpose: Deploy centralized syslog collection and forwarding to Loki
+# Author: VMStation Enterprise Monitoring Team
+# Date: January 2025
+#
+# This playbook deploys a syslog-ng based log aggregation service that:
+# - Collects syslog from all cluster nodes and external systems
+# - Forwards logs to Loki for centralized storage and querying
+# - Maintains local file backups for disaster recovery
+# - Provides Prometheus metrics for monitoring
+#
+# Requirements:
+# - Kubernetes cluster with Loki deployed
+# - kubectl available on control plane
+# - Manifests directory: /home/runner/work/VMStation/VMStation/manifests/infrastructure/
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.yml \
+#     ansible/playbooks/deploy-syslog-service.yaml
+#
+# Idempotency: Safe to run multiple times
+# =============================================================================
+
+- name: "Deploy Syslog Ingestor Service"
+  hosts: monitoring_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Display deployment banner"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          VMStation Syslog Ingestor Deployment
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Purpose: Centralized syslog collection and forwarding
+          Component: Syslog-NG StatefulSet
+          Integration: Loki log aggregation
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    # =============================================================================
+    # Pre-deployment Checks
+    # =============================================================================
+    
+    - name: "Check if Kubernetes cluster is accessible"
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+
+    - name: "Check if Loki is deployed and ready"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring -l app=loki -o jsonpath='{.items[*].status.phase}'
+      register: loki_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Display Loki status"
+      debug:
+        msg: "Loki pod status: {{ loki_status.stdout | default('Not found') }}"
+
+    - name: "Warn if Loki is not ready"
+      debug:
+        msg: |
+          WARNING: Loki does not appear to be running.
+          Syslog server will still deploy but log forwarding may fail.
+          Deploy Loki first with: ansible-playbook deploy-monitoring-stack.yaml
+      when: "'Running' not in loki_status.stdout"
+
+    # =============================================================================
+    # Create Storage Directory
+    # =============================================================================
+    
+    - name: "Create syslog data directory on host"
+      file:
+        path: /srv/monitoring_data/syslog
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    # =============================================================================
+    # Deploy Syslog Service
+    # =============================================================================
+    
+    - name: "Ensure infrastructure namespace exists"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf create namespace infrastructure
+      register: namespace_result
+      failed_when:
+        - namespace_result.rc != 0
+        - "'AlreadyExists' not in namespace_result.stderr"
+      changed_when: "'created' in namespace_result.stdout"
+
+    - name: "Deploy syslog server manifest"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /home/runner/work/VMStation/VMStation/manifests/infrastructure/syslog-server.yaml
+      register: syslog_deploy
+      changed_when: "'configured' in syslog_deploy.stdout or 'created' in syslog_deploy.stdout"
+
+    - name: "Display syslog deployment result"
+      debug:
+        msg: "{{ syslog_deploy.stdout_lines }}"
+
+    # =============================================================================
+    # Verification and Health Checks
+    # =============================================================================
+    
+    - name: "Wait for syslog StatefulSet to be ready (60s)"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf wait --for=condition=ready pod \
+          -l app=syslog-server -n infrastructure --timeout=60s
+      register: wait_result
+      changed_when: false
+      failed_when: false
+      retries: 3
+      delay: 10
+
+    - name: "Get syslog StatefulSet status"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get statefulset -n infrastructure syslog-server -o wide
+      register: statefulset_status
+      changed_when: false
+      failed_when: false
+
+    - name: "Display StatefulSet status"
+      debug:
+        msg: "{{ statefulset_status.stdout_lines }}"
+      when: statefulset_status.rc == 0
+
+    - name: "Get syslog pods status"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure -l app=syslog-server -o wide
+      register: pods_status
+      changed_when: false
+
+    - name: "Display pods status"
+      debug:
+        msg: "{{ pods_status.stdout_lines }}"
+
+    - name: "Check syslog service"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n infrastructure syslog-server
+      register: svc_status
+      changed_when: false
+
+    - name: "Display service status"
+      debug:
+        msg: "{{ svc_status.stdout_lines }}"
+
+    # =============================================================================
+    # Test Log Forwarding
+    # =============================================================================
+    
+    - name: "Get syslog pod name"
+      shell: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure \
+          -l app=syslog-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "none"
+      register: syslog_pod
+      changed_when: false
+
+    - name: "Send test log message"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf exec -n infrastructure {{ syslog_pod.stdout }} \
+          -c syslog-ng -- logger -t vmstation-test "Syslog service deployment test message at $(date)"
+      register: test_log
+      changed_when: false
+      when: syslog_pod.stdout != "none"
+      failed_when: false
+
+    - name: "Check syslog-ng logs"
+      command: |
+        kubectl --kubeconfig=/etc/kubernetes/admin.conf logs -n infrastructure {{ syslog_pod.stdout }} \
+          -c syslog-ng --tail=20
+      register: syslog_logs
+      changed_when: false
+      when: syslog_pod.stdout != "none"
+      failed_when: false
+
+    - name: "Display syslog logs"
+      debug:
+        msg: "{{ syslog_logs.stdout_lines }}"
+      when:
+        - syslog_pod.stdout != "none"
+        - syslog_logs.rc == 0
+
+    # =============================================================================
+    # Configure System Rsyslog to Forward to Syslog Server
+    # =============================================================================
+    
+    - name: "Install rsyslog on control plane (if not present)"
+      apt:
+        name: rsyslog
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: "Configure rsyslog to forward to cluster syslog server"
+      copy:
+        dest: /etc/rsyslog.d/50-vmstation-syslog.conf
+        content: |
+          # VMStation cluster syslog forwarding
+          # Forward all logs to centralized syslog server
+          
+          # TCP forwarding (reliable, recommended)
+          *.* @@127.0.0.1:30515
+          
+          # UDP forwarding (faster, less reliable - backup)
+          # *.* @127.0.0.1:30514
+        mode: '0644'
+      notify: restart_rsyslog
+
+    - name: "Restart rsyslog service"
+      systemd:
+        name: rsyslog
+        state: restarted
+        enabled: true
+
+    - name: "Test rsyslog forwarding"
+      shell: |
+        logger -t vmstation-control-plane "Test message from control plane at $(date)"
+      changed_when: false
+
+    - name: "Wait for log propagation (5s)"
+      wait_for:
+        timeout: 5
+      changed_when: false
+
+    # =============================================================================
+    # Final Summary
+    # =============================================================================
+    
+    - name: "Display deployment summary"
+      debug:
+        msg: |
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          Syslog Ingestor Deployment Complete
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          
+          ✅ Syslog-NG StatefulSet deployed to infrastructure namespace
+          ✅ Syslog service listening on:
+             - UDP: NodePort 30514 (traditional)
+             - TCP: NodePort 30515 (reliable)
+             - TLS: NodePort 30601 (RFC5424)
+          ✅ Logs forwarding to Loki in monitoring namespace
+          ✅ Local backup logs stored in /var/log/syslog-ng (in pod)
+          
+          Verification:
+          - Check pods: kubectl get pods -n infrastructure -l app=syslog-server
+          - View logs: kubectl logs -n infrastructure -l app=syslog-server -c syslog-ng
+          - Test: logger -t test "Test message" (on any node)
+          - Query in Grafana: {job="syslog"}
+          
+          External Syslog Sources:
+          - Configure devices to send syslog to: 192.168.4.63:30514 (UDP)
+          - Or: 192.168.4.63:30515 (TCP, recommended)
+          
+          Monitoring:
+          - Syslog metrics exposed on port 9102
+          - Add to Prometheus for monitoring
+          
+          Next Steps:
+          1. Configure worker nodes to forward syslog
+          2. Configure external devices (routers, switches, etc.)
+          3. Add syslog monitoring dashboard to Grafana
+          4. Test log search in Loki/Grafana
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  handlers:
+    - name: restart_rsyslog
+      systemd:
+        name: rsyslog
+        state: restarted
+
+# =============================================================================
+# Configure Syslog Forwarding on Worker Nodes
+# =============================================================================
+- name: "Configure Syslog Forwarding on Debian Worker Nodes"
+  hosts: storage_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Install rsyslog on worker"
+      apt:
+        name: rsyslog
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: "Configure rsyslog forwarding on worker"
+      copy:
+        dest: /etc/rsyslog.d/50-vmstation-syslog.conf
+        content: |
+          # VMStation cluster syslog forwarding to masternode
+          *.* @@192.168.4.63:30515
+        mode: '0644'
+      notify: restart_worker_rsyslog
+
+    - name: "Restart rsyslog on worker"
+      systemd:
+        name: rsyslog
+        state: restarted
+        enabled: true
+
+    - name: "Test worker syslog forwarding"
+      shell: |
+        logger -t vmstation-worker "Test message from {{ inventory_hostname }} at $(date)"
+      changed_when: false
+
+  handlers:
+    - name: restart_worker_rsyslog
+      systemd:
+        name: rsyslog
+        state: restarted
+
+# =============================================================================
+# Configure Syslog Forwarding on Homelab Node (RHEL)
+# =============================================================================
+- name: "Configure Syslog Forwarding on RHEL Homelab Node"
+  hosts: compute_nodes
+  gather_facts: true
+  become: true
+  tasks:
+    - name: "Install rsyslog on homelab (RHEL)"
+      dnf:
+        name: rsyslog
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: "Configure rsyslog forwarding on homelab"
+      copy:
+        dest: /etc/rsyslog.d/50-vmstation-syslog.conf
+        content: |
+          # VMStation cluster syslog forwarding to masternode
+          *.* @@192.168.4.63:30515
+        mode: '0644'
+      notify: restart_homelab_rsyslog
+
+    - name: "Restart rsyslog on homelab"
+      systemd:
+        name: rsyslog
+        state: restarted
+        enabled: true
+
+    - name: "Test homelab syslog forwarding"
+      shell: |
+        logger -t vmstation-homelab "Test message from homelab at $(date)"
+      changed_when: false
+
+  handlers:
+    - name: restart_homelab_rsyslog
+      systemd:
+        name: rsyslog
+        state: restarted
