@@ -89,7 +89,7 @@
     # =============================================================================
     
     - name: "Deploy Chrony NTP service manifest"
-    command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/chrony-ntp.yaml
+      command: kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /srv/monitoring_data/VMStation/manifests/infrastructure/chrony-ntp.yaml
       register: ntp_deploy
       changed_when: "'configured' in ntp_deploy.stdout or 'created' in ntp_deploy.stdout"
 
