@@ -140,6 +140,14 @@ This index catalogs all documentation files consolidated during the manifest reo
 - Title: Monitoring Stack Fixes - Validation Report
 - Summary: **Date**: October 9, 2025  
 
+**HEADLESS_SERVICE_ENDPOINTS_TROUBLESHOOTING.md**
+- Title: Headless Service Endpoints Troubleshooting Guide
+- Summary: Comprehensive guide for diagnosing and fixing empty endpoints issues with Prometheus and Loki headless services that cause DNS resolution failures in Grafana
+
+**HEADLESS_SERVICE_ENDPOINTS_QUICK_REFERENCE.md**
+- Title: Quick Reference: Headless Service Empty Endpoints
+- Summary: Quick command reference and decision tree for diagnosing empty endpoints in headless services, including common fixes for label mismatches, pod failures, and DNS issues
+
 **PVC_FIX_OCT2025.md**
 - Title: PersistentVolume Claims Fix - October 2025
 - Summary: Multiple pods were stuck in `Pending` state due to unbound PersistentVolumeClaims (PVCs):

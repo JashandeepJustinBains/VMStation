@@ -143,6 +143,46 @@ Validates Loki log aggregation and connectivity.
 ./tests/test-loki-validation.sh
 ```
 
+#### test-headless-service-endpoints.sh
+
+Diagnoses and validates headless service endpoints for Prometheus and Loki.
+
+**What it tests**:
+- Service selector and pod label matching
+- Pod status (Running, Ready, CrashLoopBackOff)
+- StatefulSet replica status
+- Endpoint population for headless services
+- PVC/PV binding and status
+- DNS resolution for headless service FQDNs
+- Common root causes: empty endpoints, label mismatch, permission errors
+- Provides fix recommendations based on detected issues
+
+**How to run**:
+```bash
+./tests/test-headless-service-endpoints.sh
+```
+
+**Expected output**:
+```
+[1/10] Checking monitoring namespace...
+✓ Monitoring namespace exists
+
+[2/10] Checking pod status in monitoring namespace...
+✓ Found 1 Prometheus pod(s)
+✓ Prometheus pod(s) are Ready
+✓ Found 1 Loki pod(s)
+✓ Loki pod(s) are Ready
+
+[6/10] Checking service endpoints...
+✓ Prometheus endpoints: 10.244.0.123:9090
+✓ Loki endpoints: 10.244.0.124:3100
+...
+```
+
+**Related documentation**:
+- `docs/HEADLESS_SERVICE_ENDPOINTS_TROUBLESHOOTING.md` - Full troubleshooting guide
+- `docs/HEADLESS_SERVICE_ENDPOINTS_QUICK_REFERENCE.md` - Quick command reference
+
 #### test-monitoring-access.sh (Updated)
 
 Validates monitoring endpoints with concise curl output.
