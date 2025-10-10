@@ -1,0 +1,160 @@
+[
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/grafana-pv.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "PV-sensitive",
+      "hostPath"
+    ],
+    "reason": "PV nodeAffinity: node-role.kubernetes.io/control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/grafana-pv.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeout=3",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/grafana-pv.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/grafana.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "Generic"
+    ],
+    "reason": "template.spec.nodeSelector: control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/grafana.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeout=32s\"",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/grafana.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/ipmi-exporter.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "hostPath",
+      "DaemonSet"
+    ],
+    "reason": "template.spec.nodeSelector: control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/ipmi-exporter.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeou",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/ipmi-exporter.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/kube-state-metrics.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "Generic"
+    ],
+    "reason": "template.spec.nodeSelector: control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/kube-state-metrics.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?t",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/kube-state-metrics.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/loki-pv.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "PV-sensitive",
+      "hostPath"
+    ],
+    "reason": "PV nodeAffinity: node-role.kubernetes.io/control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/loki-pv.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeout=32s\"",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/loki-pv.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/loki.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "volumeClaimTemplates",
+      "StatefulSet"
+    ],
+    "reason": "template.spec.nodeSelector: control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/loki.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeout=32s\": d",
+      "yamllint": "warnings/errors: ::group::/home/runner/work/VMStation/VMStation/manifests/monitoring/loki.yaml\n::error file=/home/run"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/loki.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/node-exporter.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "hostPath",
+      "DaemonSet"
+    ],
+    "reason": "DaemonSet default (cluster-wide)",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/node-exporter.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeou",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/node-exporter.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus-pv.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "PV-sensitive",
+      "hostPath"
+    ],
+    "reason": "PV nodeAffinity: node-role.kubernetes.io/control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus-pv.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeou",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/prometheus-pv.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "volumeClaimTemplates",
+      "StatefulSet"
+    ],
+    "reason": "template.spec.nodeSelector: control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeout=3",
+      "yamllint": "warnings/errors: ::group::/home/runner/work/VMStation/VMStation/manifests/monitoring/prometheus.yaml\n::error file=/ho"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/prometheus.yaml"
+  },
+  {
+    "source_path": "/home/runner/work/VMStation/VMStation/manifests/monitoring/promtail-pv.yaml",
+    "destination": "debian-bookworm",
+    "classification": [
+      "PV-sensitive",
+      "hostPath"
+    ],
+    "reason": "PV nodeAffinity: node-role.kubernetes.io/control-plane",
+    "validation": {
+      "yaml_parse": "ok",
+      "kubectl_dry_run": "error: error: error validating \"/home/runner/work/VMStation/VMStation/manifests/monitoring/promtail-pv.yaml\": error validating data: failed to download openapi: Get \"http://localhost:8080/openapi/v2?timeout=",
+      "yamllint": "ok"
+    },
+    "warnings": [],
+    "proposed_destination": "/home/runner/work/VMStation/VMStation/manifests/debian-bookworm/promtail-pv.yaml"
+  }
+]

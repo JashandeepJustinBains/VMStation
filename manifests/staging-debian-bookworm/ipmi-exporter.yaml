@@ -1,0 +1,226 @@
+---
+# IPMI Exporter for Enterprise Server Hardware Monitoring
+# Deploys on RHEL 10 homelab node for IPMI statistics collection
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ipmi-exporter
+  namespace: monitoring
+  labels:
+    app: ipmi-exporter
+    vmstation.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: ipmi-exporter
+  template:
+    metadata:
+      labels:
+        app: ipmi-exporter
+    spec:
+      # Deploy only on RHEL 10 compute node with enterprise hardware
+      nodeSelector:
+        vmstation.io/role: compute
+        kubernetes.io/os: linux
+      tolerations:
+      - key: node-role.kubernetes.io/worker
+        operator: Exists
+        effect: NoSchedule
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: ipmi-exporter
+        image: prometheuscommunity/ipmi-exporter:v1.6.1
+        ports:
+        - containerPort: 9290
+          hostPort: 9290
+          name: metrics
+        args:
+        - "--config.file=/config/ipmi.yml"
+        - "--web.listen-address=:9290"
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+            - SYS_RAWIO
+        volumeMounts:
+        - name: ipmi-config
+          mountPath: /config
+        - name: dev
+          mountPath: /dev
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: ipmi-config
+        configMap:
+          name: ipmi-exporter-config
+      - name: dev
+        hostPath:
+          path: /dev
+---
+# IPMI Exporter Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipmi-exporter-config
+  namespace: monitoring
+data:
+  ipmi.yml: |
+    # IPMI Exporter configuration for enterprise server monitoring
+    # Collects hardware metrics: temperature, fan speed, power, voltage
+    modules:
+      default:
+        # Collect all available IPMI sensors
+        collectors:
+          - ipmi
+          - dcmi
+          - bmc
+          - chassis
+        # Timeout for IPMI commands (seconds)
+        timeout: 10
+        # Use local BMC interface (adjust as needed for your hardware)
+        driver: "LAN_2_0"
+        privilege: "user"
+---
+# IPMI Exporter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipmi-exporter
+  namespace: monitoring
+  labels:
+    app: ipmi-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9290"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9290
+    targetPort: 9290
+    name: metrics
+  selector:
+    app: ipmi-exporter
+---
+# IPMI Credentials Secret (to be populated from secrets.yml via Ansible)
+# NOTE: The ipmi-credentials Secret must NOT be created here with empty values.
+# It should be created idempotently by the Ansible playbook from vaulted variables
+# (or by the operator) so that accidental empty secrets are not applied.
+---
+# Remote IPMI Exporter for Enterprise Server at 192.168.4.60
+# This deployment monitors remote BMC using network IPMI protocol
+# NOTE: Set replicas to 0 by default - only scale up when credentials are configured
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipmi-exporter-remote
+  namespace: monitoring
+  labels:
+    app: ipmi-exporter-remote
+    vmstation.io/component: monitoring
+spec:
+  replicas: 0  # Set to 0 by default - requires valid IPMI credentials to be useful
+  selector:
+    matchLabels:
+      app: ipmi-exporter-remote
+  template:
+    metadata:
+      labels:
+        app: ipmi-exporter-remote
+    spec:
+      # Schedule on control plane to avoid network routing issues
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: ipmi-exporter
+        image: prometheuscommunity/ipmi-exporter:v1.6.1
+        ports:
+        - containerPort: 9291
+          name: metrics
+        args:
+        - "--config.file=/config/ipmi-remote.yml"
+        - "--web.listen-address=:9291"
+        env:
+        - name: IPMI_USER
+          valueFrom:
+            secretKeyRef:
+              name: ipmi-credentials
+              key: username
+        - name: IPMI_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ipmi-credentials
+              key: password
+        volumeMounts:
+        - name: ipmi-config
+          mountPath: /config
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: ipmi-config
+        configMap:
+          name: ipmi-exporter-remote-config
+---
+# Remote IPMI Exporter Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipmi-exporter-remote-config
+  namespace: monitoring
+data:
+  ipmi-remote.yml: |
+    # IPMI Exporter configuration for remote enterprise server monitoring
+    # Monitors BMC via network IPMI protocol (IPMI over LAN)
+    modules:
+      default:
+        collectors:
+          - ipmi
+          - dcmi
+          - bmc
+          - chassis
+        # Timeout for remote IPMI commands (seconds)
+        timeout: 20
+        driver: "LAN_2_0"
+        privilege: "user"
+        # Credentials are expected to be supplied via environment variables
+        # when running the exporter (e.g. IPMI_USER / IPMI_PASSWORD)
+        # The deployment passes these through from the ipmi-credentials Secret.
+        user: "${IPMI_USER}"
+        password: "${IPMI_PASSWORD}"
+---
+# Remote IPMI Exporter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ipmi-exporter-remote
+  namespace: monitoring
+  labels:
+    app: ipmi-exporter-remote
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9291"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9291
+    targetPort: 9291
+    name: metrics
+  selector:
+    app: ipmi-exporter-remote

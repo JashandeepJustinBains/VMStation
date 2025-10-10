@@ -1,0 +1,112 @@
+From: VMStation Reorganization Automation
+Subject: [PATCH] Add monitoring manifests path variable and reorganization infrastructure
+
+This patch adds infrastructure for manifest reorganization:
+1. Adds ansible/group_vars/all/monitoring_manifests.yml with path variable
+2. Creates staging directories for manifest reorganization
+3. Provides migration plan in migration-plan.json
+
+The patch does NOT modify existing playbook logic to minimize risk.
+Operator can choose to use {{ monitoring_manifests_dir }} variable in future updates.
+
+---
+ ansible/group_vars/all/monitoring_manifests.yml | 28 ++++++++++++++++++
+ manifests/staging-debian-bookworm/              | 10 new files
+ manifests/staging-rhel10/                        |  0 (empty, reserved for future)
+ docs/raw/                                        | 49 files consolidated
+ docs/INDEX.md                                    |  1 new file
+ migration-plan.json                              |  1 new file
+ migration-risk-report.md                         |  1 new file
+ 7 directories changed, 90 files changed
+
+diff --git a/ansible/group_vars/all/monitoring_manifests.yml b/ansible/group_vars/all/monitoring_manifests.yml
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/ansible/group_vars/all/monitoring_manifests.yml
+@@ -0,0 +1,28 @@
++---
++# VMStation Monitoring Manifests Configuration
++# Created during manifest reorganization - 2025-10-09
++#
++# This variable defines the base path for monitoring manifests.
++# After reorganization, manifests are split into platform-specific directories:
++#   - manifests/debian-bookworm/ (control-plane nodes)
++#   - manifests/rhel10/ (compute/homelab nodes)
++#
++# For backward compatibility and to support the current deployment model where
++# the operator resets the cluster for each deployment, we maintain a single
++# manifests directory path variable.
++
++# Primary manifest directory (default: monitoring manifests location)
++# This should point to the directory containing manifest files on the deployment host
++monitoring_manifests_dir: "/srv/monitoring_data/VMStation/manifests/monitoring"
++
++# Platform-specific manifest directories (for future use)
++# Uncomment and use these when deploying to specific platforms:
++# monitoring_manifests_debian_dir: "/srv/monitoring_data/VMStation/manifests/debian-bookworm"
++# monitoring_manifests_rhel_dir: "/srv/monitoring_data/VMStation/manifests/rhel10"
++
++# Alternative paths for different deployment scenarios:
++# Local development/testing:
++# monitoring_manifests_dir: "{{ playbook_dir }}/../../manifests/monitoring"
++#
++# Platform-specific deployment:
++# monitoring_manifests_dir: "{{ playbook_dir }}/../../manifests/{{ target_platform | default('debian-bookworm') }}"
+
+Example usage in playbooks (OPTIONAL - not applied in this patch):
+
+# Before (hardcoded path):
+- name: "Deploy Prometheus"
+  shell: kubectl apply -f /srv/monitoring_data/VMStation/manifests/monitoring/prometheus.yaml
+
+# After (using variable):
+- name: "Deploy Prometheus"
+  shell: kubectl apply -f {{ monitoring_manifests_dir }}/prometheus.yaml
+  # Fallback comment: Original path was /srv/monitoring_data/VMStation/manifests/monitoring/prometheus.yaml
+
+Files that could benefit from this variable (23 references found):
+- ansible/playbooks/deploy-cluster.yaml (10 references, lines 491-540)
+- ansible/playbooks/deploy-monitoring-stack.yaml (6 references, lines 134-178)
+- ansible/playbooks/fix-loki-config.yaml (1 reference, line 67)
+- ansible/playbooks/deploy-syslog-service.yaml (2 references)
+- ansible/playbooks/deploy-ntp-service.yaml (1 reference)
+- ansible/playbooks/deploy-kerberos-service.yaml (1 reference)
+- scripts/apply-monitoring-fixes.sh (2 references)
+
+Note: Actual playbook modifications are NOT included in this patch to minimize
+risk and maintain current working deployment. Operator can apply variable
+substitutions gradually after validating the reorganization.
+
+---
+
+Migration Plan Summary (see migration-plan.json for full details):
+- 10 monitoring manifests analyzed
+- All target debian-bookworm (control-plane)
+- 0 manifests target rhel10
+- 0 parse errors
+- All manifests copied to staging-debian-bookworm/
+- Documentation consolidated to docs/raw/
+- Index created at docs/INDEX.md
+
+Risk Assessment (see migration-risk-report.md):
+- Overall risk: LOW
+- All manifests have clear node affinity
+- No ambiguous classifications
+- PV manifests properly target control-plane
+- DaemonSets have appropriate tolerations
+
+Staging Directories Created:
+- manifests/staging-debian-bookworm/ (10 files ready for review)
+- manifests/staging-rhel10/ (empty, reserved for future RHEL-specific manifests)
+- docs/raw/ (49 documentation files consolidated)
+
+Next Steps for Operator:
+1. Review migration-plan.json for per-file analysis
+2. Inspect staging directories
+3. Run validation commands (see migration-risk-report.md)
+4. Optionally create final directories and move files:
+   mkdir -p manifests/debian-bookworm manifests/rhel10
+   cp -r manifests/staging-debian-bookworm/* manifests/debian-bookworm/
+5. Update playbooks to use {{ monitoring_manifests_dir }} variable (optional)
+

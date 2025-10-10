@@ -1,0 +1,28 @@
+---
+# VMStation Monitoring Manifests Configuration
+# Created during manifest reorganization - 2025-10-09
+#
+# This variable defines the base path for monitoring manifests.
+# After reorganization, manifests are split into platform-specific directories:
+#   - manifests/debian-bookworm/ (control-plane nodes)
+#   - manifests/rhel10/ (compute/homelab nodes)
+#
+# For backward compatibility and to support the current deployment model where
+# the operator resets the cluster for each deployment, we maintain a single
+# manifests directory path variable.
+
+# Primary manifest directory (default: monitoring manifests location)
+# This should point to the directory containing manifest files on the deployment host
+monitoring_manifests_dir: "/srv/monitoring_data/VMStation/manifests/monitoring"
+
+# Platform-specific manifest directories (for future use)
+# Uncomment and use these when deploying to specific platforms:
+# monitoring_manifests_debian_dir: "/srv/monitoring_data/VMStation/manifests/debian-bookworm"
+# monitoring_manifests_rhel_dir: "/srv/monitoring_data/VMStation/manifests/rhel10"
+
+# Alternative paths for different deployment scenarios:
+# Local development/testing:
+# monitoring_manifests_dir: "{{ playbook_dir }}/../../manifests/monitoring"
+#
+# Platform-specific deployment:
+# monitoring_manifests_dir: "{{ playbook_dir }}/../../manifests/{{ target_platform | default('debian-bookworm') }}"
