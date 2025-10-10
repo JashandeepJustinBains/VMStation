@@ -54,40 +54,122 @@ git pull
   - Current status: Down (no credentials configured)
   - **Action:** Document IPMI credential requirements in manifests/monitoring/ipmi-exporter
 
-#### Dashboard Issues (0 Entries)
-- [ ] Fix **IPMI Hardware Monitoring - RHEL 10 Enterprise Server** dashboard
-  - Depends on IPMI exporter deployment above
-  
-- [ ] Fix **vmstation** dashboard
-  - Investigate missing data source or query issues
-  
-- [ ] Fix **Loki Logs & Aggregation** dashboard
-  - ~~Previous error: `dial tcp: lookup loki on 10.96.0.10:53: no such host`~~
-  - **UPDATE (Oct 2025):** Loki deployment fixed (schema config corrected)
-  - New error from problem statement: Status 502 - `dial tcp 10.110.131.130:3100: connect: connection refused`
-  - Root cause: Loki service may not be fully ready or network policy blocking access
-  - **Action:** Verify Loki pod is Running and service endpoints are registered
-  - **Action (Loki PV/Config):** Ensure hostPath `/srv/monitoring_data/loki` on masternode exists and is owned by UID 10001 (Loki). If using PVC/PV, verify `loki-pv.yaml` and `loki-pvc` storageClassName match and permissions allow container write access.
-  
-- [ ] Fix **Node Metrics - Detailed System Monitoring** dashboard
-  - Verify node-exporter pods are running on all nodes
-  - Check Prometheus scrape configs include all nodes
-  
-- [ ] Fix **VMStation Kubernetes Cluster Overview** dashboard
-  - Verify all data sources are configured correctly
+#### Dashboard Issues (Enterprise-Grade Improvements Completed - Oct 2025)
+
+**✅ COMPLETED:**
+- [x] **Enhanced Loki Logs & Aggregation** dashboard to enterprise-grade
+  - Added service health indicators (status, ingestion rate, error/warning rates)
+  - Implemented template variables for namespace filtering
+  - Added top log-producing pods table
+  - Added Loki performance metrics panel
+  - Enhanced log panels with better formatting
+  - Documentation: `docs/GRAFANA_DASHBOARD_USAGE_GUIDE.md`
+
+- [x] **Created Syslog Infrastructure Monitoring** dashboard
+  - Comprehensive syslog server monitoring with 11 panels
+  - Message rate tracking and processing latency
+  - Severity and facility-based log filtering
+  - Critical and error log highlighting
+  - Recent events live tail
+  - Documentation: `docs/GRAFANA_DASHBOARD_USAGE_GUIDE.md`
+
+- [x] **Created CoreDNS Performance & Health** dashboard
+  - 14 comprehensive monitoring panels
+  - Query rate by DNS record type
+  - Response time percentiles (P50, P95, P99)
+  - Cache statistics and hit rate monitoring
+  - Forward request tracking
+  - Top queried domains table
+  - Resource usage (CPU/Memory)
+  - Plugin status monitoring
+  - Documentation: `docs/GRAFANA_DASHBOARD_USAGE_GUIDE.md`
+
+**REMAINING ACTIONS:**
+
+- [ ] **Deploy and Configure IPMI Exporter on Homelab Node**
+  - Follow guide: `docs/RHEL10_HOMELAB_METRICS_SETUP.md`
+  - Install IPMI exporter on 192.168.4.62
+  - Configure IPMI credentials
+  - Verify IPMI Hardware Monitoring dashboard shows data
+
+- [ ] **Fix Prometheus Pod Status (1/2 Ready)**
+  - Run diagnostics: `./scripts/diagnose-monitoring-stack.sh`
+  - Check if fix from AI_AGENT_IMPLEMENTATION_REPORT.md was applied
+  - Verify runAsGroup: 65534 in prometheus.yaml securityContext
+  - Check Loki frontend_worker is disabled
+  - Run remediation if needed: `./scripts/remediate-monitoring-stack.sh`
+
+- [ ] **Verify Grafana Datasource Connectivity**
+  - Access Grafana: http://192.168.4.63:30300
+  - Navigate to Configuration → Data Sources
+  - Test Prometheus datasource connection
+  - Test Loki datasource connection
+  - Review endpoints: `kubectl get endpoints -n monitoring prometheus loki`
 
 #### Prometheus Targets Down
-Current down targets from problem statement:
-- [ ] `192.168.4.62:9290` - ipmi-exporter on homelab (needs credentials)
-- [ ] `192.168.4.61:9100` - node-exporter on storagenodet3500 (needs investigation)
-- [ ] `192.168.4.62:9100` - node-exporter on homelab (needs investigation)  
-- [ ] `192.168.4.63:9100` - node-exporter on masternode (needs investigation)
 
-**Actions:**
-1. SSH to each node and verify node-exporter is running: `systemctl status node_exporter`
-2. Check firewall rules allow port 9100 access
-3. Verify Prometheus scrape configs in `manifests/monitoring/prometheus.yaml`
-4. Check node-exporter deployment manifest for correct node selectors
+**IMPORTANT:** Before troubleshooting, deploy monitoring stack with new dashboards:
+```bash
+cd /srv/monitoring_data/VMStation
+git pull
+./deploy.sh monitoring
+```
+
+Current down targets from problem statement require investigation:
+
+- [ ] `192.168.4.62:9290` - **ipmi-exporter on homelab**
+  - **Status:** Not yet deployed
+  - **Action:** Follow setup guide: `docs/RHEL10_HOMELAB_METRICS_SETUP.md` section 3
+  - **Steps:**
+    1. SSH to homelab: `ssh root@192.168.4.62`
+    2. Install IPMI tools: `dnf install -y ipmitool freeipmi`
+    3. Download and install ipmi_exporter
+    4. Create systemd service with CAP_SYS_RAWIO capability
+    5. Configure firewall: `firewall-cmd --add-port=9290/tcp --permanent`
+    6. Verify in Prometheus targets after restart
+  
+- [ ] `192.168.4.62:9100` - **node-exporter on homelab**
+  - **Status:** Likely not installed
+  - **Action:** Follow setup guide: `docs/RHEL10_HOMELAB_METRICS_SETUP.md` section 1
+  - **Steps:**
+    1. SSH to homelab: `ssh root@192.168.4.62`
+    2. Download and install node_exporter
+    3. Create systemd service
+    4. Configure firewall: `firewall-cmd --add-port=9100/tcp --permanent`
+    5. Test from masternode: `curl http://192.168.4.62:9100/metrics`
+    6. Verify in Prometheus targets
+  
+- [ ] `192.168.4.61:9100` - **node-exporter on storagenodet3500**
+  - **Status:** Should be deployed by Ansible already
+  - **Action:** Verify deployment and connectivity
+  - **Steps:**
+    1. SSH to storagenodet3500: `ssh root@192.168.4.61`
+    2. Check service: `systemctl status node_exporter`
+    3. Test locally: `curl http://localhost:9100/metrics`
+    4. Check firewall on Debian: `ufw status` or `iptables -L`
+    5. Test from masternode: `curl http://192.168.4.61:9100/metrics`
+    6. Review Ansible logs for deployment errors
+  
+- [ ] `192.168.4.63:9100` - **node-exporter on masternode**
+  - **Status:** Should be deployed by Ansible already
+  - **Action:** Verify deployment and connectivity
+  - **Steps:**
+    1. Check service: `systemctl status node_exporter`
+    2. Test locally: `curl http://localhost:9100/metrics`
+    3. Verify in Prometheus targets at http://192.168.4.63:30090
+    4. Review pod logs if using DaemonSet: `kubectl logs -n monitoring -l app=node-exporter`
+
+**Diagnostic Commands:**
+```bash
+# Check all Prometheus targets status
+curl http://192.168.4.63:30090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, instance: .labels.instance, health: .health}'
+
+# Verify Prometheus scrape config
+kubectl get configmap prometheus-config -n monitoring -o yaml
+
+# Check which targets are currently configured
+grep -A 5 "job_name.*node-exporter\|job_name.*ipmi" manifests/monitoring/prometheus.yaml
+```
 
 ### 🧪 Testing & Validation
 

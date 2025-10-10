@@ -1,8 +1,8 @@
 {
   "schemaVersion": 27,
-  "title": "Loki Logs & Aggregation",
+  "title": "Loki Logs & Aggregation - Enterprise",
   "uid": "loki-logs",
-  "tags": ["loki", "logs", "vmstation"],
+  "tags": ["loki", "logs", "vmstation", "enterprise"],
   "timezone": "browser",
   "editable": true,
   "refresh": "30s",
@@ -10,16 +10,200 @@
     "from": "now-1h",
     "to": "now"
   },
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": "Loki",
+        "query": "label_values(namespace)",
+        "multi": true,
+        "includeAll": true,
+        "refresh": 1,
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
   "panels": [
+    {
+      "id": 20,
+      "title": "Loki Service Status",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": {"h": 3, "w": 4, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "up{job=\"loki\"}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {"text": "Down", "color": "red"},
+                "1": {"text": "Healthy", "color": "green"}
+              },
+              "type": "value"
+            }
+          ],
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "orientation": "auto",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 21,
+      "title": "Total Log Lines (5m)",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {"h": 3, "w": 5, "x": 4, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(count_over_time({job=~\".+\"}[5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 22,
+      "title": "Log Ingestion Rate",
+      "type": "gauge",
+      "datasource": "Loki",
+      "gridPos": {"h": 3, "w": 5, "x": 9, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate({job=~\".+\"}[1m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "logs/s",
+          "min": 0,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "red", "value": 500}
+            ]
+          }
+        }
+      },
+      "options": {
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      }
+    },
+    {
+      "id": 23,
+      "title": "Error Rate (5m)",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {"h": 3, "w": 5, "x": 14, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(count_over_time({job=~\".+\"} |~ \"(?i)error|err|fail\" [5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 10},
+              {"color": "red", "value": 100}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "orientation": "auto"
+      }
+    },
+    {
+      "id": 24,
+      "title": "Warning Rate (5m)",
+      "type": "stat",
+      "datasource": "Loki",
+      "gridPos": {"h": 3, "w": 5, "x": 19, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(count_over_time({job=~\".+\"} |~ \"(?i)warn|warning\" [5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 20}
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "orientation": "auto"
+      }
+    },
     {
       "id": 1,
       "title": "Log Volume by Namespace",
       "type": "timeseries",
       "datasource": "Loki",
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 3},
       "targets": [
         {
-          "expr": "sum by (namespace) (rate({job=\"kubernetes-pods\"}[1m]))",
+          "expr": "sum by (namespace) (rate({job=~\".+\", namespace=~\"$namespace\"}[1m]))",
           "refId": "A"
         }
       ],
@@ -45,77 +229,47 @@
       }
     },
     {
-      "id": 2,
-      "title": "Application Logs",
-      "type": "logs",
+      "id": 25,
+      "title": "Log Volume by Job",
+      "type": "timeseries",
       "datasource": "Loki",
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 8},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 3},
       "targets": [
         {
-          "expr": "{namespace!=\"kube-system\", namespace!=\"kube-flannel\", namespace!=\"monitoring\"}",
+          "expr": "sum by (job) (rate({job=~\".+\"}[1m]))",
           "refId": "A"
         }
       ],
-      "options": {
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "dedupStrategy": "none",
-        "enableLogDetails": true
-      }
-    },
-    {
-      "id": 3,
-      "title": "System Logs (kube-system)",
-      "type": "logs",
-      "datasource": "Loki",
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 20},
-      "targets": [
-        {
-          "expr": "{namespace=\"kube-system\"}",
-          "refId": "A"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "logs/sec",
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "stacking": {"mode": "normal"}
+          }
         }
-      ],
+      },
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "dedupStrategy": "none",
-        "enableLogDetails": true
-      }
-    },
-    {
-      "id": 4,
-      "title": "Monitoring Stack Logs",
-      "type": "logs",
-      "datasource": "Loki",
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 32},
-      "targets": [
-        {
-          "expr": "{namespace=\"monitoring\"}",
-          "refId": "A"
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["mean", "max", "last"]
         }
-      ],
-      "options": {
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "dedupStrategy": "none",
-        "enableLogDetails": true
       }
     },
     {
       "id": 5,
-      "title": "Error Log Rate",
+      "title": "Error Log Rate by Namespace",
       "type": "timeseries",
       "datasource": "Loki",
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 44},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 11},
       "targets": [
         {
-          "expr": "sum by (namespace, pod) (rate({job=\"kubernetes-pods\"} |= \"error\" [5m]))",
+          "expr": "sum by (namespace) (rate({job=~\".+\", namespace=~\"$namespace\"} |~ \"(?i)error|err|exception|fatal|critical\" [5m]))",
           "refId": "A"
         }
       ],
@@ -138,6 +292,187 @@
             ]
           }
         }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["mean", "max", "last"]
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "Top 10 Log Producing Pods",
+      "type": "table",
+      "datasource": "Loki",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 19},
+      "targets": [
+        {
+          "expr": "topk(10, sum by (namespace, pod) (count_over_time({job=~\".+\", namespace=~\"$namespace\"}[5m])))",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "namespace": "Namespace",
+              "pod": "Pod",
+              "Value": "Log Count (5m)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Log Count (5m)"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "gradient-gauge"},
+              {"id": "unit", "value": "short"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Log Count (5m)",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "title": "Loki Performance Metrics",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 19},
+      "targets": [
+        {
+          "expr": "rate(loki_ingester_chunks_created_total[5m])",
+          "legendFormat": "Chunks Created/s",
+          "refId": "A"
+        },
+        {
+          "expr": "loki_ingester_memory_chunks",
+          "legendFormat": "Memory Chunks",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "Request Duration P99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Request Duration P99"},
+            "properties": [
+              {"id": "unit", "value": "s"},
+              {"id": "custom.axisPlacement", "value": "right"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Application Logs (Filtered)",
+      "type": "logs",
+      "datasource": "Loki",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 27},
+      "targets": [
+        {
+          "expr": "{job=~\".+\", namespace=~\"$namespace\"} | namespace !~ \"kube-system|kube-flannel|monitoring\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 3,
+      "title": "System Logs (kube-system)",
+      "type": "logs",
+      "datasource": "Loki",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 39},
+      "targets": [
+        {
+          "expr": "{job=~\".+\", namespace=\"kube-system\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Monitoring Stack Logs",
+      "type": "logs",
+      "datasource": "Loki",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 51},
+      "targets": [
+        {
+          "expr": "{job=~\".+\", namespace=\"monitoring\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending"
       }
     }
   ],
