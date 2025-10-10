@@ -178,10 +178,11 @@ data:
       max_outstanding_per_tenant: 256
       compress_responses: true
     
-    # Frontend worker
-    frontend_worker:
-      frontend_address: 127.0.0.1:9095
-      parallelism: 10
+    # Frontend worker - DISABLED for single-instance deployment
+    # Uncommenting this can cause "connection refused" errors in all-in-one mode
+    # frontend_worker:
+    #   frontend_address: 127.0.0.1:9095
+    #   parallelism: 10
     
     # Querier configuration
     querier:
