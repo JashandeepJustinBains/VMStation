@@ -514,6 +514,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534  # nobody user
+        runAsGroup: 65534  # nobody group
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
