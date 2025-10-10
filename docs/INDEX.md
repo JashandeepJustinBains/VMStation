@@ -148,6 +148,10 @@ This index catalogs all documentation files consolidated during the manifest reo
 - Title: Quick Reference: Headless Service Empty Endpoints
 - Summary: Quick command reference and decision tree for diagnosing empty endpoints in headless services, including common fixes for label mismatches, pod failures, and DNS issues
 
+**HEADLESS_SERVICE_ENDPOINTS_INTEGRATION.md**
+- Title: Headless Service Endpoints Diagnostic - Integration Guide
+- Summary: Integration guide explaining how the headless service endpoints diagnostic tools integrate with the existing VMStation monitoring validation suite
+
 **PVC_FIX_OCT2025.md**
 - Title: PersistentVolume Claims Fix - October 2025
 - Summary: Multiple pods were stuck in `Pending` state due to unbound PersistentVolumeClaims (PVCs):

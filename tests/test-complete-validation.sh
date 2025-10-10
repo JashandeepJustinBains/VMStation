@@ -59,7 +59,8 @@ echo "  1. Auto-sleep and wake configuration"
 echo "  2. Monitoring exporters health"
 echo "  3. Loki log aggregation"
 echo "  4. Loki ConfigMap drift prevention"
-echo "  5. Sleep/wake cycle (optional - requires confirmation)"
+echo "  5. Headless service endpoints validation"
+echo "  6. Sleep/wake cycle (optional - requires confirmation)"
 echo ""
 echo "Test order:"
 echo "  - Non-destructive tests run first"
@@ -98,6 +99,11 @@ echo ""
 
 run_test_suite "Monitoring Access (Updated)" \
   "tests/test-monitoring-access.sh" || true
+
+echo ""
+
+run_test_suite "Headless Service Endpoints" \
+  "tests/test-headless-service-endpoints.sh" || true
 
 echo ""
 
