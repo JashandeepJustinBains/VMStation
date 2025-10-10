@@ -2,10 +2,17 @@
 
 clear
 git pull
-./deploy.sh reset          
+./deploy.sh reset 
+./deploy.sh setup
 ./deploy.sh debian         
 ./deploy.sh monitoring     
 ./deploy.sh infrastructure 
+
+# Run standalone diagnostic
+./tests/test-headless-service-endpoints.sh
+
+# Run as part of complete validation suite
+./tests/test-complete-validation.sh
 
 ## Immediate Issues - January 2025
 
