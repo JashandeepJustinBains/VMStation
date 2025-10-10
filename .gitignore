@@ -159,6 +159,7 @@ demo_*.sh
 !IMPLEMENTATION_SUMMARY.md
 !DEPLOYMENT_FIX_SUMMARY.md
 !docs/POST_RESET_DEPLOYMENT_FIX.md
+!docs/HEADLESS_SERVICE_ENDPOINTS_TROUBLESHOOTING.md
 
 # Allow essential infrastructure scripts but block temporary testing scripts
 !/scripts/manual_containerd_filesystem_fix.sh
@@ -173,6 +174,7 @@ demo_*.sh
 !tests/test-yes-flag.sh
 !tests/test-deploy-limits.sh
 !tests/test-install-k8s-binaries.sh
+!tests/test-headless-service-endpoints.sh
 
 # Block temporary testing/fix scripts (use /tmp for these)
 /tmp/test_*.sh
