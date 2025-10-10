@@ -8,8 +8,10 @@ git pull
 ./deploy.sh monitoring     
 ./deploy.sh infrastructure 
 
-# Run standalone diagnostic
-./tests/test-headless-service-endpoints.sh
+./scripts/diagnose-monitoring-stack.sh
+./scripts/remediate-monitoring-stack.sh
+./scripts/validate-monitoring-stack.sh
+
 
 # Run as part of complete validation suite
 ./tests/test-complete-validation.sh
