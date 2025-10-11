@@ -120,13 +120,26 @@ kubectl logs -n monitoring prometheus-0 --previous
 
 **Common Causes:**
 
-1. **Invalid configuration:**
+1. **Invalid alert rules YAML syntax:**
+If you see errors like "mapping values are not allowed in this context" in the logs, check for unquoted strings with colons in alert descriptions:
+```bash
+# Check logs for YAML syntax errors
+kubectl logs -n monitoring prometheus-0 | grep "loading groups failed"
+
+# The error typically shows the line number and column
+# Common issue: unquoted descriptions with colons after template expressions
+# Fix: Quote the description string
+# WRONG: description: Server {{ $value }} (threshold: X)
+# RIGHT: description: "Server {{ $value }} (threshold: X)"
+```
+
+2. **Invalid configuration:**
 ```bash
 # Validate config
 kubectl exec -n monitoring prometheus-0 -- promtool check config /etc/prometheus/prometheus.yml
 ```
 
-2. **Permissions issue:**
+3. **Permissions issue:**
 ```bash
 # Check PVC permissions
 kubectl exec -n monitoring prometheus-0 -- ls -la /prometheus
