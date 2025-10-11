@@ -20,9 +20,17 @@ echo "Automated testing of full sleep/wake cycle"
 echo "========================================="
 echo ""
 echo "⚠️  WARNING: This test will:"
-echo "  1. Trigger cluster sleep (drain nodes, cordon)"
-echo "  2. Send Wake-on-LAN packets to worker nodes"
-echo "  3. Measure wake time and validate services"
+echo "  1. Cordon and drain worker nodes"
+echo "  2. Actually SUSPEND worker nodes (low power mode)"
+echo "  3. Send Wake-on-LAN packets to wake them"
+echo "  4. Auto-uncordon nodes after successful wake"
+echo "  5. Measure actual hardware wake time"
+echo ""
+echo "📝 NOTE: This test requires:"
+echo "  - Wake-on-LAN enabled in BIOS/UEFI"
+echo "  - Network interfaces support WoL (check with ethtool)"
+echo "  - SSH access to all nodes"
+echo "  - Root/sudo privileges on all nodes"
 echo ""
 read -p "Continue with sleep/wake cycle test? [y/N]: " -n 1 -r
 echo
@@ -155,6 +163,7 @@ WAKE_START=$(timestamp)
 
 # Wait for storage node to respond
 log_info "Waiting for storagenodet3500 to respond (timeout: ${WAKE_TIMEOUT}s)..."
+log_info "Note: Actual hardware wake may take 30-90 seconds"
 STORAGE_WAKE_TIME=0
 STORAGE_AWAKE=false
 while [[ $STORAGE_WAKE_TIME -lt $WAKE_TIMEOUT ]]; do
@@ -169,10 +178,12 @@ done
 
 if [[ "$STORAGE_AWAKE" == "false" ]]; then
   log_fail "storagenodet3500 did not respond within ${WAKE_TIMEOUT}s"
+  log_info "Machine may still be waking up from suspend. Check with: ping ${STORAGE_NODE_IP}"
 fi
 
 # Wait for homelab node to respond
 log_info "Waiting for homelab to respond (timeout: ${WAKE_TIMEOUT}s)..."
+log_info "Note: Actual hardware wake may take 30-90 seconds"
 HOMELAB_WAKE_TIME=0
 HOMELAB_AWAKE=false
 while [[ $HOMELAB_WAKE_TIME -lt $WAKE_TIMEOUT ]]; do
@@ -187,6 +198,7 @@ done
 
 if [[ "$HOMELAB_AWAKE" == "false" ]]; then
   log_fail "homelab did not respond within ${WAKE_TIMEOUT}s"
+  log_info "Machine may still be waking up from suspend. Check with: ping ${HOMELAB_NODE_IP}"
 fi
 echo ""
 
@@ -211,6 +223,15 @@ if [[ "$STORAGE_AWAKE" == "true" ]]; then
   else
     log_fail "node-exporter is not responding on storagenodet3500"
   fi
+  
+  # Check if node is uncordoned
+  NODE_SCHEDULABLE=$(ssh root@${MASTERNODE_IP} "kubectl --kubeconfig=/etc/kubernetes/admin.conf get node storagenodet3500 -o jsonpath='{.spec.unschedulable}'" 2>/dev/null || echo "true")
+  if [[ "$NODE_SCHEDULABLE" == "false" ]] || [[ -z "$NODE_SCHEDULABLE" ]]; then
+    log_pass "storagenodet3500 is uncordoned and schedulable"
+  else
+    log_fail "storagenodet3500 is still cordoned (should be auto-uncordoned after wake)"
+    log_info "Manual uncordon: kubectl uncordon storagenodet3500"
+  fi
 fi
 
 # Check services on homelab
@@ -220,6 +241,15 @@ if [[ "$HOMELAB_AWAKE" == "true" ]]; then
     log_pass "rke2 service is active on homelab"
   else
     log_fail "rke2 service is not active on homelab (may not be configured)"
+  fi
+  
+  # Check if node is uncordoned
+  NODE_SCHEDULABLE=$(ssh root@${MASTERNODE_IP} "kubectl --kubeconfig=/etc/kubernetes/admin.conf get node homelab -o jsonpath='{.spec.unschedulable}'" 2>/dev/null || echo "true")
+  if [[ "$NODE_SCHEDULABLE" == "false" ]] || [[ -z "$NODE_SCHEDULABLE" ]]; then
+    log_pass "homelab is uncordoned and schedulable"
+  else
+    log_fail "homelab is still cordoned (should be auto-uncordoned after wake)"
+    log_info "Manual uncordon: kubectl uncordon homelab"
   fi
 fi
 
@@ -231,9 +261,6 @@ if [[ -n "$WAKE_NODE_STATUS" ]]; then
   echo "$WAKE_NODE_STATUS" | while read -r line; do
     echo "  $line"
   done
-  
-  # Nodes should still be cordoned until manually uncordoned
-  log_info "Note: Nodes remain cordoned until manually uncordoned with 'kubectl uncordon <node>'"
 fi
 echo ""
 
@@ -275,14 +302,31 @@ if [[ $FAILED -eq 0 ]]; then
   echo "✅ Sleep/wake cycle completed successfully!"
   echo ""
   echo "Next steps:"
-  echo "  1. Uncordon nodes: kubectl uncordon <node-name>"
+  echo "  1. Verify nodes are uncordoned: kubectl get nodes"
   echo "  2. Verify pods are rescheduled: kubectl get pods -A"
   echo "  3. Check monitoring dashboards: http://${MASTERNODE_IP}:30300"
+  echo "  4. Review wake logs: /var/log/vmstation-event-wake.log"
+  echo ""
+  echo "To collect detailed wake logs for debugging:"
+  echo "  sudo /usr/local/bin/vmstation-collect-wake-logs.sh"
   echo ""
   exit 0
 else
   echo "❌ Sleep/wake cycle test encountered failures."
   echo ""
   echo "Review details above for troubleshooting."
+  echo ""
+  echo "Common issues:"
+  echo "  - Nodes didn't wake: Check WoL enabled in BIOS and network driver supports it"
+  echo "  - Services not starting: Nodes may still be booting, wait and check again"
+  echo "  - Nodes still cordoned: Auto-uncordon may have failed, manually uncordon"
+  echo ""
+  echo "To collect diagnostic logs:"
+  echo "  sudo /usr/local/bin/vmstation-collect-wake-logs.sh"
+  echo ""
+  echo "To manually uncordon nodes:"
+  echo "  kubectl uncordon storagenodet3500"
+  echo "  kubectl uncordon homelab"
+  echo ""
   exit 1
 fi

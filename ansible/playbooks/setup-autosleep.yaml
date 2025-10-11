@@ -135,12 +135,21 @@
         content: |
           #!/bin/bash
           # VMStation Cluster Sleep Script
-          # Gracefully cordons, drains, and scales down cluster workloads
+          # Gracefully cordons, drains, scales down cluster workloads, and suspends worker nodes
           # All operations are logged and idempotent
           
           set -euo pipefail
           
           LOG_FILE="/var/log/vmstation-sleep.log"
+          STATE_DIR="/var/lib/vmstation"
+          
+          # Node configuration (from inventory)
+          STORAGE_NODE_IP="192.168.4.61"
+          STORAGE_NODE_MAC="b8:ac:6f:7e:6c:9d"
+          STORAGE_NODE_USER="root"
+          HOMELAB_NODE_IP="192.168.4.62"
+          HOMELAB_NODE_MAC="d0:94:66:30:d6:63"
+          HOMELAB_NODE_USER="jashandeepjustinbains"
           
           # Detect kubeconfig based on cluster type
           if [[ -f "/etc/kubernetes/admin.conf" ]]; then
@@ -154,6 +163,9 @@
           log() {
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
           }
+          
+          # Create required directories
+          mkdir -p "$STATE_DIR"
           
           # Validate kubectl is available
           KUBECTL="kubectl"
@@ -180,6 +192,9 @@
             exit 0
           fi
           
+          # Track nodes to suspend
+          NODES_TO_SUSPEND=()
+          
           # Cordon and drain all worker nodes (not control-plane)
           log "Step 1: Cordoning and draining worker nodes..."
           for node in $NODES; do
@@ -200,6 +215,9 @@
               --delete-emptydir-data \
               --force \
               --timeout=5m 2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to drain $NODE_NAME"
+            
+            # Add to suspend list
+            NODES_TO_SUSPEND+=("$NODE_NAME")
           done
           
           # Scale down deployments in default namespace
@@ -216,8 +234,41 @@
             log "No deployments found in default namespace"
           fi
           
+          # Step 3: Suspend worker nodes
+          log "Step 3: Suspending worker nodes to save power..."
+          
+          for node in "${NODES_TO_SUSPEND[@]}"; do
+            case "$node" in
+              storagenodet3500)
+                log "Suspending storage node: $node ($STORAGE_NODE_IP)"
+                # Record sleep state
+                echo "suspended:$(date +%s)" > "$STATE_DIR/${node}.state"
+                # Suspend the node via SSH (use systemctl suspend for proper sleep)
+                ssh -o ConnectTimeout=10 "${STORAGE_NODE_USER}@${STORAGE_NODE_IP}" \
+                  "logger 'VMStation: Entering suspend mode' && sudo systemctl suspend" \
+                  2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to suspend $node (may already be down)"
+                ;;
+              homelab)
+                log "Suspending homelab node: $node ($HOMELAB_NODE_IP)"
+                # Record sleep state
+                echo "suspended:$(date +%s)" > "$STATE_DIR/${node}.state"
+                # Suspend the node via SSH
+                ssh -o ConnectTimeout=10 "${HOMELAB_NODE_USER}@${HOMELAB_NODE_IP}" \
+                  "logger 'VMStation: Entering suspend mode' && sudo systemctl suspend" \
+                  2>&1 | tee -a "$LOG_FILE" || log "WARNING: Failed to suspend $node (may already be down)"
+                ;;
+              *)
+                log "Unknown node $node - skipping suspend"
+                ;;
+            esac
+            
+            # Small delay between suspends
+            sleep 2
+          done
+          
           log "=========================================="
           log "Cluster sleep sequence completed"
+          log "Nodes have been suspended and can be woken via Wake-on-LAN"
           log "=========================================="
         mode: '0755'
 
