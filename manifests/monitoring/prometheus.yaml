@@ -433,7 +433,7 @@ data:
           severity: warning
         annotations:
           summary: High syslog message rate
-          description: Syslog server receiving {{ $value }} messages/sec (threshold: 1000/sec).
+          description: "Syslog server receiving {{ $value }} messages/sec (threshold: 1000/sec)."
     
     - name: monitoring.rules
       interval: 1m
