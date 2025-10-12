@@ -42,9 +42,20 @@ if [[ ! -d "$VENV_DIR" ]]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-# Activate virtual environment
-# shellcheck disable=SC1091
-source "$VENV_DIR/bin/activate"
+# Ensure Kubespray venv exists and has required packages
+KUBESPRAY_CACHE="/srv/monitoring_data/VMStation/.cache/kubespray"
+VENV_PATH="$KUBESPRAY_CACHE/.venv"
+
+if [ ! -x "$VENV_PATH/bin/activate" ]; then
+    mkdir -p "$KUBESPRAY_CACHE"
+    python3 -m venv "$VENV_PATH"
+    "$VENV_PATH/bin/pip" install -U pip setuptools wheel
+    if [ -f "$KUBESPRAY_CACHE/requirements.txt" ]; then
+        "$VENV_PATH/bin/pip" install -r "$KUBESPRAY_CACHE/requirements.txt"
+    fi
+fi
+
+. "$VENV_PATH/bin/activate"
 
 # Install requirements
 log_info "Installing Kubespray requirements..."

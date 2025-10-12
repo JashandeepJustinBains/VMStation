@@ -1,6 +1,0 @@
----
-- name: Cluster setup (idempotent)
-  hosts: all
-  become: true
-  roles:
-    - cluster-setup
