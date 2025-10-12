@@ -105,11 +105,13 @@ echo "2. Customize cluster variables:"
 echo "   $INVENTORY_TEMPLATE_DIR/group_vars/all/all.yml"
 echo "   $INVENTORY_TEMPLATE_DIR/group_vars/k8s_cluster/k8s-cluster.yml"
 echo ""
-echo "3. Run preflight checks on RHEL10 node:" 
-echo "   ansible-playbook -i $INVENTORY_TEMPLATE_DIR/inventory.ini \\\" 
-echo "     -l compute_nodes \\\" 
-echo "     -e 'target_hosts=compute_nodes' \\\" 
-echo "     ansible/playbooks/run-preflight-rhel10.yml"
+cat <<EOF
+3. Run preflight checks on RHEL10 node:
+   ansible-playbook -i $INVENTORY_TEMPLATE_DIR/inventory.ini \
+    -l compute_nodes \
+    -e 'target_hosts=compute_nodes' \
+    ansible/playbooks/run-preflight-rhel10.yml
+EOF
 echo ""
 echo "4. Deploy cluster with Kubespray:"
 echo "   cd $KUBESPRAY_DIR"
