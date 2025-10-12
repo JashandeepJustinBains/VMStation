@@ -1,5 +1,8 @@
 # VMStation TODO List
 
+## Current Workflow Commands
+
+```bash
 clear
 git pull
 ./deploy.sh reset 
@@ -8,13 +11,47 @@ git pull
 ./deploy.sh monitoring     
 ./deploy.sh infrastructure 
 
-./scripts/diagnose-monitoring-stack.sh
-./scripts/remediate-monitoring-stack.sh
+# ./scripts/diagnose-monitoring-stack.sh
+# ./scripts/remediate-monitoring-stack.sh
 ./scripts/validate-monitoring-stack.sh
 
+# Test the cycle
+./tests/test-sleep-wake-cycle.sh
 
 # Run as part of complete validation suite
 ./tests/test-complete-validation.sh
+```
+
+## 🆕 New Features (January 2025)
+
+### Kubespray Integration ✅
+
+- [x] **Kubespray deployment path added** as alternative to RKE2 for RHEL10 nodes
+  - Script: `scripts/run-kubespray.sh`
+  - Preflight role: `ansible/roles/preflight-rhel10`
+  - Playbook: `ansible/playbooks/run-preflight-rhel10.yml`
+  
+- [x] **Documentation consolidation** - Minimized repository surface area
+  - New: `docs/ARCHITECTURE.md` (consolidated architecture documentation)
+  - New: `docs/TROUBLESHOOTING.md` (consolidated troubleshooting guides)
+  - New: `docs/USAGE.md` (comprehensive usage guide with kubespray)
+  - New: `README.md` (project overview and quick start)
+  - Old root docs preserved in `docs/` directory
+
+### Usage
+
+**Preflight checks for RHEL10**:
+```bash
+ansible-playbook -i ansible/inventory/hosts.yml \
+  ansible/playbooks/run-preflight-rhel10.yml
+```
+
+**Stage Kubespray**:
+```bash
+./scripts/run-kubespray.sh
+```
+
+**Deploy with Kubespray** (follow on-screen instructions after staging)
 
 ## Immediate Issues - January 2025
 
