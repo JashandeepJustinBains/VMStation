@@ -1,5 +1,11 @@
 # Architecture
 
+> **⚠️ MIGRATED**: This document has been consolidated into [docs/ARCHITECTURE.md](../ARCHITECTURE.md)
+> 
+> This file is kept for reference only. Please use the new consolidated documentation.
+
+---
+
 ## Overview
 
 VMStation uses a **two-cluster architecture** to separate concerns and avoid OS mixing issues:

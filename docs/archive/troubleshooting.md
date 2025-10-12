@@ -1,5 +1,11 @@
 # Troubleshooting Guide
 
+> **⚠️ MIGRATED**: This document has been consolidated into [docs/TROUBLESHOOTING.md](../TROUBLESHOOTING.md)
+> 
+> This file is kept for reference only. Please use the new consolidated documentation.
+
+---
+
 Quick diagnostic checks for VMStation clusters.
 
 ## Automated Validation
