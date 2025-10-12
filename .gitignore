@@ -194,3 +194,8 @@ demo_*.sh
 
 # Test files for homelab node fixes
 test_homelab_fixes.sh
+
+# Kubespray cache directory
+.cache/
+*.venv/
+venv/
