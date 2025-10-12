@@ -8,10 +8,11 @@ git pull
 ./deploy.sh monitoring     
 ./deploy.sh infrastructure 
 
-./scripts/diagnose-monitoring-stack.sh
-./scripts/remediate-monitoring-stack.sh
+# ./scripts/diagnose-monitoring-stack.sh
+# ./scripts/remediate-monitoring-stack.sh
 ./scripts/validate-monitoring-stack.sh
-
+# Test the cycle
+./tests/test-sleep-wake-cycle.sh
 
 # Run as part of complete validation suite
 ./tests/test-complete-validation.sh
