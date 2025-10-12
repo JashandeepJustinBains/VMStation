@@ -6,8 +6,8 @@ A homelab Kubernetes environment with automated deployment, monitoring, and powe
 
 VMStation provides a production-ready Kubernetes setup using a two-cluster architecture:
 
-- **Debian Cluster** (kubeadm): Production workloads, storage, monitoring
-- **RKE2/Kubespray Cluster** (RHEL10): Compute, testing, optional federation
+- **Debian Cluster** (Kubespray): Production workloads, storage, monitoring
+- **RKE2 Cluster** (RHEL10): Compute, testing, optional federation
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ VMStation provides a production-ready Kubernetes setup using a two-cluster archi
 git clone https://github.com/JashandeepJustinBains/VMStation.git
 cd VMStation
 
-# Deploy Debian cluster
+# Deploy Debian cluster with Kubespray
 ./deploy.sh reset
 ./deploy.sh setup
 ./deploy.sh debian
@@ -38,7 +38,7 @@ cd VMStation
 - **Idempotent Ansible playbooks** - Safe to run multiple times
 - **Single command deployment** - `./deploy.sh` wrapper script
 - **Pre-flight checks** - Validates requirements before deployment
-- **Multi-cluster support** - Debian (kubeadm) + RHEL10 (RKE2 or Kubespray)
+- **Multi-cluster support** - Debian (Kubespray) + RHEL10 (RKE2)
 
 ### 📊 Complete Monitoring Stack
 - **Prometheus** - Metrics collection and alerting
@@ -65,15 +65,15 @@ cd VMStation
 
 ### 🎯 Three Deployment Options
 
-1. **Debian Cluster (kubeadm)** - Recommended for production
+1. **Kubespray (Debian nodes)** - Recommended for production, flexible and battle-tested
 2. **RKE2 (RHEL10)** - Simple, batteries-included Kubernetes for RHEL
-3. **Kubespray (RHEL10)** - Flexible, production-grade deployment (NEW)
+3. **Legacy kubeadm (deprecated)** - Original deployment method, use Kubespray instead
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Debian Cluster (kubeadm)                            │
+│ Debian Cluster (Kubespray)                          │
 ├─────────────────────────────────────────────────────┤
 │ masternode (192.168.4.63)                           │
 │   - Control Plane                                    │
@@ -87,7 +87,7 @@ cd VMStation
 └─────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────┐
-│ RKE2/Kubespray Cluster (RHEL10)                     │
+│ RKE2 Cluster (RHEL10)                               │
 ├─────────────────────────────────────────────────────┤
 │ homelab (192.168.4.62)                              │
 │   - Single-node cluster                              │
@@ -109,42 +109,35 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
 
 ## Deployment Options
 
-### Option 1: Debian Cluster Only
+### Option 1: Kubespray Cluster Only (Recommended)
 
 ```bash
 ./deploy.sh reset
 ./deploy.sh setup
-./deploy.sh debian
+./deploy.sh debian          # Now uses Kubespray
 ./deploy.sh monitoring
 ./deploy.sh infrastructure
 ```
 
-### Option 2: Debian + RKE2
+### Option 2: Kubespray + RKE2
 
 ```bash
 ./deploy.sh reset
 ./deploy.sh setup
-./deploy.sh debian
+./deploy.sh debian          # Kubespray on Debian nodes
 ./deploy.sh monitoring
 ./deploy.sh infrastructure
-./deploy.sh rke2
+./deploy.sh rke2            # RKE2 on RHEL10 node
 ```
 
-### Option 3: Debian + Kubespray (NEW)
+### Option 3: Legacy Kubespray Manual Setup
 
 ```bash
-# Deploy Debian cluster
-./deploy.sh reset
-./deploy.sh setup
-./deploy.sh debian
-./deploy.sh monitoring
-./deploy.sh infrastructure
-
 # Prepare RHEL10 node
 ansible-playbook -i ansible/inventory/hosts.yml \
   ansible/playbooks/run-preflight-rhel10.yml
 
-# Stage and deploy Kubespray
+# Stage and manually deploy Kubespray
 ./scripts/run-kubespray.sh
 # Follow on-screen instructions
 ```
@@ -156,7 +149,8 @@ See [docs/USAGE.md](docs/USAGE.md) for complete deployment guide.
 ### Deployment
 
 ```bash
-./deploy.sh debian          # Deploy Debian cluster
+./deploy.sh debian          # Deploy Kubespray cluster on Debian nodes
+./deploy.sh kubespray       # Same as 'debian' - Deploy Kubespray cluster
 ./deploy.sh rke2            # Deploy RKE2 cluster (RHEL10)
 ./deploy.sh monitoring      # Deploy monitoring stack
 ./deploy.sh infrastructure  # Deploy infrastructure services

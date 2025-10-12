@@ -31,7 +31,8 @@ usage(){
 Usage: $(basename "$0") [command] [flags]
 
 Commands:
-  debian          Deploy kubeadm/Kubernetes to Debian nodes only (monitoring_nodes + storage_nodes)
+  debian          Deploy Kubespray/Kubernetes to Debian nodes only (monitoring_nodes + storage_nodes)
+  kubespray       Deploy Kubespray/Kubernetes to Debian nodes (alias for 'debian')
   rke2            Deploy RKE2 to homelab RHEL10 node with pre-checks
   all             Deploy both Debian and RKE2 (requires --with-rke2 or confirmation)
   monitoring      Deploy monitoring stack (Prometheus, Grafana, Loki, exporters)
@@ -48,7 +49,8 @@ Flags:
   --log-dir    Specify custom log directory (default: ansible/artifacts)
 
 Examples:
-  ./deploy.sh debian                    # Deploy kubeadm to Debian nodes only
+  ./deploy.sh debian                    # Deploy Kubespray to Debian nodes only
+  ./deploy.sh kubespray                 # Deploy Kubespray to Debian nodes (same as debian)
   ./deploy.sh monitoring                # Deploy monitoring stack
   ./deploy.sh infrastructure            # Deploy infrastructure services (NTP, Syslog, Kerberos)
   ./deploy.sh rke2                      # Deploy RKE2 to homelab (with pre-checks)
@@ -59,14 +61,15 @@ Examples:
 
 Recommended Workflow:
   1. ./deploy.sh reset                  # Clean slate
-  2. ./deploy.sh debian                 # Deploy Debian control-plane and worker
-  3. ./deploy.sh monitoring             # Deploy monitoring stack
-  4. ./deploy.sh infrastructure         # Deploy infrastructure services
-  5. ./deploy.sh setup                  # Setup auto-sleep
+  2. ./deploy.sh setup                  # Setup auto-sleep
+  3. ./deploy.sh debian                 # Deploy Kubespray cluster on Debian nodes
+  4. ./deploy.sh monitoring             # Deploy monitoring stack
+  5. ./deploy.sh infrastructure         # Deploy infrastructure services
   6. ./deploy.sh rke2                   # Deploy RKE2 on homelab node (optional)
 
 Artifacts:
-  - Logs: ansible/artifacts/deploy-debian.log, install-rke2-homelab.log, etc.
+  - Logs: ansible/artifacts/deploy-kubespray.log, install-rke2-homelab.log, etc.
+  - Kubeconfig: ~/.kube/config (Kubespray default)
   - RKE2 kubeconfig: ansible/artifacts/homelab-rke2-kubeconfig.yaml
 
 EOF
@@ -137,31 +140,36 @@ verify_ssh_homelab(){
 }
 
 verify_debian_cluster_health(){
-  info "Verifying Debian cluster health..."
-  local kubeconfig="/etc/kubernetes/admin.conf"
+  info "Verifying cluster health..."
   
-  # Check if we're on the control plane or need to SSH
-  if [[ -f "$kubeconfig" ]]; then
-    # We're on the masternode
-    if kubectl --kubeconfig="$kubeconfig" get nodes >/dev/null 2>&1; then
-      # Only count Debian nodes (monitoring_nodes + storage_nodes)
-      local nodes_ready=$(kubectl --kubeconfig="$kubeconfig" get nodes --no-headers 2>/dev/null | grep -E "(masternode|storagenodet3500)" | grep -c " Ready" || echo "0")
-      if [[ "$nodes_ready" -ge 1 ]]; then
-        info "✓ Debian cluster is healthy ($nodes_ready Debian nodes Ready)"
-        return 0
+  # Try different kubeconfig locations
+  local kubeconfigs=(
+    "$HOME/.kube/config"
+    "/etc/kubernetes/admin.conf"
+  )
+  
+  for kubeconfig in "${kubeconfigs[@]}"; do
+    if [[ -f "$kubeconfig" ]]; then
+      if kubectl --kubeconfig="$kubeconfig" get nodes >/dev/null 2>&1; then
+        # Count Ready nodes (monitoring_nodes + storage_nodes)
+        local nodes_ready=$(kubectl --kubeconfig="$kubeconfig" get nodes --no-headers 2>/dev/null | grep -E "(masternode|storagenodet3500)" | grep -c " Ready" || echo "0")
+        if [[ "$nodes_ready" -ge 1 ]]; then
+          info "✓ Cluster is healthy ($nodes_ready nodes Ready) [kubeconfig: $kubeconfig]"
+          return 0
+        fi
       fi
     fi
-  else
-    # Try via ansible to masternode (only check Debian nodes)
-    if ansible monitoring_nodes -i "$INVENTORY_FILE" -m shell \
-       -a "kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes --no-headers | grep -E '(masternode|storagenodet3500)'" \
-       >/dev/null 2>&1; then
-      info "✓ Debian cluster appears healthy"
-      return 0
-    fi
+  done
+  
+  # Try via ansible to masternode
+  if ansible monitoring_nodes -i "$INVENTORY_FILE" -m shell \
+     -a "kubectl get nodes --no-headers 2>/dev/null | grep -E '(masternode|storagenodet3500)'" \
+     >/dev/null 2>&1; then
+    info "✓ Cluster appears healthy"
+    return 0
   fi
   
-  warn "Debian cluster health check failed or cluster not initialized"
+  warn "Cluster health check failed or cluster not initialized"
   return 1
 }
 
@@ -252,15 +260,20 @@ run_cleanup_on_hosts(){
 }
 
 cmd_debian(){
+  cmd_kubespray
+}
+
+cmd_kubespray(){
   info "========================================"
-  info " Deploying Kubernetes to Debian Nodes  "
+  info " Deploying Kubespray to Debian Nodes   "
   info "========================================"
   info "Target: monitoring_nodes + storage_nodes"
-  info "Playbook: $DEPLOY_PLAYBOOK"
-  info "Log: $LOG_DIR/deploy-debian.log"
+  info "Method: Kubespray"
+  info "Log: $LOG_DIR/deploy-kubespray.log"
   info ""
   
   require_bin ansible-playbook
+  require_bin python3
   
   # Validate inventory file exists
   if [ ! -f "$INVENTORY_FILE" ]; then
@@ -271,33 +284,35 @@ cmd_debian(){
   mkdir -p "$LOG_DIR"
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
-    info "DRY-RUN: Would execute:"
-    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $DEPLOY_PLAYBOOK --limit monitoring_nodes,storage_nodes"
-    if [[ "$FLAG_YES" == "true" ]]; then
-      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
-    fi
-    echo "  $dry_run_cmd | tee $LOG_DIR/deploy-debian.log"
+    info "DRY-RUN: Would execute Kubespray deployment:"
+    echo "  1. Setup Kubespray in .cache/kubespray"
+    echo "  2. Generate inventory from $INVENTORY_FILE"
+    echo "  3. Run cluster.yml playbook"
+    echo "  Log: $LOG_DIR/deploy-kubespray.log"
     return 0
   fi
   
-  # Run deployment with --limit to exclude homelab (compute_nodes)
-  info "Starting Debian deployment (this may take 10-15 minutes)..."
+  # Run Kubespray deployment via helper script
+  info "Starting Kubespray deployment (this may take 15-20 minutes)..."
   
-  # Build ansible-playbook command with proper flags
-  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $DEPLOY_PLAYBOOK --limit monitoring_nodes,storage_nodes"
-  
-  # Add skip_ansible_confirm when FLAG_YES is true
-  if [[ "$FLAG_YES" == "true" ]]; then
-    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  local kubespray_script="$REPO_ROOT/scripts/deploy-kubespray.sh"
+  if [[ ! -x "$kubespray_script" ]]; then
+    err "Kubespray deployment script not found or not executable: $kubespray_script"
   fi
   
-  # Force color output for better readability
-  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-debian.log"
-  local deploy_result=${PIPESTATUS[0]}
+  # Build command with flags
+  local deploy_cmd="LOG_DIR=$LOG_DIR $kubespray_script"
+  if [[ "$FLAG_YES" == "true" ]]; then
+    deploy_cmd="$deploy_cmd --yes"
+  fi
+  
+  # Execute deployment
+  eval "$deploy_cmd"
+  local deploy_result=$?
   
   if [[ $deploy_result -eq 0 ]]; then
     info ""
-    info "✓ Debian deployment completed successfully"
+    info "✓ Kubespray deployment completed successfully"
     info ""
     
     # Verify deployment
@@ -307,20 +322,21 @@ cmd_debian(){
     if verify_debian_cluster_health; then
       info ""
       info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-      info "  Debian Kubernetes Cluster Ready!"
+      info "  Kubespray Kubernetes Cluster Ready!"
       info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       info ""
       info "Verification commands:"
-      info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes"
-      info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -A"
+      info "  kubectl get nodes"
+      info "  kubectl get pods -A"
       info ""
-      info "Log saved to: $LOG_DIR/deploy-debian.log"
+      info "Kubeconfig: ~/.kube/config"
+      info "Log saved to: $LOG_DIR/deploy-kubespray.log"
       info ""
     else
       warn "Deployment completed but verification had warnings"
     fi
   else
-    err "Debian deployment failed - check logs: $LOG_DIR/deploy-debian.log"
+    err "Kubespray deployment failed - check logs: $LOG_DIR/deploy-kubespray.log"
   fi
 }
 
@@ -450,14 +466,14 @@ cmd_rke2(){
 
 cmd_all(){
   info "========================================"
-  info " Two-Phase Deployment: Debian + RKE2   "
+  info " Two-Phase Deployment: Kubespray + RKE2"
   info "========================================"
   info ""
   
   # Check if --with-rke2 flag is set
   if [[ "$FLAG_WITH_RKE2" != "true" ]] && [[ "$FLAG_YES" != "true" ]]; then
     info "This will deploy:"
-    info "  1. Kubernetes (kubeadm) to Debian nodes (monitoring + storage)"
+    info "  1. Kubespray/Kubernetes to Debian nodes (monitoring + storage)"
     info "  2. RKE2 to homelab RHEL10 node"
     info ""
     if ! confirm "Proceed with two-phase deployment?"; then
@@ -465,10 +481,10 @@ cmd_all(){
     fi
   fi
   
-  # Phase 1: Debian
+  # Phase 1: Kubespray
   info ""
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  PHASE 1: Deploying to Debian Nodes"
+  info "  PHASE 1: Deploying Kubespray to Debian Nodes"
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   cmd_debian
   
@@ -490,11 +506,11 @@ cmd_all(){
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   info ""
   info "Summary:"
-  info "  ✓ Debian cluster: monitoring_nodes + storage_nodes"
+  info "  ✓ Kubespray cluster: monitoring_nodes + storage_nodes"
   info "  ✓ RKE2 cluster: homelab"
   info ""
   info "Logs:"
-  info "  - $LOG_DIR/deploy-debian.log"
+  info "  - $LOG_DIR/deploy-kubespray.log"
   info "  - $LOG_DIR/install-rke2-homelab.log"
   info ""
 }
@@ -837,7 +853,7 @@ main(){
         usage
         exit 0
         ;;
-      debian|rke2|all|reset|setup|spindown|monitoring|infrastructure)
+      debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure)
         cmd="$1"
         shift
         ;;
@@ -855,8 +871,9 @@ main(){
     info "No command specified. Use './deploy.sh help' for usage."
     info ""
     info "Quick start:"
-    info "  ./deploy.sh all --with-rke2    # Deploy both Debian and RKE2"
-    info "  ./deploy.sh debian             # Deploy Debian cluster only"
+    info "  ./deploy.sh all --with-rke2    # Deploy both Kubespray and RKE2"
+    info "  ./deploy.sh debian             # Deploy Kubespray cluster only"
+    info "  ./deploy.sh kubespray          # Deploy Kubespray cluster (same as debian)"
     info "  ./deploy.sh monitoring         # Deploy monitoring stack"
     info "  ./deploy.sh infrastructure     # Deploy infrastructure services"
     info ""
@@ -866,7 +883,7 @@ main(){
   
   # Execute command
   case "$cmd" in
-    debian)
+    debian|kubespray)
       cmd_debian
       ;;
     rke2)
