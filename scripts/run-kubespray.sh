@@ -43,8 +43,11 @@ if [[ ! -d "$VENV_DIR" ]]; then
     python3 -m venv "$VENV_DIR"
 fi
 
+
 # Activate the venv from the repo cache and ensure pip/tools are present
-if [ ! -x "$VENV_DIR/bin/activate" ]; then
+# The activate script does not need the executable bit when it will be sourced;
+# just ensure the file exists.
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
     log_err "Virtualenv activation script not found at $VENV_DIR/bin/activate"
 fi
 
@@ -60,10 +63,8 @@ fi
 # Activate venv for subsequent commands in this script
 . "$VENV_DIR/bin/activate"
 
-# Install requirements
-log_info "Installing Kubespray requirements..."
-pip install --upgrade pip setuptools wheel
-pip install -r "$KUBESPRAY_DIR/requirements.txt"
+# Note: requirements were installed earlier using the venv's pip. The venv is
+# now activated so subsequent commands can rely on the environment.
 
 # Create inventory template directory if not exists
 INVENTORY_TEMPLATE_DIR="$KUBESPRAY_DIR/inventory/mycluster"
@@ -104,16 +105,16 @@ echo "2. Customize cluster variables:"
 echo "   $INVENTORY_TEMPLATE_DIR/group_vars/all/all.yml"
 echo "   $INVENTORY_TEMPLATE_DIR/group_vars/k8s_cluster/k8s-cluster.yml"
 echo ""
-echo "3. Run preflight checks on RHEL10 node:"
-echo "   ansible-playbook -i ansible/inventory/hosts.yml \\"
-echo "     -l compute_nodes \\"
-echo "     -e 'target_hosts=compute_nodes' \\"
+echo "3. Run preflight checks on RHEL10 node:" 
+echo "   ansible-playbook -i $INVENTORY_TEMPLATE_DIR/inventory.ini \\\" 
+echo "     -l compute_nodes \\\" 
+echo "     -e 'target_hosts=compute_nodes' \\\" 
 echo "     ansible/playbooks/run-preflight-rhel10.yml"
 echo ""
 echo "4. Deploy cluster with Kubespray:"
 echo "   cd $KUBESPRAY_DIR"
 echo "   source $VENV_DIR/bin/activate"
-echo "   ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml"
+echo "   ansible-playbook -i $INVENTORY_TEMPLATE_DIR/inventory.ini cluster.yml"
 echo ""
 echo "5. Access your cluster:"
 echo "   export KUBECONFIG=\$HOME/.kube/config"
