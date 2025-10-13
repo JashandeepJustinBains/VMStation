@@ -522,7 +522,7 @@ cmd_reset(){
   info " Comprehensive Cluster Reset            "
   info "========================================"
   info "This will reset:"
-  info "  - Debian Kubernetes cluster (kubeadm)"
+  info "  - Kubespray Kubernetes cluster (Debian nodes)"
   info "  - RKE2 cluster on homelab"
   info "  - All network interfaces and configs"
   info ""
@@ -531,10 +531,10 @@ cmd_reset(){
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
-    local dry_run_reset="ansible-playbook $RESET_PLAYBOOK (Debian nodes)"
+    local dry_run_reset="Kubespray reset.yml (Debian nodes)"
     local dry_run_uninstall="ansible-playbook $UNINSTALL_RKE2_PLAYBOOK (homelab)"
     if [[ "$FLAG_YES" == "true" ]]; then
-      dry_run_reset="$dry_run_reset with -e skip_ansible_confirm=true"
+      dry_run_reset="$dry_run_reset with -e reset_confirmation=yes"
       dry_run_uninstall="$dry_run_uninstall with -e skip_ansible_confirm=true"
     fi
     echo "  1. $dry_run_reset"
@@ -548,23 +548,29 @@ cmd_reset(){
   
   info ""
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  PHASE 1: Resetting Debian Nodes"
+  info "  PHASE 1: Resetting Kubespray Cluster (Debian Nodes)"
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
-  # Build ansible-playbook command with proper flags
-  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $RESET_PLAYBOOK"
-  
-  # Add skip_ansible_confirm when FLAG_YES is true
-  if [[ "$FLAG_YES" == "true" ]]; then
-    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  # Use Kubespray reset script
+  local kubespray_reset_script="$REPO_ROOT/scripts/reset-kubespray.sh"
+  if [[ -x "$kubespray_reset_script" ]]; then
+    LOG_DIR="$LOG_DIR" "$kubespray_reset_script" --yes
+    local reset_result=$?
+  else
+    # Fall back to legacy reset playbook if script not found
+    warn "Kubespray reset script not found, using legacy reset playbook"
+    local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $RESET_PLAYBOOK"
+    
+    if [[ "$FLAG_YES" == "true" ]]; then
+      ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+    fi
+    
+    ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-debian.log"
+    local reset_result=${PIPESTATUS[0]}
   fi
   
-  # Force color output for better readability
-  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-debian.log"
-  local reset_result=${PIPESTATUS[0]}
-  
   if [[ $reset_result -eq 0 ]]; then
-    info "✓ Debian cluster reset completed"
+    info "✓ Debian nodes reset completed"
   else
     warn "Debian reset had errors (see log)"
   fi
@@ -609,13 +615,15 @@ cmd_reset(){
   info "Cluster is ready for fresh deployment"
   info ""
   info "Logs:"
-  info "  - $LOG_DIR/reset-debian.log"
+  info "  - $LOG_DIR/reset-kubespray.log"
   info "  - $LOG_DIR/uninstall-rke2.log"
   info ""
   info "Next steps:"
-  info "  ./deploy.sh all --with-rke2    # Full deployment"
-  info "  ./deploy.sh debian             # Debian only"
-  info "  ./deploy.sh rke2               # RKE2 only"
+  info "  ./deploy.sh setup              # Setup auto-sleep"
+  info "  ./deploy.sh debian             # Deploy Kubespray cluster"
+  info "  ./deploy.sh monitoring         # Deploy monitoring stack"
+  info "  ./deploy.sh infrastructure     # Deploy infrastructure services"
+  info "  ./deploy.sh rke2               # Deploy RKE2 on homelab (optional)"
   info ""
 }
 
