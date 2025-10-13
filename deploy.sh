@@ -478,10 +478,26 @@ cmd_kubespray(){
     export KUBECONFIG="$KUBECONFIG_FOUND"
     info "✓ KUBECONFIG set to: $KUBECONFIG"
     
+    # Run kubeconfig setup playbook to ensure admin.conf is in standard locations
+    info "Setting up admin kubeconfig for monitoring and infrastructure..."
+    if ansible-playbook -i "$INVENTORY_FILE" "$REPO_ROOT/ansible/playbooks/setup-admin-kubeconfig.yml" 2>&1 | tee -a "$LOG_DIR/kubespray-deployment.log"; then
+      info "✓ Admin kubeconfig configured"
+    else
+      warn "Kubeconfig setup had warnings - continuing anyway"
+    fi
+    
     # Verify cluster access
     if command -v kubectl &>/dev/null; then
       if kubectl cluster-info &>/dev/null; then
         info "✓ Kubernetes cluster is accessible"
+        
+        # Wait for nodes to be ready
+        info "Waiting for nodes to become ready..."
+        kubectl wait --for=condition=Ready nodes --all --timeout=5m 2>&1 | tee -a "$LOG_DIR/kubespray-deployment.log" || warn "Some nodes may not be ready yet"
+        
+        # Display node status
+        info "Current node status:"
+        kubectl get nodes -o wide 2>&1 | tee -a "$LOG_DIR/kubespray-deployment.log"
       else
         warn "kubectl found but cluster is not accessible"
       fi

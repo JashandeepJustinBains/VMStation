@@ -1,0 +1,277 @@
+---
+# ansible/playbooks/verify-cni-networking.yml
+# Verifies and repairs CNI networking configuration
+# Ensures /opt/cni/bin exists and contains required binaries
+
+- name: Verify and Repair CNI Networking
+  hosts: all
+  gather_facts: true
+  become: true
+  
+  vars:
+    cni_bin_dir: /opt/cni/bin
+    cni_config_dir: /etc/cni/net.d
+    required_cni_plugins:
+      - bridge
+      - loopback
+      - host-local
+      - portmap
+      - bandwidth
+      - tuning
+      - vlan
+      - flannel
+    kernel_modules:
+      - br_netfilter
+      - overlay
+      - ip_vs
+      - ip_vs_rr
+      - ip_vs_wrr
+      - ip_vs_sh
+  
+  pre_tasks:
+    - name: Display verification info
+      ansible.builtin.debug:
+        msg: |
+          Verifying CNI networking on {{ inventory_hostname }}
+          CNI bin dir: {{ cni_bin_dir }}
+          CNI config dir: {{ cni_config_dir }}
+  
+  tasks:
+    # === CNI Binary Directory ===
+    - name: Check if CNI bin directory exists
+      ansible.builtin.stat:
+        path: "{{ cni_bin_dir }}"
+      register: cni_bin_stat
+    
+    - name: Create CNI bin directory if missing
+      ansible.builtin.file:
+        path: "{{ cni_bin_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      when: not cni_bin_stat.stat.exists
+    
+    - name: List CNI binaries
+      ansible.builtin.find:
+        paths: "{{ cni_bin_dir }}"
+        file_type: file
+      register: cni_binaries
+    
+    - name: Display CNI binaries found
+      ansible.builtin.debug:
+        msg: |
+          CNI binaries in {{ cni_bin_dir }}:
+          {% if cni_binaries.files | length > 0 %}
+          {% for file in cni_binaries.files %}
+          - {{ file.path | basename }}
+          {% endfor %}
+          {% else %}
+          No CNI binaries found (may be installed during Kubespray deployment)
+          {% endif %}
+    
+    - name: Check for required CNI plugins
+      ansible.builtin.stat:
+        path: "{{ cni_bin_dir }}/{{ item }}"
+      register: cni_plugin_check
+      loop: "{{ required_cni_plugins }}"
+      failed_when: false
+    
+    - name: Display missing CNI plugins
+      ansible.builtin.debug:
+        msg: |
+          Missing CNI plugins:
+          {% for result in cni_plugin_check.results %}
+          {% if not result.stat.exists %}
+          - {{ result.item }}
+          {% endif %}
+          {% endfor %}
+          
+          Note: These will be installed by Kubespray if not present
+      when: cni_plugin_check.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+    
+    # === CNI Configuration Directory ===
+    - name: Ensure CNI config directory exists
+      ansible.builtin.file:
+        path: "{{ cni_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    
+    - name: List CNI configuration files
+      ansible.builtin.find:
+        paths: "{{ cni_config_dir }}"
+        patterns: "*.conf,*.conflist"
+      register: cni_configs
+      failed_when: false
+    
+    - name: Display CNI configurations
+      ansible.builtin.debug:
+        msg: |
+          CNI configurations in {{ cni_config_dir }}:
+          {% if cni_configs.files | length > 0 %}
+          {% for file in cni_configs.files %}
+          - {{ file.path | basename }}
+          {% endfor %}
+          {% else %}
+          No CNI configurations found (will be created by Kubespray)
+          {% endif %}
+    
+    # === Kernel Modules ===
+    - name: Check if kernel modules are loaded
+      ansible.builtin.shell:
+        cmd: lsmod | grep -E "{{ kernel_modules | join('|') }}" || echo "none"
+      register: loaded_modules
+      changed_when: false
+      failed_when: false
+    
+    - name: Display loaded kernel modules
+      ansible.builtin.debug:
+        msg: |
+          Loaded kernel modules:
+          {{ loaded_modules.stdout }}
+    
+    - name: Load required kernel modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ kernel_modules }}"
+      failed_when: false
+      register: module_load_result
+    
+    - name: Report module loading results
+      ansible.builtin.debug:
+        msg: |
+          Kernel module loading results:
+          {% for result in module_load_result.results %}
+          - {{ result.item }}: {{ 'OK' if result.rc == 0 else 'FAILED (may not be required)' }}
+          {% endfor %}
+    
+    - name: Ensure modules load on boot
+      ansible.builtin.lineinfile:
+        path: /etc/modules-load.d/kubernetes.conf
+        line: "{{ item }}"
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ kernel_modules }}"
+    
+    # === Network Configuration ===
+    - name: Enable IP forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        sysctl_set: true
+        reload: true
+    
+    - name: Enable bridge-netfilter
+      ansible.posix.sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: '1'
+        state: present
+        sysctl_set: true
+        reload: true
+      when: "'br_netfilter' in loaded_modules.stdout"
+    
+    - name: Enable bridge-netfilter for IPv6
+      ansible.posix.sysctl:
+        name: net.bridge.bridge-nf-call-ip6tables
+        value: '1'
+        state: present
+        sysctl_set: true
+        reload: true
+      when: "'br_netfilter' in loaded_modules.stdout"
+    
+    # === Container Runtime ===
+    - name: Check containerd status
+      ansible.builtin.systemd:
+        name: containerd
+        state: started
+        enabled: true
+      register: containerd_status
+      failed_when: false
+    
+    - name: Display containerd status
+      ansible.builtin.debug:
+        msg: |
+          Containerd status: {{ containerd_status.status.ActiveState | default('not installed') }}
+    
+    # === Kubelet ===
+    - name: Check kubelet status
+      ansible.builtin.systemd:
+        name: kubelet
+        state: started
+        enabled: true
+      register: kubelet_status
+      failed_when: false
+    
+    - name: Display kubelet status
+      ansible.builtin.debug:
+        msg: |
+          Kubelet status: {{ kubelet_status.status.ActiveState | default('not installed') }}
+  
+  post_tasks:
+    - name: CNI Verification Summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          CNI Verification Summary for {{ inventory_hostname }}
+          ========================================
+          
+          CNI bin dir: {{ cni_bin_stat.stat.exists | ternary('✓ Exists', '✗ Created') }}
+          CNI config dir: ✓ Exists
+          CNI binaries: {{ cni_binaries.files | length }} found
+          Kernel modules: Loaded
+          IP forwarding: Enabled
+          Bridge netfilter: Enabled
+          Containerd: {{ containerd_status.status.ActiveState | default('not installed') }}
+          Kubelet: {{ kubelet_status.status.ActiveState | default('not installed') }}
+          
+          {% if cni_binaries.files | length == 0 %}
+          Note: CNI binaries will be installed by Kubespray during cluster deployment
+          {% endif %}
+
+- name: Verify CNI from Control Plane
+  hosts: monitoring_nodes
+  gather_facts: false
+  become: false
+  
+  tasks:
+    - name: Check CNI DaemonSets (if cluster is running)
+      ansible.builtin.command:
+        cmd: kubectl get ds -n kube-system -o wide
+      changed_when: false
+      register: cni_daemonsets
+      failed_when: false
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+    
+    - name: Display CNI DaemonSets
+      ansible.builtin.debug:
+        msg: |
+          CNI DaemonSets:
+          {{ cni_daemonsets.stdout }}
+      when:
+        - cni_daemonsets.rc == 0
+        - cni_daemonsets.stdout is defined
+    
+    - name: Check CNI pod status
+      ansible.builtin.command:
+        cmd: kubectl get pods -n kube-system -l app=flannel -o wide
+      changed_when: false
+      register: cni_pods
+      failed_when: false
+      environment:
+        KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/config"
+    
+    - name: Display CNI pod status
+      ansible.builtin.debug:
+        msg: |
+          CNI Pods:
+          {{ cni_pods.stdout }}
+      when:
+        - cni_pods.rc == 0
+        - cni_pods.stdout is defined

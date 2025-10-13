@@ -1,14 +1,67 @@
 # VMStation Scripts Documentation
 
-This directory historically contained many operational scripts for VMStation.
+This directory contains operational scripts for VMStation cluster management and deployment.
 
-NOTE: As part of a cleanup to reduce technical debt, large legacy scripts have been archived under `ansible/archive/playbooks` and `ansible/archive/plays`.
-The active deployment flow is now focused under `ansible/playbooks/deploy-cluster.yaml` and `ansible/roles/`.
+## Kubespray Deployment Scripts (Recommended)
 
-Use the Ansible minimal deploy instead of the legacy scripts:
+VMStation now uses Kubespray as the primary deployment method. These scripts provide comprehensive automation:
 
-```powershell
-ansible-playbook -i ansible/inventory.txt ansible/playbooks/deploy-cluster.yaml
+### Core Kubespray Scripts
+
+- **`deploy-kubespray-full.sh`** - Complete automated Kubespray deployment workflow
+  - Handles preparation, backups, inventory validation
+  - Runs preflight checks on RHEL10 nodes
+  - Deploys Kubespray cluster
+  - Configures kubeconfig
+  - Verifies cluster health
+  - Runs smoke tests
+  
+  ```bash
+  ./scripts/deploy-kubespray-full.sh --auto
+  ```
+
+- **`run-kubespray.sh`** - Stages Kubespray (clones repo, sets up venv, installs requirements)
+  ```bash
+  ./scripts/run-kubespray.sh
+  ```
+
+- **`activate-kubespray-env.sh`** - Activates Kubespray venv and sets KUBECONFIG
+  ```bash
+  source scripts/activate-kubespray-env.sh
+  ```
+
+### Inventory and Configuration
+
+- **`normalize-kubespray-inventory.sh`** - Validates and normalizes inventory for Kubespray
+  ```bash
+  ./scripts/normalize-kubespray-inventory.sh [--dry-run]
+  ```
+
+### Node Management
+
+- **`wake-node.sh`** - Wake-on-LAN utility for sleeping nodes with retry logic
+  ```bash
+  ./scripts/wake-node.sh homelab --wait --retry 3
+  ./scripts/wake-node.sh all --wait
+  ```
+
+### Diagnostics and Troubleshooting
+
+- **`diagnose-kubespray-cluster.sh`** - Comprehensive diagnostics collection for cluster issues
+  ```bash
+  ./scripts/diagnose-kubespray-cluster.sh [--verbose]
+  ```
+
+## Legacy Infrastructure Scripts
+
+NOTE: Legacy scripts are being phased out in favor of Kubespray deployment.
+The active deployment flow is now focused under Kubespray automation and `ansible/playbooks/`.
+
+### Use Kubespray Deployment Instead
+
+```bash
+# Recommended workflow
+./deploy.sh kubespray
 ```
 
 ## Infrastructure Scripts
