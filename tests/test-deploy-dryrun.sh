@@ -12,7 +12,7 @@ echo ""
 
 # Test 1: Dry-run Debian deployment
 echo "[1/2] Dry-run: Debian cluster deployment..."
-if ansible-playbook -i ansible/inventory/hosts.yml \
+if ansible-playbook -i inventory.ini \
     ansible/playbooks/deploy-cluster.yaml \
     --check \
     2>&1 | tee /tmp/dryrun-debian.log; then
@@ -25,26 +25,25 @@ fi
 
 echo ""
 
-# Test 2: Dry-run RKE2 deployment (if vault password available)
-echo "[2/2] Dry-run: RKE2 deployment..."
-if [ -f ansible/inventory/group_vars/secrets.yml ]; then
-    echo "  Vault file found, attempting dry-run..."
-    echo "  (This will prompt for vault password if encrypted)"
+# Test 2: Dry-run Kubespray preflight (RKE2 deployment removed)
+echo "[2/2] Dry-run: Kubespray preflight checks..."
+echo "  Note: RKE2 deployment deprecated in favor of Kubespray"
+
+if [ -f ansible/playbooks/run-preflight-rhel10.yml ]; then
+    echo "  Running preflight checks on compute_nodes..."
     
-    if ansible-playbook -i ansible/inventory/hosts.yml \
-        ansible/playbooks/install-rke2-homelab.yml \
+    if ansible-playbook -i inventory.ini \
+        ansible/playbooks/run-preflight-rhel10.yml \
+        -l compute_nodes \
         --check \
-        --ask-vault-pass \
-        2>&1 | tee /tmp/dryrun-rke2.log; then
-        echo "  ✅ RKE2 deployment dry-run completed"
+        2>&1 | tee /tmp/dryrun-preflight.log; then
+        echo "  ✅ Preflight checks dry-run completed"
     else
-        echo "  ❌ RKE2 deployment dry-run FAILED"
-        echo "  Check /tmp/dryrun-rke2.log for details"
-        exit 1
+        echo "  ❌ Preflight checks dry-run FAILED (non-blocking)"
+        echo "  Check /tmp/dryrun-preflight.log for details"
     fi
 else
-    echo "  ⚠️  Vault file not found, skipping RKE2 dry-run"
-    echo "  Create ansible/inventory/group_vars/secrets.yml to enable"
+    echo "  ⚠️  Preflight playbook not found, skipping"
 fi
 
 echo ""

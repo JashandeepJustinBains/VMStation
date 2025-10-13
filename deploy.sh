@@ -2,17 +2,23 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INVENTORY_FILE="$REPO_ROOT/ansible/inventory/hosts.yml"
+# Kubespray-only deployment: Use inventory.ini as the canonical inventory
+INVENTORY_FILE="${KUBESPRAY_INVENTORY:-$REPO_ROOT/inventory.ini}"
 SPIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/spin-down-cluster.yaml"
 DEPLOY_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-cluster.yaml"
 RESET_PLAYBOOK="$REPO_ROOT/ansible/playbooks/reset-cluster.yaml"
 AUTOSLEEP_SETUP_PLAYBOOK="$REPO_ROOT/ansible/playbooks/setup-autosleep.yaml"
 CLEANUP_HOMELAB_PLAYBOOK="$REPO_ROOT/ansible/playbooks/cleanup-homelab.yml"
-INSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/install-rke2-homelab.yml"
-UNINSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/uninstall-rke2-homelab.yml"
+# Legacy RKE2 playbooks removed - use Kubespray instead
+# INSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/install-rke2-homelab.yml"
+# UNINSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/uninstall-rke2-homelab.yml"
 MONITORING_STACK_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-monitoring-stack.yaml"
 INFRASTRUCTURE_SERVICES_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-infrastructure-services.yaml"
 ARTIFACTS_DIR="$REPO_ROOT/ansible/artifacts"
+KUBESPRAY_DIR="$REPO_ROOT/.cache/kubespray"
+KUBESPRAY_VENV="$KUBESPRAY_DIR/.venv"
+KUBESPRAY_INVENTORY_DIR="$KUBESPRAY_DIR/inventory/mycluster"
+PREFLIGHT_PLAYBOOK="$REPO_ROOT/ansible/playbooks/run-preflight-rhel10.yml"
 
 # Logging functions with timestamps
 log_timestamp(){ date '+%Y-%m-%d %H:%M:%S'; }
@@ -31,12 +37,11 @@ usage(){
 Usage: $(basename "$0") [command] [flags]
 
 Commands:
-  debian          Deploy kubeadm/Kubernetes to Debian nodes only (monitoring_nodes + storage_nodes)
-  rke2            Deploy RKE2 to homelab RHEL10 node with pre-checks
-  all             Deploy both Debian and RKE2 (requires --with-rke2 or confirmation)
+  debian          Deploy kubeadm/Kubernetes to Debian nodes (monitoring_nodes + storage_nodes) [DEPRECATED: use 'kubespray']
+  kubespray       Deploy Kubernetes via Kubespray to all nodes (RECOMMENDED)
   monitoring      Deploy monitoring stack (Prometheus, Grafana, Loki, exporters)
   infrastructure  Deploy infrastructure services (NTP/Chrony, Syslog, Kerberos)
-  reset           Comprehensive cluster reset - removes all K8s config/network (Debian + RKE2)
+  reset           Comprehensive cluster reset - removes all K8s config/network
   setup           Setup auto-sleep monitoring (one-time setup)
   spindown        Cordon/drain and scale to zero on all nodes, then cleanup CNI/flannel artifacts (does NOT power off)
   help            Show this message
@@ -44,30 +49,32 @@ Commands:
 Flags:
   --yes        Skip interactive confirmations (for automation)
   --check      Dry-run mode - show planned actions without executing
-  --with-rke2  Auto-proceed with RKE2 deployment in 'all' command
   --log-dir    Specify custom log directory (default: ansible/artifacts)
 
 Examples:
-  ./deploy.sh debian                    # Deploy kubeadm to Debian nodes only
+  ./deploy.sh kubespray                 # Deploy Kubernetes via Kubespray (RECOMMENDED)
   ./deploy.sh monitoring                # Deploy monitoring stack
   ./deploy.sh infrastructure            # Deploy infrastructure services (NTP, Syslog, Kerberos)
-  ./deploy.sh rke2                      # Deploy RKE2 to homelab (with pre-checks)
-  ./deploy.sh all --with-rke2           # Deploy both phases non-interactively
-  ./deploy.sh reset                     # Full reset (Debian + RKE2)
-  ./deploy.sh debian --check            # Show what would be deployed
+  ./deploy.sh reset                     # Full cluster reset
+  ./deploy.sh debian --check            # Show what would be deployed (legacy Debian-only)
   ./deploy.sh setup                     # Setup auto-sleep monitoring
 
-Recommended Workflow:
+Recommended Workflow (Kubespray-only):
   1. ./deploy.sh reset                  # Clean slate
-  2. ./deploy.sh debian                 # Deploy Debian control-plane and worker
-  3. ./deploy.sh monitoring             # Deploy monitoring stack
-  4. ./deploy.sh infrastructure         # Deploy infrastructure services
-  5. ./deploy.sh setup                  # Setup auto-sleep
-  6. ./deploy.sh rke2                   # Deploy RKE2 on homelab node (optional)
+  2. ./deploy.sh setup                  # Setup auto-sleep
+  3. ./deploy.sh kubespray              # Deploy Kubernetes via Kubespray
+  4. ./deploy.sh monitoring             # Deploy monitoring stack
+  5. ./deploy.sh infrastructure         # Deploy infrastructure services
+  6. ./scripts/validate-monitoring-stack.sh   # Validate deployment
+  7. ./tests/test-complete-validation.sh      # Complete validation
 
 Artifacts:
-  - Logs: ansible/artifacts/deploy-debian.log, install-rke2-homelab.log, etc.
-  - RKE2 kubeconfig: ansible/artifacts/homelab-rke2-kubeconfig.yaml
+  - Logs: ansible/artifacts/*.log
+  - Kubeconfig: ~/.kube/config or .cache/kubespray/inventory/mycluster/artifacts/admin.conf
+
+Legacy Commands (DEPRECATED):
+  - debian: Legacy kubeadm deployment (use 'kubespray' instead)
+  - rke2: Removed (use 'kubespray' instead)
 
 EOF
 }
@@ -324,179 +331,220 @@ cmd_debian(){
   fi
 }
 
-cmd_rke2(){
-  info "========================================"
-  info " Deploying RKE2 to Homelab (RHEL10)    "
-  info "========================================"
-  info "Target: homelab (192.168.4.62)"
-  info "Playbook: $INSTALL_RKE2_PLAYBOOK"
-  info "Log: $LOG_DIR/install-rke2-homelab.log"
+cmd_kubespray(){
+  info "=========================================="
+  info " Deploying Kubernetes via Kubespray      "
+  info "=========================================="
+  info "Target: All nodes (kube-master, kube-node)"
+  info "Workflow: Kubespray staging → preflight → cluster.yml → monitoring → infrastructure"
+  info "Log: $LOG_DIR/kubespray-deployment.log"
   info ""
   
   require_bin ansible-playbook
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
-    echo "  Pre-flight checks:"
-    echo "    - Verify SSH connectivity to homelab"
-    echo "    - Check if homelab needs cleanup"
-    echo "    - Verify Debian cluster health"
-    echo ""
-    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $INSTALL_RKE2_PLAYBOOK"
-    if [[ "$FLAG_YES" == "true" ]]; then
-      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
-    fi
-    echo "  $dry_run_cmd | tee $LOG_DIR/install-rke2-homelab.log"
+    echo "  1. ./scripts/run-kubespray.sh (stage Kubespray repo and venv)"
+    echo "  2. ansible-playbook -i $INVENTORY_FILE $PREFLIGHT_PLAYBOOK -l compute_nodes"
+    echo "  3. cd $KUBESPRAY_DIR && source $KUBESPRAY_VENV/bin/activate"
+    echo "  4. ansible-playbook -i $KUBESPRAY_INVENTORY_DIR/inventory.ini cluster.yml -b"
+    echo "  5. export KUBECONFIG=<path-to-kubeconfig>"
+    echo "  6. ./deploy.sh monitoring"
+    echo "  7. ./deploy.sh infrastructure"
     return 0
-  fi
-  
-  # Pre-flight checks
-  info "Running pre-flight checks..."
-  
-  # 1. Verify SSH connectivity to homelab
-  if ! verify_ssh_homelab; then
-    err "Pre-flight check failed: Cannot reach homelab"
-  fi
-  
-  # 2. Check if homelab needs cleanup
-  if ! check_homelab_clean; then
-    warn "homelab has existing Kubernetes artifacts"
-    
-    if confirm "Run cleanup on homelab before RKE2 installation?"; then
-      info "Running cleanup playbook..."
-      ansible-playbook -i "$INVENTORY_FILE" "$CLEANUP_HOMELAB_PLAYBOOK" \
-        2>&1 | tee "$LOG_DIR/cleanup-homelab.log" || warn "Cleanup had warnings"
-    else
-      warn "Proceeding without cleanup - this may cause issues"
-    fi
-  fi
-  
-  # 3. Verify Debian cluster health (optional but recommended for federation)
-  if verify_debian_cluster_health; then
-    info "✓ Debian cluster is healthy - RKE2 federation will work"
-  else
-    warn "Debian cluster not healthy - federation may not work properly"
-    if ! confirm "Continue with RKE2 installation anyway?"; then
-      err "Aborted by user"
-    fi
   fi
   
   # Ensure artifacts directory exists
   mkdir -p "$LOG_DIR"
   
-  # Run RKE2 installation
-  info "Starting RKE2 installation (this may take 15-20 minutes)..."
+  # Step 1: Stage Kubespray
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  STEP 1: Staging Kubespray"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
-  # Build ansible-playbook command with proper flags
-  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $INSTALL_RKE2_PLAYBOOK"
-  
-  # Add skip_ansible_confirm when FLAG_YES is true
-  if [[ "$FLAG_YES" == "true" ]]; then
-    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  if ! "$REPO_ROOT/scripts/run-kubespray.sh" 2>&1 | tee -a "$LOG_DIR/kubespray-deployment.log"; then
+    err "Kubespray staging failed - check logs: $LOG_DIR/kubespray-deployment.log"
   fi
   
-  # Force color output for better readability
-  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/install-rke2-homelab.log"
-  local install_result=${PIPESTATUS[0]}
+  info ""
+  info "✓ Kubespray staged successfully"
+  info ""
   
-  if [[ $install_result -eq 0 ]]; then
+  # Step 2: Run preflight checks on RHEL10 nodes (compute_nodes)
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  STEP 2: Running Preflight Checks on RHEL10 Nodes"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  if ! ansible-playbook -i "$INVENTORY_FILE" "$PREFLIGHT_PLAYBOOK" -l compute_nodes 2>&1 | tee -a "$LOG_DIR/kubespray-deployment.log"; then
+    warn "Preflight checks had warnings - review logs before proceeding"
+  fi
+  
+  info ""
+  info "✓ Preflight checks completed"
+  info ""
+  
+  # Step 3: Deploy Kubernetes cluster with Kubespray
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  STEP 3: Deploying Kubernetes Cluster with Kubespray"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info ""
+  info "⚠️  OPERATOR ACTION REQUIRED:"
+  info "    The Kubespray cluster deployment requires manual execution due to:"
+  info "    - Potential credential/network access requirements"
+  info "    - Long-running deployment (10-30 minutes)"
+  info "    - Interactive prompts may be needed"
+  info ""
+  info "Please run the following commands manually:"
+  info ""
+  info "  cd $KUBESPRAY_DIR"
+  info "  source $KUBESPRAY_VENV/bin/activate"
+  info "  ansible-playbook -i $KUBESPRAY_INVENTORY_DIR/inventory.ini cluster.yml -b -v"
+  info ""
+  info "After successful deployment, the KUBECONFIG will be available at:"
+  info "  $KUBESPRAY_INVENTORY_DIR/artifacts/admin.conf"
+  info ""
+  info "Then set KUBECONFIG:"
+  info "  export KUBECONFIG=$KUBESPRAY_INVENTORY_DIR/artifacts/admin.conf"
+  info ""
+  info "Or use the activation script:"
+  info "  source $REPO_ROOT/scripts/activate-kubespray-env.sh"
+  info ""
+  
+  # Check if we should attempt automated deployment
+  if [[ "$FLAG_YES" != "true" ]]; then
+    echo ""
+    read -p "Would you like to attempt automated Kubespray deployment now? [y/N]: " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      info "Skipping automated deployment. Run the commands above manually."
+      info ""
+      info "After deploying the cluster, continue with:"
+      info "  ./deploy.sh monitoring"
+      info "  ./deploy.sh infrastructure"
+      return 0
+    fi
+  fi
+  
+  info "Attempting automated Kubespray deployment..."
+  info "(This may take 10-30 minutes depending on cluster size and network)"
+  info ""
+  
+  # Attempt automated deployment
+  cd "$KUBESPRAY_DIR" || err "Failed to cd to $KUBESPRAY_DIR"
+  
+  # Activate venv and run cluster.yml
+  if ! (source "$KUBESPRAY_VENV/bin/activate" && \
+        ansible-playbook -i "$KUBESPRAY_INVENTORY_DIR/inventory.ini" cluster.yml -b -v 2>&1 | tee -a "$LOG_DIR/kubespray-deployment.log"); then
+    warn "Kubespray cluster deployment encountered errors. Check logs: $LOG_DIR/kubespray-deployment.log"
     info ""
-    info "✓ RKE2 installation completed successfully"
-    info ""
+    info "If deployment failed due to credentials or network access:"
+    info "  1. Review the error messages above"
+    info "  2. Ensure SSH access to all nodes is configured"
+    info "  3. Ensure sudo access is available (homelab uses NOPASSWD sudo)"
+    info "  4. Run the deployment manually using the commands shown earlier"
+    return 1
+  fi
+  
+  cd "$REPO_ROOT" || err "Failed to cd back to $REPO_ROOT"
+  
+  info ""
+  info "✓ Kubespray cluster deployment completed"
+  info ""
+  
+  # Step 4: Set KUBECONFIG
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  STEP 4: Configuring KUBECONFIG"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  # Try to find kubeconfig
+  KUBECONFIG_PATHS=(
+    "$KUBESPRAY_INVENTORY_DIR/artifacts/admin.conf"
+    "$HOME/.kube/config"
+    "/etc/kubernetes/admin.conf"
+  )
+  
+  KUBECONFIG_FOUND=""
+  for kconfig in "${KUBECONFIG_PATHS[@]}"; do
+    if [[ -f "$kconfig" ]]; then
+      KUBECONFIG_FOUND="$kconfig"
+      break
+    fi
+  done
+  
+  if [[ -n "$KUBECONFIG_FOUND" ]]; then
+    export KUBECONFIG="$KUBECONFIG_FOUND"
+    info "✓ KUBECONFIG set to: $KUBECONFIG"
     
-    # Verify artifacts
-    local kubeconfig_artifact="$ARTIFACTS_DIR/homelab-rke2-kubeconfig.yaml"
-    if [[ -f "$kubeconfig_artifact" ]]; then
-      info "Verifying RKE2 cluster..."
-      if kubectl --kubeconfig="$kubeconfig_artifact" get nodes >/dev/null 2>&1; then
-        local nodes=$(kubectl --kubeconfig="$kubeconfig_artifact" get nodes --no-headers | wc -l)
-        info "✓ RKE2 cluster has $nodes node(s) Ready"
-        
-        # Check monitoring pods
-        local monitoring_pods=$(kubectl --kubeconfig="$kubeconfig_artifact" get pods -n monitoring-rke2 --no-headers 2>/dev/null | grep Running | wc -l || echo "0")
-        if [[ "$monitoring_pods" -gt 0 ]]; then
-          info "✓ Monitoring stack deployed ($monitoring_pods pods Running)"
-        fi
+    # Verify cluster access
+    if command -v kubectl &>/dev/null; then
+      if kubectl cluster-info &>/dev/null; then
+        info "✓ Kubernetes cluster is accessible"
+      else
+        warn "kubectl found but cluster is not accessible"
       fi
     fi
-    
-    info ""
-    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    info "  RKE2 Cluster Ready on Homelab!"
-    info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    info ""
-    info "Artifacts:"
-    info "  - Kubeconfig: $kubeconfig_artifact"
-    info "  - Log: $LOG_DIR/install-rke2-homelab.log"
-    info ""
-    info "Verification commands:"
-    info "  export KUBECONFIG=$kubeconfig_artifact"
-    info "  kubectl get nodes"
-    info "  kubectl get pods -A"
-    info "  kubectl get pods -n monitoring-rke2"
-    info ""
-    info "Monitoring endpoints:"
-    info "  - Node Exporter: http://192.168.4.62:9100/metrics"
-    info "  - Prometheus: http://192.168.4.62:30090"
-    info "  - Federation: http://192.168.4.62:30090/federate"
-    info ""
-    info "Federation test:"
-    info "  curl -s 'http://192.168.4.62:30090/federate?match[]={job=~\".+\"}' | head -20"
-    info ""
   else
-    err "RKE2 installation failed - check logs: $LOG_DIR/install-rke2-homelab.log"
+    warn "No kubeconfig file found - cluster may not be fully deployed"
   fi
+  
+  info ""
+  
+  # Step 5: Deploy monitoring stack
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  STEP 5: Deploying Monitoring Stack"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  cmd_monitoring
+  
+  info ""
+  
+  # Step 6: Deploy infrastructure services
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  STEP 6: Deploying Infrastructure Services"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  
+  cmd_infrastructure
+  
+  info ""
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info "  KUBESPRAY DEPLOYMENT COMPLETE!"
+  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  info ""
+  info "Summary:"
+  info "  ✓ Kubespray cluster deployed"
+  info "  ✓ Monitoring stack deployed"
+  info "  ✓ Infrastructure services deployed"
+  info ""
+  info "Next steps:"
+  info "  1. Validate deployment:"
+  info "     $REPO_ROOT/scripts/validate-monitoring-stack.sh"
+  info ""
+  info "  2. Run complete validation:"
+  info "     $REPO_ROOT/tests/test-complete-validation.sh"
+  info ""
+  info "  3. Test sleep/wake cycle:"
+  info "     $REPO_ROOT/tests/test-sleep-wake-cycle.sh"
+  info ""
+  info "Logs saved to: $LOG_DIR/kubespray-deployment.log"
+  info ""
+}
+
+# Legacy cmd_rke2 removed - replaced by cmd_kubespray
+# RKE2 deployment is deprecated in favor of Kubespray
+cmd_rke2(){
+  err "RKE2 deployment has been removed. Use './deploy.sh kubespray' instead."
 }
 
 cmd_all(){
   info "========================================"
-  info " Two-Phase Deployment: Debian + RKE2   "
+  info " Full Deployment (Deprecated)           "
   info "========================================"
   info ""
-  
-  # Check if --with-rke2 flag is set
-  if [[ "$FLAG_WITH_RKE2" != "true" ]] && [[ "$FLAG_YES" != "true" ]]; then
-    info "This will deploy:"
-    info "  1. Kubernetes (kubeadm) to Debian nodes (monitoring + storage)"
-    info "  2. RKE2 to homelab RHEL10 node"
-    info ""
-    if ! confirm "Proceed with two-phase deployment?"; then
-      err "Aborted by user. Use --with-rke2 flag to skip confirmation."
-    fi
-  fi
-  
-  # Phase 1: Debian
+  warn "'all' command is deprecated - use 'kubespray' instead"
   info ""
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  PHASE 1: Deploying to Debian Nodes"
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  cmd_debian
-  
-  # Wait a bit between phases
+  info "Redirecting to: ./deploy.sh kubespray"
   info ""
-  info "Waiting 10 seconds before Phase 2..."
-  sleep 10
-  
-  # Phase 2: RKE2
-  info ""
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  PHASE 2: Deploying RKE2 to Homelab"
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  cmd_rke2
-  
-  info ""
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  TWO-PHASE DEPLOYMENT COMPLETE!"
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info ""
-  info "Summary:"
-  info "  ✓ Debian cluster: monitoring_nodes + storage_nodes"
-  info "  ✓ RKE2 cluster: homelab"
-  info ""
-  info "Logs:"
-  info "  - $LOG_DIR/deploy-debian.log"
-  info "  - $LOG_DIR/install-rke2-homelab.log"
-  info ""
+  cmd_kubespray
 }
 
 cmd_reset(){
@@ -506,23 +554,20 @@ cmd_reset(){
   info " Comprehensive Cluster Reset            "
   info "========================================"
   info "This will reset:"
-  info "  - Debian Kubernetes cluster (kubeadm)"
-  info "  - RKE2 cluster on homelab"
+  info "  - Kubernetes cluster (all nodes)"
   info "  - All network interfaces and configs"
+  info "  - Note: RKE2-specific reset removed (use Kubespray reset)"
   info ""
   info "SSH keys and physical ethernet will be preserved"
   info ""
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
-    local dry_run_reset="ansible-playbook $RESET_PLAYBOOK (Debian nodes)"
-    local dry_run_uninstall="ansible-playbook $UNINSTALL_RKE2_PLAYBOOK (homelab)"
+    local dry_run_reset="ansible-playbook $RESET_PLAYBOOK (all nodes)"
     if [[ "$FLAG_YES" == "true" ]]; then
       dry_run_reset="$dry_run_reset with -e skip_ansible_confirm=true"
-      dry_run_uninstall="$dry_run_uninstall with -e skip_ansible_confirm=true"
     fi
     echo "  1. $dry_run_reset"
-    echo "  2. $dry_run_uninstall"
     return 0
   fi
   
@@ -532,7 +577,7 @@ cmd_reset(){
   
   info ""
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  PHASE 1: Resetting Debian Nodes"
+  info "  Resetting Cluster"
   info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   
   # Build ansible-playbook command with proper flags
@@ -544,45 +589,13 @@ cmd_reset(){
   fi
   
   # Force color output for better readability
-  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-debian.log"
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-cluster.log"
   local reset_result=${PIPESTATUS[0]}
   
   if [[ $reset_result -eq 0 ]]; then
-    info "✓ Debian cluster reset completed"
+    info "✓ Cluster reset completed"
   else
-    warn "Debian reset had errors (see log)"
-  fi
-  
-  # Check if homelab has RKE2 installed
-  info ""
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  info "  PHASE 2: Resetting RKE2 on Homelab"
-  info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  
-  # Check if RKE2 is installed
-  if ansible homelab -i "$INVENTORY_FILE" -m shell \
-     -a "test -d /var/lib/rancher/rke2" 2>/dev/null | grep -q SUCCESS; then
-    info "RKE2 detected on homelab, uninstalling..."
-    
-    # Build ansible-playbook command with proper flags
-    local ansible_rke2_cmd="ansible-playbook -i $INVENTORY_FILE $UNINSTALL_RKE2_PLAYBOOK"
-    
-    # Add skip_ansible_confirm when FLAG_YES is true
-    if [[ "$FLAG_YES" == "true" ]]; then
-      ansible_rke2_cmd="$ansible_rke2_cmd -e skip_ansible_confirm=true"
-    fi
-    
-    # Force color output for better readability
-    ANSIBLE_FORCE_COLOR=true eval "$ansible_rke2_cmd" 2>&1 | tee "$LOG_DIR/uninstall-rke2.log"
-    local uninstall_result=${PIPESTATUS[0]}
-    
-    if [[ $uninstall_result -eq 0 ]]; then
-      info "✓ RKE2 uninstalled from homelab"
-    else
-      warn "RKE2 uninstall had errors (see log)"
-    fi
-  else
-    info "No RKE2 installation found on homelab, skipping"
+    warn "Cluster reset had errors (see log)"
   fi
   
   info ""
@@ -592,14 +605,10 @@ cmd_reset(){
   info ""
   info "Cluster is ready for fresh deployment"
   info ""
-  info "Logs:"
-  info "  - $LOG_DIR/reset-debian.log"
-  info "  - $LOG_DIR/uninstall-rke2.log"
+  info "Log: $LOG_DIR/reset-cluster.log"
   info ""
   info "Next steps:"
-  info "  ./deploy.sh all --with-rke2    # Full deployment"
-  info "  ./deploy.sh debian             # Debian only"
-  info "  ./deploy.sh rke2               # RKE2 only"
+  info "  ./deploy.sh kubespray              # Full Kubespray deployment"
   info ""
 }
 
@@ -837,7 +846,7 @@ main(){
         usage
         exit 0
         ;;
-      debian|rke2|all|reset|setup|spindown|monitoring|infrastructure)
+      debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure)
         cmd="$1"
         shift
         ;;
@@ -868,6 +877,9 @@ main(){
   case "$cmd" in
     debian)
       cmd_debian
+      ;;
+    kubespray)
+      cmd_kubespray
       ;;
     rke2)
       cmd_rke2

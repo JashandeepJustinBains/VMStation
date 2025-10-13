@@ -44,7 +44,7 @@ for i in $(seq 1 "$ITERATIONS"); do
     # Verify deployment
     echo ""
     echo "[$i.3] Verifying deployment..."
-    if ! ansible-playbook -i ansible/inventory/hosts.yml \
+    if ! ansible-playbook -i inventory.ini \
         ansible/playbooks/verify-cluster.yaml \
         2>&1 | tee "/tmp/verify-cycle-${i}.log"; then
         echo "❌ Verification FAILED at cycle $i"

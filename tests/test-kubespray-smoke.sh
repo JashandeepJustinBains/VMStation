@@ -151,7 +151,7 @@ if [[ $FAILED -eq 0 ]]; then
   echo "Next steps:"
   echo "  1. Review the new documentation in docs/"
   echo "  2. Try the kubespray wrapper: ./scripts/run-kubespray.sh --help || ./scripts/run-kubespray.sh"
-  echo "  3. Run preflight checks: ansible-playbook -i ansible/inventory/hosts.yml ansible/playbooks/run-preflight-rhel10.yml --check"
+  echo "  3. Run preflight checks: ansible-playbook -i inventory.ini ansible/playbooks/run-preflight-rhel10.yml --check"
   echo "  4. Test existing workflows: ./deploy.sh --help"
   exit 0
 else

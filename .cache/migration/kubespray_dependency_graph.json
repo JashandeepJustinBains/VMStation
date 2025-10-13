@@ -1,0 +1,35 @@
+{
+  "canonical_workflow": [
+    "deploy.sh reset",
+    "deploy.sh setup",
+    "deploy.sh debian",
+    "deploy.sh monitoring",
+    "deploy.sh infrastructure",
+    "validate-monitoring-stack.sh",
+    "test-sleep-wake-cycle.sh",
+    "test-complete-validation.sh"
+  ],
+  "kubespray_flow": [
+    "scripts/run-kubespray.sh",
+    "ansible-playbook -i inventory.ini run-preflight-rhel10.yml -l compute_nodes",
+    "cd .cache/kubespray && source .venv/bin/activate && ansible-playbook -i inventory/mycluster/inventory.ini cluster.yml -b",
+    "scripts/activate-kubespray-env.sh",
+    "deploy.sh monitoring",
+    "deploy.sh infrastructure"
+  ],
+  "used_files": {
+    "scripts/run-kubespray.sh": "canonical_workflow",
+    "scripts/activate-kubespray-env.sh": "canonical_workflow",
+    "tests/test-sleep-wake-cycle.sh": "canonical_workflow",
+    "tests/test-complete-validation.sh": "canonical_workflow",
+    "ansible/playbooks/run-preflight-rhel10.yml": "canonical_workflow",
+    "scripts/validate-monitoring-stack.sh": "canonical_workflow",
+    "deploy.sh": "canonical_workflow",
+    "inventory.ini": "canonical_workflow"
+  },
+  "notes": [
+    "This graph represents files reachable from the canonical Kubespray workflow",
+    "Files not in this graph are candidates for archival or deletion",
+    "RKE2 playbooks have been identified as orphaned and should be archived"
+  ]
+}

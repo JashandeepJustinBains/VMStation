@@ -1,0 +1,66 @@
+# Orphaned Files Analysis
+# Files not reachable from the canonical Kubespray workflow
+# Generated: $(date)
+
+## RKE2-Related Files (ARCHIVED)
+
+- ansible/playbooks/install-rke2-homelab.yml → archive/legacy/ansible/playbooks/
+- ansible/playbooks/uninstall-rke2-homelab.yml → archive/legacy/ansible/playbooks/
+
+**Reason**: RKE2 deployment has been completely replaced by Kubespray. These files are archived for reference but no longer used in the canonical workflow.
+
+## Legacy Inventory (KEPT for backward compatibility)
+
+- ansible/inventory/hosts.yml (YAML format)
+  - Kept for backward compatibility
+  - Primary inventory is now inventory.ini (INI format, Kubespray-compatible)
+  - Both inventories define the same hosts
+
+## Scripts and Tests Analysis
+
+All scripts in scripts/ and tests/ were analyzed. The following are part of the canonical workflow:
+
+**Canonical Scripts**:
+- scripts/run-kubespray.sh - Stages Kubespray repo and venv
+- scripts/activate-kubespray-env.sh - Activates Kubespray venv and sets KUBECONFIG
+- scripts/validate-monitoring-stack.sh - Validates monitoring deployment
+
+**Canonical Tests**:
+- tests/test-sleep-wake-cycle.sh - Tests auto-sleep and wake-on-LAN
+- tests/test-complete-validation.sh - Complete validation suite
+
+**Other Scripts/Tests**: 
+- All other scripts/tests in the repository are supplementary (diagnostics, smoke tests, etc.)
+- These are kept for debugging and development purposes
+- They are not part of the minimal canonical workflow but provide value
+
+## Documentation Files
+
+Most documentation has been consolidated into docs/ directory. Legacy docs in the root (e.g., README_MONITORING_FIXES.md, deploy.md) provide historical context and troubleshooting.
+
+## Notes
+
+1. **Archival Strategy**: RKE2-specific files moved to archive/legacy/ with directory structure preserved
+2. **Backward Compatibility**: hosts.yml kept for reference, but inventory.ini is now canonical
+3. **Minimal Deletions**: We archived rather than deleted to preserve institutional knowledge
+4. **Test Suites**: Supplementary tests kept for debugging; canonical workflow uses minimal validation
+
+## Canonical Workflow Files (Used)
+
+- deploy.sh
+- inventory.ini
+- scripts/run-kubespray.sh
+- scripts/activate-kubespray-env.sh
+- scripts/validate-monitoring-stack.sh
+- tests/test-sleep-wake-cycle.sh
+- tests/test-complete-validation.sh
+- ansible/playbooks/run-preflight-rhel10.yml
+- ansible/playbooks/deploy-cluster.yaml
+- ansible/playbooks/deploy-monitoring-stack.yaml
+- ansible/playbooks/deploy-infrastructure-services.yaml
+- ansible/playbooks/reset-cluster.yaml
+- ansible/playbooks/setup-autosleep.yaml
+- manifests/monitoring/* (all files)
+- manifests/infrastructure/* (all files)
+
+

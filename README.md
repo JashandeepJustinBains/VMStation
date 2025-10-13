@@ -4,10 +4,13 @@ A homelab Kubernetes environment with automated deployment, monitoring, and powe
 
 ## Overview
 
-VMStation provides a production-ready Kubernetes setup using a two-cluster architecture:
+VMStation provides a production-ready Kubernetes setup using **Kubespray** for deployment automation.
 
-- **Debian Cluster** (kubeadm): Production workloads, storage, monitoring
-- **RKE2/Kubespray Cluster** (RHEL10): Compute, testing, optional federation
+- **Primary Deployment**: Kubespray - Production-grade Kubernetes deployment
+- **Legacy Option**: kubeadm (Debian nodes) - Deprecated but supported
+- **Monitoring**: Prometheus, Grafana, Loki, exporters
+- **Power Management**: Wake-on-LAN, auto-sleep
+- **Infrastructure**: NTP/Chrony, Syslog, Kerberos (optional)
 
 ## Quick Start
 
@@ -16,15 +19,24 @@ VMStation provides a production-ready Kubernetes setup using a two-cluster archi
 git clone https://github.com/JashandeepJustinBains/VMStation.git
 cd VMStation
 
-# Deploy Debian cluster
+# Deploy full stack with Kubespray (RECOMMENDED)
+./deploy.sh reset
+./deploy.sh setup
+./deploy.sh kubespray  # Deploys cluster + monitoring + infrastructure
+
+# Validate deployment
+./scripts/validate-monitoring-stack.sh
+./tests/test-complete-validation.sh
+```
+
+## Alternative Quick Start (Legacy Debian-only)
+
+```bash
+# Deploy to Debian nodes only (deprecated)
 ./deploy.sh reset
 ./deploy.sh setup
 ./deploy.sh debian
-
-# Deploy monitoring stack
 ./deploy.sh monitoring
-
-# Deploy infrastructure services
 ./deploy.sh infrastructure
 
 # Validate deployment
@@ -35,10 +47,11 @@ cd VMStation
 ## Features
 
 ### 🚀 Automated Deployment
+- **Kubespray Integration** - Production-grade Kubernetes deployment
 - **Idempotent Ansible playbooks** - Safe to run multiple times
-- **Single command deployment** - `./deploy.sh` wrapper script
+- **Single command deployment** - `./deploy.sh kubespray` for complete stack
 - **Pre-flight checks** - Validates requirements before deployment
-- **Multi-cluster support** - Debian (kubeadm) + RHEL10 (RKE2 or Kubespray)
+- **Multi-cluster support** - Debian (kubeadm) + RHEL10 (Kubespray)
 
 ### 📊 Complete Monitoring Stack
 - **Prometheus** - Metrics collection and alerting
@@ -63,41 +76,41 @@ cd VMStation
 - **Syslog Server** - Centralized logging
 - **Kerberos/FreeIPA** - SSO and identity management (optional)
 
-### 🎯 Three Deployment Options
+### 🎯 Deployment Options
 
-1. **Debian Cluster (kubeadm)** - Recommended for production
-2. **RKE2 (RHEL10)** - Simple, batteries-included Kubernetes for RHEL
-3. **Kubespray (RHEL10)** - Flexible, production-grade deployment (NEW)
+1. **Kubespray (RECOMMENDED)** - Production-grade Kubernetes deployment for all nodes
+2. **Debian kubeadm (LEGACY)** - kubeadm deployment to Debian nodes only
+
+> **Migration Notice**: RKE2 deployment has been deprecated and replaced by Kubespray. See [docs/MIGRATION.md](docs/MIGRATION.md) for details.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│ Debian Cluster (kubeadm)                            │
+│ Kubernetes Cluster (Kubespray)                      │
 ├─────────────────────────────────────────────────────┤
-│ masternode (192.168.4.63)                           │
-│   - Control Plane                                    │
+│ masternode (192.168.4.63) - Control Plane           │
+│   - Kubernetes API Server                            │
 │   - Monitoring Stack (Prometheus, Grafana, Loki)    │
 │   - Always-on                                        │
 ├─────────────────────────────────────────────────────┤
-│ storagenodet3500 (192.168.4.61)                     │
-│   - Worker Node                                      │
+│ storagenodet3500 (192.168.4.61) - Worker            │
 │   - Jellyfin (media streaming)                       │
+│   - Storage workloads                                │
 │   - Auto-sleep enabled                               │
-└─────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────┐
-│ RKE2/Kubespray Cluster (RHEL10)                     │
 ├─────────────────────────────────────────────────────┤
-│ homelab (192.168.4.62)                              │
-│   - Single-node cluster                              │
+│ homelab (192.168.4.62) - Worker (RHEL10)            │
+│   - General compute workloads                        │
 │   - Node Exporter                                    │
-│   - Optional: Prometheus federation                  │
 │   - Auto-sleep enabled                               │
 └─────────────────────────────────────────────────────┘
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
+**Deployment Methods**:
+- **Kubespray** (default): All nodes via Kubespray cluster.yml
+- **kubeadm** (legacy): Debian nodes only (monitoring + storage)
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture and [docs/MIGRATION.md](docs/MIGRATION.md) for Kubespray migration details.
 
 ## Node Specifications
 
@@ -109,7 +122,15 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
 
 ## Deployment Options
 
-### Option 1: Debian Cluster Only
+### Option 1: Full Kubespray Deployment (RECOMMENDED)
+
+```bash
+./deploy.sh reset
+./deploy.sh setup
+./deploy.sh kubespray  # Deploys cluster + monitoring + infrastructure
+```
+
+### Option 2: Legacy Debian-only Deployment
 
 ```bash
 ./deploy.sh reset
@@ -119,21 +140,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture.
 ./deploy.sh infrastructure
 ```
 
-### Option 2: Debian + RKE2
-
-```bash
-./deploy.sh reset
-./deploy.sh setup
-./deploy.sh debian
-./deploy.sh monitoring
-./deploy.sh infrastructure
-./deploy.sh rke2
-```
-
-### Option 3: Debian + Kubespray (NEW)
-
-```bash
-# Deploy Debian cluster
+## Documentation
 ./deploy.sh reset
 ./deploy.sh setup
 ./deploy.sh debian
@@ -156,13 +163,12 @@ See [docs/USAGE.md](docs/USAGE.md) for complete deployment guide.
 ### Deployment
 
 ```bash
-./deploy.sh debian          # Deploy Debian cluster
-./deploy.sh rke2            # Deploy RKE2 cluster (RHEL10)
+./deploy.sh kubespray       # Deploy Kubespray cluster (RECOMMENDED)
+./deploy.sh debian          # Deploy Debian cluster (LEGACY)
 ./deploy.sh monitoring      # Deploy monitoring stack
 ./deploy.sh infrastructure  # Deploy infrastructure services
 ./deploy.sh setup           # Setup auto-sleep monitoring
-./deploy.sh reset           # Reset all clusters
-./deploy.sh all --with-rke2 # Deploy everything
+./deploy.sh reset           # Reset cluster
 ```
 
 ### Validation
