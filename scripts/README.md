@@ -1,6 +1,40 @@
 # VMStation Scripts Documentation
 
-This directory historically contained many operational scripts for VMStation.
+This directory contains operational scripts for VMStation cluster management.
+
+## Kubespray Automated Deployment (NEW!)
+
+### Overview
+The **ops-kubespray-automation.sh** script provides complete automated deployment of Kubernetes using Kubespray with built-in error handling, remediation, and comprehensive logging.
+
+### Key Features
+- 🤖 Fully automated deployment workflow
+- 🔄 Automatic retry and remediation
+- 📊 Comprehensive logging and artifacts
+- 🔐 Secure SSH key management
+- 📦 Backup and rollback support
+- 🏥 Health checks and validation
+- 🌐 Wake-on-LAN support for sleeping nodes
+
+### Quick Start
+
+**Via GitHub Actions** (Recommended):
+```bash
+# Go to: Actions → Kubespray Automated Deployment → Run workflow
+```
+
+**Local Execution**:
+```bash
+export VMSTATION_SSH_KEY="$(cat ~/.ssh/id_vmstation_ops)"
+bash scripts/ops-kubespray-automation.sh
+```
+
+### Documentation
+- **Complete Guide**: [docs/KUBESPRAY_AUTOMATION.md](../docs/KUBESPRAY_AUTOMATION.md)
+- **Quick Reference**: [docs/KUBESPRAY_AUTOMATION_QUICK_REF.md](../docs/KUBESPRAY_AUTOMATION_QUICK_REF.md)
+- **Test Suite**: [tests/test-kubespray-automation.sh](../tests/test-kubespray-automation.sh)
+
+---
 
 NOTE: As part of a cleanup to reduce technical debt, large legacy scripts have been archived under `ansible/archive/playbooks` and `ansible/archive/plays`.
 The active deployment flow is now focused under `ansible/playbooks/deploy-cluster.yaml` and `ansible/roles/`.

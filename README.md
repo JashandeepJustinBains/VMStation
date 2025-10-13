@@ -14,6 +14,17 @@ VMStation provides a production-ready Kubernetes setup using **Kubespray** for d
 
 ## Quick Start
 
+### Automated Deployment (GitHub Actions)
+```bash
+# 1. Configure VMSTATION_SSH_KEY secret in GitHub repository
+# 2. Go to: Actions → Kubespray Automated Deployment → Run workflow
+# 3. Monitor logs and download artifacts
+# 4. Access cluster using downloaded kubeconfig
+```
+
+See [Kubespray Automation Guide](docs/KUBESPRAY_AUTOMATION.md) for details.
+
+### Manual Deployment (Traditional)
 ```bash
 # Clone repository
 git clone https://github.com/JashandeepJustinBains/VMStation.git
@@ -45,6 +56,17 @@ cd VMStation
 ```
 
 ## Features
+
+### 🤖 Fully Automated Deployment (NEW!)
+- **GitHub Actions Integration** - Automated deployment via GitHub-hosted runners
+- **One-Click Deployment** - Deploy entire cluster from GitHub Actions
+- **Automatic Remediation** - Built-in error detection and fixes
+- **Comprehensive Logging** - Detailed logs and artifacts for troubleshooting
+- **Wake-on-LAN Support** - Automatically wakes sleeping nodes
+- **Health Validation** - Verifies cluster health after deployment
+- **Backup & Rollback** - Automatic backups before modifications
+
+See [Kubespray Automation Guide](docs/KUBESPRAY_AUTOMATION.md) for details.
 
 ### 🚀 Automated Deployment
 - **Kubespray Integration** - Production-grade Kubernetes deployment
