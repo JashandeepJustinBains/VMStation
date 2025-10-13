@@ -30,6 +30,7 @@ err(){ echo "[$(log_timestamp)] [ERROR] $*" >&2; exit 1; }
 FLAG_YES=false
 FLAG_CHECK=false
 FLAG_WITH_RKE2=false
+FLAG_ENABLE_AUTOSLEEP=false
 LOG_DIR="$ARTIFACTS_DIR"
 
 usage(){
@@ -43,6 +44,7 @@ Commands:
   infrastructure  Deploy infrastructure services (NTP/Chrony, Syslog, Kerberos)
   reset           Comprehensive cluster reset - removes all K8s config/network
   setup           Setup auto-sleep monitoring (one-time setup)
+    --enable-autosleep  When used with 'setup', actually enable/start the timer (opt-in)
   spindown        Cordon/drain and scale to zero on all nodes, then cleanup CNI/flannel artifacts (does NOT power off)
   help            Show this message
 
@@ -61,7 +63,8 @@ Examples:
 
 Recommended Workflow (Kubespray-only):
   1. ./deploy.sh reset                  # Clean slate
-  2. ./deploy.sh setup                  # Setup auto-sleep
+  2. ./deploy.sh setup                  # Setup auto-sleep (does NOT enable timer by default)
+    To enable the timer immediately, run: ./deploy.sh setup --enable-autosleep
   3. ./deploy.sh kubespray              # Deploy Kubernetes via Kubespray
   4. ./deploy.sh monitoring             # Deploy monitoring stack
   5. ./deploy.sh infrastructure         # Deploy infrastructure services
@@ -762,6 +765,10 @@ cmd_setup_autosleep(){
   if [[ "$FLAG_YES" == "true" ]]; then
     ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
   fi
+  # Add explicit enable flag only if operator requested it
+  if [[ "$FLAG_ENABLE_AUTOSLEEP" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e enable_autosleep=true"
+  fi
   
   # Force color output for better readability
   ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd"
@@ -795,6 +802,10 @@ parse_flags(){
     case "$1" in
       --yes|-y)
         FLAG_YES=true
+        shift
+        ;;
+      --enable-autosleep)
+        FLAG_ENABLE_AUTOSLEEP=true
         shift
         ;;
       --check|--dry-run)
@@ -891,6 +902,9 @@ main(){
       cmd_reset
       ;;
     setup)
+      if [[ "$FLAG_ENABLE_AUTOSLEEP" == "true" ]]; then
+        FLAG_ENABLE_AUTOSLEEP=true
+      fi
       cmd_setup_autosleep
       ;;
     spindown)
