@@ -41,6 +41,173 @@ log_cmd() {
 }
 
 # ============================================================================
+# Create Idempotent Fix Playbooks
+# ============================================================================
+create_idempotent_fixes() {
+    log_info "Creating idempotent fix playbooks..."
+    
+    local fixes_dir="$REPO_ROOT/ansible/playbooks/fixes"
+    mkdir -p "$fixes_dir"
+    
+    # Create swap disable playbook
+    cat > "$fixes_dir/disable-swap.yml" << 'EOF'
+---
+# Idempotent playbook to disable swap on all nodes
+- name: Disable swap for Kubernetes
+  hosts: all
+  become: true
+  tasks:
+    - name: Disable swap immediately
+      ansible.builtin.command: swapoff -a
+      changed_when: false
+      
+    - name: Remove swap entries from fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^[^#].*\s+swap\s+'
+        state: absent
+        backup: yes
+      
+    - name: Verify swap is disabled
+      ansible.builtin.command: swapon --show
+      register: swap_status
+      changed_when: false
+      failed_when: swap_status.stdout != ""
+EOF
+    
+    # Create kernel modules playbook
+    cat > "$fixes_dir/load-kernel-modules.yml" << 'EOF'
+---
+# Idempotent playbook to load required kernel modules
+- name: Load required kernel modules for Kubernetes
+  hosts: all
+  become: true
+  tasks:
+    - name: Load br_netfilter module
+      community.general.modprobe:
+        name: br_netfilter
+        state: present
+        
+    - name: Load overlay module
+      community.general.modprobe:
+        name: overlay
+        state: present
+        
+    - name: Ensure modules load on boot
+      ansible.builtin.copy:
+        content: |
+          br_netfilter
+          overlay
+        dest: /etc/modules-load.d/kubernetes.conf
+        mode: '0644'
+EOF
+    
+    # Create containerd restart playbook
+    cat > "$fixes_dir/restart-container-runtime.yml" << 'EOF'
+---
+# Idempotent playbook to restart container runtime
+- name: Restart container runtime services
+  hosts: all
+  become: true
+  tasks:
+    - name: Restart containerd
+      ansible.builtin.systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+      
+    - name: Wait for containerd to be ready
+      ansible.builtin.wait_for:
+        path: /var/run/containerd/containerd.sock
+        timeout: 30
+EOF
+    
+    log_info "Idempotent fix playbooks created in $fixes_dir"
+}
+
+# ============================================================================
+# Diagnostic Bundle Creation
+# ============================================================================
+create_diagnostic_bundle() {
+    log_info "Creating diagnostic bundle..."
+    
+    local bundle_dir="$ARTIFACTS_DIR/diagnostic-bundle"
+    mkdir -p "$bundle_dir"
+    
+    # Network diagnostics
+    {
+        echo "=== Network Diagnostics ==="
+        echo "Date: $(date)"
+        echo ""
+        echo "--- Routing Table ---"
+        ip route || netstat -rn || route -n
+        echo ""
+        echo "--- DNS Configuration ---"
+        cat /etc/resolv.conf
+        echo ""
+        echo "--- Network Interfaces ---"
+        ip addr || ifconfig
+        echo ""
+        echo "--- Ping Tests ---"
+        for host in 192.168.4.61 192.168.4.62 192.168.4.63; do
+            echo "Pinging $host..."
+            ping -c 3 -W 2 "$host" || echo "Failed to ping $host"
+        done
+    } > "$bundle_dir/network-diagnostics.txt" 2>&1
+    
+    # SSH diagnostics
+    {
+        echo "=== SSH Diagnostics ==="
+        echo "SSH Key Path: $SSH_KEY_PATH"
+        echo "SSH Key Exists: $(test -f "$SSH_KEY_PATH" && echo "yes" || echo "no")"
+        echo "SSH Key Permissions: $(ls -l "$SSH_KEY_PATH" 2>/dev/null || echo "N/A")"
+        echo ""
+        echo "--- Known Hosts ---"
+        cat ~/.ssh/known_hosts 2>/dev/null || echo "No known_hosts file"
+        echo ""
+        echo "--- SSH Test Connections ---"
+        for host in 192.168.4.61 192.168.4.62 192.168.4.63; do
+            echo "Testing SSH to $host..."
+            ssh -i "$SSH_KEY_PATH" -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+                root@"$host" "echo 'Connection successful'" 2>&1 || echo "Failed to connect to $host"
+        done
+    } > "$bundle_dir/ssh-diagnostics.txt" 2>&1
+    
+    # Inventory diagnostics
+    {
+        echo "=== Inventory Diagnostics ==="
+        echo "Main Inventory: $MAIN_INVENTORY"
+        echo "Kubespray Inventory: $KUBESPRAY_INVENTORY"
+        echo ""
+        echo "--- Main Inventory Content ---"
+        cat "$MAIN_INVENTORY" 2>/dev/null || echo "File not found"
+        echo ""
+        echo "--- Kubespray Inventory Content ---"
+        cat "$KUBESPRAY_INVENTORY" 2>/dev/null || echo "File not found"
+    } > "$bundle_dir/inventory-diagnostics.txt" 2>&1
+    
+    # Environment diagnostics
+    {
+        echo "=== Environment Diagnostics ==="
+        echo "User: $(whoami)"
+        echo "Home: $HOME"
+        echo "PWD: $(pwd)"
+        echo "REPO_ROOT: $REPO_ROOT"
+        echo ""
+        echo "--- Environment Variables ---"
+        env | grep -E "(ANSIBLE|KUBE|SSH|PATH)" | sort
+        echo ""
+        echo "--- Ansible Version ---"
+        ansible --version
+        echo ""
+        echo "--- Python Version ---"
+        python3 --version
+    } > "$bundle_dir/environment-diagnostics.txt" 2>&1
+    
+    log_info "Diagnostic bundle created at $bundle_dir"
+}
+
+# ============================================================================
 # Step 1: Prepare Runner Runtime
 # ============================================================================
 prepare_runtime() {
@@ -105,14 +272,15 @@ backup_files() {
         fi
     done
     
-    # Commit backup
+    # Commit backup (create .gitkeep to ensure directory structure)
     cd "$REPO_ROOT"
+    touch "$BACKUP_DIR/.gitkeep"
     git add .git/ops-backups/ 2>/dev/null || true
-    if git diff --cached --quiet; then
-        log_info "No changes to commit for backup"
-    else
+    if ! git diff --cached --quiet 2>/dev/null; then
         git commit -m "chore(backup): ops-backup $TIMESTAMP" --no-verify || true
         log_info "Backup committed"
+    else
+        log_info "No changes to commit for backup"
     fi
 }
 
@@ -151,14 +319,15 @@ validate_inventory() {
     local logfile="$LOG_DIR/inventory-validation.log"
     log_cmd "ansible all -i $KUBESPRAY_INVENTORY -m ping" "$logfile"
     
+    # Try with root user first
     if ansible all -i "$KUBESPRAY_INVENTORY" -m ping \
-        --private-key "$SSH_KEY_PATH" -u root \
+        --private-key "$SSH_KEY_PATH" \
         >> "$logfile" 2>&1; then
         log_info "✓ Inventory validation successful"
         return 0
     else
-        log_warn "Inventory validation had failures, attempting node remediation..."
-        cat "$logfile"
+        log_warn "Inventory validation had failures"
+        cat "$logfile" | tail -20
         return 1
     fi
 }
@@ -666,7 +835,20 @@ main() {
         if ! validate_inventory; then
             log_error "Inventory validation still failing after WoL"
             log_error "Cannot proceed without network access to nodes"
+            
+            # Create diagnostic bundle
+            create_diagnostic_bundle
             generate_report
+            
+            log_error "=========================================="
+            log_error "DIAGNOSTIC BUNDLE CREATED"
+            log_error "Network isolation detected - unable to reach hosts"
+            log_error "Next steps:"
+            log_error "  1. Check network connectivity to hosts"
+            log_error "  2. Verify SSH key has proper permissions"
+            log_error "  3. Check if hosts need to be woken via WoL"
+            log_error "  4. Review diagnostic bundle in artifacts"
+            log_error "=========================================="
             exit 1
         fi
     fi
@@ -676,6 +858,9 @@ main() {
         log_error "Preflight checks failed"
         exit_code=1
     fi
+    
+    # Step 4.5: Create idempotent fix playbooks
+    create_idempotent_fixes
     
     # Step 5: Setup Kubespray
     if ! setup_kubespray; then

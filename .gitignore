@@ -200,9 +200,11 @@ test_homelab_fixes.sh
 *.venv/
 venv/
 
-# Ops automation artifacts (keep backups but exclude temp files)
+# Ops automation artifacts (keep backups structure in git, exclude temp files)
 /tmp/id_vmstation_ops
 /tmp/admin.conf
 ansible/artifacts/run-*/
 !ansible/artifacts/.gitkeep
-.git/ops-backups/*/
+# Keep ops-backups directory structure but not individual backups
+!.git/ops-backups/
+!.git/ops-backups/**/.gitkeep
