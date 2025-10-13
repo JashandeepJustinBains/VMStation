@@ -199,3 +199,10 @@ test_homelab_fixes.sh
 .cache/
 *.venv/
 venv/
+
+# Ops automation artifacts (keep backups but exclude temp files)
+/tmp/id_vmstation_ops
+/tmp/admin.conf
+ansible/artifacts/run-*/
+!ansible/artifacts/.gitkeep
+.git/ops-backups/*/
