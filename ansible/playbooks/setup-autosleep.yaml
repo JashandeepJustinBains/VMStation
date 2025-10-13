@@ -4,12 +4,14 @@
 # Configure automatic cluster sleep after inactivity
 # =============================================================================
 
-- name: "Setup Auto-Sleep Monitoring"
-  hosts: all
+  hosts: monitoring_nodes
   gather_facts: true
   become: true
   vars:
     skip_ansible_confirm: false
+    # opt-in flag: set enable_autosleep=true when you explicitly want the
+    # auto-sleep monitor to be enabled on monitoring/control-plane nodes.
+    enable_autosleep: false
   tasks:
     - name: "Display auto-sleep setup banner"
       debug:
@@ -35,6 +37,7 @@
         - confirm_setup.user_input | default('no') != 'yes'
 
     - name: "Create auto-sleep monitor script"
+      when: enable_autosleep | bool
       copy:
         dest: /usr/local/bin/vmstation-autosleep-monitor.sh
         content: |
@@ -130,6 +133,7 @@
         mode: '0755'
 
     - name: "Create cluster sleep script"
+      when: enable_autosleep | bool
       copy:
         dest: /usr/local/bin/vmstation-sleep.sh
         content: |
@@ -273,6 +277,7 @@
         mode: '0755'
 
     - name: "Create systemd service for auto-sleep monitor"
+      when: enable_autosleep | bool
       copy:
         dest: /etc/systemd/system/vmstation-autosleep.service
         content: |
@@ -301,6 +306,7 @@
         mode: '0644'
 
     - name: "Create systemd timer for auto-sleep monitor"
+      when: enable_autosleep | bool
       copy:
         dest: /etc/systemd/system/vmstation-autosleep.timer
         content: |
@@ -318,12 +324,14 @@
     - name: "Reload systemd"
       systemd:
         daemon_reload: true
+      when: enable_autosleep | bool
 
     - name: "Enable and start auto-sleep timer"
       systemd:
         name: vmstation-autosleep.timer
         enabled: true
         state: started
+      when: enable_autosleep | bool
 
     - name: "Display setup complete message"
       debug:

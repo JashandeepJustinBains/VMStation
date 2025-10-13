@@ -7,18 +7,12 @@ clear
 git pull
 ./deploy.sh reset 
 ./deploy.sh setup
-./deploy.sh debian         
-./deploy.sh monitoring     
-./deploy.sh infrastructure 
-
-# ./scripts/diagnose-monitoring-stack.sh
-# ./scripts/remediate-monitoring-stack.sh
+# ./deploy.sh debian         
+# ./deploy.sh monitoring     
+# ./deploy.sh infrastructure 
+./deploy.sh kubespray
+# validate monitoring stack and run full validation
 ./scripts/validate-monitoring-stack.sh
-
-# Test the cycle
-./tests/test-sleep-wake-cycle.sh
-
-# Run as part of complete validation suite
 ./tests/test-complete-validation.sh
 ```
 
