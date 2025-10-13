@@ -646,6 +646,12 @@ cmd_monitoring(){
   # Ensure artifacts directory exists
   mkdir -p "$LOG_DIR"
   
+  # Setup kubeconfig for playbook compatibility
+  info "Setting up kubeconfig..."
+  if [[ -x "$REPO_ROOT/scripts/setup-kubeconfig.sh" ]]; then
+    eval "$("$REPO_ROOT/scripts/setup-kubeconfig.sh")" || warn "Kubeconfig setup had warnings"
+  fi
+  
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
     local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $MONITORING_STACK_PLAYBOOK"
@@ -686,8 +692,8 @@ cmd_monitoring(){
     info "  - Loki: http://192.168.4.63:31100"
     info ""
     info "Verification:"
-    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n monitoring"
-    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n monitoring"
+    info "  kubectl get pods -n monitoring"
+    info "  kubectl get svc -n monitoring"
     info ""
     info "Log saved to: $LOG_DIR/deploy-monitoring-stack.log"
     info ""
@@ -714,6 +720,12 @@ cmd_infrastructure(){
   
   # Ensure artifacts directory exists
   mkdir -p "$LOG_DIR"
+  
+  # Setup kubeconfig for playbook compatibility
+  info "Setting up kubeconfig..."
+  if [[ -x "$REPO_ROOT/scripts/setup-kubeconfig.sh" ]]; then
+    eval "$("$REPO_ROOT/scripts/setup-kubeconfig.sh")" || warn "Kubeconfig setup had warnings"
+  fi
   
   if [[ "$FLAG_CHECK" == "true" ]]; then
     info "DRY-RUN: Would execute:"
@@ -755,8 +767,8 @@ cmd_infrastructure(){
     info "  - FreeIPA/Kerberos: Identity management (if enabled)"
     info ""
     info "Verification:"
-    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n infrastructure"
-    info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get svc -n infrastructure"
+    info "  kubectl get pods -n infrastructure"
+    info "  kubectl get svc -n infrastructure"
     info "  ./tests/validate-time-sync.sh"
     info ""
     info "Log saved to: $LOG_DIR/deploy-infrastructure-services.log"
