@@ -3,20 +3,34 @@
 ## Current Workflow Commands
 
 ```bash
-# clear
-# git pull
-# ./deploy.sh reset
-# ./deploy.sh kubespray
-# ./deploy.sh monitoring
-# ./deploy.sh infrastructure
-# (Optional) ./deploy.sh setup  # run after cluster validation to enable auto-sleep
 clear
 git pull
 ./deploy.sh reset 
-# ./deploy.sh setup  # (deferred until after kube and monitoring validation)
+./deploy.sh setup
+# ./deploy.sh debian         
+# ./deploy.sh monitoring     
+# ./deploy.sh infrastructure 
 ./deploy.sh kubespray
 # validate monitoring stack and run full validation
 ./scripts/validate-monitoring-stack.sh
+./tests/test-complete-validation.sh
+```
+
+```bash
+./deploy.sh reset
+# ./deploy.sh setup
+# If using Kubespray path:
+./scripts/run-kubespray.sh
+# or legacy debian path (if applicable)
+# ./deploy.sh debian
+
+# Deploy monitoring and infra
+./deploy.sh monitoring
+./deploy.sh infrastructure
+
+# Validate
+./scripts/validate-monitoring-stack.sh
+./tests/test-sleep-wake-cycle.sh
 ./tests/test-complete-validation.sh
 ```
 

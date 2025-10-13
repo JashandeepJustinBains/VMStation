@@ -1,0 +1,110 @@
+---
+- name: Provision VMStation automation runner (control host)
+  hosts: localhost
+  become: true
+  vars:
+    vmstation_operator: vmstation-ops
+    vmstation_ssh_pubkey_path: "~/.ssh/id_vmstation_ops.pub"
+    python_version: 3
+    kube_version: "v1.29.0"
+  tasks:
+    - name: Ensure operator user exists
+      user:
+        name: "{{ vmstation_operator }}"
+        groups: sudo
+        shell: /bin/bash
+        create_home: true
+        state: present
+
+    - name: Allow passwordless sudo for operator (limited) - create sudoers file
+      copy:
+        dest: "/etc/sudoers.d/{{ vmstation_operator }}"
+        content: "{{ vmstation_operator }} ALL=(ALL) NOPASSWD:SETENV: /usr/bin/ansible-playbook, /usr/bin/systemctl, /usr/bin/journalctl, /usr/bin/scp, /usr/bin/ssh, /usr/bin/wakeonlan, /usr/bin/cp\n"
+        mode: '0440'
+
+    - name: Install required system packages
+      apt:
+        name:
+          - python3-venv
+          - python3-pip
+          - git
+          - curl
+          - wget
+          - unzip
+          - sudo
+          - build-essential
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install required system packages (RHEL)
+      yum:
+        name:
+          - python3
+          - python3-venv
+          - python3-pip
+          - git
+          - curl
+          - wget
+          - unzip
+          - sudo
+          - gcc
+          - make
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Create Python venv for kubespray under /opt/kubespray-venv
+      file:
+        path: /opt/kubespray-venv
+        state: directory
+        owner: "{{ vmstation_operator }}"
+        mode: '0755'
+
+    - name: Create venv
+      become_user: "{{ vmstation_operator }}"
+      command: python3 -m venv /opt/kubespray-venv creates=/opt/kubespray-venv/bin/activate
+
+    - name: Install pip packages in venv (ansible, yamllint optional)
+      become_user: "{{ vmstation_operator }}"
+      pip:
+        virtualenv: /opt/kubespray-venv
+        name:
+          - ansible==8.5.0
+          - PyYAML
+          - ruamel.yaml
+        state: present
+
+    - name: Download kubectl to /usr/local/bin
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kube_version }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+      register: kubectl_dl
+      failed_when: kubectl_dl is failed
+
+    - name: Create SSH key pair for automation (do not overwrite)
+      become_user: "{{ vmstation_operator }}"
+      openssh_keypair:
+        path: "/home/{{ vmstation_operator }}/.ssh/id_vmstation_ops"
+        type: rsa
+        size: 4096
+        owner: "{{ vmstation_operator }}"
+        mode: '0600'
+      register: sshkey
+
+    - name: Show public key to operator
+      debug:
+        msg: "Public key created at /home/{{ vmstation_operator }}/.ssh/id_vmstation_ops.pub - add this to your target hosts' authorized_keys"
+
+    - name: Ensure .ssh permissions
+      file:
+        path: "/home/{{ vmstation_operator }}/.ssh"
+        owner: "{{ vmstation_operator }}"
+        mode: '0700'
+
+    - name: Print next steps
+      debug:
+        msg: |
+          Runner bootstrapped. Next steps:
+            1. Copy /home/{{ vmstation_operator }}/.ssh/id_vmstation_ops.pub to target hosts' ~/.ssh/authorized_keys
+            2. Verify ansible connectivity from control host: ansible -i <inventory> all -m ping
+            3. Place private key securely on control host or CI secrets (never commit to git)
