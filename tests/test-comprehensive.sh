@@ -86,7 +86,7 @@ test_suite "Configuration Validation"
 
 TOTAL_TESTS=$((TOTAL_TESTS + 1))
 echo -n "Checking inventory file... "
-if [[ -f ansible/inventory/hosts.yml ]]; then
+if [[ -f inventory.ini ]]; then
   echo -e "${GREEN}✅ PASS${NC}"
   PASSED_TESTS=$((PASSED_TESTS + 1))
 else

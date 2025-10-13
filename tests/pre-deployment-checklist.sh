@@ -51,7 +51,7 @@ echo
 echo "2. Checking required files exist..."
 required_files=(
     "ansible/playbooks/deploy-cluster.yaml"
-    "ansible/inventory/hosts.yml"
+    "inventory.ini"
     "deploy.sh"
     "manifests/monitoring/prometheus.yaml"
     "manifests/monitoring/grafana.yaml"
@@ -85,11 +85,11 @@ fi
 
 echo
 echo "5. Checking inventory file..."
-if ansible-inventory -i ansible/inventory/hosts.yml --list >/dev/null 2>&1; then
+if ansible-inventory -i inventory.ini --list >/dev/null 2>&1; then
     check_pass "Inventory file valid"
     
     # Check for required groups
-    groups=$(ansible-inventory -i ansible/inventory/hosts.yml --list | jq -r '.all.children | keys[]' 2>/dev/null)
+    groups=$(ansible-inventory -i inventory.ini --list | jq -r '.all.children | keys[]' 2>/dev/null)
     for group in monitoring_nodes storage_nodes compute_nodes; do
         if echo "$groups" | grep -q "$group"; then
             check_pass "Group '$group' defined in inventory"
