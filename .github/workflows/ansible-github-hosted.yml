@@ -1,0 +1,31 @@
+name: Run Ansible via GitHub-hosted runner (uses private key secret)
+on:
+  workflow_dispatch:
+jobs:
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python3-venv sshpass
+
+      - name: Setup SSH key
+        env:
+          SSH_KEY: ${{ secrets.VMSTATION_SSH_KEY }}
+        run: |
+          echo "$SSH_KEY" > /tmp/id_vmstation_ops
+          chmod 600 /tmp/id_vmstation_ops
+          mkdir -p ~/.ssh
+          ssh-keyscan -H 192.168.4.61 >> ~/.ssh/known_hosts || true
+          ssh-keyscan -H 192.168.4.62 >> ~/.ssh/known_hosts || true
+
+      - name: Run Ansible ping (example)
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install ansible==8.5.0
+          ansible all -i ansible/inventory/hosts.yml -m ping -u root --private-key /tmp/id_vmstation_ops
