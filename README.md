@@ -14,19 +14,46 @@ VMStation provides a production-ready Kubernetes setup using **Kubespray** for d
 
 ## Quick Start
 
+### Fully Automated Deployment (Recommended)
+
 ```bash
 # Clone repository
 git clone https://github.com/JashandeepJustinBains/VMStation.git
 cd VMStation
 
-# Deploy full stack with Kubespray (RECOMMENDED)
-./deploy.sh reset
-./deploy.sh setup
-./deploy.sh kubespray  # Deploys cluster + monitoring + infrastructure
+# Complete automated deployment
+./scripts/deploy-kubespray-full.sh --auto
 
 # Validate deployment
+./tests/validate-kubespray-deployment.sh
+./tests/kubespray-smoke.sh
+```
+
+### Step-by-Step Deployment
+
+```bash
+# 1. Reset and setup (if needed)
+./deploy.sh reset
+./deploy.sh setup
+
+# 2. Deploy cluster with Kubespray
+./deploy.sh kubespray  # Deploys cluster + monitoring + infrastructure
+
+# 3. Validate deployment
 ./scripts/validate-monitoring-stack.sh
 ./tests/test-complete-validation.sh
+```
+
+### Manual Control Deployment
+
+For operators who prefer manual control over each step:
+
+```bash
+# See detailed guide:
+# docs/KUBESPRAY_DEPLOYMENT_GUIDE.md
+
+# Quick reference:
+# docs/KUBESPRAY_OPERATOR_QUICK_REFERENCE.md
 ```
 
 ## Alternative Quick Start (Legacy Debian-only)
@@ -175,6 +202,8 @@ See [docs/USAGE.md](docs/USAGE.md) for complete deployment guide.
 
 ```bash
 ./scripts/validate-monitoring-stack.sh     # Validate monitoring
+./tests/validate-kubespray-deployment.sh   # Validate Kubespray deployment
+./tests/kubespray-smoke.sh                 # Smoke tests for cluster
 ./tests/test-complete-validation.sh        # Complete validation suite
 ./tests/test-sleep-wake-cycle.sh           # Test sleep/wake cycle
 ```
@@ -183,14 +212,18 @@ See [docs/USAGE.md](docs/USAGE.md) for complete deployment guide.
 
 ```bash
 ./scripts/diagnose-monitoring-stack.sh     # Diagnose monitoring issues
+./scripts/diagnose-kubespray-cluster.sh    # Diagnose cluster issues
 ./scripts/remediate-monitoring-stack.sh    # Fix common problems
 ./scripts/vmstation-collect-wake-logs.sh   # Collect wake logs
 ```
 
-### Kubespray
+### Kubespray Automation
 
 ```bash
+./scripts/deploy-kubespray-full.sh         # Full automated deployment
 ./scripts/run-kubespray.sh                 # Stage Kubespray
+./scripts/normalize-kubespray-inventory.sh # Validate inventory
+./scripts/wake-node.sh                     # Wake sleeping nodes
 ansible-playbook ... run-preflight-rhel10.yml  # Preflight checks
 ```
 
@@ -276,10 +309,21 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for detailed troubleshoot
 
 ## Documentation
 
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete architecture documentation
-- **[USAGE.md](docs/USAGE.md)** - Deployment and usage guide
-- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Troubleshooting guide
+### Deployment Guides
+
+- **[KUBESPRAY_DEPLOYMENT_GUIDE.md](docs/KUBESPRAY_DEPLOYMENT_GUIDE.md)** - Complete Kubespray deployment guide
+- **[KUBESPRAY_OPERATOR_QUICK_REFERENCE.md](docs/KUBESPRAY_OPERATOR_QUICK_REFERENCE.md)** - Quick reference for operators
+- **[MIGRATION.md](docs/MIGRATION.md)** - Migration guide from RKE2 to Kubespray
 - **[DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md)** - Step-by-step deployment
+
+### Architecture and Usage
+
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Complete architecture documentation
+- **[USAGE.md](docs/USAGE.md)** - Usage guide
+
+### Troubleshooting
+
+- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Comprehensive troubleshooting guide
 - **[TODO.md](TODO.md)** - Project roadmap and tasks
 
 ## Repository Structure
@@ -287,27 +331,42 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for detailed troubleshoot
 ```
 VMStation/
 ├── deploy.sh                       # Main deployment script
+├── inventory.ini                   # Kubespray-compatible inventory (CANONICAL)
 ├── ansible/
-│   ├── inventory/hosts.yml         # Cluster inventory
-│   ├── playbooks/                  # Ansible playbooks
+│   ├── inventory/hosts.yml         # Legacy YAML inventory
+│   ├── playbooks/
+│   │   ├── setup-admin-kubeconfig.yml    # Kubeconfig setup (NEW)
+│   │   ├── verify-cni-networking.yml     # CNI verification (NEW)
+│   │   └── run-preflight-rhel10.yml      # RHEL10 preflight (NEW)
 │   └── roles/
-│       └── preflight-rhel10/       # RHEL10 preflight checks (NEW)
+│       └── preflight-rhel10/       # RHEL10 preflight checks
 ├── scripts/
-│   ├── run-kubespray.sh            # Kubespray wrapper (NEW)
+│   ├── deploy-kubespray-full.sh    # Full automated deployment (NEW)
+│   ├── run-kubespray.sh            # Kubespray staging (NEW)
+│   ├── normalize-kubespray-inventory.sh  # Inventory validation (NEW)
+│   ├── wake-node.sh                # Wake-on-LAN utility (NEW)
+│   ├── diagnose-kubespray-cluster.sh     # Cluster diagnostics (NEW)
 │   ├── validate-monitoring-stack.sh
 │   ├── diagnose-monitoring-stack.sh
 │   └── vmstation-event-wake.sh     # Wake-on-LAN handler
 ├── tests/
+│   ├── validate-kubespray-deployment.sh  # Deployment validation (NEW)
+│   ├── kubespray-smoke.sh          # Smoke tests (NEW)
 │   ├── test-complete-validation.sh
 │   ├── test-sleep-wake-cycle.sh
 │   └── ...
 ├── docs/
-│   ├── ARCHITECTURE.md             # Architecture guide (NEW)
-│   ├── USAGE.md                    # Usage guide (NEW)
-│   ├── TROUBLESHOOTING.md          # Troubleshooting (NEW)
+│   ├── KUBESPRAY_DEPLOYMENT_GUIDE.md     # Full deployment guide (NEW)
+│   ├── KUBESPRAY_OPERATOR_QUICK_REFERENCE.md  # Quick reference (NEW)
+│   ├── MIGRATION.md                # Migration from RKE2 (NEW)
+│   ├── ARCHITECTURE.md             # Architecture guide
+│   ├── USAGE.md                    # Usage guide
+│   ├── TROUBLESHOOTING.md          # Troubleshooting
 │   └── ...
-└── manifests/
-    └── monitoring/                 # Monitoring manifests
+├── manifests/
+│   └── monitoring/                 # Monitoring manifests
+└── .cache/
+    └── kubespray/                  # Kubespray repo and venv (generated)
 ```
 
 ## Requirements
