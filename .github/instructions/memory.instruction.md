@@ -149,3 +149,5 @@ Enhance the Prometheus monitoring stack to ingest IPMI sensor readings from the 
 - No hardcoded secrets; use Ansible Vault and Kubernetes Secrets.
 - Headless service DNS requires FQDN in Grafana datasources.
 - Filesystem ownerships align to container UIDs: Prometheus 65534, Loki 10001, Grafana 472.
+
+- Added `docs/DESIGN.md` capturing UID mapping, headless FQDN policy, RKE2 separation, containerd resilience, Windows/WSL development guidance, and secrets management. Linked from `ansible/README.md`.
