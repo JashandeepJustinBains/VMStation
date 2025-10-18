@@ -119,3 +119,33 @@ applyTo: '**'
 ### AI Agent Prompt (IPMI Ingestion)
 
 Enhance the Prometheus monitoring stack to ingest IPMI sensor readings from the enterprise server at 192.168.4.60. The IPMI exporter should be configured to scrape metrics from this host, and all authentication credentials required for IPMI access must be securely referenced from secrets.yml. Ensure the Prometheus configuration includes a job for the IPMI exporter targeting 192.168.4.60, and document any changes to the scrape_configs section. Do not hardcode credentials; use secrets.yml for login details. Validate that metrics are ingested and visible in Prometheus after deployment.
+
+---
+
+## Repository Documentation Index (Oct 2025)
+
+- Root README updated with quick links to per-directory docs.
+- New/updated documentation files:
+   - ansible/README.md (usage, requirements)
+   - ansible/inventory/README.md (groups, guidelines)
+   - ansible/group_vars/README.md and ansible/group_vars/all/README.md (Vault, secrets handling)
+   - ansible/files/README.md and ansible/files/grafana_datasources/README.md (FQDN service URLs)
+   - ansible/artifacts/README.md (logs/artifacts policy)
+   - ansible/roles/README.md (roles index)
+   - ansible/subsites/README.md (operational presets)
+   - manifests/README.md (how to apply, structure)
+   - manifests/monitoring/README.md (components, UIDs, access)
+   - manifests/network/README.md (CoreDNS notes)
+   - manifests/infrastructure/README.md (preexisting, retained)
+   - manifests/jellyfin/README.md (usage)
+   - manifests/debian-bookworm/README.md (overrides)
+   - manifests/rhel10/README.md (overrides)
+   - scripts/README.md (helpers, WSL note)
+   - terraform/README.md (index)
+   - tests/README.md (how to run)
+
+### Best Practices Reflected
+- Linux/Kubernetes-first workflows; Windows users should use WSL for shell scripts.
+- No hardcoded secrets; use Ansible Vault and Kubernetes Secrets.
+- Headless service DNS requires FQDN in Grafana datasources.
+- Filesystem ownerships align to container UIDs: Prometheus 65534, Loki 10001, Grafana 472.

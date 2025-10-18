@@ -158,6 +158,24 @@ ansible-playbook -i ansible/inventory/hosts.yml \
 
 See [docs/USAGE.md](docs/USAGE.md) for complete deployment guide.
 
+### Subdirectory documentation
+
+- ansible: [ansible/README.md](ansible/README.md)
+  - inventory: [ansible/inventory/README.md](ansible/inventory/README.md)
+  - group_vars: [ansible/group_vars/README.md](ansible/group_vars/README.md)
+  - files: [ansible/files/README.md](ansible/files/README.md)
+  - roles: [ansible/roles/preflight-rhel10/README.md](ansible/roles/preflight-rhel10/README.md)
+  - subsites: [ansible/subsites/README.md](ansible/subsites/README.md)
+- manifests: [manifests/README.md](manifests/README.md)
+  - monitoring: [manifests/monitoring/README.md](manifests/monitoring/README.md)
+  - network: [manifests/network/README.md](manifests/network/README.md)
+  - infrastructure: [manifests/infrastructure/README.md](manifests/infrastructure/README.md)
+  - jellyfin: [manifests/jellyfin/README.md](manifests/jellyfin/README.md)
+  - staging (Debian/RHEL): see READMEs in staging folders
+- scripts: [scripts/README.md](scripts/README.md)
+- terraform: [terraform/README.md](terraform/README.md)
+- tests: [tests/README.md](tests/README.md)
+
 ## Commands Reference
 
 ### Deployment
@@ -280,6 +298,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for detailed troubleshoot
 - **[USAGE.md](docs/USAGE.md)** - Deployment and usage guide
 - **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Troubleshooting guide
 - **[DEPLOYMENT_RUNBOOK.md](docs/DEPLOYMENT_RUNBOOK.md)** - Step-by-step deployment
+- **[MIGRATION.md](docs/MIGRATION.md)** - Migration notes (kubeadm → Kubespray)
 - **[TODO.md](TODO.md)** - Project roadmap and tasks
 
 ## Repository Structure
