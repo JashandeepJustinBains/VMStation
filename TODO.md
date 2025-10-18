@@ -285,6 +285,94 @@ Docs / follow-ups:
 
 ### 🚀 New Infrastructure - Scaffolding Required
 
+#### CCNA Practice Lab Deployment ✅ COMPLETE
+**Status:** Ready for deployment  
+**Location:** `terraform/ccna-lab/`  
+**Documentation:** `terraform/ccna-lab/README.md`
+
+Create Terraform infrastructure for CCNA practice environment with Cisco routers, network visualization, and complete isolation from production.
+
+**Deployment Workflow:**
+
+```bash
+# 1. Prepare homelab node (run on homelab: 192.168.4.62)
+ssh root@192.168.4.62
+cd /tmp
+# Download and run setup script from your workstation
+./terraform/ccna-lab/scripts/setup-homelab.sh
+
+# 2. Copy Cisco IOS images to homelab
+scp c7200-advipservicesk9-mz.152-4.S5.bin root@192.168.4.62:/var/lib/libvirt/images/cisco/
+scp c7200p-advipsericesk9-mz.152-4.M.bin root@192.168.4.62:/var/lib/libvirt/images/cisco/
+
+# 3. Deploy from workstation
+cd f:\VMStation\terraform\ccna-lab
+terraform init
+terraform plan
+terraform apply
+
+# 4. Access GNS3 Web UI via SSH tunnel
+ssh -L 3080:10.100.0.10:3080 root@192.168.4.62
+# Open browser: http://localhost:3080
+
+# 5. Create routers in GNS3 Web UI
+# - Add Dynamips routers with your IOS images
+# - Configure network topology
+# - Connect routers and VMs
+# - Start devices and practice CCNA scenarios
+
+# 6. Monitor topology (optional)
+python3 scripts/generate-topology.py
+python3 scripts/monitor-links.py
+
+# 7. Test network isolation
+./scripts/test-isolation.sh
+
+# 8. Destroy lab when done
+./scripts/destroy-lab.sh
+```
+
+**Components Deployed:**
+- [x] GNS3 server with Dynamips (Cisco router emulation)
+- [x] 3 Cisco routers (configurable via GNS3 Web UI)
+- [x] Ubuntu server VMs (default: 2, configurable)
+- [x] Isolated networks (10.100.0.0/16)
+- [x] Network visualization via GNS3 Web UI
+- [x] REST API for automation
+- [x] Complete isolation from production (192.168.4.0/24)
+
+**Network Topology:**
+```
+Management: 10.100.0.0/24   (GNS3 server)
+Routers:    10.100.1.0/24   (Cisco router interconnects)
+Clients:    10.100.2.0/24   (Ubuntu/Windows VMs)
+Practice:   10.100.10-30.0/24 (CCNA lab exercises)
+```
+
+**Access Methods:**
+- GNS3 Web UI: http://localhost:3080 (via SSH tunnel)
+- REST API: http://10.100.0.10:3080/v3
+- Router consoles: Via GNS3 Web UI or telnet
+- Ubuntu VMs: SSH to IPs from client network
+- Topology visualization: Python scripts in scripts/
+
+**Security:**
+- ✓ Complete network isolation (no route to 192.168.4.0/24)
+- ✓ Firewall rules enforced on homelab host
+- ✓ No internet access by default
+- ✓ Management only via SSH
+
+**Documentation:**
+- Main README: `terraform/ccna-lab/README.md`
+- Architecture diagrams included
+- Step-by-step deployment guide
+- Troubleshooting section
+- CCNA practice scenarios
+
+**Estimated Deployment Time:** 30-45 minutes (including image upload)
+
+---
+
 #### Malware Analysis Lab Deployment
 Create Terraform infrastructure for isolated malware analysis environment:
 

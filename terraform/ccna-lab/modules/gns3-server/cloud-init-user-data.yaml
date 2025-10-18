@@ -1,0 +1,142 @@
+#cloud-config
+# GNS3 Server Cloud-Init User Data
+
+hostname: ${hostname}
+fqdn: ${hostname}.ccna.lab.internal
+manage_etc_hosts: true
+
+users:
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin, docker
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - python3-pip
+  - python3-setuptools
+  - telnet
+  - net-tools
+  - iputils-ping
+  - traceroute
+  - tcpdump
+  - wireshark-common
+  - build-essential
+  - cmake
+  - libelf-dev
+  - libpcap-dev
+  - qemu-kvm
+  - qemu-utils
+  - bridge-utils
+  - uml-utilities
+  - libvirt-daemon-system
+  - libvirt-clients
+  - virt-manager
+
+runcmd:
+  # Add GNS3 PPA
+  - add-apt-repository -y ppa:gns3/ppa
+  - apt-get update
+  
+  # Install GNS3 server
+  - apt-get install -y gns3-server=${gns3_version}
+  
+  # Install GNS3 GUI (for local testing)
+  - apt-get install -y gns3-gui=${gns3_version}
+  
+  # Install additional Python packages for GNS3
+  - pip3 install gns3-server==${gns3_version}
+  - pip3 install gns3-gui==${gns3_version}
+  
+  # Configure GNS3 server
+  - mkdir -p /home/ubuntu/.config/GNS3/2.2
+  - mkdir -p /home/ubuntu/GNS3/projects
+  - mkdir -p /home/ubuntu/GNS3/images
+  - mkdir -p ${cisco_images_path}
+  - chown -R ubuntu:ubuntu /home/ubuntu/.config/GNS3
+  - chown -R ubuntu:ubuntu /home/ubuntu/GNS3
+  - chown -R ubuntu:ubuntu ${cisco_images_path}
+  
+  # Create GNS3 server systemd service
+  - |
+    cat > /etc/systemd/system/gns3server.service << 'EOFF'
+    [Unit]
+    Description=GNS3 Server
+    After=network.target
+    
+    [Service]
+    Type=simple
+    User=ubuntu
+    Group=ubuntu
+    ExecStart=/usr/bin/gns3server --host 0.0.0.0 --port ${api_port} --local
+    Restart=on-failure
+    RestartSec=10
+    StandardOutput=journal
+    StandardError=journal
+    
+    [Install]
+    WantedBy=multi-user.target
+    EOFF
+  
+  # Enable and start GNS3 server
+  - systemctl daemon-reload
+  - systemctl enable gns3server
+  - systemctl start gns3server
+  
+  # Configure firewall to allow GNS3 access
+  - ufw allow ${web_port}/tcp
+  - ufw allow ${api_port}/tcp
+  - ufw allow 5000:6000/tcp  # Console ports for routers
+  - ufw --force enable
+  
+  # Add ubuntu user to required groups
+  - usermod -aG libvirt ubuntu
+  - usermod -aG kvm ubuntu
+  - usermod -aG wireshark ubuntu
+  
+  # Configure libvirt for GNS3
+  - systemctl enable libvirtd
+  - systemctl start libvirtd
+  
+  # Create welcome message
+  - |
+    cat > /etc/motd << 'EOFF'
+    
+    ╔═══════════════════════════════════════════════════════════╗
+    ║           GNS3 Server - CCNA Practice Lab                ║
+    ╠═══════════════════════════════════════════════════════════╣
+    ║                                                           ║
+    ║  Web UI:    http://$(hostname -I | awk '{print $1}'):${web_port}     ║
+    ║  REST API:  http://$(hostname -I | awk '{print $1}'):${api_port}/v3  ║
+    ║                                                           ║
+    ║  Cisco Images: ${cisco_images_path}                      ║
+    ║  Projects:     /home/ubuntu/GNS3/projects                ║
+    ║                                                           ║
+    ║  Service Status: sudo systemctl status gns3server        ║
+    ║  Service Logs:   sudo journalctl -u gns3server -f       ║
+    ║                                                           ║
+    ╚═══════════════════════════════════════════════════════════╝
+    
+    EOFF
+
+final_message: |
+  GNS3 Server is ready!
+  Access the web UI at: http://${hostname}:${web_port}
+  REST API available at: http://${hostname}:${api_port}/v3
+  
+  To check service status: sudo systemctl status gns3server
+  To view logs: sudo journalctl -u gns3server -f
+
+power_state:
+  mode: reboot
+  condition: True

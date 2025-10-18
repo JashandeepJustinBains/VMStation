@@ -1,0 +1,74 @@
+#cloud-config
+# Ubuntu VM Cloud-Init Configuration for CCNA Lab
+
+hostname: ${hostname}
+fqdn: ${hostname}.clients.ccna.lab.internal
+manage_etc_hosts: true
+
+users:
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - net-tools
+  - iputils-ping
+  - traceroute
+  - telnet
+  - curl
+  - wget
+  - tcpdump
+  - nmap
+  - iperf3
+  - mtr
+  - dnsutils
+  - openssh-server
+  - vim
+  - htop
+
+runcmd:
+  # Enable SSH
+  - systemctl enable ssh
+  - systemctl start ssh
+  
+  # Configure networking for CCNA practice
+  - sysctl -w net.ipv4.ip_forward=0
+  - echo "net.ipv4.ip_forward=0" >> /etc/sysctl.conf
+  
+  # Create welcome message
+  - |
+    cat > /etc/motd << 'EOFF'
+    
+    ╔═══════════════════════════════════════════════════════════╗
+    ║         CCNA Practice Lab - Ubuntu Client VM              ║
+    ╠═══════════════════════════════════════════════════════════╣
+    ║                                                           ║
+    ║  Hostname: ${hostname}                                    ║
+    ║  Network:  10.100.2.0/24 (CCNA Lab Client Network)      ║
+    ║                                                           ║
+    ║  This VM is isolated from production network             ║
+    ║  Use this for CCNA practice scenarios                    ║
+    ║                                                           ║
+    ║  Network tools installed:                                 ║
+    ║    - ping, traceroute, nmap, iperf3, mtr                 ║
+    ║    - tcpdump, telnet, ssh                                ║
+    ║                                                           ║
+    ╚═══════════════════════════════════════════════════════════╝
+    
+    EOFF
+
+final_message: |
+  Ubuntu client VM for CCNA lab is ready!
+  Hostname: ${hostname}
+  
+  Use this VM to test network connectivity and CCNA scenarios.
+
+power_state:
+  mode: reboot
+  condition: True

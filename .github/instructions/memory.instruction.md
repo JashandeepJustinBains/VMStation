@@ -57,6 +57,15 @@ applyTo: '**'
 
 ## Project Context
 
+### CCNA Lab Requirements (January 2025)
+- Target deployment: homelab node (192.168.4.62) RHEL10
+- Cisco router images: c7200-advipservicesk9-mz.152-4.S5 (x2), c7200p-advipsericesk9-mz.152-4.M (x1)
+- Additional VMs: Windows Server (free trials), Ubuntu servers (undetermined number)
+- Network: Complete isolation from production VMStation cluster (192.168.4.0/24)
+- Visualization: Real-time network topology with link status monitoring
+- Architecture: GNS3 Server + Dynamips for Cisco emulation, libvirt for VMs
+- Network range: 10.100.0.0/16 for CCNA lab (isolated)
+
 ## VMStation - Clean Deployment Architecture
 - RHEL 10 node (homelab): Uses RKE2 as a separate cluster (not joined to kubeadm cluster)
 - No mixing of kubeadm + RHEL - clean separation of concerns
