@@ -44,6 +44,20 @@
       changed_when: pip_install.rc == 0
       failed_when: pip_install.rc != 0
 
+    - name: "Ensure Jellyfin config directory exists and is writable by the container user"
+      ansible.builtin.file:
+        path: "{{ jellyfin_config_path | default('/var/lib/jellyfin') }}"
+        state: directory
+        owner: 1000
+        group: 1000
+        mode: '0755'
+
+    - name: "Ensure media storage path exists and is readable"
+      ansible.builtin.file:
+        path: "{{ media_storage_path | default('/srv/media') }}"
+        state: directory
+        mode: '0755'
+
     - name: "Switch Python interpreter to the venv for subsequent tasks"
       ansible.builtin.set_fact:
         ansible_python_interpreter: /opt/ansible-venv/bin/python
@@ -64,11 +78,40 @@
       delegate_to: masternode
       run_once: true
 
-    - name: "Apply Jellyfin manifest"
+    - name: "Ensure Jellyfin Service exists"
+      kubernetes.core.k8s:
+        state: present
+        definition: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: jellyfin-service
+            namespace: jellyfin
+            labels:
+              app: jellyfin
+              component: media-server
+          spec:
+            type: NodePort
+            ports:
+            - port: 8096
+              targetPort: 8096
+              nodePort: 30096
+              name: http
+            - port: 8920
+              targetPort: 8920
+              nodePort: 30920
+              name: https
+            selector:
+              app: jellyfin
+              component: media-server
+      delegate_to: masternode
+      run_once: true
+
+    - name: "Apply Jellyfin manifest (create Pod/volumes)"
       kubernetes.core.k8s:
         state: present
         src: "{{ playbook_dir }}/../../manifests/jellyfin/jellyfin.yaml"
-        wait: yes
+        wait: no
         apply: yes
       register: jellyfin_deploy
       failed_when: jellyfin_deploy.failed
