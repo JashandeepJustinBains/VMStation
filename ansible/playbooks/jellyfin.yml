@@ -7,7 +7,7 @@
     - name: "Create Jellyfin namespace"
       kubernetes.core.k8s:
         state: present
-        definition: "{{ lookup('file', 'manifests/jellyfin/jellyfin.yaml') }}"
+        definition: "{{ lookup('file', playbook_dir + '/../../manifests/jellyfin/jellyfin.yaml') }}"
         wait: yes
         apply: yes
       register: jellyfin_namespace
@@ -16,7 +16,7 @@
     - name: "Apply Jellyfin manifest"
       kubernetes.core.k8s:
         state: present
-        src: manifests/jellyfin/jellyfin.yaml
+        src: "{{ playbook_dir }}/../../manifests/jellyfin/jellyfin.yaml"
         wait: yes
         apply: yes
       register: jellyfin_deploy
