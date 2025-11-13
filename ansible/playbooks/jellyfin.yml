@@ -61,6 +61,8 @@
         apply: yes
       register: jellyfin_namespace
       failed_when: jellyfin_namespace.failed
+      delegate_to: masternode
+      run_once: true
 
     - name: "Apply Jellyfin manifest"
       kubernetes.core.k8s:
@@ -70,6 +72,8 @@
         apply: yes
       register: jellyfin_deploy
       failed_when: jellyfin_deploy.failed
+      delegate_to: masternode
+      run_once: true
 
     - name: "Display Jellyfin deployment status"
       debug:
