@@ -25,6 +25,13 @@ Examples:
 - Python 3.10+
 - kubectl v1.29+
 
+Note: Some playbooks (for example `playbooks/jellyfin.yml`) now include a small pre-task that will
+attempt to ensure the Python `kubernetes` client package is present on target nodes by installing
+`python3-pip` and `kubernetes` via `pip3`. This is a convenience to make those playbooks runnable
+on freshly provisioned nodes without requiring extra ad-hoc steps. If your environment is strictly
+offline, populate a local wheelhouse and modify playbook execution accordingly (contact the repo
+maintainer for wheelhouse guidance).
+
 ## Notes
 
 - Do not store secrets in plaintext. Use Ansible Vault and reference variables from `group_vars/all/`.

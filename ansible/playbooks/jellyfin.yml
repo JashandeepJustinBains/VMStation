@@ -3,6 +3,25 @@
 - name: "Deploy Jellyfin Pod and Service"
   hosts: storage_nodes
   become: true
+  pre_tasks:
+    - name: "Ensure python3-pip is installed (for kubernetes client)"
+      ansible.builtin.package:
+        name: python3-pip
+        state: present
+
+    - name: "Install kubernetes Python client via pip3 (idempotent)"
+      ansible.builtin.pip:
+        name: kubernetes
+        state: present
+        executable: /usr/bin/pip3
+
+    - name: "Verify kubernetes Python client import"
+      ansible.builtin.command:
+        cmd: /usr/bin/python3 -c "import kubernetes; print(kubernetes.__version__)"
+      register: _k8s_client_check
+      changed_when: false
+      failed_when: _k8s_client_check.rc != 0
+
   tasks:
     - name: "Create Jellyfin namespace"
       kubernetes.core.k8s:
