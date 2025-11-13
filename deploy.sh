@@ -14,6 +14,7 @@ CLEANUP_HOMELAB_PLAYBOOK="$REPO_ROOT/ansible/playbooks/cleanup-homelab.yml"
 # UNINSTALL_RKE2_PLAYBOOK="$REPO_ROOT/ansible/playbooks/uninstall-rke2-homelab.yml"
 MONITORING_STACK_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-monitoring-stack.yaml"
 INFRASTRUCTURE_SERVICES_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-infrastructure-services.yaml"
+JELLYFIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/jellyfin.yml"
 ARTIFACTS_DIR="$REPO_ROOT/ansible/artifacts"
 KUBESPRAY_DIR="$REPO_ROOT/.cache/kubespray"
 KUBESPRAY_VENV="$KUBESPRAY_DIR/.venv"
@@ -40,6 +41,7 @@ Usage: $(basename "$0") [command] [flags]
 Commands:
   debian          Deploy kubeadm/Kubernetes to Debian nodes (monitoring_nodes + storage_nodes) [DEPRECATED: use 'kubespray']
   kubespray       Deploy Kubernetes via Kubespray to all nodes (RECOMMENDED)
+  jellyfin        Deploy Jellyfin media server (optional)
   monitoring      Deploy monitoring stack (Prometheus, Grafana, Loki, exporters)
   infrastructure  Deploy infrastructure services (NTP/Chrony, Syslog, Kerberos)
   reset           Comprehensive cluster reset - removes all K8s config/network
@@ -57,6 +59,7 @@ Examples:
   ./deploy.sh kubespray                 # Deploy Kubernetes via Kubespray (RECOMMENDED)
   ./deploy.sh monitoring                # Deploy monitoring stack
   ./deploy.sh infrastructure            # Deploy infrastructure services (NTP, Syslog, Kerberos)
+  ./deploy.sh jellyfin                  # Deploy Jellyfin media server
   ./deploy.sh reset                     # Full cluster reset
   ./deploy.sh debian --check            # Show what would be deployed (legacy Debian-only)
   ./deploy.sh setup                     # Setup auto-sleep monitoring
@@ -754,6 +757,62 @@ cmd_infrastructure(){
   fi
 }
 
+  cmd_jellyfin(){
+    info "========================================"
+    info " Deploy Jellyfin Media Server            "
+    info "========================================"
+    info "Target: monitoring_nodes"
+    info "Playbook: $JELLYFIN_PLAYBOOK"
+    info "Log: $LOG_DIR/deploy-jellyfin.log"
+    info ""
+
+    require_bin ansible-playbook
+
+    # Validate inventory file exists
+    if [ ! -f "$INVENTORY_FILE" ]; then
+      err "Inventory file not found: $INVENTORY_FILE"
+    fi
+
+    # Ensure artifacts directory exists
+    mkdir -p "$LOG_DIR"
+
+    if [[ "$FLAG_CHECK" == "true" ]]; then
+      info "DRY-RUN: Would execute:"
+      local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $JELLYFIN_PLAYBOOK"
+      if [[ "$FLAG_YES" == "true" ]]; then
+        dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
+      fi
+      echo "  $dry_run_cmd | tee $LOG_DIR/deploy-jellyfin.log"
+      return 0
+    fi
+
+    info "Starting Jellyfin deployment..."
+
+    # Build ansible-playbook command with proper flags
+    local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $JELLYFIN_PLAYBOOK"
+
+    # Add skip_ansible_confirm when FLAG_YES is true
+    if [[ "$FLAG_YES" == "true" ]]; then
+      ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+    fi
+
+    # Force color output for better readability
+    ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-jellyfin.log"
+    local deploy_result=${PIPESTATUS[0]}
+
+    if [[ $deploy_result -eq 0 ]]; then
+      info ""
+      info "✓ Jellyfin deployment completed successfully"
+      info ""
+      info "Verification:" 
+      info "  kubectl --kubeconfig=/etc/kubernetes/admin.conf get pods -n jellyfin"
+      info "Log saved to: $LOG_DIR/deploy-jellyfin.log"
+      info ""
+    else
+      err "Jellyfin deployment failed - check logs: $LOG_DIR/deploy-jellyfin.log"
+    fi
+  }
+
 cmd_setup_autosleep(){
   require_bin ansible-playbook
   info "Setting up auto-sleep monitoring..."
@@ -857,7 +916,7 @@ main(){
         usage
         exit 0
         ;;
-      debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure)
+      debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure|jellyfin)
         cmd="$1"
         shift
         ;;
@@ -915,6 +974,9 @@ main(){
       ;;
     infrastructure)
       cmd_infrastructure
+      ;;
+    jellyfin)
+      cmd_jellyfin
       ;;
     *)
       usage
