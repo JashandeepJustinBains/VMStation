@@ -40,7 +40,7 @@
     - name: "Switch Python interpreter to the venv for subsequent tasks"
       ansible.builtin.set_fact:
         ansible_python_interpreter: /opt/ansible-venv/bin/python
-      cacheable: yes
+        cacheable: yes
 
     - name: "Reconnect to use the venv Python interpreter"
       ansible.builtin.meta: reset_connection
