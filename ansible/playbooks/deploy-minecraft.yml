@@ -4,7 +4,7 @@
   gather_facts: false
   tasks:
     - name: Apply all manifests in ansible/files/minecraft
-      command: kubectl apply -f ansible/files/minecraft/
+      command: kubectl apply -f "{{ playbook_dir }}/../files/minecraft/"
       register: apply_output
 
     - name: Show apply output
