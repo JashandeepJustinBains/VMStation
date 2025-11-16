@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minecraft
+  namespace: default
+  labels:
+    app: minecraft
+spec:
+  serviceName: minecraft
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft
+  template:
+    metadata:
+      labels:
+        app: minecraft
+    spec:
+      # Ensure this pod is scheduled onto the homelab/compute node(s).
+      # The inventory labels the homelab host with `vmstation.io/role=compute`.
+      nodeSelector:
+        vmstation.io/role: compute
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: minecraft
+        image: itzg/minecraft-server:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: EULA
+          value: "TRUE"
+        - name: MEMORY
+          value: "2G"
+        - name: TYPE
+          value: "FORGE" # Change to VANILLA or FABRIC as needed
+        # Optional: if you host a server pack (zip) reachable by URL, set MODPACK_URL
+        # - name: MODPACK_URL
+        #   value: "https://example.com/my-server-pack-server.zip"
+        ports:
+        - name: minecraft
+          containerPort: 25565
+          protocol: TCP
+        volumeMounts:
+        - name: minecraft-data
+          mountPath: /data
+        - name: config
+          mountPath: /config
+      initContainers:
+      - name: copy-server-properties
+        image: busybox
+        command: ["sh","-c","cp /config/server.properties /data/server.properties || true"]
+        volumeMounts:
+        - name: minecraft-data
+          mountPath: /data
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: minecraft-config
+  volumeClaimTemplates:
+  - metadata:
+      name: minecraft-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: manual
+      resources:
+        requests:
+          storage: 20Gi

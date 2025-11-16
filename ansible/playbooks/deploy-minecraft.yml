@@ -1,0 +1,12 @@
+- name: Deploy Minecraft manifests to Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Apply all manifests in ansible/files/minecraft
+      command: kubectl apply -f ansible/files/minecraft/
+      register: apply_output
+
+    - name: Show apply output
+      debug:
+        var: apply_output.stdout

@@ -1,0 +1,32 @@
+- name: Clean up Minecraft manifests and host resources
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    minecraft_remove_data: false
+  tasks:
+    - name: Delete Kubernetes resources defined in ansible/files/minecraft
+      command: kubectl delete -f ansible/files/minecraft/ --ignore-not-found
+      register: delete_output
+      changed_when: delete_output.rc == 0
+
+    - name: Show kubectl delete output
+      debug:
+        var: delete_output.stdout_lines
+
+- name: Remove firewall rule and (optionally) server data on homelab
+  hosts: homelab
+  become: true
+  tasks:
+    - name: Remove firewall rule for Minecraft port
+      ansible.builtin.shell: |
+        firewall-cmd --permanent --remove-port=25565/tcp || true
+        firewall-cmd --reload || true
+      args:
+        warn: false
+
+    - name: Optionally remove server data directory
+      ansible.builtin.file:
+        path: /srv/minecraft-data
+        state: absent
+      when: minecraft_remove_data | default(false)

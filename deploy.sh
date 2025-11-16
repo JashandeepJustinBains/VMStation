@@ -15,6 +15,8 @@ CLEANUP_HOMELAB_PLAYBOOK="$REPO_ROOT/ansible/playbooks/cleanup-homelab.yml"
 MONITORING_STACK_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-monitoring-stack.yaml"
 INFRASTRUCTURE_SERVICES_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-infrastructure-services.yaml"
 JELLYFIN_PLAYBOOK="$REPO_ROOT/ansible/playbooks/jellyfin.yml"
+MINECRAFT_PLAYBOOK="$REPO_ROOT/ansible/playbooks/deploy-minecraft.yml"
+MINECRAFT_RESET_PLAYBOOK="$REPO_ROOT/ansible/playbooks/reset-minecraft.yml"
 ARTIFACTS_DIR="$REPO_ROOT/ansible/artifacts"
 KUBESPRAY_DIR="$REPO_ROOT/.cache/kubespray"
 KUBESPRAY_VENV="$KUBESPRAY_DIR/.venv"
@@ -616,6 +618,17 @@ cmd_reset(){
   info "Next steps:"
   info "  ./deploy.sh kubespray              # Full Kubespray deployment"
   info ""
+
+  # Run optional per-service reset handlers (minecraft)
+  if [[ -f "$MINECRAFT_RESET_PLAYBOOK" ]]; then
+    info "Running Minecraft reset playbook to remove Minecraft resources and firewall rules"
+    local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $MINECRAFT_RESET_PLAYBOOK -e minecraft_remove_data=true"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+    fi
+    ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/reset-minecraft.log"
+    info "Minecraft reset log: $LOG_DIR/reset-minecraft.log"
+  fi
 }
 
 cmd_monitoring(){
@@ -812,6 +825,51 @@ cmd_infrastructure(){
       err "Jellyfin deployment failed - check logs: $LOG_DIR/deploy-jellyfin.log"
     fi
   }
+
+cmd_minecraft(){
+  info "========================================"
+  info " Deploy Minecraft Server                 "
+  info "========================================"
+  info "Playbook: $MINECRAFT_PLAYBOOK"
+  info "Log: $LOG_DIR/deploy-minecraft.log"
+  info ""
+
+  require_bin ansible-playbook
+
+  # Validate inventory file exists
+  if [ ! -f "$INVENTORY_FILE" ]; then
+    err "Inventory file not found: $INVENTORY_FILE"
+  fi
+
+  mkdir -p "$LOG_DIR"
+
+  if [[ "$FLAG_CHECK" == "true" ]]; then
+    info "DRY-RUN: Would execute:"
+    local dry_run_cmd="ansible-playbook -i $INVENTORY_FILE $MINECRAFT_PLAYBOOK"
+    if [[ "$FLAG_YES" == "true" ]]; then
+      dry_run_cmd="$dry_run_cmd -e skip_ansible_confirm=true"
+    fi
+    echo "  $dry_run_cmd | tee $LOG_DIR/deploy-minecraft.log"
+    return 0
+  fi
+
+  info "Starting Minecraft deployment..."
+
+  local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $MINECRAFT_PLAYBOOK"
+  if [[ "$FLAG_YES" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
+  fi
+
+  ANSIBLE_FORCE_COLOR=true eval "$ansible_cmd" 2>&1 | tee "$LOG_DIR/deploy-minecraft.log"
+  local deploy_result=${PIPESTATUS[0]}
+
+  if [[ $deploy_result -eq 0 ]]; then
+    info "✓ Minecraft deployment completed successfully"
+    info "Log: $LOG_DIR/deploy-minecraft.log"
+  else
+    err "Minecraft deployment failed - check logs: $LOG_DIR/deploy-minecraft.log"
+  fi
+}
 
 cmd_setup_autosleep(){
   require_bin ansible-playbook
