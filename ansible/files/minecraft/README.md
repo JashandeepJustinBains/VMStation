@@ -78,34 +78,136 @@ nodeSelector:
 
 - **Caveats:** If the label you reference does not exist on any ready node, the pod will stay Pending. After changing scheduling rules, re-apply the StatefulSet (`kubectl apply -f ...`) and watch `kubectl get pods -w` for scheduling decisions.
 
-Cloudflare Tunnel (optional - sidecar)
--- If you want to expose the Minecraft server through Cloudflare Tunnel for Identity-based access and no inbound router ports, this StatefulSet includes a `cloudflared` sidecar which expects a Kubernetes Secret named `cloudflared-credentials` containing your tunnel credentials.
+Cloudflare Tunnel (optional - pod-scoped sidecar)
 
-Quick steps to enable the tunnel (operator provides credentials):
+This StatefulSet includes an optional `cloudflared` sidecar container that tunnels the Minecraft server through Cloudflare Tunnel. The tunnel runs **only inside the pod** and requires no host-level installation — credentials are stored in a Kubernetes Secret (namespace-scoped, pod-scoped).
 
-1. Create the Kubernetes secret on the cluster (replace path to your credentials JSON):
+### Why use Cloudflare Tunnel?
+- **No port forwarding needed**: Tunnel is outbound-only; no need to open router ports or expose your home IP.
+- **Identity-based access** (optional): Use Cloudflare Access policies to require authentication before connecting.
+- **Pod-scoped isolation**: Tunnel credentials exist only in the `default` namespace and only the Minecraft pod can mount them.
 
-```powershell
-kubectl -n default create secret generic cloudflared-credentials \
-	--from-file=credentials.json=/path/to/<your-tunnel-credentials>.json
+### Setup instructions
+
+#### Step 1: Generate tunnel credentials on the homelab node
+
+SSH to the homelab and generate the tunnel:
+
+```bash
+ssh jashandeepjustinbains@192.168.4.62
+
+# Install cloudflared if not present
+sudo curl -L --output /usr/local/bin/cloudflared \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+sudo chmod +x /usr/local/bin/cloudflared
+
+# Login to Cloudflare (opens browser for OAuth)
+cloudflared tunnel login
+
+# Create a tunnel named 'my-minecraft-tunnel'
+cloudflared tunnel create my-minecraft-tunnel
+
+# This outputs:
+# Tunnel credentials written to /home/jashandeepjustinbains/.cloudflared/<tunnel-id>.json
+# Tunnel <tunnel-id> created with name my-minecraft-tunnel
+
+# List your tunnels
+cloudflared tunnel list
+
+exit
 ```
 
-2. In the Cloudflare Zero Trust dashboard create a Tunnel named `my-minecraft-tunnel` and add a TCP ingress rule or configure a hostname that maps to the tunnel and supports TCP/Spectrum if required by your plan. The sidecar runs:
+#### Step 2: Create Kubernetes secret from the tunnel credentials
 
+From your control machine (masternode or workstation with kubectl access), stream the credentials from homelab to kubectl:
+
+```bash
+# Replace <tunnel-id> with the ID from step 1
+ssh jashandeepjustinbains@192.168.4.62 \
+  'cat ~/.cloudflared/<tunnel-id>.json' \
+  | kubectl -n default create secret generic cloudflared-credentials \
+    --from-file=credentials.json=/dev/stdin
+
+# Verify the secret was created
+kubectl -n default get secret cloudflared-credentials
 ```
-cloudflared tunnel run --no-autoupdate --credentials-file /etc/cloudflared/credentials.json my-minecraft-tunnel --url tcp://127.0.0.1:25565
+
+#### Step 3: Deploy the Minecraft server
+
+```bash
+# From your repo root
+./deploy.sh minecraft
+
+# Watch the pod start
+kubectl get pod -l app=minecraft -w
+
+# Check logs
+kubectl logs minecraft-0 -c minecraft -f
 ```
 
-3. Apply the manifests (the StatefulSet already contains the sidecar and will mount the secret):
+#### Step 4: Configure the tunnel ingress in Cloudflare dashboard
 
-```powershell
-kubectl apply -f ansible/files/minecraft/minecraft-configmap.yaml
-kubectl apply -f ansible/files/minecraft/minecraft-pv-pvc.yaml
-kubectl apply -f ansible/files/minecraft/minecraft-statefulset.yaml
+In **Cloudflare Zero Trust → Networks → Tunnels → my-minecraft-tunnel**:
+
+1. Click **Configure** to add a public hostname or TCP rule.
+2. For TCP (raw Minecraft):
+   - **Public hostname**: `minecraft.yourdomain.com` (or use a subdomain)
+   - **Protocol**: TCP
+   - **TTL**: Auto
+   - **Service**: `localhost:25565`
+3. Save.
+
+Alternative: If using Cloudflare Spectrum (plan-dependent), add a TCP ingress rule:
+```
+minecraft.yourdomain.com:25565 → tcp://127.0.0.1:25565
 ```
 
-Notes & caveats:
-- Cloudflare HTTP Access is meant for web apps; proxying raw TCP (Minecraft) requires Cloudflare Tunnel TCP support or Spectrum (plan-dependent). Verify your Cloudflare plan supports TCP ingress with Access enforcement.
-- Keep the tunnel credentials secret; do not commit them to Git. Use Kubernetes Secrets as shown.
-- If you prefer not to run the sidecar, you can run `cloudflared` on the homelab host as a systemd service and point it to `127.0.0.1:25565` instead.
-- Monitor `cloudflared` logs and rotate credentials periodically.
+#### Step 5: Share the tunnel hostname with friends
+
+Give your friends the tunnel address (e.g., `minecraft.yourdomain.com:25565`) and they can connect via Minecraft client directly.
+
+#### Step 6: Verify the tunnel is active
+
+```bash
+# Check cloudflared sidecar logs
+kubectl logs minecraft-0 -c cloudflared
+
+# Expected output:
+# Tunnel registered with connection ID <id>
+# Connection established successfully
+```
+
+### Monitoring & troubleshooting
+
+**Check tunnel status in Cloudflare dashboard:**
+- Navigate to **Tunnels** and look for "Connected" status.
+
+**If pod fails to start:**
+```bash
+# Check secret exists
+kubectl get secret cloudflared-credentials -n default
+
+# Inspect pod events
+kubectl describe pod minecraft-0
+```
+
+**If tunnel disconnects:**
+- Check cloudflared logs: `kubectl logs minecraft-0 -c cloudflared`
+- Restart pod: `kubectl delete pod minecraft-0`
+
+### Security & best practices
+
+- **Credential rotation**: Regenerate tunnel credentials periodically and update the secret.
+- **Access policies** (optional): In Cloudflare Zero Trust, add "Access" policies to require email/SAML authentication.
+- **Read-only mounts**: The secret is mounted read-only at `/etc/cloudflared/credentials.json`; pod cannot modify credentials.
+- **No host-level exposure**: Tunnel runs only inside the pod; homelab host is not affected.
+
+### Alternative: Host-level cloudflared (not recommended)
+
+If you prefer to run `cloudflared` as a systemd service on the homelab host instead of the sidecar:
+
+1. Install and configure cloudflared on the homelab host (as shown in Step 1).
+2. Create a systemd service to run the tunnel persistently.
+3. Disable the sidecar in the StatefulSet (remove or comment out the `cloudflared` container).
+
+However, this approach exposes credentials to the host filesystem and is not pod-isolated. The sidecar approach (above) is recommended.
