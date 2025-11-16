@@ -8,6 +8,8 @@
     # cloudflared_token: "<TOKEN>"
     # OR
     # cloudflared_credentials_path: "/path/to/<tunnel-id>.json"
+    # Optional: perform a clean deployment (delete runtime resources but preserve PV/PVC data)
+    # minecraft_clean_deploy: false
   tasks:
     - name: Create cloudflared secret from token (optional)
       command: >-
@@ -22,6 +24,17 @@
         --from-file=credentials.json={{ cloudflared_credentials_path }} --dry-run=client -o yaml | kubectl apply -f -
       when: (cloudflared_credentials_path is defined) and (cloudflared_use_token is not defined or not cloudflared_use_token)
       register: cloudflared_credentials_secret
+
+    - name: Optionally perform a clean deployment (delete runtime resources, preserve persistent data)
+      command: >-
+        kubectl delete statefulset,deploy,daemonset,replicaset,service,pod -l app=minecraft -n default --ignore-not-found --wait=true --timeout=60s
+      when: minecraft_clean_deploy | default(false)
+      register: clean_delete_output
+
+    - name: Debug clean delete output
+      debug:
+        var: clean_delete_output.stdout_lines
+      when: minecraft_clean_deploy | default(false)
 
     - name: Apply all manifests in ansible/files/minecraft
       command: kubectl apply -f "{{ playbook_dir }}/../files/minecraft/"

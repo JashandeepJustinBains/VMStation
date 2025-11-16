@@ -622,6 +622,12 @@ cmd_reset(){
   # Run optional per-service reset handlers (minecraft)
   if [[ -f "$MINECRAFT_RESET_PLAYBOOK" ]]; then
     info "Running Minecraft reset playbook to remove Minecraft resources and firewall rules"
+    # If operator didn't previously run a clean minecraft deploy, show a hint
+    if [[ ! -f "$ARTIFACTS_DIR/minecraft-clean.marker" ]]; then
+      warn "Hint: You did not run './deploy.sh minecraft --clean' before reset."
+      warn "It's recommended to run './deploy.sh minecraft --clean' to remove runtime Minecraft resources (pods/services) while preserving world data before running full reset."
+    fi
+
     local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $MINECRAFT_RESET_PLAYBOOK -e minecraft_remove_data=true"
     if [[ "$FLAG_YES" == "true" ]]; then
       ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
@@ -827,6 +833,14 @@ cmd_infrastructure(){
   }
 
 cmd_minecraft(){
+  # Accept optional args forwarded from main (e.g. --clean)
+  local cmd_args=("$@")
+  local CLEAN_FLAG=false
+  for a in "${cmd_args[@]:-}"; do
+    if [[ "$a" == "--clean" ]]; then
+      CLEAN_FLAG=true
+    fi
+  done
   info "========================================"
   info " Deploy Minecraft Server                 "
   info "========================================"
@@ -856,6 +870,10 @@ cmd_minecraft(){
   info "Starting Minecraft deployment..."
 
   local ansible_cmd="ansible-playbook -i $INVENTORY_FILE $MINECRAFT_PLAYBOOK"
+  # If operator requested a clean deploy, pass extra-var to Ansible
+  if [[ "$CLEAN_FLAG" == "true" ]]; then
+    ansible_cmd="$ansible_cmd -e minecraft_clean_deploy=true"
+  fi
   if [[ "$FLAG_YES" == "true" ]]; then
     ansible_cmd="$ansible_cmd -e skip_ansible_confirm=true"
   fi
@@ -866,6 +884,12 @@ cmd_minecraft(){
   if [[ $deploy_result -eq 0 ]]; then
     info "✓ Minecraft deployment completed successfully"
     info "Log: $LOG_DIR/deploy-minecraft.log"
+    # If we ran a clean deploy, create a marker so reset can hint the operator
+    if [[ "$CLEAN_FLAG" == "true" ]]; then
+      mkdir -p "$ARTIFACTS_DIR"
+      touch "$ARTIFACTS_DIR/minecraft-clean.marker"
+      info "Created marker: $ARTIFACTS_DIR/minecraft-clean.marker"
+    fi
   else
     err "Minecraft deployment failed - check logs: $LOG_DIR/deploy-minecraft.log"
   fi
@@ -954,7 +978,8 @@ parse_flags(){
 main(){
   # Parse flags and get command
   local cmd=""
-  local remaining_args=()
+  # CMD_EXTRA_ARGS will hold arguments supplied after the command (e.g. ./deploy.sh minecraft --clean)
+  CMD_EXTRA_ARGS=()
   
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -977,6 +1002,12 @@ main(){
       debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure|jellyfin|minecraft)
         cmd="$1"
         shift
+        # Collect any remaining args as command-specific args and stop parsing
+        while [[ $# -gt 0 ]]; do
+          CMD_EXTRA_ARGS+=("$1")
+          shift
+        done
+        break
         ;;
       *)
         err "Unknown argument: $1. Use 'help' for usage."
@@ -1037,7 +1068,7 @@ main(){
       cmd_jellyfin
       ;;
     minecraft)
-      cmd_minecraft
+      cmd_minecraft "${CMD_EXTRA_ARGS[@]:-}"
       ;;
     *)
       usage
