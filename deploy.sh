@@ -974,7 +974,7 @@ main(){
         usage
         exit 0
         ;;
-      debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure|jellyfin)
+      debian|kubespray|rke2|all|reset|setup|spindown|monitoring|infrastructure|jellyfin|minecraft)
         cmd="$1"
         shift
         ;;
@@ -1035,6 +1035,9 @@ main(){
       ;;
     jellyfin)
       cmd_jellyfin
+      ;;
+    minecraft)
+      cmd_minecraft
       ;;
     *)
       usage
