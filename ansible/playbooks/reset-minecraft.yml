@@ -6,7 +6,7 @@
     minecraft_remove_data: false
   tasks:
     - name: Delete Kubernetes resources defined in ansible/files/minecraft
-      command: kubectl delete -f ansible/files/minecraft/ --ignore-not-found
+      command: kubectl delete -f "{{ playbook_dir }}/../files/minecraft/" --ignore-not-found
       register: delete_output
       changed_when: delete_output.rc == 0
 

@@ -2,7 +2,27 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  vars:
+    # Set one of these when running the playbook (via --extra-vars)
+    # cloudflared_use_token: true
+    # cloudflared_token: "<TOKEN>"
+    # OR
+    # cloudflared_credentials_path: "/path/to/<tunnel-id>.json"
   tasks:
+    - name: Create cloudflared secret from token (optional)
+      command: >-
+        kubectl -n default create secret generic cloudflared-token
+        --from-literal=token={{ cloudflared_token }} --dry-run=client -o yaml | kubectl apply -f -
+      when: cloudflared_use_token | default(false)
+      register: cloudflared_token_secret
+
+    - name: Create cloudflared secret from credentials file (optional)
+      command: >-
+        kubectl -n default create secret generic cloudflared-credentials
+        --from-file=credentials.json={{ cloudflared_credentials_path }} --dry-run=client -o yaml | kubectl apply -f -
+      when: (cloudflared_credentials_path is defined) and (cloudflared_use_token is not defined or not cloudflared_use_token)
+      register: cloudflared_credentials_secret
+
     - name: Apply all manifests in ansible/files/minecraft
       command: kubectl apply -f "{{ playbook_dir }}/../files/minecraft/"
       register: apply_output
