@@ -518,13 +518,6 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
-      # Node selection and scheduling
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
-      tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
       # Anti-affinity for HA (prevents multiple replicas on same node)
       affinity:
         podAntiAffinity:
@@ -904,12 +897,6 @@ spec:
         app: blackbox-exporter
     spec:
       serviceAccountName: blackbox-exporter
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
-      tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
       containers:
       - name: blackbox-exporter
         image: prom/blackbox-exporter:v0.25.0

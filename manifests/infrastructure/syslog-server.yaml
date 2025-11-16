@@ -219,12 +219,6 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: syslog-server
-      nodeSelector:
-        node-role.kubernetes.io/control-plane: ""
-      tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
       containers:
       - name: syslog-ng
         image: balabit/syslog-ng:latest
@@ -256,11 +250,8 @@ spec:
             cpu: 500m
             memory: 512Mi
         livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - pgrep syslog-ng
+          tcpSocket:
+            port: 514
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5

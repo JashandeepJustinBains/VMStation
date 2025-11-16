@@ -45,6 +45,26 @@ spec:
           mountPath: /data
         - name: config
           mountPath: /config
+      - name: cloudflared
+        image: cloudflare/cloudflared:2025.10.0
+        imagePullPolicy: IfNotPresent
+        args:
+        - tunnel
+        - run
+        - --no-autoupdate
+        - --credentials-file
+        - /etc/cloudflared/credentials.json
+        - my-minecraft-tunnel
+        - --url
+        - tcp://127.0.0.1:25565
+        volumeMounts:
+        - name: cloudflared-creds
+          mountPath: /etc/cloudflared
+          readOnly: true
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
       initContainers:
       - name: copy-server-properties
         image: busybox
@@ -58,6 +78,9 @@ spec:
       - name: config
         configMap:
           name: minecraft-config
+      - name: cloudflared-creds
+        secret:
+          secretName: cloudflared-credentials
   volumeClaimTemplates:
   - metadata:
       name: minecraft-data

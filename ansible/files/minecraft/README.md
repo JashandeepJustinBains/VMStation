@@ -77,3 +77,35 @@ nodeSelector:
 ```
 
 - **Caveats:** If the label you reference does not exist on any ready node, the pod will stay Pending. After changing scheduling rules, re-apply the StatefulSet (`kubectl apply -f ...`) and watch `kubectl get pods -w` for scheduling decisions.
+
+Cloudflare Tunnel (optional - sidecar)
+-- If you want to expose the Minecraft server through Cloudflare Tunnel for Identity-based access and no inbound router ports, this StatefulSet includes a `cloudflared` sidecar which expects a Kubernetes Secret named `cloudflared-credentials` containing your tunnel credentials.
+
+Quick steps to enable the tunnel (operator provides credentials):
+
+1. Create the Kubernetes secret on the cluster (replace path to your credentials JSON):
+
+```powershell
+kubectl -n default create secret generic cloudflared-credentials \
+	--from-file=credentials.json=/path/to/<your-tunnel-credentials>.json
+```
+
+2. In the Cloudflare Zero Trust dashboard create a Tunnel named `my-minecraft-tunnel` and add a TCP ingress rule or configure a hostname that maps to the tunnel and supports TCP/Spectrum if required by your plan. The sidecar runs:
+
+```
+cloudflared tunnel run --no-autoupdate --credentials-file /etc/cloudflared/credentials.json my-minecraft-tunnel --url tcp://127.0.0.1:25565
+```
+
+3. Apply the manifests (the StatefulSet already contains the sidecar and will mount the secret):
+
+```powershell
+kubectl apply -f ansible/files/minecraft/minecraft-configmap.yaml
+kubectl apply -f ansible/files/minecraft/minecraft-pv-pvc.yaml
+kubectl apply -f ansible/files/minecraft/minecraft-statefulset.yaml
+```
+
+Notes & caveats:
+- Cloudflare HTTP Access is meant for web apps; proxying raw TCP (Minecraft) requires Cloudflare Tunnel TCP support or Spectrum (plan-dependent). Verify your Cloudflare plan supports TCP ingress with Access enforcement.
+- Keep the tunnel credentials secret; do not commit them to Git. Use Kubernetes Secrets as shown.
+- If you prefer not to run the sidecar, you can run `cloudflared` on the homelab host as a systemd service and point it to `127.0.0.1:25565` instead.
+- Monitor `cloudflared` logs and rotate credentials periodically.
