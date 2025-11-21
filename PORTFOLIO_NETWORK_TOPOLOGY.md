@@ -312,12 +312,12 @@ Color: Purple (power management)
 ## Project Statistics
 
 ### Repository Structure
-- **Ansible Playbooks:** 15+ automated deployment playbooks
+- **Ansible Playbooks:** 17 automated deployment playbooks (4,256 total lines)
 - **Ansible Roles:** Custom preflight-rhel10 role
 - **Scripts:** 10+ management and validation scripts
-- **Tests:** Comprehensive validation test suite
-- **Manifests:** 20+ Kubernetes manifests for services
-- **Documentation:** 10+ detailed markdown documents
+- **Tests:** Comprehensive validation test suite (8+ scripts)
+- **Manifests:** 33 Kubernetes manifests for services
+- **Documentation:** 11 detailed markdown documents
 
 ### Deployment Capabilities
 - **Full Stack Deployment:** ~25-30 minutes

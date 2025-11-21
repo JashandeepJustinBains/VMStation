@@ -301,11 +301,11 @@ Display key statistics about the homelab:
     <div class="stat-label">Nodes</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">15+</div>
+    <div class="stat-value">17</div>
     <div class="stat-label">Playbooks</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">20+</div>
+    <div class="stat-value">33</div>
     <div class="stat-label">Manifests</div>
   </div>
   <div class="stat-card">
@@ -710,8 +710,8 @@ import 'vis-network/styles/vis-network.css';
 If you prefer to fetch data from JSON:
 
 ```javascript
-// Fetch from portfolio-data.json
-fetch('/path/to/portfolio-data.json')
+// Fetch from portfolio-data.json (adjust path as needed)
+fetch('./portfolio-data.json')  // Or '/data/portfolio-data.json' if in public folder
   .then(response => response.json())
   .then(data => {
     const nodes = data.network_topology.nodes.map(node => ({

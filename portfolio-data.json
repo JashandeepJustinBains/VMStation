@@ -20,11 +20,12 @@
     ],
     "stats": {
       "nodes": 3,
-      "playbooks": 15,
-      "manifests": 20,
+      "playbooks": 17,
+      "manifests": 33,
       "tests": 8,
-      "documentation_files": 10,
-      "deployment_time_minutes": 30
+      "documentation_files": 11,
+      "deployment_time_minutes": 30,
+      "ansible_lines": 4256
     }
   },
   "network_topology": {
@@ -507,9 +508,15 @@
     "roadmap": "TODO.md"
   },
   "metadata": {
-    "last_updated": "2024-11",
+    "last_updated": "2024-11-21",
     "status": "production-ready",
     "license": "MIT",
-    "author": "Jashandeep Justin Bains"
+    "author": "Jashandeep Justin Bains",
+    "metrics": {
+      "ansible_lines": 4256,
+      "playbooks_count": 17,
+      "manifests_count": 33,
+      "documentation_files": 11
+    }
   }
 }

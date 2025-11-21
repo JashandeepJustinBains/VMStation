@@ -195,10 +195,10 @@ The VMStation project uses a carefully chosen color palette:
 
 **Repository Stats:**
 - 3-node production-ready cluster
-- 15+ Ansible playbooks (3000+ lines)
-- 20+ Kubernetes manifests
+- 17 Ansible playbooks (4,256 lines of code)
+- 33 Kubernetes manifests
 - 8+ automated test scripts
-- 10+ documentation files
+- 11 documentation files
 - ~30 minute full-stack deployment
 
 **Technical Achievements:**
@@ -350,7 +350,7 @@ Interactive topology: [link]
 
 ```
 • Designed and deployed production-ready 3-node Kubernetes homelab with 
-  automated deployment using Kubespray and Ansible (15+ playbooks)
+  automated deployment using Kubespray and Ansible (17 playbooks, 4,256 lines)
 
 • Implemented comprehensive monitoring stack with Prometheus, Grafana, 
   and Loki, providing full observability across multi-distribution cluster 
@@ -404,12 +404,12 @@ Promtail on workers pushes logs to Loki on the master."
 
 **Q: How did you ensure your deployments are idempotent?**
 
-A: "I structured all Ansible playbooks with conditional checks and proper state 
-management. For example, before initializing the Kubernetes control plane, I 
-check if it's already initialized. Worker node joins check for existing cluster 
-membership. I also built an automated test suite that runs deployments multiple 
-times to verify idempotency - it runs 3 cycles of reset, deploy, verify, 
-redeploy, and checks for unexpected changes."
+A: "I structured all 17 Ansible playbooks (over 4,200 lines of code) with 
+conditional checks and proper state management. For example, before initializing 
+the Kubernetes control plane, I check if it's already initialized. Worker node 
+joins check for existing cluster membership. I also built an automated test 
+suite that runs deployments multiple times to verify idempotency - it runs 3 
+cycles of reset, deploy, verify, redeploy, and checks for unexpected changes."
 
 ### Monitoring Questions
 

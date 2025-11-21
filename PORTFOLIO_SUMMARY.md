@@ -45,10 +45,10 @@ A sophisticated 3-node Kubernetes homelab with automated deployment, comprehensi
 
 ### Statistics
 - **Deployment Time:** 25-30 minutes (full stack)
-- **Lines of Automation:** 3000+ lines of Ansible
-- **Manifests:** 20+ Kubernetes manifests
+- **Lines of Automation:** 4,256 lines of Ansible code (17 playbooks + roles)
+- **Manifests:** 33 Kubernetes manifests
 - **Test Coverage:** 8+ validation scripts
-- **Documentation:** 10+ detailed guides
+- **Documentation:** 11 detailed guides
 
 ### Demo Links
 - **Repository:** https://github.com/JashandeepJustinBains/VMStation
@@ -102,7 +102,7 @@ A sophisticated 3-node Kubernetes homelab with automated deployment, comprehensi
 **Stats to Display:**
 - ⭐ Stars: [GitHub will show]
 - 🍴 Forks: [GitHub will show]
-- 📝 15+ Ansible Playbooks
+- 📝 17 Ansible Playbooks (4,256 lines)
 - 🧪 8+ Test Scripts
 - 📊 3 Node Cluster
 - ⚡ Auto-Sleep Enabled
