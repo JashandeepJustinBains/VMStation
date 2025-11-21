@@ -1,0 +1,515 @@
+{
+  "repository": {
+    "name": "VMStation",
+    "url": "https://github.com/JashandeepJustinBains/VMStation",
+    "description": "A production-ready Kubernetes homelab environment with automated deployment, monitoring, and power management",
+    "topics": [
+      "kubernetes",
+      "ansible",
+      "prometheus",
+      "grafana",
+      "loki",
+      "devops",
+      "homelab",
+      "infrastructure-as-code",
+      "monitoring",
+      "automation",
+      "kubespray",
+      "debian",
+      "rhel"
+    ],
+    "stats": {
+      "nodes": 3,
+      "playbooks": 15,
+      "manifests": 20,
+      "tests": 8,
+      "documentation_files": 10,
+      "deployment_time_minutes": 30
+    }
+  },
+  "network_topology": {
+    "nodes": [
+      {
+        "id": 1,
+        "label": "masternode",
+        "group": "hypervisor",
+        "title": "Kubernetes Control Plane & Monitoring Hub",
+        "ip": "192.168.4.63",
+        "status": "always-on",
+        "specs": {
+          "cpu": "4 cores",
+          "ram": "8 GB",
+          "storage": "100 GB",
+          "os": "Debian 12 (Bookworm)",
+          "runtime": "containerd",
+          "role": "Control Plane",
+          "availability": "24/7"
+        },
+        "services": [
+          {
+            "name": "Kubernetes API Server",
+            "port": 6443,
+            "protocol": "HTTPS"
+          },
+          {
+            "name": "etcd",
+            "description": "Distributed key-value store"
+          },
+          {
+            "name": "Prometheus",
+            "port": 30090,
+            "url": "http://192.168.4.63:30090",
+            "description": "Metrics collection"
+          },
+          {
+            "name": "Grafana",
+            "port": 30300,
+            "url": "http://192.168.4.63:30300",
+            "description": "Dashboards & visualization"
+          },
+          {
+            "name": "Loki",
+            "port": 31100,
+            "url": "http://192.168.4.63:31100",
+            "description": "Log aggregation"
+          },
+          {
+            "name": "CoreDNS",
+            "description": "Cluster DNS"
+          }
+        ],
+        "color": "#2563eb",
+        "features": [
+          "Primary control plane",
+          "Centralized monitoring hub",
+          "Always-on availability",
+          "NTP/Chrony time sync server",
+          "Syslog centralized logging"
+        ]
+      },
+      {
+        "id": 2,
+        "label": "storagenodet3500",
+        "group": "storage",
+        "title": "Storage & Media Worker Node",
+        "ip": "192.168.4.61",
+        "mac": "b8:ac:6f:7e:6c:9d",
+        "status": "auto-sleep",
+        "specs": {
+          "cpu": "4 cores",
+          "ram": "8 GB",
+          "storage": "500+ GB",
+          "os": "Debian 12 (Bookworm)",
+          "runtime": "containerd",
+          "role": "Storage Worker",
+          "availability": "On-demand (auto-sleep)"
+        },
+        "services": [
+          {
+            "name": "Jellyfin",
+            "description": "Media streaming server"
+          },
+          {
+            "name": "Storage Workloads",
+            "description": "Persistent volume management"
+          },
+          {
+            "name": "Node Exporter",
+            "port": 9100,
+            "description": "System metrics"
+          },
+          {
+            "name": "Promtail",
+            "description": "Log shipping to Loki"
+          }
+        ],
+        "color": "#16a34a",
+        "features": [
+          "Storage-optimized workloads",
+          "Auto-sleep after 2+ hours idle",
+          "Wake-on-LAN capable",
+          "Media storage and streaming",
+          "Automatic cluster rejoin on wake"
+        ],
+        "power_management": {
+          "enabled": true,
+          "idle_timeout_hours": 2,
+          "monitors": [
+            "Jellyfin activity",
+            "CPU usage patterns",
+            "Active user sessions"
+          ],
+          "wake_methods": [
+            "Wake-on-LAN magic packet",
+            "Scheduled timer events"
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "label": "homelab",
+        "group": "application",
+        "title": "RHEL10 Compute Worker",
+        "ip": "192.168.4.62",
+        "mac": "d0:94:66:30:d6:63",
+        "status": "auto-sleep",
+        "specs": {
+          "cpu": "4 cores",
+          "ram": "8 GB",
+          "storage": "100 GB",
+          "os": "RHEL 10 (Red Hat Enterprise Linux)",
+          "runtime": "containerd",
+          "role": "Compute Worker",
+          "availability": "On-demand (auto-sleep)"
+        },
+        "services": [
+          {
+            "name": "General Compute Workloads",
+            "description": "Application hosting"
+          },
+          {
+            "name": "Node Exporter",
+            "port": 9100,
+            "description": "System metrics"
+          },
+          {
+            "name": "Promtail",
+            "description": "Log shipping to Loki"
+          }
+        ],
+        "color": "#ea580c",
+        "features": [
+          "Multi-distro support (RHEL)",
+          "Auto-sleep capability",
+          "Wake-on-LAN enabled",
+          "Kubespray and RKE2 support",
+          "Enterprise Linux compatibility"
+        ],
+        "power_management": {
+          "enabled": true,
+          "idle_timeout_hours": 2,
+          "monitors": [
+            "CPU usage patterns",
+            "Active workload count"
+          ],
+          "wake_methods": [
+            "Wake-on-LAN magic packet",
+            "Scheduled timer events"
+          ]
+        },
+        "deployment_options": [
+          "Kubespray (recommended)",
+          "RKE2 (alternative)"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from": 1,
+        "to": 2,
+        "label": "K8s Control / CNI",
+        "type": "bidirectional",
+        "color": "#2563eb",
+        "protocols": ["HTTPS:6443", "VXLAN:8472"],
+        "description": "Kubernetes API and Flannel CNI networking"
+      },
+      {
+        "from": 1,
+        "to": 3,
+        "label": "K8s Control / CNI",
+        "type": "bidirectional",
+        "color": "#2563eb",
+        "protocols": ["HTTPS:6443", "VXLAN:8472"],
+        "description": "Kubernetes API and Flannel CNI networking"
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "label": "Prometheus Scrape",
+        "type": "unidirectional",
+        "color": "#16a34a",
+        "dashes": true,
+        "protocols": ["HTTP:9100"],
+        "description": "Metrics collection from Node Exporter"
+      },
+      {
+        "from": 1,
+        "to": 3,
+        "label": "Prometheus Scrape",
+        "type": "unidirectional",
+        "color": "#16a34a",
+        "dashes": true,
+        "protocols": ["HTTP:9100"],
+        "description": "Metrics collection from Node Exporter"
+      },
+      {
+        "from": 2,
+        "to": 1,
+        "label": "Log Push (Loki)",
+        "type": "unidirectional",
+        "color": "#ea580c",
+        "dashes": true,
+        "protocols": ["HTTP:31100"],
+        "description": "Log aggregation via Promtail"
+      },
+      {
+        "from": 3,
+        "to": 1,
+        "label": "Log Push (Loki)",
+        "type": "unidirectional",
+        "color": "#ea580c",
+        "dashes": true,
+        "protocols": ["HTTP:31100"],
+        "description": "Log aggregation via Promtail"
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "label": "Wake-on-LAN",
+        "type": "special",
+        "color": "#9333ea",
+        "dashes": [10, 5],
+        "protocols": ["UDP:9"],
+        "description": "Power management magic packets"
+      },
+      {
+        "from": 1,
+        "to": 3,
+        "label": "Wake-on-LAN",
+        "type": "special",
+        "color": "#9333ea",
+        "dashes": [10, 5],
+        "protocols": ["UDP:9"],
+        "description": "Power management magic packets"
+      }
+    ]
+  },
+  "technology_stack": {
+    "core_infrastructure": {
+      "kubernetes_version": "v1.29.15",
+      "deployment_methods": [
+        {
+          "name": "Kubespray",
+          "status": "recommended",
+          "description": "Production-grade Kubernetes deployment"
+        },
+        {
+          "name": "kubeadm",
+          "status": "legacy",
+          "description": "Traditional Kubernetes deployment for Debian"
+        },
+        {
+          "name": "RKE2",
+          "status": "alternative",
+          "description": "Rancher Kubernetes Engine 2 for RHEL"
+        }
+      ],
+      "cni_plugin": "Flannel v0.27.4",
+      "container_runtime": "containerd"
+    },
+    "automation": {
+      "configuration_management": "Ansible 2.9+",
+      "inventory_format": "YAML",
+      "infrastructure_as_code": true,
+      "idempotent_playbooks": true
+    },
+    "monitoring": {
+      "metrics": "Prometheus",
+      "visualization": "Grafana",
+      "log_aggregation": "Loki",
+      "log_shipping": "Promtail",
+      "exporters": [
+        "Node Exporter",
+        "Kube-state-metrics",
+        "Blackbox Exporter",
+        "IPMI Exporter (optional)"
+      ]
+    },
+    "infrastructure_services": {
+      "time_sync": "NTP/Chrony DaemonSet",
+      "centralized_logging": "Syslog Server",
+      "identity_management": "FreeIPA/Kerberos (optional)"
+    },
+    "power_management": {
+      "auto_sleep": true,
+      "wake_on_lan": true,
+      "activity_monitoring": true,
+      "energy_efficient": true
+    }
+  },
+  "key_features": [
+    {
+      "category": "Automated Deployment",
+      "items": [
+        "Single-command deployment",
+        "Idempotent Ansible playbooks",
+        "Pre-flight validation checks",
+        "Multi-cluster support",
+        "Modular architecture"
+      ]
+    },
+    {
+      "category": "Complete Monitoring",
+      "items": [
+        "Full observability stack",
+        "Custom Grafana dashboards",
+        "Real-time alerting",
+        "Multi-cluster aggregation",
+        "Historical data persistence"
+      ]
+    },
+    {
+      "category": "Smart Power Management",
+      "items": [
+        "Intelligent auto-sleep",
+        "Activity pattern detection",
+        "Graceful pod eviction",
+        "Fast wake with WoL",
+        "Energy cost reduction"
+      ]
+    },
+    {
+      "category": "Production Ready",
+      "items": [
+        "High availability aware design",
+        "Persistent volume support",
+        "Backup/restore procedures",
+        "Enterprise OS support",
+        "Security hardened"
+      ]
+    }
+  ],
+  "deployment_info": {
+    "quick_start": "./deploy.sh kubespray",
+    "deployment_phases": [
+      {
+        "name": "reset",
+        "command": "./deploy.sh reset",
+        "description": "Clean slate - removes previous installations"
+      },
+      {
+        "name": "setup",
+        "command": "./deploy.sh setup",
+        "description": "Configure auto-sleep monitoring"
+      },
+      {
+        "name": "kubespray",
+        "command": "./deploy.sh kubespray",
+        "description": "Deploy full stack with Kubespray",
+        "duration_minutes": "25-30"
+      },
+      {
+        "name": "validation",
+        "command": "./scripts/validate-monitoring-stack.sh",
+        "description": "Validate deployment"
+      }
+    ],
+    "access_endpoints": [
+      {
+        "service": "Grafana",
+        "url": "http://192.168.4.63:30300",
+        "credentials": "admin/admin (change on first login)"
+      },
+      {
+        "service": "Prometheus",
+        "url": "http://192.168.4.63:30090",
+        "credentials": "None required"
+      },
+      {
+        "service": "Loki",
+        "url": "http://192.168.4.63:31100",
+        "credentials": "None required"
+      }
+    ]
+  },
+  "achievements": [
+    "Multi-distribution cluster (Debian + RHEL)",
+    "Complete observability stack",
+    "Intelligent power management",
+    "Idempotent automation",
+    "Production-grade deployment",
+    "Zero-downtime monitoring",
+    "Automated validation suite",
+    "Comprehensive documentation",
+    "Modular architecture",
+    "Energy efficient design"
+  ],
+  "skills_demonstrated": [
+    "Kubernetes Administration",
+    "Ansible Automation",
+    "Infrastructure as Code",
+    "Monitoring & Observability",
+    "Linux System Administration",
+    "DevOps Best Practices",
+    "CI/CD Ready Architecture",
+    "Documentation",
+    "Power Management",
+    "Multi-distribution Support"
+  ],
+  "use_cases": [
+    "Development & Testing",
+    "Media Streaming (Jellyfin)",
+    "Learning & Experimentation",
+    "Production Simulation",
+    "Container Orchestration",
+    "Infrastructure Automation",
+    "Monitoring Best Practices",
+    "Disaster Recovery Testing"
+  ],
+  "visualization": {
+    "color_scheme": {
+      "control_plane": "#2563eb",
+      "storage": "#16a34a",
+      "compute": "#ea580c",
+      "power_management": "#9333ea"
+    },
+    "node_styles": {
+      "always_on": {
+        "border": "solid",
+        "indicator": "green"
+      },
+      "auto_sleep": {
+        "border": "dashed",
+        "indicator": "orange"
+      }
+    },
+    "connection_styles": {
+      "kubernetes": {
+        "color": "#2563eb",
+        "style": "solid",
+        "width": 2
+      },
+      "monitoring": {
+        "color": "#16a34a",
+        "style": "dashed",
+        "width": 1.5
+      },
+      "logging": {
+        "color": "#ea580c",
+        "style": "dashed",
+        "width": 1.5
+      },
+      "power": {
+        "color": "#9333ea",
+        "style": "dotted",
+        "width": 1
+      }
+    }
+  },
+  "documentation": {
+    "main_readme": "README.md",
+    "quick_start": "QUICK_START.md",
+    "architecture": "docs/ARCHITECTURE.md",
+    "usage_guide": "docs/USAGE.md",
+    "troubleshooting": "docs/TROUBLESHOOTING.md",
+    "portfolio_topology": "PORTFOLIO_NETWORK_TOPOLOGY.md",
+    "portfolio_summary": "PORTFOLIO_SUMMARY.md",
+    "roadmap": "TODO.md"
+  },
+  "metadata": {
+    "last_updated": "2024-11",
+    "status": "production-ready",
+    "license": "MIT",
+    "author": "Jashandeep Justin Bains"
+  }
+}
