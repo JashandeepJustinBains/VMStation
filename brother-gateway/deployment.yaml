@@ -18,6 +18,9 @@ spec:
       # Required: Binds container interfaces directly to the host LAN for mDNS and UDP packets
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      # Force scheduling to the storage node only
+      nodeSelector:
+        kubernetes.io/hostname: storagenodet3500
       containers:
         # -------------------------------------------------------------
         # 1. INBOUND PRINT PROXY (AirPrint / IPP -> Brother Printer)
@@ -83,6 +86,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: manual
   resources:
     requests:
       storage: 10Gi
