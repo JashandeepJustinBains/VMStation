@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brother-gateway
+  namespace: default
+  labels:
+    app: brother-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: brother-gateway
+  template:
+    metadata:
+      labels:
+        app: brother-gateway
+    spec:
+      # Required: Binds container interfaces directly to the host LAN for mDNS and UDP packets
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        # -------------------------------------------------------------
+        # 1. INBOUND PRINT PROXY (AirPrint / IPP -> Brother Printer)
+        # -------------------------------------------------------------
+        - name: cups-print-proxy
+          image: rogerrum/cups-airprint:latest
+          securityContext:
+            privileged: true
+          env:
+            - name: CUPS_ADMIN_USER
+              value: "admin"
+            - name: CUPS_ADMIN_PASSWORD
+              value: "SuperSecretPassword123"
+            # Configures raw socket forwarding to printer IP port 9100 at startup
+            - name: CUPS_LPADMIN_PRINTER1
+              value: "lpadmin -p Brother_Printer -D 'Brother MFC-9130CW' -E -v socket://<YOUR_PRINTER_IP>:9100 -m everywhere"
+          ports:
+            - name: cups-web
+              containerPort: 631
+              protocol: TCP
+            - name: mdns
+              containerPort: 5353
+              protocol: UDP
+
+        # -------------------------------------------------------------
+        # 2. OUTBOUND SCAN LISTENER (Printer Touchscreen -> K8s Storage)
+        # -------------------------------------------------------------
+        - name: brother-scan-proxy
+          image: philippmundhenk/brotherscannerdocker:latest
+          securityContext:
+            privileged: true
+          env:
+            # Backwards-compatible static IP placeholder (replace <YOUR_PRINTER_IP> as needed)
+            - name: PRINTER_IP
+              value: "<YOUR_PRINTER_IP>" # Set to your printer's static IP address
+            - name: MODEL
+              value: "MFC-9130CW"
+            - name: NAME
+              value: "K8s-Cluster"      # Target name visible on printer touchscreen
+            # New: point the container at the mounted hosts/master schema from the repo
+            - name: PRINTER_HOSTS_FILE
+              value: "/etc/cluster-hosts/hosts.yml"
+          volumeMounts:
+            - name: scan-storage
+              mountPath: /scans
+            - name: cluster-hosts
+              mountPath: /etc/cluster-hosts
+              readOnly: true
+      volumes:
+        - name: scan-storage
+          persistentVolumeClaim:
+            claimName: scan-storage-pvc
+        # ConfigMap-mounted copy of the repository's master hosts schema
+        - name: cluster-hosts
+          configMap:
+            name: printers-hosts-config
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scan-storage-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
