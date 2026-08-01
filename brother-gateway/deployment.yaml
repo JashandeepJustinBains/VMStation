@@ -18,6 +18,9 @@ spec:
       # Required: Binds container interfaces directly to the host LAN for mDNS and UDP packets
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      # Ensure files created by containers are group-owned by jjbly (set fsGroup to jjbly group id)
+      securityContext:
+        fsGroup: 1000
       # Force scheduling to the storage node only
       nodeSelector:
         kubernetes.io/hostname: storagenodet3500
@@ -60,7 +63,7 @@ spec:
               value: "MFC-9130CW"
             - name: NAME
               value: "K8s-Cluster"      # Target name visible on printer touchscreen
-            # New: point the container at the mounted hosts/master schema from the repo
+            # Point the container at the mounted hosts/master schema from the repo
             - name: PRINTER_HOSTS_FILE
               value: "/etc/cluster-hosts/hosts.yml"
           volumeMounts:
@@ -69,6 +72,29 @@ spec:
             - name: cluster-hosts
               mountPath: /etc/cluster-hosts
               readOnly: true
+
+        # -------------------------------------------------------------
+        # 3. SCAN WATCHER SIDECAR (inotify -> convert -> copy-only)
+        # -------------------------------------------------------------
+        - name: scan-watcher
+          image: alpine:3.18
+          command: ["/bin/sh","-c"]
+          args:
+            - apk add --no-cache inotify-tools imagemagick rsync bash && /scripts/convert-watch.sh
+          volumeMounts:
+            - name: scan-storage
+              mountPath: /scans
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: paperless-input
+              mountPath: /paperless/input
+          resources:
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          securityContext:
+            runAsUser: 0
       volumes:
         - name: scan-storage
           persistentVolumeClaim:
@@ -77,6 +103,13 @@ spec:
         - name: cluster-hosts
           configMap:
             name: printers-hosts-config
+        - name: scripts
+          configMap:
+            name: scan-convert-scripts
+            defaultMode: 0755
+        - name: paperless-input
+          persistentVolumeClaim:
+            claimName: paperless-input-pvc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
