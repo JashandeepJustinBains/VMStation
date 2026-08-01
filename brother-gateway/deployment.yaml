@@ -58,7 +58,7 @@ spec:
           env:
             # Backwards-compatible static IP placeholder (replace <YOUR_PRINTER_IP> as needed)
             - name: PRINTER_IP
-              value: "<YOUR_PRINTER_IP>" # Set to your printer's static IP address
+              value: "192.168.4.72" # Set to your printer's static IP address
             - name: MODEL
               value: "MFC-9130CW"
             - name: NAME
