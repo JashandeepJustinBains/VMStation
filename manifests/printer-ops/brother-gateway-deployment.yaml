@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: brother-gateway
+  namespace: printer-ops
+  labels:
+    app: brother-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: brother-gateway
+  template:
+    metadata:
+      labels:
+        app: brother-gateway
+    spec:
+      nodeSelector:
+        vmstation/role: storage
+      containers:
+      - name: cups-print-proxy
+        image: rogerrum/cups-airprint:latest
+        ports:
+        - containerPort: 631
+          name: cups-web
+          protocol: TCP
+        - containerPort: 5353
+          name: mdns
+          protocol: UDP
+        env:
+        - name: CUPS_ADMIN_USER
+          value: "admin"
+        - name: CUPS_ADMIN_PASSWORD
+          value: "SuperSecretPassword123"
+        - name: CUPS_LPADMIN_PRINTER1
+          value: "lpadmin -p Brother_Printer -D 'Brother MFC-9130CW' -E -v socket://<YOUR_PRINTER_IP>:9100 -m everywhere"
+        securityContext:
+          allowPrivilegeEscalation: false
+      - name: brother-scan-proxy
+        image: philippmundhenk/brotherscannerdocker:latest
+        env:
+        - name: PRINTER_IP
+          value: "192.168.4.72"
+        - name: MODEL
+          value: "MFC-9130CW"
+        - name: NAME
+          value: "K8s-Cluster"
+        - name: PRINTER_HOSTS_FILE
+          value: "/etc/cluster-hosts/hosts.yml"
+        volumeMounts:
+        - name: cluster-hosts
+          mountPath: /etc/cluster-hosts
+          readOnly: true
+        - name: scan-storage
+          mountPath: /scans
+      - name: scan-watcher
+        image: alpine:3.18
+        command: ["/bin/sh","-c"]
+        args: ["apk add --no-cache inotify-tools imagemagick rsync bash && /scripts/convert-watch.sh"]
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 200m
+            memory: 128Mi
+        volumeMounts:
+        - name: paperless-input
+          mountPath: /paperless/input
+        - name: scan-storage
+          mountPath: /scans
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scan-storage
+        persistentVolumeClaim:
+          claimName: scan-storage-pvc
+      - name: paperless-input
+        persistentVolumeClaim:
+          claimName: paperless-input-pvc
+      - name: cluster-hosts
+        configMap:
+          name: printers-hosts-config
+      - name: scripts
+        configMap:
+          name: scan-convert-scripts
