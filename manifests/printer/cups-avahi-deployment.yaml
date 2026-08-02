@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cups-avahi
+  namespace: printer-ops
+  labels:
+    app: cups-avahi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cups-avahi
+  template:
+    metadata:
+      labels:
+        app: cups-avahi
+    spec:
+      hostNetwork: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - storagenodet3500
+      containers:
+      - name: cups
+        image: linuxserver/cups:latest
+        env:
+        - name: PUID
+          value: "0"
+        - name: PGID
+          value: "0"
+        - name: TZ
+          value: "UTC"
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN", "SYS_ADMIN"]
+        ports:
+        - containerPort: 631
+          protocol: TCP
+        - containerPort: 9100
+          protocol: TCP
+        - containerPort: 5353
+          protocol: UDP
+        volumeMounts:
+        - name: cups-config
+          mountPath: /config
+        - name: paperless-input
+          mountPath: /srv/paperless-input
+      volumes:
+      - name: cups-config
+        emptyDir: {}
+      - name: paperless-input
+        persistentVolumeClaim:
+          claimName: pvc-paperless-input
+      tolerations:
+      - operator: "Exists"

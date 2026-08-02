@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: samba
+  namespace: printer-ops
+  labels:
+    app: samba
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: samba
+  template:
+    metadata:
+      labels:
+        app: samba
+    spec:
+      hostNetwork: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - storagenodet3500
+      containers:
+      - name: samba
+        image: dperson/samba:latest
+        args:
+        - "-S"
+        - "user;paperless=/srv/paperless-input;read only=no;guest ok=no"
+        - "user;scan-storage=/srv/scan-storage;read only=no;guest ok=no"
+        env:
+        - name: SAMBA_USER
+          value: "scanner"
+        - name: SAMBA_PASS
+          value: "CHANGE_ME"
+        ports:
+        - containerPort: 445
+          protocol: TCP
+        - containerPort: 139
+          protocol: TCP
+        volumeMounts:
+        - name: paperless-input
+          mountPath: /srv/paperless-input
+        - name: scan-storage
+          mountPath: /srv/scan-storage
+      volumes:
+      - name: paperless-input
+        persistentVolumeClaim:
+          claimName: pvc-paperless-input
+      - name: scan-storage
+        persistentVolumeClaim:
+          claimName: pvc-scan-storage

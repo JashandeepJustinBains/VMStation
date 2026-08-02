@@ -3,12 +3,12 @@ kind: PersistentVolume
 metadata:
   name: pv-paperless-input
   labels:
-    app: paperless-input
+    app: brother-gateway
 spec:
   capacity:
     storage: 10Gi
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   hostPath:

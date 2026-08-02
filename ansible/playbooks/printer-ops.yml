@@ -1,0 +1,44 @@
+---
+- name: Prepare storage node directories
+  hosts: storage_nodes
+  become: true
+  tasks:
+    - name: Ensure /srv/paperless-input exists
+      file:
+        path: /srv/paperless-input
+        state: directory
+        owner: root
+        group: root
+        mode: '0775'
+
+    - name: Ensure /srv/scan-storage exists
+      file:
+        path: /srv/scan-storage
+        state: directory
+        owner: root
+        group: root
+        mode: '0775'
+
+- name: Deploy Kubernetes manifests for printer-ops
+  hosts: monitoring_nodes
+  become: true
+  connection: local
+  vars:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  tasks:
+    - name: Create printer-ops namespace
+      command: kubectl --kubeconfig={{ KUBECONFIG }} create namespace printer-ops --dry-run=client -o yaml | kubectl --kubeconfig={{ KUBECONFIG }} apply -f -
+
+    - name: Apply storage PV/PVC manifests
+      shell: |
+        kubectl --kubeconfig={{ KUBECONFIG }} apply -f manifests/storage/pv-paperless-input.yaml
+        kubectl --kubeconfig={{ KUBECONFIG }} apply -f manifests/storage/pvc-paperless-input.yaml
+        kubectl --kubeconfig={{ KUBECONFIG }} apply -f manifests/storage/pvc-scan-storage.yaml
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Apply printer manifests
+      shell: |
+        kubectl --kubeconfig={{ KUBECONFIG }} apply -f manifests/printer/
+      args:
+        chdir: "{{ playbook_dir }}"
