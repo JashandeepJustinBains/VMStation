@@ -1,0 +1,7 @@
+resources:
+  - ../../printer-ops/brother-gateway-deployment.yaml
+  - ../../storage/pv-scan-storage.yaml
+  - ../../storage/pv-paperless-input.yaml
+  - ../../storage/pvc-paperless-input.yaml
+
+# Leave namespace unset here; overlays set the namespace
