@@ -1,0 +1,19 @@
+- name: Ensure storage directories exist on storagenodet3500
+  hosts: storagenodet3500
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Create /srv/scan-storage
+      file:
+        path: /srv/scan-storage
+        state: directory
+        owner: 1000
+        group: 1000
+        mode: '0755'
+    - name: Create /srv/paperless-input
+      file:
+        path: /srv/paperless-input
+        state: directory
+        owner: 1000
+        group: 1000
+        mode: '0755'
